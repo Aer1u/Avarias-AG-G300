@@ -116,7 +116,7 @@ export default function DashboardPage() {
       entry.paletes += (item.paletes || 0)
       if (item.produto) {
         const total = item.quantidade_total || 0
-        const damaged = item.qtd_molhado || 0
+        const damaged = (item.qtd_molhado || 0) + (item.qtd_tombada || 0)
         entry.products.push({
           sku: item.produto,
           quantidade: total - damaged,
@@ -203,14 +203,14 @@ export default function DashboardPage() {
         const entry = posMap.get(pos)
         entry.paletes += (item.paletes || 0)
         entry.quantidade_total += (item.quantidade_total || 0)
-        entry.dmg_molhado = (entry.dmg_molhado || 0) + (item.qtd_molhado || 0)
+        entry.dmg_total = (entry.dmg_total || 0) + (item.qtd_molhado || 0) + (item.qtd_tombada || 0)
         if (item.produto) entry.skus.add(item.produto)
       })
 
       baseData = Array.from(posMap.values()).map(item => ({
         ...item,
         sku_count: item.skus.size,
-        quantidade: item.quantidade_total - (item.dmg_molhado || 0),
+        quantidade: item.quantidade_total - (item.dmg_total || 0),
         ocupacao: item.capacidade > 0 ? (item.paletes / item.capacidade * 100) : 0,
         drive_status: item.skus.size > 1 ? "MISTURADO" : "MONO",
         is_complete: item.capacidade > 0 && item.paletes >= item.capacidade ? "COMPLETO" : "DISPONÍVEL"
@@ -230,14 +230,14 @@ export default function DashboardPage() {
         const entry = productMap.get(prod)
         entry.paletes += (item.paletes || 0)
         entry.quantidade_total += (item.quantidade_total || 0)
-        entry.dmg_molhado = (entry.dmg_molhado || 0) + (item.qtd_molhado || 0)
+        entry.dmg_total = (entry.dmg_total || 0) + (item.qtd_molhado || 0) + (item.qtd_tombada || 0)
         if (item.posicao) entry.posicoes.add(item.posicao)
       })
 
       baseData = Array.from(productMap.values()).map(item => ({
         ...item,
         posicao_count: item.posicoes.size,
-        quantidade: item.quantidade_total - (item.dmg_molhado || 0)
+        quantidade: item.quantidade_total - (item.dmg_total || 0)
       }))
 
       const sortedForRank = [...baseData].sort((a, b) => (b.quantidade_total || 0) - (a.quantidade_total || 0))
@@ -473,6 +473,15 @@ export default function DashboardPage() {
           )
         },
         {
+          header: "Avarias",
+          accessor: "dmg_total",
+          render: (val: number) => val > 0 ? (
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-red-50 text-red-600 font-black text-[10px] animate-pulse">
+              <AlertCircle size={10} /> {fmtNum(val)}
+            </span>
+          ) : <span className="text-slate-200">-</span>
+        },
+        {
           header: "Lotação",
           accessor: "is_complete",
           render: (val: string) => (
@@ -521,6 +530,16 @@ export default function DashboardPage() {
           )
         },
         { header: "Paletes", accessor: "paletes", render: (val: number) => fmtNum(val) },
+        {
+          header: "Avarias",
+          accessor: "dmg_total",
+          render: (val: number) => val > 0 ? (
+            <div className="flex flex-col items-center">
+              <span className="text-[10px] font-black text-red-500 uppercase">Crítico</span>
+              <span className="px-2 py-0.5 rounded-md bg-red-50 text-red-600 font-black text-[10px] border border-red-100">{fmtNum(val)}</span>
+            </div>
+          ) : <span className="text-slate-200">-</span>
+        },
         {
           header: "Quantidade",
           accessor: "quantidade",
@@ -690,12 +709,17 @@ export default function DashboardPage() {
             }
           />
           <MetricCard
-            title="Peças Totais"
-            value={stats?.total_quantity?.toLocaleString() ?? "0"}
+            title="Estoque Disponível"
+            value={(stats ? (stats.total_quantity - stats.qtd_molhado - stats.qtd_tombada) : 0).toLocaleString('pt-BR')}
             icon={BarChart3}
             delay={0.2}
+            description="Peças em bom estado"
             hoverContent={
               <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-center min-w-[200px]">
+                <div className="flex flex-col col-span-2 mb-2 pb-2 border-b border-white/10">
+                  <span className="text-[10px] font-black uppercase text-slate-400">Total Bruto</span>
+                  <span className="text-lg font-black text-white">{fmtNum(stats?.total_quantity || 0)}</span>
+                </div>
                 <div className="flex flex-col">
                   <span className="text-[8px] font-black uppercase text-slate-400">Alocadas</span>
                   <span className="text-xs font-black text-emerald-400">{fmtNum(data.filter(i => {
