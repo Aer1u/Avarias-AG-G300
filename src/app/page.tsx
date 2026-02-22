@@ -115,12 +115,10 @@ export default function DashboardPage() {
       const entry = posMap.get(posId)
       entry.paletes += (item.paletes || 0)
       if (item.produto) {
-        const total = item.quantidade_total || 0
-        const damaged = (item.qtd_molhado || 0) + (item.qtd_tombada || 0)
         entry.products.push({
           sku: item.produto,
-          quantidade: total - damaged,
-          quantidade_total: total,
+          quantidade: item.quantidade_total || 0,
+          quantidade_total: item.quantidade_total || 0,
           paletes: item.paletes,
           nivel: item.nivel || "N/A",
           profundidade: item.profundidade || item.Profundidade || "-",
@@ -203,14 +201,15 @@ export default function DashboardPage() {
         const entry = posMap.get(pos)
         entry.paletes += (item.paletes || 0)
         entry.quantidade_total += (item.quantidade_total || 0)
-        entry.dmg_total = (entry.dmg_total || 0) + (item.qtd_molhado || 0) + (item.qtd_tombada || 0)
+        entry.dmg_molhado = (entry.dmg_molhado || 0) + (item.qtd_molhado || 0)
+        entry.dmg_tombada = (entry.dmg_tombada || 0) + (item.qtd_tombada || 0)
         if (item.produto) entry.skus.add(item.produto)
       })
 
       baseData = Array.from(posMap.values()).map(item => ({
         ...item,
         sku_count: item.skus.size,
-        quantidade: item.quantidade_total - (item.dmg_total || 0),
+        quantidade: item.quantidade_total,
         ocupacao: item.capacidade > 0 ? (item.paletes / item.capacidade * 100) : 0,
         drive_status: item.skus.size > 1 ? "MISTURADO" : "MONO",
         is_complete: item.capacidade > 0 && item.paletes >= item.capacidade ? "COMPLETO" : "DISPONÍVEL"
@@ -230,23 +229,17 @@ export default function DashboardPage() {
         const entry = productMap.get(prod)
         entry.paletes += (item.paletes || 0)
         entry.quantidade_total += (item.quantidade_total || 0)
-        entry.dmg_total = (entry.dmg_total || 0) + (item.qtd_molhado || 0) + (item.qtd_tombada || 0)
+        entry.dmg_molhado = (entry.dmg_molhado || 0) + (item.qtd_molhado || 0)
+        entry.dmg_tombada = (entry.dmg_tombada || 0) + (item.qtd_tombada || 0)
         if (item.posicao) entry.posicoes.add(item.posicao)
       })
 
       baseData = Array.from(productMap.values()).map(item => ({
         ...item,
         posicao_count: item.posicoes.size,
-        quantidade: item.quantidade_total - (item.dmg_total || 0)
+        quantidade: item.quantidade_total
       }))
 
-      const sortedForRank = [...baseData].sort((a, b) => (b.quantidade_total || 0) - (a.quantidade_total || 0))
-      const top3Names = sortedForRank.slice(0, 3).map(p => p.produto)
-
-      baseData = baseData.map(item => ({
-        ...item,
-        rank: top3Names.indexOf(item.produto) !== -1 ? top3Names.indexOf(item.produto) + 1 : null
-      }))
     } else if (activeView === "nao_alocados") {
       baseData = data.filter(item => {
         const pos = String(item.posicao || "").toUpperCase()
@@ -288,6 +281,7 @@ export default function DashboardPage() {
     }
 
     // Rank items for Products view after sorting
+    // Finalize Rank for Products view after all source sorting
     if (activeView === "produtos") {
       const sortedByQty = [...baseData].sort((a, b) => (b.quantidade || 0) - (a.quantidade || 0));
       const rankMap = new Map(sortedByQty.map((p, i) => [p.produto, i + 1]));
@@ -432,11 +426,25 @@ export default function DashboardPage() {
         {
           header: "Posição",
           accessor: "posicao",
-          render: (val: string) => (
-            <span className="font-black text-slate-900 tracking-tight">
-              {val}
-            </span>
-          )
+          render: (val: string, item: any) => {
+            const molhado = item.dmg_molhado || 0;
+            const tombado = item.dmg_tombada || 0;
+            const tradicional = Math.max(0, (item.quantidade_total || 0) - molhado - tombado);
+
+            return (
+              <div className="flex flex-col">
+                <span className="font-black text-slate-900 tracking-tight">{val}</span>
+                <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{item.skus.size} SKUS</span>
+                  <span className="mx-1 h-3 w-[1px] bg-slate-200" />
+                  <span className="text-[10px] font-black text-slate-500 uppercase">{item.nivel}</span>
+                  {molhado > 0 && <span className="ml-1.5 px-1.2 py-0.2 rounded bg-blue-50 text-blue-600 text-[8px] font-black uppercase">M: {fmtNum(molhado)}</span>}
+                  {tombado > 0 && <span className="ml-1 px-1.2 py-0.2 rounded bg-red-50 text-red-600 text-[8px] font-black uppercase">T: {fmtNum(tombado)}</span>}
+                  {tradicional > 0 && (molhado > 0 || tombado > 0) && <span className="ml-1 px-1.2 py-0.2 rounded bg-slate-50 text-slate-500 text-[8px] font-black uppercase">Trad: {fmtNum(tradicional)}</span>}
+                </div>
+              </div>
+            );
+          }
         },
         { header: "Capacidade", accessor: "capacidade", render: (val: number) => fmtNum(val) },
         { header: "Paletes", accessor: "paletes", render: (val: number) => fmtNum(val) },
@@ -471,15 +479,6 @@ export default function DashboardPage() {
               <span className="text-[10px] font-black text-slate-400">{Math.round(val)}%</span>
             </div>
           )
-        },
-        {
-          header: "Avarias",
-          accessor: "dmg_total",
-          render: (val: number) => val > 0 ? (
-            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-red-50 text-red-600 font-black text-[10px] animate-pulse">
-              <AlertCircle size={10} /> {fmtNum(val)}
-            </span>
-          ) : <span className="text-slate-200">-</span>
         },
         {
           header: "Lotação",
@@ -524,22 +523,20 @@ export default function DashboardPage() {
                     {val}
                   </span>
                 </div>
-                <span className="text-[10px] font-black text-slate-400 uppercase">{item.posicao_count} Posições</span>
+                <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                  <span className="text-[10px] font-black text-slate-400 uppercase">{item.posicao_count} Posições</span>
+                  <span className="mx-1 h-3 w-[1px] bg-slate-200" />
+                  {item.dmg_molhado > 0 && <span className="px-1.2 py-0.2 rounded bg-blue-50 text-blue-600 text-[8px] font-black uppercase">M: {fmtNum(item.dmg_molhado)}</span>}
+                  {item.dmg_tombada > 0 && <span className="px-1.2 py-0.2 rounded bg-red-50 text-red-600 text-[8px] font-black uppercase">T: {fmtNum(item.dmg_tombada)}</span>}
+                  {((item.quantidade_total || 0) - (item.dmg_molhado || 0) - (item.dmg_tombada || 0)) > 0 && (item.dmg_molhado > 0 || item.dmg_tombada > 0) && (
+                    <span className="px-1.2 py-0.2 rounded bg-slate-50 text-slate-500 text-[8px] font-black uppercase">Trad: {fmtNum((item.quantidade_total || 0) - (item.dmg_molhado || 0) - (item.dmg_tombada || 0))}</span>
+                  )}
+                </div>
               </div>
             </div>
           )
         },
         { header: "Paletes", accessor: "paletes", render: (val: number) => fmtNum(val) },
-        {
-          header: "Avarias",
-          accessor: "dmg_total",
-          render: (val: number) => val > 0 ? (
-            <div className="flex flex-col items-center">
-              <span className="text-[10px] font-black text-red-500 uppercase">Crítico</span>
-              <span className="px-2 py-0.5 rounded-md bg-red-50 text-red-600 font-black text-[10px] border border-red-100">{fmtNum(val)}</span>
-            </div>
-          ) : <span className="text-slate-200">-</span>
-        },
         {
           header: "Quantidade",
           accessor: "quantidade",
@@ -709,39 +706,30 @@ export default function DashboardPage() {
             }
           />
           <MetricCard
-            title="Estoque Disponível"
-            value={(stats ? (stats.total_quantity - stats.qtd_molhado - stats.qtd_tombada) : 0).toLocaleString('pt-BR')}
+            title="Peças Totais"
+            value={stats?.total_quantity?.toLocaleString() ?? "0"}
             icon={BarChart3}
             delay={0.2}
-            description="Peças em bom estado"
             hoverContent={
               <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-center min-w-[200px]">
                 <div className="flex flex-col col-span-2 mb-2 pb-2 border-b border-white/10">
-                  <span className="text-[10px] font-black uppercase text-slate-400">Total Bruto</span>
+                  <span className="text-[10px] font-black uppercase text-slate-400">Total de Avarias</span>
                   <span className="text-lg font-black text-white">{fmtNum(stats?.total_quantity || 0)}</span>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-[8px] font-black uppercase text-slate-400">Alocadas</span>
-                  <span className="text-xs font-black text-emerald-400">{fmtNum(data.filter(i => {
-                    const p = String(i.posicao || "").toUpperCase();
-                    return p && p !== "S/P" && p !== "N/A" && p !== "NÃO INFORMADO" && p !== "-";
-                  }).reduce((s, i) => s + (i.quantidade_total || 0), 0))}</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[8px] font-black uppercase text-slate-400">Não Alocadas</span>
-                  <span className="text-xs font-black text-orange-400">{fmtNum(data.filter(i => {
-                    const p = String(i.posicao || "").toUpperCase();
-                    return !p || p === "S/P" || p === "N/A" || p === "NÃO INFORMADO" || p === "-";
-                  }).reduce((s, i) => s + (i.quantidade_total || 0), 0))}</span>
-                </div>
-                <div className="col-span-2 h-[1px] bg-white/10 my-1" />
-                <div className="flex flex-col border-r border-white/10 pr-6">
                   <span className="text-[8px] font-black uppercase text-slate-400">Molhadas</span>
-                  <span className="text-xs font-black text-blue-400">{fmtNum(stats?.qtd_molhado || 0)} <span className="text-[8px] text-slate-500 font-medium">un</span></span>
+                  <span className="text-xs font-black text-blue-400">{fmtNum(stats?.qtd_molhado || 0)}</span>
                 </div>
                 <div className="flex flex-col">
                   <span className="text-[8px] font-black uppercase text-slate-400">Tombadas</span>
-                  <span className="text-xs font-black text-red-500">{fmtNum(stats?.qtd_tombada || 0)} <span className="text-[8px] text-slate-500 font-medium">un</span></span>
+                  <span className="text-xs font-black text-red-500">{fmtNum(stats?.qtd_tombada || 0)}</span>
+                </div>
+                <div className="col-span-2 h-[1px] bg-white/10 my-1" />
+                <div className="flex flex-col col-span-2">
+                  <span className="text-[8px] font-black uppercase text-slate-400">Tradicionais</span>
+                  <span className="text-xs font-black text-slate-300">
+                    {fmtNum((stats?.total_quantity || 0) - (stats?.qtd_molhado || 0) - (stats?.qtd_tombada || 0))}
+                  </span>
                 </div>
               </div>
             }
