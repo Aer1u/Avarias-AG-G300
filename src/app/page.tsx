@@ -34,6 +34,7 @@ import {
 } from "lucide-react"
 import { MetricCard } from "@/components/MetricCard"
 import { WarehouseTable } from "@/components/WarehouseTable"
+import { ExportMenu } from "@/components/ExportMenu"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 
@@ -248,16 +249,14 @@ export default function DashboardPage() {
         quantidade: item.quantidade_total - (item.dmg_molhado || 0)
       }))
 
-      const sortedForRank = [...baseData].sort((a, b) => (b.quantidade_total || 0) - (a.quantidade_total || 0))
-      const top3Names = sortedForRank.slice(0, 3).map(p => p.produto)
-
+      // Calc global prominence (Top 3 by Quantity)
+      const sortedByQty = [...baseData].sort((a, b) => (b.quantidade || 0) - (a.quantidade || 0))
       baseData = baseData.map(item => ({
         ...item,
-        rank: top3Names.indexOf(item.produto) !== -1 ? top3Names.indexOf(item.produto) + 1 : null
+        qtyRank: sortedByQty.findIndex(s => s.produto === item.produto) + 1
       }))
     } else if (activeView === "molhados") {
       const productMap = new Map()
-      // First pass: get total quantity for all SKUs that have at least one wet item
       const skusWithWet = new Set()
       data.forEach(item => {
         if (item.qtd_molhado && item.qtd_molhado > 0) {
@@ -293,12 +292,11 @@ export default function DashboardPage() {
         quantidade: item.dmg_molhado
       }))
 
-      const sortedForRank = [...baseData].sort((a, b) => (b.dmg_molhado || 0) - (a.dmg_molhado || 0))
-      const top3Names = sortedForRank.slice(0, 3).map(p => p.produto)
-
+      // Calc global prominence (Top 3 by Quantity)
+      const sortedByQty = [...baseData].sort((a, b) => (b.quantidade || 0) - (a.quantidade || 0))
       baseData = baseData.map(item => ({
         ...item,
-        rank: top3Names.indexOf(item.produto) !== -1 ? top3Names.indexOf(item.produto) + 1 : null
+        qtyRank: sortedByQty.findIndex(s => s.produto === item.produto) + 1
       }))
     } else if (activeView === "nao_alocados") {
       baseData = data.filter(item => {
@@ -340,7 +338,11 @@ export default function DashboardPage() {
       })
     }
 
-    return baseData
+    // FINAL STEP: Assign rank based on final visual order for ALL items
+    return baseData.map((item, idx) => ({
+      ...item,
+      rank: idx + 1
+    }))
   }, [data, activeView, sortMode, tableSort])
 
   const handleSort = (key: string) => {
@@ -541,46 +543,78 @@ export default function DashboardPage() {
         {
           header: "Produto",
           accessor: "produto",
-          render: (val: string, item: any) => (
-            <div className="flex items-center gap-3">
-              <div className={cn(
-                "flex h-10 w-10 items-center justify-center rounded-xl font-black transition-all",
-                item.rank === 1 ? "bg-orange-600 text-white shadow-lg shadow-orange-200" :
-                  item.rank === 2 ? "bg-orange-500 text-white shadow-md shadow-orange-100/50" :
-                    item.rank === 3 ? "bg-orange-400/80 text-white shadow-sm" :
-                      "bg-slate-50 text-slate-400 border border-slate-100"
-              )}>
-                {item.rank}
-              </div>
-              <div className="flex flex-col">
-                <div className="flex items-center gap-1.5">
-                  {item.rank === 1 && <Flame size={14} className="text-orange-500 fill-orange-500 animate-pulse" />}
-                  {item.rank === 2 && <Flame size={14} className="text-orange-500 fill-orange-500/50" />}
-                  {item.rank === 3 && <Flame size={14} className="text-orange-500/70" />}
-                  <span className={cn(
-                    "text-sm font-black group-hover:text-blue-600 transition-colors uppercase tracking-tight",
-                    "text-slate-900"
-                  )}>
-                    {val}
-                  </span>
+          render: (val: string, item: any) => {
+            const isTopQty = item.qtyRank <= 3
+            const isVisualTop = item.rank <= 3
+            const isSortedByQty = sortMode === "qty_desc"
+            const showHighlight = isVisualTop && isTopQty && isSortedByQty
+
+            return (
+              <div className="flex items-center gap-3">
+                <div className={cn(
+                  "flex h-10 w-10 items-center justify-center rounded-xl font-black transition-all",
+                  showHighlight ? (
+                    item.rank === 1 ? "bg-orange-500 text-white shadow-lg shadow-orange-100" :
+                      item.rank === 2 ? "bg-orange-400 text-white shadow-md shadow-orange-50/50" :
+                        "bg-orange-300 text-white shadow-sm"
+                  ) : (
+                    "bg-slate-50 text-slate-400 border border-slate-100"
+                  )
+                )}>
+                  {item.rank}
                 </div>
-                <span className="text-[10px] font-black text-slate-400 uppercase">{item.posicao_count} Posições</span>
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-1.5">
+                    {showHighlight && (
+                      <Flame size={14} className={cn(
+                        "text-orange-500 fill-orange-500",
+                        item.qtyRank === 1 && "animate-pulse"
+                      )} />
+                    )}
+                    <span className={cn(
+                      "text-sm font-black transition-colors uppercase tracking-tight",
+                      showHighlight ? "text-orange-600" : "text-slate-900"
+                    )}>
+                      {val}
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-black text-slate-400 uppercase">{item.posicao_count} Posições</span>
+                </div>
               </div>
-            </div>
-          )
+            )
+          }
         },
         { header: "Paletes", accessor: "paletes", render: (val: number) => fmtNum(val) },
         {
           header: "Quantidade",
           accessor: "quantidade",
-          render: (val: number, item: any) => (
-            <span className={cn(
-              "font-black px-2 py-0.5 rounded-lg transition-all",
-              "text-slate-900"
-            )}>
-              {fmtNum(val)}
-            </span>
-          )
+          render: (val: number, item: any) => {
+            const isTopQty = item.qtyRank <= 3
+            const isVisualTop = item.rank <= 3
+            const showHighlight = isVisualTop && isTopQty && sortMode === "qty_desc"
+
+            if (showHighlight) {
+              return (
+                <span className={cn(
+                  "font-black px-3 py-1 rounded-xl transition-all border",
+                  item.rank === 1 ? "bg-orange-500 text-white border-orange-400 shadow-md shadow-orange-100" :
+                    item.rank === 2 ? "bg-orange-400 text-white border-orange-300 shadow-sm" :
+                      "bg-orange-300 text-white border-orange-200"
+                )}>
+                  {fmtNum(val)}
+                </span>
+              )
+            }
+
+            return (
+              <span className={cn(
+                "px-2 transition-all text-slate-900",
+                isTopQty ? "font-black" : "font-medium"
+              )}>
+                {fmtNum(val)}
+              </span>
+            )
+          }
         },
         { header: "Nº de Posições", accessor: "posicao_count" },
       ]
@@ -591,40 +625,77 @@ export default function DashboardPage() {
         {
           header: "Produto",
           accessor: "produto",
-          render: (val: string, item: any) => (
-            <div className="flex items-center gap-4">
-              {item.rank && (
+          render: (val: string, item: any) => {
+            const isTopQty = item.qtyRank <= 3
+            const isVisualTop = item.rank <= 3
+            const isSortedByQty = sortMode === "qty_desc"
+            const showHighlight = isVisualTop && isTopQty && isSortedByQty
+
+            return (
+              <div className="flex items-center gap-4">
                 <div className={cn(
                   "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-black transition-all",
-                  item.rank === 1 ? "bg-blue-600 text-white shadow-lg" :
-                    item.rank === 2 ? "bg-blue-500 text-white shadow-md" :
-                      item.rank === 3 ? "bg-blue-400 text-white shadow-sm" :
-                        "bg-slate-50 text-slate-400 border border-slate-100"
+                  showHighlight ? (
+                    item.rank === 1 ? "bg-blue-500 text-white shadow-lg" :
+                      item.rank === 2 ? "bg-blue-400 text-white shadow-md" :
+                        "bg-blue-300 text-white shadow-sm"
+                  ) : (
+                    "bg-slate-50 text-slate-400 border border-slate-100"
+                  )
                 )}>
                   {item.rank}
                 </div>
-              )}
-              {!item.rank && <div className="h-10 w-10 shrink-0 rounded-xl bg-slate-50 border border-slate-100" />}
-              <div className="flex flex-col">
-                <div className="flex items-center gap-1.5">
-                  <Droplet size={14} className="text-blue-500 fill-blue-500" />
-                  <span className="text-sm font-black text-slate-900 group-hover:text-blue-600 transition-colors uppercase tracking-tight">
-                    {val}
-                  </span>
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-1.5">
+                    {showHighlight && (
+                      <Droplet size={14} className={cn(
+                        "text-blue-500 fill-blue-500",
+                        item.qtyRank === 1 && "animate-pulse"
+                      )} />
+                    )}
+                    <span className={cn(
+                      "text-sm font-black transition-colors uppercase tracking-tight",
+                      showHighlight ? "text-blue-600" : "text-slate-900"
+                    )}>
+                      {val}
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-black text-slate-400 uppercase">{item.posicao_count} Posições com Molhado</span>
                 </div>
-                <span className="text-[10px] font-black text-slate-400 uppercase">{item.posicao_count} Posições com Molhado</span>
               </div>
-            </div>
-          )
+            )
+          }
         },
         {
           header: "Qtd. Molhado",
           accessor: "dmg_molhado",
-          render: (val: number) => (
-            <span className="font-black px-2 py-0.5 rounded-lg bg-blue-50 text-blue-600">
-              {fmtNum(val)}
-            </span>
-          )
+          render: (val: number, item: any) => {
+            const isTopQty = item.qtyRank <= 3
+            const isVisualTop = item.rank <= 3
+            const showHighlight = isVisualTop && isTopQty && sortMode === "qty_desc"
+
+            if (showHighlight) {
+              return (
+                <span className={cn(
+                  "font-black px-3 py-1 rounded-xl transition-all border",
+                  item.rank === 1 ? "bg-blue-500 text-white border-blue-400 shadow-md shadow-blue-100" :
+                    item.rank === 2 ? "bg-blue-400 text-white border-blue-300 shadow-sm" :
+                      "bg-blue-300 text-white border-blue-200"
+                )}>
+                  {fmtNum(val)}
+                </span>
+              )
+            }
+
+            return (
+              <span className={cn(
+                "px-2 transition-all text-slate-900",
+                isTopQty ? "font-black" : "font-medium"
+              )}>
+                {fmtNum(val)}
+              </span>
+            )
+          }
         },
         {
           header: "% do Estoque",
@@ -1294,7 +1365,20 @@ export default function DashboardPage() {
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{fmtNum(positionDetail.occupied)} / {positionDetail.capacidade} Paletes • {positionDetail.level_count} Níveis</p>
                   </div>
                 </div>
-                <button onClick={() => setSelectedPosition(null)} className="h-12 w-12 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-red-50 hover:text-red-500"><X size={24} /></button>
+                <div className="flex items-center gap-3">
+                  <ExportMenu
+                    variant="mini"
+                    type="position"
+                    data={positionDetail.products}
+                    label={selectedPosition}
+                  />
+                  <button
+                    onClick={() => setSelectedPosition(null)}
+                    className="h-12 w-12 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-red-50 hover:text-red-500 transition-all border border-slate-100"
+                  >
+                    <X size={24} />
+                  </button>
+                </div>
               </div>
               <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 -mr-1">
                 <div className="overflow-hidden rounded-3xl border border-slate-100 bg-slate-50/30">
