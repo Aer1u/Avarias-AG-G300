@@ -51,9 +51,9 @@ def get_allocated_data():
         elif 'prof' in c: new_cols[col] = 'profundidade'
         elif '/' in c and 'palete' in c: new_cols[col] = 'qtd_por_palete'
         elif 'id' in c and 'palete' in c: new_cols[col] = 'id_palete'
-        elif 'tombada' in c: new_cols[col] = 'qtd_tombada'
-        elif 'molhado' in c: new_cols[col] = 'qtd_molhado'
-        elif 'status' in c or 'observa' in c or 'avaria' in c: new_cols[col] = 'observacao'
+        elif 'tombada' in c or 'tombado' in c: new_cols[col] = 'qtd_tombada'
+        elif 'molhado' in c or 'molhada' in c: new_cols[col] = 'qtd_molhado'
+        elif 'status' in c or 'observa' in c or 'obse' in c or 'avaria' in c: new_cols[col] = 'observacao'
 
     df = df.rename(columns=new_cols)
     return df
@@ -148,9 +148,12 @@ def get_clean_data():
 
     # Damage Logic (Subsets of Total) - Ensure metrics pick them up
     def check_damage_flag(row):
+        # Check both product name and observation for damage keywords
         text = (str(row.get('produto', '')) + " " + str(row.get('observacao', ''))).lower()
-        is_molhado = 1 if 'molhado' in text or row['qtd_molhado'] > 0 else 0
-        is_tombado = 1 if 'tombado' in text or row['qtd_tombada'] > 0 else 0
+        # Robust check for "molhad" (covers molhado, molhada, molhados, etc.)
+        # and "tombad" (covers tombado, tombada, etc.)
+        is_molhado = 1 if 'molhad' in text or row.get('qtd_molhado', 0) > 0 else 0
+        is_tombado = 1 if 'tombad' in text or row.get('qtd_tombada', 0) > 0 else 0
         return pd.Series([is_molhado, is_tombado], index=['is_molhado', 'is_tombado'])
 
     df[['is_molhado', 'is_tombado']] = df.apply(check_damage_flag, axis=1)
