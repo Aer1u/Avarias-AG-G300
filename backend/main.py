@@ -22,30 +22,25 @@ app.add_middleware(
 
 # Configuration
 GSHEET_URL = "https://docs.google.com/spreadsheets/d/1q-gttvSLzCVD4x6xtVqivDeYMVvY3PIEOMEYaWnxyeM/export?format=xlsx"
+UNALLOCATED_GSHEET_URL = "https://docs.google.com/spreadsheets/d/1Ni-HNW28V8V2vHt__YPPiiBeTX333vDQf_9Qw96wdmc/export?format=xlsx"
 LOCAL_EXCEL_PATH = os.path.join(os.path.dirname(__file__), "data", "Drive atualizado.xlsx")
 
-# Function to load and clean data
-def get_clean_data():
+# Function to load and clean "Allocated" data (Existing logic)
+def get_allocated_data():
     df = None
-    
-    # 1. Try to fetch from Google Sheets first
     try:
         response = requests.get(GSHEET_URL, timeout=10)
         if response.status_code == 200:
             df = pd.read_excel(io.BytesIO(response.content))
-            print("Successfully loaded data from Google Sheets")
     except Exception as e:
-        print(f"Failed to fetch from Google Sheets: {e}")
+        print(f"Failed to fetch allocated from Google Sheets: {e}")
 
-    # 2. Fallback to local file if fetch failed
     if df is None:
         if os.path.exists(LOCAL_EXCEL_PATH):
             df = pd.read_excel(LOCAL_EXCEL_PATH)
-            print("Loaded data from local Excel file")
         else:
-            raise FileNotFoundError("Data source not found (neither Google Sheets nor local file)")
+            raise FileNotFoundError("Allocated data source not found")
     
-    # Hardened mapping logic
     new_cols = {}
     for col in df.columns:
         c = str(col).lower()
@@ -64,8 +59,9 @@ def get_clean_data():
         elif 'status' in c or 'observa' in c or 'avaria' in c: new_cols[col] = 'observacao'
     
     df = df.rename(columns=new_cols)
+    df['is_unallocated_source'] = False
 
-    # Damage categorization logic
+    # Standard damage check for allocated
     def check_damage(row, keyword):
         text = (str(row.get('produto', '')) + " " + str(row.get('observacao', ''))).lower()
         return 1 if keyword in text else 0
@@ -73,28 +69,79 @@ def get_clean_data():
     df['is_molhado'] = df.apply(lambda r: check_damage(r, 'molhado'), axis=1)
     df['is_tombado'] = df.apply(lambda r: check_damage(r, 'tombado'), axis=1)
 
-    # Ultra-robust position detection
-    if 'posicao' not in df.columns or df['posicao'].astype(str).str.contains('N/A').all():
-        for col in df.columns:
-            if df[col].astype(str).str.contains('G300', na=False).any():
-                df = df.rename(columns={col: 'posicao'})
-                break
+    return df
+
+# Function to load and clean "Unallocated" data (New logic)
+def get_unallocated_data():
+    df = None
+    try:
+        response = requests.get(UNALLOCATED_GSHEET_URL, timeout=10)
+        if response.status_code == 200:
+            df = pd.read_excel(io.BytesIO(response.content))
+    except Exception as e:
+        print(f"Failed to fetch unallocated from Google Sheets: {e}")
+        return pd.DataFrame()
+
+    # Mapping based on user spec
+    # 1. Produto, 2. Qtd no Palete, 3. Qtd de Palete, 4. Quantidade Total, 5. ID Palete, 6. Parte Tombada, 7. Parte Molhada, 8. Observação
+    col_mapping = {
+        'Produto': 'produto',
+        'Quantidade no palete': 'qtd_por_palete',
+        'Qtd. de palete': 'paletes',
+        'Quantidade total': 'quantidade_total',
+        'ID palete': 'id_palete',
+        'Parte Tombada': 'qtd_tombada',
+        'Parte Molhada': 'qtd_molhado',
+        'Observação': 'observacao'
+    }
     
-    required_cols = ['produto', 'quantidade_total', 'paletes', 'capacidade', 'posicao', 'nivel', 'observacao']
+    # Flexible mapping if names vary slightly
+    actual_cols = df.columns
+    final_mapping = {}
+    for target_name, final_name in col_mapping.items():
+        found = next((c for c in actual_cols if target_name.lower() in str(c).lower()), None)
+        if found:
+            final_mapping[found] = final_name
+
+    df = df.rename(columns=final_mapping)
+    df['posicao'] = 'S/P'
+    df['nivel'] = '-'
+    df['capacidade'] = 0
+    df['is_unallocated_source'] = True
+
+    # Rule: Damage Null to 0
+    df['qtd_tombada'] = pd.to_numeric(df.get('qtd_tombada', 0), errors='coerce').fillna(0)
+    df['qtd_molhado'] = pd.to_numeric(df.get('qtd_molhado', 0), errors='coerce').fillna(0)
+
+    # Rule: Damage Logic (Subsets of Total) - Categorization for dashboard metrics
+    df['is_molhado'] = (df['qtd_molhado'] > 0).astype(int)
+    df['is_tombado'] = (df['qtd_tombada'] > 0).astype(int)
+
+    return df
+
+def get_clean_data():
+    df_alloc = get_allocated_data()
+    df_unalloc = get_unallocated_data()
+    
+    # Combine sources
+    df = pd.concat([df_alloc, df_unalloc], ignore_index=True)
+
+    # Ensure all required columns exist as Series before processing
+    required_cols = ['produto', 'quantidade_total', 'paletes', 'capacidade', 'posicao', 'nivel', 'observacao', 'id_palete', 'qtd_tombada', 'qtd_molhado', 'qtd_por_palete']
     for rc in required_cols:
         if rc not in df.columns:
-            df[rc] = 0 if rc in ['quantidade_total', 'paletes', 'capacidade'] else ('-' if rc == 'nivel' else 'N/A')
+            df[rc] = 0 if rc in ['quantidade_total', 'paletes', 'capacidade', 'qtd_tombada', 'qtd_molhado', 'qtd_por_palete'] else ('S/P' if rc == 'posicao' else 'N/A')
     
     # Normalize data
-    df['produto'] = df['produto'].fillna('Não Identificado')
+    df['produto'] = df['produto'].fillna('Não Identificado').astype(str)
     df['quantidade_total'] = pd.to_numeric(df['quantidade_total'], errors='coerce').fillna(0)
     df['paletes'] = pd.to_numeric(df['paletes'], errors='coerce').fillna(0)
     df['capacidade'] = pd.to_numeric(df['capacidade'], errors='coerce').fillna(0)
-    df['posicao'] = df['posicao'].fillna('S/P')
-    df['nivel'] = df['nivel'].fillna('-')
+    df['posicao'] = df['posicao'].fillna('S/P').astype(str)
+    df['nivel'] = df['nivel'].fillna('-').astype(str)
     df['qtd_por_palete'] = pd.to_numeric(df['qtd_por_palete'], errors='coerce').fillna(0)
-    df['qtd_tombada'] = pd.to_numeric(df.get('qtd_tombada', 0), errors='coerce').fillna(0)
-    df['qtd_molhado'] = pd.to_numeric(df.get('qtd_molhado', 0), errors='coerce').fillna(0)
+    df['qtd_tombada'] = pd.to_numeric(df['qtd_tombada'], errors='coerce').fillna(0)
+    df['qtd_molhado'] = pd.to_numeric(df['qtd_molhado'], errors='coerce').fillna(0)
     
     # Precise Depth Handling
     def clean_depth(val):
@@ -109,25 +156,29 @@ def get_clean_data():
     else:
         df['profundidade'] = '-'
     
-    # Logic for ID Palete (Shared Pallets)
-    if 'id_palete' in df.columns:
-        df['id_palete'] = df['id_palete'].fillna('').astype(str).str.strip().replace('nan', '')
-        shared_mask = df['id_palete'] != ''
-        if shared_mask.any():
-            id_counts = df[shared_mask]['id_palete'].value_counts()
-            def balance_pallet(row):
-                if row['id_palete'] != '':
-                    count = id_counts.get(row['id_palete'], 1)
-                    return 1.0 / count
-                return row['paletes']
-            df['paletes'] = df.apply(balance_pallet, axis=1)
+    # Rule: Mixed Pallet Detection (Palete Misto)
+    df['id_palete'] = df['id_palete'].fillna('').astype(str).str.strip().replace('nan', '')
+    # Only check non-empty IDs
+    shared_mask = (df['id_palete'] != '') & (df['id_palete'] != '0') & (df['id_palete'] != 'None')
+    if shared_mask.any():
+        id_counts = df[shared_mask]['id_palete'].value_counts()
+        # If an ID appears for different SKUs, it's mixed
+        def balance_pallet(row):
+            if row['id_palete'] != '' and row['id_palete'] != '0' and row['id_palete'] != 'None':
+                count = id_counts.get(row['id_palete'], 1)
+                return 1.0 / count
+            return row['paletes']
+        df['paletes'] = df.apply(balance_pallet, axis=1)
+
+        # Metadata for frontend
+        df['is_misto'] = df['id_palete'].map(lambda x: id_counts.get(x, 0) > 1 if x != '' else False)
 
     # Correct Occupancy Calculation
-    df['ocupacao'] = (df['paletes'] / df['capacidade'] * 100).clip(0, 500).fillna(0)
+    df['ocupacao'] = (df['paletes'] / df.apply(lambda r: r['capacidade'] if r['capacidade'] > 0 else 1, axis=1) * 100).clip(0, 500)
     
-    # Final JSON compliance check
-    df = df.replace([np.inf, -np.inf], np.nan)
-    df = df.fillna(0)
+    # Final cleanup
+    df = df.replace([np.inf, -np.inf], np.nan).fillna(0)
+    print(f"DEBUG: Consolidated {len(df)} rows. Unallocated count: {len(df[df['posicao'] == 'S/P'])}")
     return df
 
 @app.get("/api/data")
@@ -147,9 +198,9 @@ async def get_stats():
         return {
             "total_pallets": int(df['paletes'].sum()),
             "total_quantity": int(df['quantidade_total'].sum()),
-            "total_positions": int(df['posicao'].nunique()),
+            "total_positions": int(df[df['posicao'] != 'S/P']['posicao'].nunique()),
             "total_skus": int(df['produto'].nunique()),
-            "avg_occupancy": float(df['ocupacao'].mean()),
+            "avg_occupancy": float(df[df['capacidade'] > 0]['ocupacao'].mean()) if not df[df['capacidade'] > 0].empty else 0,
             "molhados": int(df['is_molhado'].sum()),
             "tombados": int(df['is_tombado'].sum()),
             "qtd_molhado": int(df['qtd_molhado'].sum()),

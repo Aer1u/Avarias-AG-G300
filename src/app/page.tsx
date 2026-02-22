@@ -348,7 +348,10 @@ export default function DashboardPage() {
         }
       }
 
-      if (activePos && activePos !== 'N/A') {
+      const posUpper = (activePos || "").toUpperCase()
+      const isRealDrive = posUpper && posUpper !== "S/P" && posUpper !== "N/A" && posUpper !== "NÃO INFORMADO" && posUpper !== "-" && !item.is_unallocated_source
+
+      if (isRealDrive) {
         if (!globalPosMap.has(activePos)) {
           globalPosMap.set(activePos, new Set())
           posOccupancy.set(activePos, 0)
@@ -357,7 +360,7 @@ export default function DashboardPage() {
 
         const cap = item.capacidade || 0
         posMap.set(activePos, cap)
-        posOccupancy.set(activePos, posOccupancy.get(activePos) + (item.paletes || 0))
+        posOccupancy.set(activePos, (posOccupancy.get(activePos) || 0) + (item.paletes || 0))
       }
     })
 
@@ -377,9 +380,6 @@ export default function DashboardPage() {
     }
 
     globalPosMap.forEach((skus, pos) => {
-      const posUpper = pos.toUpperCase()
-      const isAllocated = pos && posUpper !== "S/P" && posUpper !== "N/A" && posUpper !== "NÃO INFORMADO" && posUpper !== "-"
-
       if (skus.size > 1) mixedCount++
       else if (skus.size === 1) monoCount++
 
@@ -395,7 +395,7 @@ export default function DashboardPage() {
 
     data.forEach(item => {
       const posUpper = String(item.posicao || "").toUpperCase()
-      const isAllocated = posUpper && posUpper !== "S/P" && posUpper !== "N/A" && posUpper !== "NÃO INFORMADO" && posUpper !== "-"
+      const isAllocated = posUpper && posUpper !== "S/P" && posUpper !== "N/A" && posUpper !== "NÃO INFORMADO" && posUpper !== "-" && !item.is_unallocated_source
 
       if (isAllocated) alocadosPallets += (item.paletes || 0)
       else naoAlocadosPallets += (item.paletes || 0)
@@ -409,8 +409,14 @@ export default function DashboardPage() {
 
     const totalCapacity = Array.from(posMap.values()).reduce((sum, cap) => sum + cap, 0)
     const totalPositions = posMap.size
-    const occupied = stats?.total_pallets || 0
-    const free = Math.max(0, totalCapacity - occupied)
+
+    // FIX: occupied should ONLY count allocated pallets to match backend stats
+    const occupied = Math.round(data.filter(i => {
+      const p = String(i.posicao || "").toUpperCase();
+      return p && p !== "S/P" && p !== "N/A" && p !== "NÃO INFORMADO" && p !== "-" && !i.is_unallocated_source;
+    }).reduce((s, i) => s + (i.paletes || 0), 0));
+
+    const free = Math.round(Math.max(0, totalCapacity - occupied))
     const occupiedPercent = totalCapacity > 0 ? (occupied / totalCapacity) * 100 : 0
 
     const sortedBreakdown = Array.from(capBreakdown.entries())
@@ -550,6 +556,15 @@ export default function DashboardPage() {
         },
         { header: "Quantidade", accessor: "quantidade_total", render: (val: number) => fmtNum(val) },
         { header: "Paletes", accessor: "paletes", render: (val: number) => fmtNum(val) + " PTs" },
+        {
+          header: "Observação",
+          accessor: "observacao",
+          render: (val: any) => (
+            <span className="text-[10px] text-slate-500 italic max-w-xs truncate block">
+              {val && val !== 0 ? String(val) : "-"}
+            </span>
+          )
+        },
         {
           header: "Status",
           accessor: "posicao",
