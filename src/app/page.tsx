@@ -29,6 +29,7 @@ import {
   Menu,
   X,
   ExternalLink,
+  Droplet,
   Table as TableIcon
 } from "lucide-react"
 import { MetricCard } from "@/components/MetricCard"
@@ -36,7 +37,7 @@ import { WarehouseTable } from "@/components/WarehouseTable"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 
-type ViewType = "geral" | "posicoes" | "nao_alocados" | "produtos"
+type ViewType = "geral" | "posicoes" | "nao_alocados" | "produtos" | "molhados"
 type DisplayMode = "mapa" | "tabela"
 type SortType = "none" | "qty_desc" | "qty_asc" | "alpha_asc"
 
@@ -59,7 +60,7 @@ export default function DashboardPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [tableSort, setTableSort] = useState<{ key: string; direction: "asc" | "desc" }>({ key: "posicao", direction: "asc" })
   const [sortMode, setSortMode] = useState<SortType>("none")
-  const [isChartHovered, setIsChartHovered] = useState(false)
+  const [modalFilter, setModalFilter] = useState(false)
   const rowsPerPage = 10
 
   const fetchData = async () => {
@@ -67,8 +68,8 @@ export default function DashboardPage() {
     setError(null)
     try {
       const [dataRes, statsRes] = await Promise.all([
-        fetch("https://avarias-ag-g300.onrender.com/api/data"),
-        fetch("https://avarias-ag-g300.onrender.com/api/stats")
+        fetch("http://localhost:8000/api/data"),
+        fetch("http://localhost:8000/api/stats")
       ])
 
       if (!dataRes.ok || !statsRes.ok) throw new Error("Erro ao carregar dados")
@@ -103,6 +104,13 @@ export default function DashboardPage() {
 
     const posMap = new Map()
     data.forEach(item => {
+      // Otimização: Se houver busca, ignorar itens que não batem com o SKU ou com a Posição
+      const matchesSearch = !search ||
+        (item.produto || "").toLowerCase().includes(search.toLowerCase()) ||
+        (item.posicao || "").toLowerCase().includes(search.toLowerCase())
+
+      if (!matchesSearch) return
+
       const posId = item.posicao || "S/P"
       if (!posMap.has(posId)) {
         posMap.set(posId, {
@@ -180,7 +188,7 @@ export default function DashboardPage() {
     })
 
     return streets
-  }, [data])
+  }, [data, search])
 
   // View Aggregation & Filtering Logic
   const processedData = useMemo(() => {
@@ -247,6 +255,51 @@ export default function DashboardPage() {
         ...item,
         rank: top3Names.indexOf(item.produto) !== -1 ? top3Names.indexOf(item.produto) + 1 : null
       }))
+    } else if (activeView === "molhados") {
+      const productMap = new Map()
+      // First pass: get total quantity for all SKUs that have at least one wet item
+      const skusWithWet = new Set()
+      data.forEach(item => {
+        if (item.qtd_molhado && item.qtd_molhado > 0) {
+          skusWithWet.add(item.produto || "Não Identificado")
+        }
+      })
+
+      data.forEach(item => {
+        const prod = item.produto || "Não Identificado"
+        if (!skusWithWet.has(prod)) return
+
+        if (!productMap.has(prod)) {
+          productMap.set(prod, {
+            produto: prod,
+            paletes: 0,
+            quantidade_total: 0,
+            dmg_molhado: 0,
+            posicoes_com_molhado: new Set()
+          })
+        }
+        const entry = productMap.get(prod)
+        entry.paletes += (item.paletes || 0)
+        entry.quantidade_total += (item.quantidade_total || 0)
+        entry.dmg_molhado += (item.qtd_molhado || 0)
+        if (item.qtd_molhado && item.qtd_molhado > 0 && item.posicao) {
+          entry.posicoes_com_molhado.add(item.posicao)
+        }
+      })
+
+      baseData = Array.from(productMap.values()).map(item => ({
+        ...item,
+        posicao_count: item.posicoes_com_molhado.size,
+        quantidade: item.dmg_molhado
+      }))
+
+      const sortedForRank = [...baseData].sort((a, b) => (b.dmg_molhado || 0) - (a.dmg_molhado || 0))
+      const top3Names = sortedForRank.slice(0, 3).map(p => p.produto)
+
+      baseData = baseData.map(item => ({
+        ...item,
+        rank: top3Names.indexOf(item.produto) !== -1 ? top3Names.indexOf(item.produto) + 1 : null
+      }))
     } else if (activeView === "nao_alocados") {
       baseData = data.filter(item => {
         const pos = String(item.posicao || "").toUpperCase()
@@ -264,7 +317,7 @@ export default function DashboardPage() {
       baseData.sort((a, b) => (b.quantidade || 0) - (a.quantidade || 0))
     } else if (sortMode === "alpha_asc") {
       baseData.sort((a, b) => {
-        const key = activeView === "produtos" ? "produto" : "posicao"
+        const key = (activeView === "produtos" || activeView === "molhados") ? "produto" : "posicao"
         return String(a[key]).localeCompare(String(b[key]))
       })
     }
@@ -285,16 +338,6 @@ export default function DashboardPage() {
         if (valA > valB) return tableSort.direction === "asc" ? 1 : -1
         return 0
       })
-    }
-
-    // Rank items for Products view after sorting
-    if (activeView === "produtos") {
-      const sortedByQty = [...baseData].sort((a, b) => (b.quantidade || 0) - (a.quantidade || 0));
-      const rankMap = new Map(sortedByQty.map((p, i) => [p.produto, i + 1]));
-      baseData = baseData.map(item => ({
-        ...item,
-        rank: rankMap.get(item.produto)
-      }))
     }
 
     return baseData
@@ -516,7 +559,7 @@ export default function DashboardPage() {
                   {item.rank === 3 && <Flame size={14} className="text-orange-500/70" />}
                   <span className={cn(
                     "text-sm font-black group-hover:text-blue-600 transition-colors uppercase tracking-tight",
-                    item.rank <= 3 ? "text-blue-600" : "text-slate-900"
+                    "text-slate-900"
                   )}>
                     {val}
                   </span>
@@ -533,13 +576,72 @@ export default function DashboardPage() {
           render: (val: number, item: any) => (
             <span className={cn(
               "font-black px-2 py-0.5 rounded-lg transition-all",
-              item.rank <= 3 ? "text-blue-600 bg-blue-50/50 font-extrabold" : "text-slate-900"
+              "text-slate-900"
             )}>
               {fmtNum(val)}
             </span>
           )
         },
         { header: "Nº de Posições", accessor: "posicao_count" },
+      ]
+    }
+
+    if (activeView === "molhados") {
+      return [
+        {
+          header: "Produto",
+          accessor: "produto",
+          render: (val: string, item: any) => (
+            <div className="flex items-center gap-4">
+              {item.rank && (
+                <div className={cn(
+                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-black transition-all",
+                  item.rank === 1 ? "bg-blue-600 text-white shadow-lg" :
+                    item.rank === 2 ? "bg-blue-500 text-white shadow-md" :
+                      item.rank === 3 ? "bg-blue-400 text-white shadow-sm" :
+                        "bg-slate-50 text-slate-400 border border-slate-100"
+                )}>
+                  {item.rank}
+                </div>
+              )}
+              {!item.rank && <div className="h-10 w-10 shrink-0 rounded-xl bg-slate-50 border border-slate-100" />}
+              <div className="flex flex-col">
+                <div className="flex items-center gap-1.5">
+                  <Droplet size={14} className="text-blue-500 fill-blue-500" />
+                  <span className="text-sm font-black text-slate-900 group-hover:text-blue-600 transition-colors uppercase tracking-tight">
+                    {val}
+                  </span>
+                </div>
+                <span className="text-[10px] font-black text-slate-400 uppercase">{item.posicao_count} Posições com Molhado</span>
+              </div>
+            </div>
+          )
+        },
+        {
+          header: "Qtd. Molhado",
+          accessor: "dmg_molhado",
+          render: (val: number) => (
+            <span className="font-black px-2 py-0.5 rounded-lg bg-blue-50 text-blue-600">
+              {fmtNum(val)}
+            </span>
+          )
+        },
+        {
+          header: "% do Estoque",
+          accessor: "dmg_molhado",
+          render: (_: any, item: any) => {
+            const val = item.dmg_molhado || 0
+            const pct = Math.min((val / item.quantidade_total) * 100, 100)
+            return (
+              <div className="flex items-center gap-2 w-32">
+                <div className="h-1.5 flex-1 bg-slate-100 rounded-full overflow-hidden border border-slate-200/50">
+                  <div className="h-full bg-blue-500 rounded-full" style={{ width: `${pct}%` }} />
+                </div>
+                <span className="text-[10px] font-black text-slate-400">{Math.round(pct)}%</span>
+              </div>
+            )
+          }
+        },
       ]
     }
 
@@ -632,11 +734,17 @@ export default function DashboardPage() {
     const matches = data.filter(item => item.produto === selectedProduct)
     if (matches.length === 0) return null
 
+    const filteredMatches = modalFilter
+      ? matches.filter(m => (m.qtd_molhado || 0) > 0)
+      : matches
+
     return {
       sku: selectedProduct,
       total_paletes: matches.reduce((sum, item) => sum + (item.paletes || 0), 0),
       total_quantidade: matches.reduce((sum, item) => sum + (item.quantidade_total || 0), 0),
-      positions: matches.map(m => ({
+      total_registros: filteredMatches.length,
+      total_posicoes_unicas: new Set(filteredMatches.map(m => m.posicao)).size,
+      positions: filteredMatches.map(m => ({
         posicao: m.posicao || "S/P",
         nivel: m.nivel || "Térreo",
         quantidade: m.quantidade_total || 0,
@@ -646,7 +754,7 @@ export default function DashboardPage() {
         qtd_molhado: m.qtd_molhado || 0
       })).sort((a, b) => a.posicao.localeCompare(b.posicao))
     }
-  }, [selectedProduct, data])
+  }, [selectedProduct, data, modalFilter])
 
   return (
     <div className="min-h-screen bg-[#f8fafc] p-8 md:p-12 lg:p-16">
@@ -911,12 +1019,32 @@ export default function DashboardPage() {
               onClick={() => setActiveView("nao_alocados")}
               className={cn(
                 "flex items-center gap-2 rounded-xl px-5 py-2.5 text-[11px] font-black transition-all",
-                activeView === "nao_alocados" ? "bg-white text-orange-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                activeView === "nao_alocados" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
               )}
             >
               <AlertCircle size={14} /> Não alocados
             </button>
           </div>
+
+          {(activeView === "produtos" || activeView === "molhados") && (
+            <div className="flex items-center gap-1 p-1 bg-blue-50/50 border border-blue-100/50 rounded-2xl w-fit">
+              <button
+                onClick={() => setActiveView("molhados")}
+                className={cn(
+                  "flex items-center gap-2 rounded-xl px-5 py-2.5 text-[11px] font-black transition-all relative group",
+                  activeView === "molhados" ? "bg-blue-600 text-white shadow-lg" : "text-blue-500 hover:bg-blue-50"
+                )}
+              >
+                <Droplet size={14} className={cn(activeView === "molhados" ? "fill-white/20" : "fill-blue-500/20 animate-pulse")} /> Molhados
+                {activeView !== "molhados" && (
+                  <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+                  </span>
+                )}
+              </button>
+            </div>
+          )}
 
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-2xl">
@@ -1029,7 +1157,14 @@ export default function DashboardPage() {
                   delay={0.1}
                   onRowClick={(row) => {
                     if (activeView === "posicoes") setSelectedPosition(row.posicao)
-                    if (activeView === "produtos") setSelectedProduct(row.produto)
+                    if (activeView === "produtos") {
+                      setModalFilter(false)
+                      setSelectedProduct(row.produto)
+                    }
+                    if (activeView === "molhados") {
+                      setModalFilter(true)
+                      setSelectedProduct(row.produto)
+                    }
                   }}
                   sortConfig={tableSort}
                   onSort={handleSort}
@@ -1058,10 +1193,17 @@ export default function DashboardPage() {
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-4xl max-h-[92vh] rounded-[3rem] bg-white p-8 md:p-10 shadow-2xl border border-white/20 flex flex-col overflow-hidden">
               <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center gap-4">
-                  <div className="h-14 w-14 rounded-3xl bg-emerald-600 flex items-center justify-center text-white shadow-xl shadow-emerald-200"><Tag size={24} /></div>
+                  <div className={cn(
+                    "h-14 w-14 rounded-3xl flex items-center justify-center text-white shadow-xl transition-all",
+                    modalFilter ? "bg-blue-600 shadow-blue-200" : "bg-emerald-600 shadow-emerald-200"
+                  )}>
+                    {modalFilter ? <Droplet size={24} /> : <Tag size={24} />}
+                  </div>
                   <div>
                     <h3 className="text-3xl font-black text-slate-900">{selectedProduct}</h3>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{Math.round(productDetail.total_paletes)} Paletes • {Math.round(productDetail.total_quantidade).toLocaleString('pt-BR')} Peças</p>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
+                      {Math.round(productDetail.total_paletes)} Paletes • {Math.round(productDetail.total_quantidade).toLocaleString('pt-BR')} Peças
+                    </p>
                   </div>
                 </div>
                 <button onClick={() => setSelectedProduct(null)} className="h-12 w-12 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-red-50 hover:text-red-500"><X size={24} /></button>
@@ -1112,9 +1254,27 @@ export default function DashboardPage() {
                   </table>
                 </div>
               </div>
-              <div className="mt-10 p-6 rounded-3xl bg-emerald-600 text-white flex items-center justify-between">
-                <div className="flex items-center gap-3"><Zap size={20} className="fill-white/20" /><p className="text-xs font-bold">Resumo: Produto distribuído em {productDetail.positions.length} posições</p></div>
-                <button className="flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-[10px] font-black uppercase hover:bg-white/20 transition-all border border-white/10">Ver no Mapa <ExternalLink size={12} /></button>
+              <div className={cn(
+                "mt-10 p-6 rounded-3xl text-white flex items-center justify-between transition-all",
+                modalFilter ? "bg-blue-600 shadow-xl shadow-blue-100" : "bg-emerald-600 shadow-xl shadow-emerald-100"
+              )}>
+                <div className="flex items-center gap-3">
+                  {modalFilter ? <Droplet size={20} className="fill-white/20" /> : <Zap size={20} className="fill-white/20" />}
+                  <p className="text-xs font-bold">
+                    {modalFilter ? `Visualização Filtrada: SKU possui ${productDetail.total_registros} registros com molhado em ${productDetail.total_posicoes_unicas} posições` : `Resumo: SKU possui ${productDetail.total_registros} registros distribuídos ao longo de ${productDetail.total_posicoes_unicas} posições`}
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setActiveView("posicoes")
+                    setDisplayMode("mapa")
+                    setSearch(selectedProduct)
+                    setSelectedProduct(null)
+                  }}
+                  className="flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-[10px] font-black uppercase hover:bg-white/20 transition-all border border-white/10"
+                >
+                  Ver no Mapa <ExternalLink size={12} />
+                </button>
               </div>
             </motion.div>
           </div>
