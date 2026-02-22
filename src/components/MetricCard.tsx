@@ -29,7 +29,7 @@ export function MetricCard({
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay, ease: [0.21, 0.47, 0.32, 0.98] }}
             className={cn(
-                "group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:border-blue-300 hover:shadow-md",
+                "group relative rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:border-blue-300 hover:shadow-md",
                 className
             )}
         >
@@ -50,11 +50,13 @@ export function MetricCard({
                 </div>
             </div>
 
-            {/* Hover Content - Elegant Bottom Slide */}
+            {/* Hover Content - Elegant Speech Bubble BELOW Card */}
             {hoverContent && (
-                <div className="absolute inset-x-0 bottom-0 z-10 translate-y-full opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
-                    <div className="mx-4 mb-4 rounded-xl bg-slate-900/90 p-3 text-white shadow-xl backdrop-blur-md">
+                <div className="absolute inset-x-0 top-full z-20 translate-y-2 opacity-0 transition-all duration-300 pointer-events-none group-hover:translate-y-4 group-hover:opacity-100 px-4">
+                    <div className="relative rounded-2xl bg-slate-900/95 p-3 text-white shadow-2xl backdrop-blur-md border border-white/10">
                         {hoverContent}
+                        {/* Speech Bubble Arrow - Pointing UP */}
+                        <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-slate-900/95 rotate-45 border-l border-t border-white/10" />
                     </div>
                 </div>
             )}

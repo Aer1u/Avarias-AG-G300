@@ -36,7 +36,7 @@ import { WarehouseTable } from "@/components/WarehouseTable"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 
-type ViewType = "geral" | "posicoes" | "produtos"
+type ViewType = "geral" | "posicoes" | "nao_alocados" | "produtos"
 type DisplayMode = "mapa" | "tabela"
 type SortType = "none" | "qty_desc" | "qty_asc" | "alpha_asc"
 
@@ -238,6 +238,14 @@ export default function DashboardPage() {
         ...item,
         rank: top3Names.indexOf(item.produto) !== -1 ? top3Names.indexOf(item.produto) + 1 : null
       }))
+    } else if (activeView === "nao_alocados") {
+      baseData = data.filter(item => {
+        const pos = String(item.posicao || "").toUpperCase()
+        return !pos || pos === "S/P" || pos === "N/A" || pos === "NÃO INFORMADO" || pos === "-"
+      }).map(item => ({
+        ...item,
+        posicao: item.posicao || "S/P"
+      }))
     } else {
       baseData = [...data]
     }
@@ -351,8 +359,21 @@ export default function DashboardPage() {
     let monoCount = 0
     let completoCount = 0
     let disponivelCount = 0
+    let alocadosPallets = 0
+    let naoAlocadosPallets = 0
+    let molhadosPallets = 0
+    let tombadosPallets = 0
+
+    const checkStatus = (item: any) => {
+      const prod = String(item.produto || "").toLowerCase()
+      if (prod.includes("molhado")) molhadosPallets += (item.paletes || 0)
+      if (prod.includes("tombado")) tombadosPallets += (item.paletes || 0)
+    }
 
     globalPosMap.forEach((skus, pos) => {
+      const posUpper = pos.toUpperCase()
+      const isAllocated = pos && posUpper !== "S/P" && posUpper !== "N/A" && posUpper !== "NÃO INFORMADO" && posUpper !== "-"
+
       if (skus.size > 1) mixedCount++
       else if (skus.size === 1) monoCount++
 
@@ -364,6 +385,16 @@ export default function DashboardPage() {
       } else {
         disponivelCount++
       }
+    })
+
+    data.forEach(item => {
+      const posUpper = String(item.posicao || "").toUpperCase()
+      const isAllocated = posUpper && posUpper !== "S/P" && posUpper !== "N/A" && posUpper !== "NÃO INFORMADO" && posUpper !== "-"
+
+      if (isAllocated) alocadosPallets += (item.paletes || 0)
+      else naoAlocadosPallets += (item.paletes || 0)
+
+      checkStatus(item)
     })
 
     posMap.forEach((cap) => {
@@ -384,7 +415,8 @@ export default function DashboardPage() {
       totalCapacity, totalPositions, occupied, free, occupiedPercent,
       breakdown: sortedBreakdown,
       mixedCount, monoCount, completoCount, disponivelCount,
-      mixPercent: totalPositions > 0 ? (mixedCount / totalPositions) * 100 : 0
+      mixPercent: totalPositions > 0 ? (mixedCount / totalPositions) * 100 : 0,
+      alocadosPallets, naoAlocadosPallets, molhadosPallets, tombadosPallets
     }
   }, [data, stats])
 
@@ -476,6 +508,31 @@ export default function DashboardPage() {
           )
         },
         { header: "Nº de Posições", accessor: "posicao_count" },
+      ]
+    }
+
+    if (activeView === "nao_alocados") {
+      return [
+        {
+          header: "Produto",
+          accessor: "produto",
+          render: (val: string) => (
+            <span className="font-bold text-slate-800">
+              {val || "Não Identificado"}
+            </span>
+          )
+        },
+        { header: "Quantidade", accessor: "quantidade_total", render: (val: number) => fmtNum(val) },
+        { header: "Paletes", accessor: "paletes", render: (val: number) => fmtNum(val) + " PTs" },
+        {
+          header: "Status",
+          accessor: "posicao",
+          render: () => (
+            <span className="inline-flex items-center rounded-full px-2 py-1 text-[10px] font-bold uppercase bg-amber-50 text-amber-600 border border-amber-100">
+              Aguardando Alocação
+            </span>
+          )
+        },
       ]
     }
 
@@ -579,8 +636,58 @@ export default function DashboardPage() {
 
         {/* KPIs Row */}
         <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
-          <MetricCard title="Paletes Totais" value={stats?.total_pallets?.toLocaleString('pt-BR') ?? "0"} icon={Package} delay={0.1} />
-          <MetricCard title="Peças Totais" value={stats?.total_quantity?.toLocaleString() ?? "0"} icon={BarChart3} delay={0.2} />
+          <MetricCard
+            title="Paletes Totais"
+            value={stats?.total_pallets?.toLocaleString('pt-BR') ?? "0"}
+            icon={Package}
+            delay={0.1}
+            hoverContent={
+              <div className="flex items-center justify-around gap-6 text-center min-w-[200px]">
+                <div className="flex flex-col">
+                  <span className="text-[8px] font-black uppercase text-slate-400">Alocados</span>
+                  <span className="text-xs font-black text-emerald-400">{fmtNum(advancedStats.alocadosPallets)}</span>
+                </div>
+                <div className="h-4 w-[1px] bg-white/10" />
+                <div className="flex flex-col">
+                  <span className="text-[8px] font-black uppercase text-slate-400">Não Alocados</span>
+                  <span className="text-xs font-black text-orange-400">{fmtNum(advancedStats.naoAlocadosPallets)}</span>
+                </div>
+              </div>
+            }
+          />
+          <MetricCard
+            title="Peças Totais"
+            value={stats?.total_quantity?.toLocaleString() ?? "0"}
+            icon={BarChart3}
+            delay={0.2}
+            hoverContent={
+              <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-center min-w-[200px]">
+                <div className="flex flex-col">
+                  <span className="text-[8px] font-black uppercase text-slate-400">Alocadas</span>
+                  <span className="text-xs font-black text-emerald-400">{fmtNum(data.filter(i => {
+                    const p = String(i.posicao || "").toUpperCase();
+                    return p && p !== "S/P" && p !== "N/A" && p !== "NÃO INFORMADO" && p !== "-";
+                  }).reduce((s, i) => s + (i.quantidade_total || 0), 0))}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[8px] font-black uppercase text-slate-400">Não Alocadas</span>
+                  <span className="text-xs font-black text-orange-400">{fmtNum(data.filter(i => {
+                    const p = String(i.posicao || "").toUpperCase();
+                    return !p || p === "S/P" || p === "N/A" || p === "NÃO INFORMADO" || p === "-";
+                  }).reduce((s, i) => s + (i.quantidade_total || 0), 0))}</span>
+                </div>
+                <div className="col-span-2 h-[1px] bg-white/10 my-1" />
+                <div className="flex flex-col">
+                  <span className="text-[8px] font-black uppercase text-slate-400">Molhadas</span>
+                  <span className="text-xs font-black text-blue-400">{fmtNum(data.filter(i => String(i.produto || "").toLowerCase().includes("molhado")).reduce((s, i) => s + (i.quantidade_total || 0), 0))}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[8px] font-black uppercase text-slate-400">Tombadas</span>
+                  <span className="text-xs font-black text-red-500">{fmtNum(data.filter(i => String(i.produto || "").toLowerCase().includes("tombado")).reduce((s, i) => s + (i.quantidade_total || 0), 0))}</span>
+                </div>
+              </div>
+            }
+          />
           <MetricCard
             title="Drives Ativos"
             value={advancedStats.totalPositions}
@@ -750,6 +857,15 @@ export default function DashboardPage() {
               )}
             >
               <Tag size={14} /> Produtos
+            </button>
+            <button
+              onClick={() => setActiveView("nao_alocados")}
+              className={cn(
+                "flex items-center gap-2 rounded-xl px-5 py-2.5 text-[11px] font-black transition-all",
+                activeView === "nao_alocados" ? "bg-white text-orange-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+              )}
+            >
+              <AlertCircle size={14} /> Não alocados
             </button>
           </div>
 
@@ -1018,5 +1134,3 @@ export default function DashboardPage() {
     </div>
   )
 }
-/ /   F o r c e   r e d e p l o y   t o   e n s u r e   2 - t i e r   l a y o u t   i s   l i v e  
- 
