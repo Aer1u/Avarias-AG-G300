@@ -67,8 +67,8 @@ export default function DashboardPage() {
     setError(null)
     try {
       const [dataRes, statsRes] = await Promise.all([
-        fetch("https://avarias-ag-g300.onrender.com/api/data"),
-        fetch("https://avarias-ag-g300.onrender.com/api/stats")
+        fetch("/api/data"),
+        fetch("/api/stats")
       ])
 
       if (!dataRes.ok || !statsRes.ok) throw new Error("Erro ao carregar dados")
