@@ -6,6 +6,9 @@ import traceback
 import json
 import numpy as np
 
+import requests
+import io
+
 app = FastAPI()
 
 # Enable CORS for Next.js developer server
@@ -17,18 +20,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-EXCEL_PATH = os.environ.get(
-    "https://docs.google.com/spreadsheets/d/1q-gttvSLzCVD4x6xtVqivDeYMVvY3PIEOMEYaWnxyeM/edit?usp=sharing",
-    os.path.join(os.path.dirname(__file__), "data", "Drive atualizado.xlsx")
-)
-
+# Configuration
+GSHEET_URL = "https://docs.google.com/spreadsheets/d/1q-gttvSLzCVD4x6xtVqivDeYMVvY3PIEOMEYaWnxyeM/export?format=xlsx"
+LOCAL_EXCEL_PATH = os.path.join(os.path.dirname(__file__), "data", "Drive atualizado.xlsx")
 
 # Function to load and clean data
 def get_clean_data():
-    if not os.path.exists(EXCEL_PATH):
-        raise FileNotFoundError("Excel file not found")
+    df = None
     
-    df = pd.read_excel(EXCEL_PATH)
+    # 1. Try to fetch from Google Sheets first
+    try:
+        response = requests.get(GSHEET_URL, timeout=10)
+        if response.status_code == 200:
+            df = pd.read_excel(io.BytesIO(response.content))
+            print("Successfully loaded data from Google Sheets")
+    except Exception as e:
+        print(f"Failed to fetch from Google Sheets: {e}")
+
+    # 2. Fallback to local file if fetch failed
+    if df is None:
+        if os.path.exists(LOCAL_EXCEL_PATH):
+            df = pd.read_excel(LOCAL_EXCEL_PATH)
+            print("Loaded data from local Excel file")
+        else:
+            raise FileNotFoundError("Data source not found (neither Google Sheets nor local file)")
     
     # Hardened mapping logic
     new_cols = {}
@@ -44,22 +59,33 @@ def get_clean_data():
         elif 'prof' in c: new_cols[col] = 'profundidade'
         elif '/' in c and 'palete' in c: new_cols[col] = 'qtd_por_palete'
         elif 'id' in c and 'palete' in c: new_cols[col] = 'id_palete'
+        elif 'tombada' in c: new_cols[col] = 'qtd_tombada'
+        elif 'molhado' in c: new_cols[col] = 'qtd_molhado'
+        elif 'status' in c or 'observa' in c or 'avaria' in c: new_cols[col] = 'observacao'
     
     df = df.rename(columns=new_cols)
+
+    # Damage categorization logic
+    def check_damage(row, keyword):
+        text = (str(row.get('produto', '')) + " " + str(row.get('observacao', ''))).lower()
+        return 1 if keyword in text else 0
+
+    df['is_molhado'] = df.apply(lambda r: check_damage(r, 'molhado'), axis=1)
+    df['is_tombado'] = df.apply(lambda r: check_damage(r, 'tombado'), axis=1)
 
     # Ultra-robust position detection
     if 'posicao' not in df.columns or df['posicao'].astype(str).str.contains('N/A').all():
         for col in df.columns:
-            # Check if values in this column look like G300 positions
             if df[col].astype(str).str.contains('G300', na=False).any():
                 df = df.rename(columns={col: 'posicao'})
                 break
-    required_cols = ['produto', 'quantidade_total', 'paletes', 'capacidade', 'posicao', 'nivel']
+    
+    required_cols = ['produto', 'quantidade_total', 'paletes', 'capacidade', 'posicao', 'nivel', 'observacao']
     for rc in required_cols:
         if rc not in df.columns:
             df[rc] = 0 if rc in ['quantidade_total', 'paletes', 'capacidade'] else ('-' if rc == 'nivel' else 'N/A')
     
-    # Normalize data and handle NaN for JSON compliance
+    # Normalize data
     df['produto'] = df['produto'].fillna('Não Identificado')
     df['quantidade_total'] = pd.to_numeric(df['quantidade_total'], errors='coerce').fillna(0)
     df['paletes'] = pd.to_numeric(df['paletes'], errors='coerce').fillna(0)
@@ -67,6 +93,8 @@ def get_clean_data():
     df['posicao'] = df['posicao'].fillna('S/P')
     df['nivel'] = df['nivel'].fillna('-')
     df['qtd_por_palete'] = pd.to_numeric(df['qtd_por_palete'], errors='coerce').fillna(0)
+    df['qtd_tombada'] = pd.to_numeric(df.get('qtd_tombada', 0), errors='coerce').fillna(0)
+    df['qtd_molhado'] = pd.to_numeric(df.get('qtd_molhado', 0), errors='coerce').fillna(0)
     
     # Precise Depth Handling
     def clean_depth(val):
@@ -82,31 +110,24 @@ def get_clean_data():
         df['profundidade'] = '-'
     
     # Logic for ID Palete (Shared Pallets)
-    # 1. Clean up id_palete column
     if 'id_palete' in df.columns:
         df['id_palete'] = df['id_palete'].fillna('').astype(str).str.strip().replace('nan', '')
-        
-        # 2. Identify rows with a shared pallet ID (non-empty)
         shared_mask = df['id_palete'] != ''
         if shared_mask.any():
-            # Count occurrences of each shared ID Palete
             id_counts = df[shared_mask]['id_palete'].value_counts()
-            
-            # Apply balancing: Pallet count = 1 / total items sharing that ID
             def balance_pallet(row):
                 if row['id_palete'] != '':
                     count = id_counts.get(row['id_palete'], 1)
                     return 1.0 / count
                 return row['paletes']
-                
             df['paletes'] = df.apply(balance_pallet, axis=1)
 
-    # Correct Occupancy Calculation (Pallets / Capacity)
+    # Correct Occupancy Calculation
     df['ocupacao'] = (df['paletes'] / df['capacidade'] * 100).clip(0, 500).fillna(0)
     
     # Final JSON compliance check
     df = df.replace([np.inf, -np.inf], np.nan)
-    df = df.fillna(0) # Ensure no NaN for pure JSON compliance if needed
+    df = df.fillna(0)
     return df
 
 @app.get("/api/data")
@@ -128,7 +149,11 @@ async def get_stats():
             "total_quantity": int(df['quantidade_total'].sum()),
             "total_positions": int(df['posicao'].nunique()),
             "total_skus": int(df['produto'].nunique()),
-            "avg_occupancy": float(df['ocupacao'].mean())
+            "avg_occupancy": float(df['ocupacao'].mean()),
+            "molhados": int(df['is_molhado'].sum()),
+            "tombados": int(df['is_tombado'].sum()),
+            "qtd_molhado": int(df['qtd_molhado'].sum()),
+            "qtd_tombada": int(df['qtd_tombada'].sum())
         }
     except Exception as e:
         print(f"CRITICAL ERROR in /api/stats: {str(e)}")

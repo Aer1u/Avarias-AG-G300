@@ -115,13 +115,18 @@ export default function DashboardPage() {
       const entry = posMap.get(posId)
       entry.paletes += (item.paletes || 0)
       if (item.produto) {
+        const total = item.quantidade_total || 0
+        const damaged = item.qtd_molhado || 0
         entry.products.push({
           sku: item.produto,
-          quantidade: item.quantidade_total,
+          quantidade: total - damaged,
+          quantidade_total: total,
           paletes: item.paletes,
           nivel: item.nivel || "N/A",
           profundidade: item.profundidade || item.Profundidade || "-",
           qtd_por_palete: item.qtd_por_palete || item["Quantidade/palete"] || 0,
+          qtd_tombada: item.qtd_tombada || 0,
+          qtd_molhado: item.qtd_molhado || 0,
           pos_interna: item.posicao_interna || item.posicao?.split('-')?.pop() || "N/A"
         })
       }
@@ -198,12 +203,14 @@ export default function DashboardPage() {
         const entry = posMap.get(pos)
         entry.paletes += (item.paletes || 0)
         entry.quantidade_total += (item.quantidade_total || 0)
+        entry.dmg_molhado = (entry.dmg_molhado || 0) + (item.qtd_molhado || 0)
         if (item.produto) entry.skus.add(item.produto)
       })
 
       baseData = Array.from(posMap.values()).map(item => ({
         ...item,
         sku_count: item.skus.size,
+        quantidade: item.quantidade_total - (item.dmg_molhado || 0),
         ocupacao: item.capacidade > 0 ? (item.paletes / item.capacidade * 100) : 0,
         drive_status: item.skus.size > 1 ? "MISTURADO" : "MONO",
         is_complete: item.capacidade > 0 && item.paletes >= item.capacidade ? "COMPLETO" : "DISPONÍVEL"
@@ -223,12 +230,14 @@ export default function DashboardPage() {
         const entry = productMap.get(prod)
         entry.paletes += (item.paletes || 0)
         entry.quantidade_total += (item.quantidade_total || 0)
+        entry.dmg_molhado = (entry.dmg_molhado || 0) + (item.qtd_molhado || 0)
         if (item.posicao) entry.posicoes.add(item.posicao)
       })
 
       baseData = Array.from(productMap.values()).map(item => ({
         ...item,
-        posicao_count: item.posicoes.size
+        posicao_count: item.posicoes.size,
+        quantidade: item.quantidade_total - (item.dmg_molhado || 0)
       }))
 
       const sortedForRank = [...baseData].sort((a, b) => (b.quantidade_total || 0) - (a.quantidade_total || 0))
@@ -252,7 +261,7 @@ export default function DashboardPage() {
 
     // Global Sort Mode (The Buttons)
     if (sortMode === "qty_desc") {
-      baseData.sort((a, b) => (b.quantidade_total || 0) - (a.quantidade_total || 0))
+      baseData.sort((a, b) => (b.quantidade || 0) - (a.quantidade || 0))
     } else if (sortMode === "alpha_asc") {
       baseData.sort((a, b) => {
         const key = activeView === "produtos" ? "produto" : "posicao"
@@ -280,14 +289,11 @@ export default function DashboardPage() {
 
     // Rank items for Products view after sorting
     if (activeView === "produtos") {
-      const top3Names = [...baseData]
-        .sort((a, b) => (b.quantidade_total || 0) - (a.quantidade_total || 0))
-        .slice(0, 3)
-        .map(p => p.produto)
-
+      const sortedByQty = [...baseData].sort((a, b) => (b.quantidade || 0) - (a.quantidade || 0));
+      const rankMap = new Map(sortedByQty.map((p, i) => [p.produto, i + 1]));
       baseData = baseData.map(item => ({
         ...item,
-        rank: top3Names.indexOf(item.produto) !== -1 ? top3Names.indexOf(item.produto) + 1 : null
+        rank: rankMap.get(item.produto)
       }))
     }
 
@@ -427,7 +433,7 @@ export default function DashboardPage() {
           header: "Posição",
           accessor: "posicao",
           render: (val: string) => (
-            <span className="font-black text-blue-600 tracking-tight">
+            <span className="font-black text-slate-900 tracking-tight">
               {val}
             </span>
           )
@@ -452,17 +458,17 @@ export default function DashboardPage() {
           accessor: "ocupacao",
           render: (val: number) => (
             <div className="flex w-32 items-center gap-2">
-              <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden shadow-inner">
+              <div className="h-1.5 w-full rounded-full bg-slate-50 overflow-hidden border border-slate-100/50">
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${Math.min(val, 100)}%` }}
                   className={cn(
-                    "h-full rounded-full shadow-sm",
-                    val > 90 ? "bg-red-500" : val > 70 ? "bg-amber-500" : "bg-blue-500"
+                    "h-full rounded-full transition-all duration-1000",
+                    val >= 100 ? "bg-red-500" : val >= 75 ? "bg-orange-500" : "bg-blue-500"
                   )}
                 />
               </div>
-              <span className="text-[10px] font-bold text-slate-500">{Math.round(val)}%</span>
+              <span className="text-[10px] font-black text-slate-400">{Math.round(val)}%</span>
             </div>
           )
         },
@@ -471,8 +477,8 @@ export default function DashboardPage() {
           accessor: "is_complete",
           render: (val: string) => (
             <span className={cn(
-              "inline-flex items-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
-              val === "COMPLETO" ? "bg-blue-600 text-white shadow-md shadow-blue-100" : "bg-slate-100 text-slate-500"
+              "inline-flex items-center rounded-full px-3 py-1.5 text-[10px] font-black uppercase shadow-sm transition-all",
+              val === "COMPLETO" ? "bg-blue-600 text-white shadow-blue-100/50" : "bg-slate-100 text-slate-400 border border-slate-200"
             )}>
               {val}
             </span>
@@ -487,22 +493,42 @@ export default function DashboardPage() {
           header: "Produto",
           accessor: "produto",
           render: (val: string, item: any) => (
-            <div className="flex items-center gap-2">
-              {item.rank === 1 && <Flame size={16} className="text-orange-500 fill-orange-500 animate-pulse" />}
-              {item.rank === 2 && <Flame size={16} className="text-orange-400 fill-orange-400" />}
-              {item.rank === 3 && <Flame size={16} className="text-orange-300 fill-orange-300" />}
-              <span className={cn(item.rank ? "font-bold text-slate-900" : "text-slate-600")}>
-                {val}
-              </span>
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                "flex h-10 w-10 items-center justify-center rounded-xl font-black transition-all",
+                item.rank === 1 ? "bg-orange-600 text-white shadow-lg shadow-orange-200" :
+                  item.rank === 2 ? "bg-orange-500 text-white shadow-md shadow-orange-100/50" :
+                    item.rank === 3 ? "bg-orange-400/80 text-white shadow-sm" :
+                      "bg-slate-50 text-slate-400 border border-slate-100"
+              )}>
+                {item.rank}
+              </div>
+              <div className="flex flex-col">
+                <div className="flex items-center gap-1.5">
+                  {item.rank === 1 && <Flame size={14} className="text-orange-500 fill-orange-500 animate-pulse" />}
+                  {item.rank === 2 && <Flame size={14} className="text-orange-500 fill-orange-500/50" />}
+                  {item.rank === 3 && <Flame size={14} className="text-orange-500/70" />}
+                  <span className={cn(
+                    "text-sm font-black group-hover:text-blue-600 transition-colors uppercase tracking-tight",
+                    item.rank <= 3 ? "text-blue-600" : "text-slate-900"
+                  )}>
+                    {val}
+                  </span>
+                </div>
+                <span className="text-[10px] font-black text-slate-400 uppercase">{item.posicao_count} Posições</span>
+              </div>
             </div>
           )
         },
         { header: "Paletes", accessor: "paletes", render: (val: number) => fmtNum(val) },
         {
           header: "Quantidade",
-          accessor: "quantidade_total",
+          accessor: "quantidade",
           render: (val: number, item: any) => (
-            <span className={cn(item.rank ? "font-extrabold text-blue-600 bg-blue-50/50 px-2 py-0.5 rounded-lg" : "font-medium")}>
+            <span className={cn(
+              "font-black px-2 py-0.5 rounded-lg transition-all",
+              item.rank <= 3 ? "text-blue-600 bg-blue-50/50 font-extrabold" : "text-slate-900"
+            )}>
               {fmtNum(val)}
             </span>
           )
@@ -541,16 +567,20 @@ export default function DashboardPage() {
       { header: "Principal SKU", accessor: "produto" },
       { header: "Capacidade", accessor: "capacidade", render: (val: any) => <span className="font-black text-slate-400">{fmtNum(val)} PTs</span> },
       { header: "Quantidade", accessor: "quantidade_total", render: (val: any) => <span className="font-black text-slate-800">{fmtNum(val)}</span> },
-      { header: "Paletes", accessor: "paletes", render: (val: any) => <span className="font-black text-blue-600">{fmtNum(val)} PTs</span> },
+      { header: "Paletes", accessor: "paletes", render: (val: any) => <span className="font-black text-slate-900">{fmtNum(val)} PTs</span> },
       {
         header: "Ocupação",
         accessor: "ocupacao",
         render: (val: number) => (
           <div className="flex items-center gap-3 w-32">
-            <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
-              <div className={cn("h-full transition-all", val > 100 ? "bg-red-500" : "bg-blue-600")} style={{ width: `${Math.min(val, 100)}%` }} />
+            <div className="flex-1 h-1.5 rounded-full bg-slate-50 overflow-hidden border border-slate-100">
+              <div className={cn("h-full transition-all duration-1000",
+                val >= 100 ? "bg-red-500" :
+                  val >= 75 ? "bg-orange-500" :
+                    "bg-blue-500"
+              )} style={{ width: `${Math.min(val, 100)}%` }} />
             </div>
-            <span className="text-[10px] font-black text-slate-500">{Math.round(val)}%</span>
+            <span className="text-[10px] font-black text-slate-400">{Math.round(val)}%</span>
           </div>
         )
       },
@@ -574,7 +604,9 @@ export default function DashboardPage() {
         quantidade: m.quantidade_total || 0,
         paletes: m.paletes || 0,
         profundidade: m.profundidade || m.Profundidade || "-",
-        qtd_por_palete: m.qtd_por_palete || m["Quantidade/palete"] || 0
+        qtd_por_palete: m.qtd_por_palete || m["Quantidade/palete"] || 0,
+        qtd_tombada: m.qtd_tombada || 0,
+        qtd_molhado: m.qtd_molhado || 0
       }))
     }
   }, [selectedPosition, data])
@@ -594,7 +626,9 @@ export default function DashboardPage() {
         nivel: m.nivel || "Térreo",
         quantidade: m.quantidade_total || 0,
         paletes: m.paletes || 0,
-        profundidade: m.profundidade || "-"
+        profundidade: m.profundidade || "-",
+        qtd_tombada: m.qtd_tombada || 0,
+        qtd_molhado: m.qtd_molhado || 0
       })).sort((a, b) => a.posicao.localeCompare(b.posicao))
     }
   }, [selectedProduct, data])
@@ -677,13 +711,13 @@ export default function DashboardPage() {
                   }).reduce((s, i) => s + (i.quantidade_total || 0), 0))}</span>
                 </div>
                 <div className="col-span-2 h-[1px] bg-white/10 my-1" />
-                <div className="flex flex-col">
+                <div className="flex flex-col border-r border-white/10 pr-6">
                   <span className="text-[8px] font-black uppercase text-slate-400">Molhadas</span>
-                  <span className="text-xs font-black text-blue-400">{fmtNum(data.filter(i => String(i.produto || "").toLowerCase().includes("molhado")).reduce((s, i) => s + (i.quantidade_total || 0), 0))}</span>
+                  <span className="text-xs font-black text-blue-400">{fmtNum(stats?.qtd_molhado || 0)} <span className="text-[8px] text-slate-500 font-medium">un</span></span>
                 </div>
                 <div className="flex flex-col">
                   <span className="text-[8px] font-black uppercase text-slate-400">Tombadas</span>
-                  <span className="text-xs font-black text-red-500">{fmtNum(data.filter(i => String(i.produto || "").toLowerCase().includes("tombado")).reduce((s, i) => s + (i.quantidade_total || 0), 0))}</span>
+                  <span className="text-xs font-black text-red-500">{fmtNum(stats?.qtd_tombada || 0)} <span className="text-[8px] text-slate-500 font-medium">un</span></span>
                 </div>
               </div>
             }
@@ -835,7 +869,7 @@ export default function DashboardPage() {
               onClick={() => setActiveView("geral")}
               className={cn(
                 "flex items-center gap-2 rounded-xl px-5 py-2.5 text-[11px] font-black transition-all",
-                activeView === "geral" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                activeView === "geral" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
               )}
             >
               <LayoutGrid size={14} /> Geral
@@ -844,7 +878,7 @@ export default function DashboardPage() {
               onClick={() => setActiveView("posicoes")}
               className={cn(
                 "flex items-center gap-2 rounded-xl px-5 py-2.5 text-[11px] font-black transition-all",
-                activeView === "posicoes" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                activeView === "posicoes" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
               )}
             >
               <MapPin size={14} /> Posições
@@ -853,7 +887,7 @@ export default function DashboardPage() {
               onClick={() => setActiveView("produtos")}
               className={cn(
                 "flex items-center gap-2 rounded-xl px-5 py-2.5 text-[11px] font-black transition-all",
-                activeView === "produtos" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                activeView === "produtos" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
               )}
             >
               <Tag size={14} /> Produtos
@@ -871,16 +905,16 @@ export default function DashboardPage() {
 
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-2xl">
-              <button onClick={() => { setSortMode("qty_desc"); setTableSort({ key: "none", direction: "asc" }); }} className={cn("px-4 py-2.5 text-[10px] font-black uppercase rounded-xl transition-all", sortMode === "qty_desc" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500")}>
+              <button onClick={() => { setSortMode("qty_desc"); setTableSort({ key: "none", direction: "asc" }); }} className={cn("px-4 py-2.5 text-[10px] font-black uppercase rounded-xl transition-all", sortMode === "qty_desc" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500")}>
                 <ArrowDownWideNarrow size={14} className="inline mr-1" /> Maior Qtd.
               </button>
-              <button onClick={() => { setSortMode("alpha_asc"); setTableSort({ key: "none", direction: "asc" }); }} className={cn("px-4 py-2.5 text-[10px] font-black uppercase rounded-xl transition-all", sortMode === "alpha_asc" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500")}>
+              <button onClick={() => { setSortMode("alpha_asc"); setTableSort({ key: "none", direction: "asc" }); }} className={cn("px-4 py-2.5 text-[10px] font-black uppercase rounded-xl transition-all", sortMode === "alpha_asc" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500")}>
                 <ArrowDownAZ size={14} className="inline mr-1" /> A-Z
               </button>
             </div>
             <div className="relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
-              <input type="text" placeholder="Pesquisar detalhes..." className="w-64 rounded-2xl border border-slate-200 bg-white py-2.5 pl-11 pr-5 text-xs outline-none focus:border-blue-600 transition-all font-medium" value={search} onChange={(e) => setSearch(e.target.value)} />
+              <input type="text" placeholder="Pesquisar detalhes..." className="w-64 rounded-2xl border border-slate-200 bg-white py-2.5 pl-11 pr-5 text-xs outline-none focus:border-slate-900 transition-all font-medium" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
           </div>
         </div>
@@ -906,7 +940,7 @@ export default function DashboardPage() {
                 {Object.entries(streetData).map(([streetName, sections]) => (
                   <div key={streetName} className="p-8 rounded-[2.5rem] bg-white border border-slate-100 shadow-sm">
                     <div className="flex items-center gap-3 mb-8">
-                      <div className="h-8 w-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black text-xs">{streetName}</div>
+                      <div className="h-8 w-8 rounded-lg bg-slate-900 text-white flex items-center justify-center font-black text-xs">{streetName}</div>
                       <h4 className="font-black text-slate-800 uppercase tracking-widest text-sm">Rua {streetName}</h4>
                     </div>
                     <div className="space-y-8">
@@ -915,12 +949,12 @@ export default function DashboardPage() {
                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-4">Lado {side === "even" ? "PAR" : "ÍMPAR"}</p>
                           <div className="flex flex-wrap gap-2">
                             {positions.map((pos: any) => {
-                              const isMixed = pos.products.length > 1
-                              const isEmpty = pos.paletes === 0
+                              const isFull = pos.capacidade > 0 && pos.paletes >= pos.capacidade
+                              const isAvailable = pos.paletes < pos.capacidade
                               return (
                                 <div key={pos.id} className="group relative">
-                                  <button onClick={() => setSelectedPosition(pos.id)} className={cn("h-10 w-10 rounded-lg border-2 flex items-center justify-center transition-all group-hover:scale-110", isEmpty ? "bg-slate-50 border-slate-100" : isMixed ? "bg-red-50 border-red-200" : "bg-blue-50 border-blue-200")}>
-                                    <span className={cn("text-[7px] font-black leading-none text-center px-0.5", isEmpty ? "text-slate-300" : isMixed ? "text-red-600" : "text-blue-600")}>
+                                  <button onClick={() => setSelectedPosition(pos.id)} className={cn("h-10 w-10 rounded-lg border-2 flex items-center justify-center transition-all group-hover:scale-110", isFull ? "bg-red-50 border-red-500" : "bg-emerald-50 border-emerald-500")}>
+                                    <span className={cn("text-[7px] font-black leading-none text-center px-0.5", isFull ? "text-red-600" : "text-emerald-700")}>
                                       {pos.id.match(/(1G|1F|2G|3G)(\d+)/i)?.[2]?.substring(0, 3) || pos.id.slice(-4)}
                                     </span>
                                   </button>
@@ -929,20 +963,32 @@ export default function DashboardPage() {
                                   <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 hidden group-hover:block z-[100] w-52 pointer-events-none">
                                     <div className="bg-slate-900 text-white rounded-2xl p-4 shadow-2xl border border-white/10 backdrop-blur-md relative">
                                       <div className="flex items-center justify-between mb-3">
-                                        <span className="text-[10px] font-black uppercase text-blue-400 tracking-widest">{pos.id}</span>
-                                        <div className={cn("h-2 w-2 rounded-full shadow-[0_0_8px_rgba(255,255,255,0.4)]", isEmpty ? "bg-slate-400" : isMixed ? "bg-red-500" : "bg-emerald-500")} />
+                                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{pos.id}</span>
+                                        <div className={cn("h-2 w-2 rounded-full shadow-[0_0_8px_rgba(255,255,255,0.4)]", isFull ? "bg-red-500" : "bg-emerald-500")} />
                                       </div>
                                       <div className="space-y-2">
                                         <div className="flex justify-between items-center text-[9px] font-black uppercase text-slate-400">
                                           <span>Ocupação</span>
                                           <span className="text-white">{fmtNum(pos.paletes)}/{pos.capacidade || 4} PTs</span>
                                         </div>
+                                        {pos.products.some((p: any) => p.qtd_molhado > 0 || p.qtd_tombada > 0) && (
+                                          <div className="flex flex-col gap-1 pt-1 border-t border-white/5">
+                                            {pos.products.map((p: any, idx: number) => (
+                                              (p.qtd_molhado > 0 || p.qtd_tombada > 0) && (
+                                                <div key={idx} className="flex flex-wrap gap-2 text-[8px] font-black uppercase">
+                                                  {p.qtd_molhado > 0 && <span className="text-blue-400">Molhado: {fmtNum(p.qtd_molhado)}</span>}
+                                                  {p.qtd_tombada > 0 && <span className="text-red-400">Tombado: {fmtNum(p.qtd_tombada)}</span>}
+                                                </div>
+                                              )
+                                            ))}
+                                          </div>
+                                        )}
                                         {pos.products.length > 0 && (
                                           <div className="pt-2 border-t border-white/5 space-y-1">
                                             <p className="text-[8px] font-black text-slate-500 uppercase tracking-tighter">SKU Principal</p>
-                                            <p className="text-[11px] font-black text-blue-100 truncate">{pos.products[0].sku}</p>
+                                            <p className="text-[11px] font-black text-slate-100 truncate">{pos.products[0].sku}</p>
                                             {pos.products.length > 1 && (
-                                              <p className="text-[8px] font-black text-blue-400 uppercase tracking-tighter mt-1">+ {pos.products.length - 1} Itens (Mix)</p>
+                                              <p className="text-[8px] font-black text-slate-400 uppercase tracking-tighter mt-1">+ {pos.products.length - 1} Itens (Mix)</p>
                                             )}
                                           </div>
                                         )}
@@ -980,8 +1026,8 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between px-4 pb-8">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Página {currentPage} de {totalPages}</span>
                 <div className="flex gap-2">
-                  <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} className="p-3 bg-white rounded-xl border border-slate-100 text-slate-400 hover:text-blue-600"><ChevronLeft size={16} /></button>
-                  <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} className="p-3 bg-white rounded-xl border border-slate-100 text-slate-400 hover:text-blue-600"><ChevronRight size={16} /></button>
+                  <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} className="p-3 bg-white rounded-xl border border-slate-100 text-slate-400 hover:text-slate-900"><ChevronLeft size={16} /></button>
+                  <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} className="p-3 bg-white rounded-xl border border-slate-100 text-slate-400 hover:text-slate-900"><ChevronRight size={16} /></button>
                 </div>
               </div>
             )}
@@ -1038,7 +1084,11 @@ export default function DashboardPage() {
                           <td className="px-6 py-5 text-right">
                             <div className="flex flex-col">
                               <span className="text-sm font-black text-slate-900">{fmtNum(p.quantidade)}</span>
-                              <span className="text-[9px] font-black text-slate-400 uppercase">{fmtNum(p.paletes)} PTs</span>
+                              <div className="flex items-center justify-end gap-2">
+                                <span className="text-[9px] font-black text-slate-400 uppercase">{fmtNum(p.paletes)} PTs</span>
+                                {p.qtd_molhado > 0 && <span className="text-[9px] font-black text-blue-500 uppercase">| {fmtNum(p.qtd_molhado)} M</span>}
+                                {p.qtd_tombada > 0 && <span className="text-[9px] font-black text-red-500 uppercase">| {fmtNum(p.qtd_tombada)} T</span>}
+                              </div>
                             </div>
                           </td>
                         </tr>
@@ -1108,7 +1158,11 @@ export default function DashboardPage() {
                           <td className="px-6 py-5 text-right">
                             <div className="flex flex-col">
                               <span className="text-sm font-black text-slate-900">{Math.round(p.quantidade).toLocaleString('pt-BR')}</span>
-                              <span className="text-[9px] font-black text-slate-400 uppercase">{Math.round(p.paletes)} PTs</span>
+                              <div className="flex items-center justify-end gap-2">
+                                <span className="text-[9px] font-black text-slate-400 uppercase">{Math.round(p.paletes)} PTs</span>
+                                {p.qtd_molhado > 0 && <span className="text-[9px] font-black text-blue-500 uppercase">| {fmtNum(p.qtd_molhado)} Molhado</span>}
+                                {p.qtd_tombada > 0 && <span className="text-[9px] font-black text-red-500 uppercase">| {fmtNum(p.qtd_tombada)} Tombado</span>}
+                              </div>
                             </div>
                           </td>
                         </tr>
