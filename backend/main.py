@@ -198,7 +198,7 @@ def get_movement_data(period: str = "hoje", xl=None):
         for col in actual_cols:
             if 'produto' in col or 'sku' in col: new_cols[col] = 'produto'
             elif 'entrada' in col: new_cols[col] = 'entrada'
-            elif 'sa' in col and 'da' in col: new_cols[col] = 'saida' # Pega 'saída', 'saida', 'saídas', etc.
+            elif any(x in col for x in ['saída', 'saida', 'saíd', 'said']): new_cols[col] = 'saida'
             elif 'origem' in col or 'local' in col or 'ponto' in col: new_cols[col] = 'origem'
             elif 'molhado' in col: new_cols[col] = 'qtd_molhado'
         
@@ -528,7 +528,7 @@ def get_movement_totals(xl=None):
             c = str(col).lower().strip()
             if 'produto' in c or 'sku' in c: new_cols[col] = 'produto'
             elif 'entrada' in c: new_cols[col] = 'entrada'
-            elif 'sa' in c and 'da' in c: new_cols[col] = 'saida' # Pega 'saída', 'saida', 'sada'
+            elif any(x in c for x in ['saída', 'saida', 'saíd', 'said']): new_cols[col] = 'saida' 
             elif 'molhado' in c: new_cols[col] = 'qtd_molhado'
             elif 'tombado' in c: new_cols[col] = 'qtd_tombada'
             elif 'obser' in c: new_cols[col] = 'observacao'

@@ -122,6 +122,7 @@ export default function DashboardPage() {
   const [showTopSkusMenu, setShowTopSkusMenu] = useState(false)
   const [movementPeriod, setMovementPeriod] = useState<"hoje" | "semana" | "mensal">("hoje")
   const [showMovementMenu, setShowMovementMenu] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   // -- AJUSTES DE CONFRONTO --
   type AjusteManal = {
@@ -225,6 +226,7 @@ export default function DashboardPage() {
 
   const fetchData = async () => {
     setLoading(true)
+    setIsRefreshing(true)
     setError(null)
     try {
       const [dataRes, statsRes] = await Promise.all([
@@ -245,7 +247,10 @@ export default function DashboardPage() {
       setError("Falha na conexão com o servidor. Verifique se o backend está rodando.")
       console.error(err)
     } finally {
-      setTimeout(() => setLoading(false), 800)
+      setTimeout(() => {
+        setLoading(false)
+        setIsRefreshing(false)
+      }, 500)
     }
   }
 
@@ -1920,7 +1925,7 @@ export default function DashboardPage() {
 
             {/* GLOBAL LOADING INDICATOR (Phase 7) */}
             <AnimatePresence>
-              {(loading || (topTab === 'confrontos' && loadingConfrontos)) && (
+              {(loading || isRefreshing || (topTab === 'confrontos' && loadingConfrontos)) && (
                 <motion.div
                   initial={{ height: 0, opacity: 0, marginBottom: 0 }}
                   animate={{ height: "auto", opacity: 1, marginBottom: 24 }}
@@ -1929,7 +1934,7 @@ export default function DashboardPage() {
                 >
                   <div className="flex items-center justify-center gap-2 py-2.5 px-4 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/20 rounded-2xl transition-colors shadow-sm">
                     <RefreshCw size={12} className="animate-spin text-blue-600 dark:text-blue-400" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-400">Atualizando dados em tempo real...</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-400">Atualizando dados...</span>
                   </div>
                 </motion.div>
               )}
@@ -2604,7 +2609,9 @@ export default function DashboardPage() {
                                               <div key={i} className="flex flex-col gap-0.5 border-l-2 border-slate-700 pl-2">
                                                 <div className="flex items-center justify-between gap-2">
                                                   <span className="text-[9px] font-black text-slate-300 truncate tracking-tight">{d.sku}</span>
-                                                  <span className="text-[9px] font-black text-white shrink-0">+{d.val}</span>
+                                                  <span className="text-[9px] font-black text-white shrink-0">
+                                                    {item.isEntrada ? "+" : "-"}{d.val}
+                                                  </span>
                                                 </div>
                                                 {d.molhado > 0 && (
                                                   <div className="flex items-center gap-1">
