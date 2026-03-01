@@ -190,18 +190,19 @@ def get_movement_data(period: str = "hoje", xl=None):
         # Remover linhas totalmente vazias
         df = df.dropna(how='all')
         
-        # Padronizar colunas
-        df.columns = [str(c).lower().strip() for c in df.columns]
+        # Padronizar colunas e mapear de forma robusta
+        actual_cols = [str(c).lower().strip() for c in df.columns]
+        df.columns = actual_cols
         
-        # Mapeamentos
-        df = df.rename(columns={
-            'sku': 'produto',
-            'entradas': 'entrada',
-            'saídas': 'saida',
-            'saidas': 'saida',
-            'local': 'origem',
-            'ponto': 'origem'
-        })
+        new_cols = {}
+        for col in actual_cols:
+            if 'produto' in col or 'sku' in col: new_cols[col] = 'produto'
+            elif 'entrada' in col: new_cols[col] = 'entrada'
+            elif 'sa' in col and 'da' in col: new_cols[col] = 'saida' # Pega 'saída', 'saida', 'saídas', etc.
+            elif 'origem' in col or 'local' in col or 'ponto' in col: new_cols[col] = 'origem'
+            elif 'molhado' in col: new_cols[col] = 'qtd_molhado'
+        
+        df = df.rename(columns=new_cols)
 
         # Filtro de Data
         today = pd.Timestamp.now().normalize()
