@@ -2479,12 +2479,24 @@ export default function DashboardPage() {
                                 if (m.entrada > 0) {
                                   groups[d].ent.val += m.entrada;
                                   groups[d].ent.molh += (m.molhado || 0);
-                                  groups[d].ent.items.push({ sku: m.produto, val: m.entrada, molhado: m.molhado || 0 });
+                                  const existing = groups[d].ent.items.find((i: any) => i.sku === m.produto);
+                                  if (existing) {
+                                    existing.val += m.entrada;
+                                    existing.molhado += (m.molhado || 0);
+                                  } else {
+                                    groups[d].ent.items.push({ sku: m.produto, val: m.entrada, molhado: m.molhado || 0 });
+                                  }
                                 }
                                 if (m.saida > 0) {
                                   groups[d].sai.val += m.saida;
                                   groups[d].sai.molh += (m.molhado || 0);
-                                  groups[d].sai.items.push({ sku: m.produto, val: m.saida, molhado: m.molhado || 0 });
+                                  const existing = groups[d].sai.items.find((i: any) => i.sku === m.produto);
+                                  if (existing) {
+                                    existing.val += m.saida;
+                                    existing.molhado += (m.molhado || 0);
+                                  } else {
+                                    groups[d].sai.items.push({ sku: m.produto, val: m.saida, molhado: m.molhado || 0 });
+                                  }
                                 }
                               });
 
@@ -2500,12 +2512,24 @@ export default function DashboardPage() {
                                 if (m.entrada > 0) {
                                   groups[mes].ent.val += m.entrada;
                                   groups[mes].ent.molh += (m.molhado || 0);
-                                  groups[mes].ent.items.push({ sku: m.produto, val: m.entrada, molhado: m.molhado || 0 });
+                                  const existing = groups[mes].ent.items.find((i: any) => i.sku === m.produto);
+                                  if (existing) {
+                                    existing.val += m.entrada;
+                                    existing.molhado += (m.molhado || 0);
+                                  } else {
+                                    groups[mes].ent.items.push({ sku: m.produto, val: m.entrada, molhado: m.molhado || 0 });
+                                  }
                                 }
                                 if (m.saida > 0) {
                                   groups[mes].sai.val += m.saida;
                                   groups[mes].sai.molh += (m.molhado || 0);
-                                  groups[mes].sai.items.push({ sku: m.produto, val: m.saida, molhado: m.molhado || 0 });
+                                  const existing = groups[mes].sai.items.find((i: any) => i.sku === m.produto);
+                                  if (existing) {
+                                    existing.val += m.saida;
+                                    existing.molhado += (m.molhado || 0);
+                                  } else {
+                                    groups[mes].sai.items.push({ sku: m.produto, val: m.saida, molhado: m.molhado || 0 });
+                                  }
                                 }
                               });
                               Object.entries(groups).forEach(([mes, vals]) => {
