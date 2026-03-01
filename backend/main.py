@@ -595,6 +595,57 @@ def get_movement_totals(xl=None):
         print(f"DEBUG MOVEMENT TOTALS: Erro - {e}")
         return {"movement_pieces": 0, "qtd_molhado": 0, "qtd_tombada": 0, "movement_by_product": {}}
 
+def get_quantity_totals(xl=None):
+    """Lê a aba 'Quantidade Total' da planilha de movimentação para pegar molhado/tombada."""
+    try:
+        if xl is None:
+            url_xlsx = MOVEMENT_GSHEET_URL.replace("format=csv", "format=xlsx")
+            response = requests.get(url_xlsx, timeout=15)
+            response.raise_for_status()
+            xl = pd.ExcelFile(io.BytesIO(response.content))
+
+        # Procurar a aba correta
+        aba = None
+        for s in xl.sheet_names:
+            if 'quantidade' in s.lower() or 'total' in s.lower():
+                aba = s
+                break
+        
+        if not aba:
+            print("DEBUG QUANTITY TOTALS: Aba 'Quantidade Total' não encontrada.")
+            return {"qtd_molhado": 0, "qtd_tombada": 0}
+
+        df = xl.parse(aba)
+        df = df.dropna(how='all')
+        print(f"DEBUG QUANTITY TOTALS: Lida aba '{aba}' com {len(df)} linhas. Colunas: {df.columns.tolist()}")
+
+        # Mapear colunas
+        col_map = {}
+        for col in df.columns:
+            c = str(col).lower().strip()
+            if 'molhad' in c: col_map[col] = 'molhado'
+            elif 'tombad' in c: col_map[col] = 'tombado'
+
+        df = df.rename(columns=col_map)
+
+        def parse_num(v):
+            try:
+                if pd.isna(v) or str(v).strip() == '': return 0.0
+                return float(str(v).replace(',', '.'))
+            except:
+                return 0.0
+
+        qtd_molhado = int(df['molhado'].apply(parse_num).sum()) if 'molhado' in df.columns else 0
+        qtd_tombada = int(df['tombado'].apply(parse_num).sum()) if 'tombado' in df.columns else 0
+
+        print(f"DEBUG QUANTITY TOTALS: molhado={qtd_molhado}, tombada={qtd_tombada}")
+        return {"qtd_molhado": qtd_molhado, "qtd_tombada": qtd_tombada}
+
+    except Exception as e:
+        print(f"DEBUG QUANTITY TOTALS: Erro - {e}")
+        traceback.print_exc()
+        return {"qtd_molhado": 0, "qtd_tombada": 0}
+
 # Cache global para evitar downloads excessivos (expira em 30s)
 _xlsx_cache = {"data": None, "time": 0.0}        # Planilha de movimentação
 _main_xlsx_cache = {"data": None, "time": 0.0}   # Planilha principal (EXCEL_URL)
@@ -639,6 +690,7 @@ async def get_stats(period: str = "hoje"):
         
         df = get_clean_data(xl=main_xl)
         mov_totals = get_movement_totals(xl=mov_xl)
+        qty_totals = get_quantity_totals(xl=mov_xl)  # Aba 'Quantidade Total'
         top_moved = get_movement_data(period, xl=mov_xl)
         
         # Calculate divergences per product
@@ -674,8 +726,8 @@ async def get_stats(period: str = "hoje"):
             "avg_occupancy": float(df[df['capacidade'] > 0]['ocupacao'].mean()) if not df[df['capacidade'] > 0].empty else 0,
             "molhados": int(df['is_molhado'].sum()),
             "tombados": int(df['is_tombado'].sum()),
-            "qtd_molhado": mov_totals["qtd_molhado"],
-            "qtd_tombada": mov_totals["qtd_tombada"],
+            "qtd_molhado": qty_totals["qtd_molhado"],   # Da aba 'Quantidade Total'
+            "qtd_tombada": qty_totals["qtd_tombada"],   # Da aba 'Quantidade Total'
             "movement_pieces": mov_totals["movement_pieces"],
             "divergences": sorted(divergences, key=lambda x: abs(x['diff']), reverse=True),
             "total_capacity": int(df[df['posicao'] != 'S/P'].groupby('posicao')['capacidade'].first().sum()),
