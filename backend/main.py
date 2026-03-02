@@ -315,10 +315,10 @@ def get_movement_data(period: str = "hoje", xl=None):
         traceback.print_exc()
         return []
 
-def get_clean_data(xl=None):
+def get_clean_data(xl=None, unalloc_xl=None):
     df_reg = get_registered_positions(xl=xl)
     df_alloc = get_allocated_data(xl=xl)
-    df_unalloc = get_unallocated_data(xl=xl)
+    df_unalloc = get_unallocated_data(xl=unalloc_xl)
     
     # Se tivermos posições cadastradas, elas são a fonte da verdade para capacidade
     if not df_reg.empty:
@@ -713,16 +713,25 @@ async def get_stats(period: str = "hoje"):
         # Forçar hoje se vier recente (que removemos)
         if period == "recente": period = "hoje"
         
-        # Usar xl correto por planilha
-        main_xl = get_main_xlsx_file()   # Base de dados, Posições Cadastradas, etc.
-        mov_xl = get_xlsx_file()         # Registro de movimentação
+        # Optimization: Fetch via existing helpers which might have some internal logic/try-except
+        # and ensure we have separate XL objects for each source
+        main_xl_content = requests.get(EXCEL_URL, timeout=30).content
+        main_xl = pd.ExcelFile(io.BytesIO(main_xl_content))
         
-        df = get_clean_data(xl=main_xl)
+        url_mov_xlsx = MOVEMENT_GSHEET_URL.replace("format=csv", "format=xlsx")
+        mov_xl_content = requests.get(url_mov_xlsx, timeout=30).content
+        mov_xl = pd.ExcelFile(io.BytesIO(mov_xl_content))
+        
+        unalloc_xl_content = requests.get(UNALLOCATED_GSHEET_URL, timeout=30).content
+        unalloc_xl = pd.ExcelFile(io.BytesIO(unalloc_xl_content))
+
+        # Pass specific XLs to get_clean_data
+        df = get_clean_data(xl=main_xl, unalloc_xl=unalloc_xl)
         mov_totals = get_movement_totals(xl=mov_xl)
-        qty_totals = get_quantity_totals(xl=mov_xl)  # Aba 'Quantidade Total'
+        qty_totals = get_quantity_totals(xl=mov_xl)
         top_moved = get_movement_data(period, xl=mov_xl)
         
-        # Calculate divergences per product
+        # Calculate divergences
         db_by_product = {}
         if not df.empty and 'produto' in df.columns:
             valid_db = df[df['produto'].astype(str).str.strip() != '']
@@ -731,11 +740,10 @@ async def get_stats(period: str = "hoje"):
             
         mov_by_product = mov_totals.get("movement_by_product", {})
         
-        # Compare DB and Movement
         all_products = set(db_by_product.keys()).union(set(mov_by_product.keys()))
         divergences = []
         for p in all_products:
-            if not p or str(p).lower() == 'nan' or p == '-': continue
+            if not p or str(p).lower() in ['nan', 'none', '-', '']: continue
             db_qty = int(db_by_product.get(p, 0))
             mov_qty = int(mov_by_product.get(p, 0))
             if db_qty != mov_qty:
@@ -749,14 +757,11 @@ async def get_stats(period: str = "hoje"):
         return {
             "total_pallets": int(df['paletes'].sum()),
             "total_quantity": int(df['quantidade_total'].sum()),
-            "db_total_quantity": int(df['quantidade_total'].sum()), 
             "total_positions": int(df[df['posicao'] != 'S/P']['posicao'].nunique()),
             "total_skus": int(df['produto'].nunique()),
             "avg_occupancy": float(df[df['capacidade'] > 0]['ocupacao'].mean()) if not df[df['capacidade'] > 0].empty else 0,
-            "molhados": int(df['is_molhado'].sum()),
-            "tombados": int(df['is_tombado'].sum()),
-            "qtd_molhado": qty_totals["qtd_molhado"],   # Da aba 'Quantidade Total'
-            "qtd_tombada": qty_totals["qtd_tombada"],   # Da aba 'Quantidade Total'
+            "qtd_molhado": qty_totals["qtd_molhado"],
+            "qtd_tombada": qty_totals["qtd_tombada"],
             "movement_pieces": mov_totals["movement_pieces"],
             "total_entries": mov_totals.get("total_entries", 0),
             "total_exits": mov_totals.get("total_exits", 0),
@@ -766,7 +771,6 @@ async def get_stats(period: str = "hoje"):
             "unregistered_count": int(df[df['unregistered_error'] == True]['posicao'].nunique()),
             "unregistered_positions": list(df[df['unregistered_error'] == True]['posicao'].unique()),
             "top_moved": top_moved,
-            "recent_movements": get_movement_data("recente", xl=mov_xl)[:10],
             "frequency_by_product": mov_totals.get("frequency_by_product", {}),
             "molh_frequency_by_product": mov_totals.get("molh_frequency_by_product", {})
         }
