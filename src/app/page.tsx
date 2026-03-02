@@ -224,6 +224,21 @@ export default function DashboardPage() {
     setTheme(prev => prev === "light" ? "dark" : "light")
   }
 
+  const fetchStatistics = async (manual = false) => {
+    if (manual) setIsRefreshing(true)
+    try {
+      const statsRes = await fetch(`${API_BASE}/api/stats?period=${movementPeriod}`)
+      if (!statsRes.ok) throw new Error("Erro ao carregar estatísticas")
+      const statsJson = await statsRes.json()
+      setStats(statsJson)
+    } catch (err) {
+      console.error(err)
+      if (manual) setError("Falha ao carregar estatísticas.")
+    } finally {
+      if (manual) setIsRefreshing(false)
+    }
+  }
+
   const fetchData = async () => {
     setLoading(true)
     setIsRefreshing(true)
@@ -255,7 +270,14 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
+    // Carrega tudo na primeira vez
     fetchData()
+  }, []) // Apenas no mount
+
+  useEffect(() => {
+    // Quando muda o período, carrega APENAS as estatísticas/gráfico
+    // sem resetar o loading global ou o mapa
+    fetchStatistics()
   }, [movementPeriod])
 
   useEffect(() => {
@@ -2111,6 +2133,22 @@ export default function DashboardPage() {
                       value={stats?.movement_pieces?.toLocaleString('pt-BR') ?? stats?.total_quantity?.toLocaleString('pt-BR') ?? "0"}
                       icon={BarChart3}
                       delay={0.2}
+                      description={
+                        stats?.today_net !== undefined ? (
+                          <div className="flex items-center gap-1 mt-1 text-[10px] font-black uppercase tracking-wider">
+                            <span className={cn(
+                              "flex items-center gap-0.5",
+                              stats.today_net >= 0
+                                ? "text-emerald-500 dark:text-emerald-400"
+                                : "text-red-500 dark:text-red-400"
+                            )}>
+                              {stats.today_net >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                              {stats.today_net >= 0 ? "+" : ""}{stats.today_net.toLocaleString('pt-BR')}
+                            </span>
+                            <span className="text-slate-400 dark:text-slate-500 font-bold ml-1 tracking-widest leading-none">vs ontem</span>
+                          </div>
+                        ) : undefined
+                      }
                       hoverContent={
                         <div className="grid grid-cols-2 gap-x-10 gap-y-4 text-center w-full">
                           <div className="flex flex-col">
@@ -2268,17 +2306,19 @@ export default function DashboardPage() {
                             >
                               Geral
                             </button>
-                            <button
-                              onClick={() => setTopSkusFilter("molhado")}
-                              className={cn(
-                                "px-3 py-1.5 text-[9px] font-black uppercase rounded-lg transition-all",
-                                topSkusFilter === "molhado"
-                                  ? "bg-blue-600 text-white shadow-sm"
-                                  : "text-slate-400 hover:text-blue-600 dark:hover:text-blue-400"
-                              )}
-                            >
-                              Molhado
-                            </button>
+                            {topSkusSort !== "incidencia" && (
+                              <button
+                                onClick={() => setTopSkusFilter("molhado")}
+                                className={cn(
+                                  "px-3 py-1.5 text-[9px] font-black uppercase rounded-lg transition-all",
+                                  topSkusFilter === "molhado"
+                                    ? "bg-blue-600 text-white shadow-sm"
+                                    : "text-slate-400 hover:text-blue-600 dark:hover:text-blue-400"
+                                )}
+                              >
+                                Molhado
+                              </button>
+                            )}
                           </div>
                         </div>
 
@@ -2320,7 +2360,11 @@ export default function DashboardPage() {
                                     {topSkusSort === "quantidade" && <div className="h-1.5 w-1.5 rounded-full bg-blue-600" />}
                                   </button>
                                   <button
-                                    onClick={() => { setTopSkusSort("incidencia"); setShowTopSkusMenu(false); }}
+                                    onClick={() => {
+                                      setTopSkusSort("incidencia");
+                                      setTopSkusFilter("geral");
+                                      setShowTopSkusMenu(false);
+                                    }}
                                     className={cn(
                                       "w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[11px] font-black uppercase transition-colors",
                                       topSkusSort === "incidencia"
@@ -2380,9 +2424,9 @@ export default function DashboardPage() {
                               </div>
                             ))
                           ) : (
-                            <div className="py-20 flex flex-col items-center justify-center opacity-20">
-                              <Box size={40} className="mb-2" />
-                              <p className="text-[10px] font-black uppercase tracking-widest">Aguardando dados...</p>
+                            <div className="py-20 flex flex-col items-center justify-center opacity-20 dark:opacity-50">
+                              <Box size={40} className="mb-2 text-slate-400 dark:text-slate-500" />
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Aguardando dados...</p>
                             </div>
                           )}
                         </div>
@@ -2393,7 +2437,7 @@ export default function DashboardPage() {
                   {/* MOVEMENTS & CHART SECTION */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     {/* LEFT: CHART */}
-                    <motion.div className="group relative rounded-[2.5rem] bg-white dark:bg-[#0F172A] p-4 shadow-xl border border-slate-100 dark:border-slate-800 transition-colors overflow-hidden flex flex-col">
+                    <motion.div className="group relative rounded-[2.5rem] bg-white dark:bg-[#0F172A] p-4 shadow-xl border border-slate-100 dark:border-slate-800 transition-colors flex flex-col">
                       <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-3">
                           <div className="w-1.5 h-6 bg-blue-500 rounded-full" />
@@ -2401,9 +2445,31 @@ export default function DashboardPage() {
                             <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-[0.2em]">
                               Fluxo de Registros
                             </h3>
-                            <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 tracking-widest mt-1">
-                              {`VOLUME TOTAL DO PERÍODO: ${movementPeriod.toUpperCase()}`}
-                            </p>
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
+                              <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 tracking-widest">
+                                {`VOLUME TOTAL DO PERÍODO: ${movementPeriod.toUpperCase()}`}
+                              </p>
+                              <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[8px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-tighter">Entradas:</span>
+                                  <span className="text-[9px] font-black text-emerald-500 dark:text-emerald-400">
+                                    {stats?.top_moved?.reduce((acc: number, m: any) => acc + (m.entrada || 0), 0).toLocaleString('pt-BR') || "0"}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[8px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-tighter">Saídas:</span>
+                                  <span className="text-[9px] font-black text-orange-500 dark:text-orange-400">
+                                    {stats?.top_moved?.reduce((acc: number, m: any) => acc + (m.saida || 0), 0).toLocaleString('pt-BR') || "0"}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[8px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-tighter">Molhados:</span>
+                                  <span className="text-[9px] font-black text-blue-500 dark:text-blue-400">
+                                    {stats?.top_moved?.reduce((acc: number, m: any) => acc + (m.molhado || 0), 0).toLocaleString('pt-BR') || "0"}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         </div>
                         <div className="relative">
@@ -2554,8 +2620,8 @@ export default function DashboardPage() {
                                     <BarChart3 size={18} className="text-slate-400" />
                                   </div>
                                   <div>
-                                    <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Sem registros</p>
-                                    <p className="text-[10px] font-medium text-slate-400 mt-0.5">Nenhuma movimentação para este período</p>
+                                    <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">Sem registros</p>
+                                    <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500 mt-0.5">Nenhuma movimentação para este período</p>
                                   </div>
                                   <button
                                     onClick={() => setMovementPeriod("semana")}
@@ -2651,9 +2717,9 @@ export default function DashboardPage() {
                               );
                             });
                           })() : (
-                            <div className="w-full h-full flex flex-col items-center justify-center opacity-20">
-                              <BarChart3 size={32} className="mb-2" />
-                              <p className="text-[10px] font-black uppercase tracking-widest">Sem dados para o gráfico</p>
+                            <div className="w-full h-full flex flex-col items-center justify-center opacity-20 dark:opacity-50">
+                              <BarChart3 size={32} className="mb-2 text-slate-400 dark:text-slate-500" />
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Sem dados para o gráfico</p>
                             </div>
                           )}
                         </div>
@@ -2712,9 +2778,9 @@ export default function DashboardPage() {
                             </div>
                           </div>
                         ) : (
-                          <div className="h-full flex flex-col items-center justify-center opacity-20 py-10">
-                            <History size={40} className="mb-2" />
-                            <p className="text-[10px] font-black uppercase tracking-widest">Nenhuma movimentação</p>
+                          <div className="h-full flex flex-col items-center justify-center opacity-20 dark:opacity-50 py-10">
+                            <History size={40} className="mb-2 text-slate-400 dark:text-slate-500" />
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Nenhuma movimentação</p>
                           </div>
                         )}
                       </div>
@@ -4756,8 +4822,8 @@ export default function DashboardPage() {
               </div>
             )
           }
-        </main>
-      </div>
-    </div>
+        </main >
+      </div >
+    </div >
   )
 }

@@ -555,6 +555,31 @@ def get_movement_totals(xl=None):
         else:
             df['saida_num'] = 0.0
 
+        # Calcular total de hoje (ENTRADA - SAÍDA) para o indicador do Dashboard
+        today = pd.Timestamp.now().normalize()
+        today_net = 0
+        
+        if 'data' in df.columns:
+            def safe_parse_date(d):
+                try:
+                    if pd.isnull(d): return pd.NaT
+                    if isinstance(d, (pd.Timestamp, datetime.datetime, datetime.date)):
+                        return pd.to_datetime(d)
+                    s = str(d).strip()
+                    if not s or s.lower() == 'nan': return pd.NaT
+                    if '/' in s and len(s.split('/')) == 2:
+                        s += f"/{today.year}"
+                    return pd.to_datetime(s, dayfirst=True, errors='coerce')
+                except:
+                    return pd.NaT
+            
+            import datetime
+            df['dt'] = df['data'].apply(safe_parse_date).fillna(today)
+            df_today = df[df['dt'].dt.date == today.date()]
+            today_ent = df_today['entrada_num'].sum()
+            today_sai = df_today['saida_num'].sum()
+            today_net = int(today_ent - today_sai)
+
         ent = df['entrada_num'].sum()
         sai = df['saida_num'].sum()
         molh = df['qtd_molhado'].apply(parse_num).sum() if 'qtd_molhado' in df.columns else 0
@@ -586,6 +611,9 @@ def get_movement_totals(xl=None):
 
         return {
             "movement_pieces": int(ent - sai),
+            "today_net": today_net,
+            "total_entries": int(ent),
+            "total_exits": int(sai),
             "qtd_molhado": int(molh),
             "qtd_tombada": int(tomb),
             "movement_by_product": prod_groups,
@@ -730,6 +758,9 @@ async def get_stats(period: str = "hoje"):
             "qtd_molhado": qty_totals["qtd_molhado"],   # Da aba 'Quantidade Total'
             "qtd_tombada": qty_totals["qtd_tombada"],   # Da aba 'Quantidade Total'
             "movement_pieces": mov_totals["movement_pieces"],
+            "total_entries": mov_totals.get("total_entries", 0),
+            "total_exits": mov_totals.get("total_exits", 0),
+            "today_net": mov_totals.get("today_net", 0),
             "divergences": sorted(divergences, key=lambda x: abs(x['diff']), reverse=True),
             "total_capacity": int(df[df['posicao'] != 'S/P'].groupby('posicao')['capacidade'].first().sum()),
             "unregistered_count": int(df[df['unregistered_error'] == True]['posicao'].nunique()),

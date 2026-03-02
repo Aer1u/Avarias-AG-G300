@@ -9,7 +9,7 @@ interface MetricCardProps {
     title: React.ReactNode | string
     value: string | number
     icon: LucideIcon
-    description?: string
+    description?: React.ReactNode | string
     className?: string
     delay?: number
     hoverContent?: React.ReactNode
@@ -64,7 +64,7 @@ export function MetricCard({
                         {value}
                     </h3>
                     {description && (
-                        <p className="text-sm font-medium text-slate-500 dark:text-slate-400 transition-colors">{description}</p>
+                        <div className="text-sm font-medium text-slate-500 dark:text-slate-400 transition-colors leading-none">{description}</div>
                     )}
                 </div>
                 <div className="flex h-10 w-10 md:h-12 md:w-12 items-center justify-center rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 transition-colors group-hover:bg-blue-50 dark:group-hover:bg-blue-900/30 group-hover:text-blue-600 dark:group-hover:text-blue-400">
