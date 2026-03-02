@@ -735,6 +735,11 @@ async def get_stats(period: str = "hoje"):
         
         # PERSISTENT MOVEMENTS: always 5 most recent
         latest_movements = get_movement_data("recente", xl=mov_xl)[:5]
+
+        # CALCULATE PERIOD TOTALS (Strictly for the requested period)
+        period_entries = sum(m.get('entrada', 0) for m in top_moved)
+        period_exits = sum(m.get('saida', 0) for m in top_moved)
+        period_wet = sum(m.get('molhado', 0) for m in top_moved)
         
         # Calculate divergences
         db_by_product = {}
@@ -770,6 +775,9 @@ async def get_stats(period: str = "hoje"):
             "movement_pieces": mov_totals["movement_pieces"],
             "total_entries": mov_totals.get("total_entries", 0),
             "total_exits": mov_totals.get("total_exits", 0),
+            "period_entries": int(period_entries),
+            "period_exits": int(period_exits),
+            "period_wet": int(period_wet),
             "today_net": mov_totals.get("today_net", 0),
             "divergences": sorted(divergences, key=lambda x: abs(x['diff']), reverse=True),
             "total_capacity": int(df[df['posicao'] != 'S/P'].groupby('posicao')['capacidade'].first().sum()),

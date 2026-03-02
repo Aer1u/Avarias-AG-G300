@@ -1436,135 +1436,173 @@ export default function DashboardPage() {
   return (
     <div className="relative">
       {/* Printable Report (Hidden normally) */}
-      {!isExportingPDF && printData.length > 0 && (
+      {printData.length > 0 && (
         <div className="hidden print:block print:bg-white print:text-black print:p-2 print:w-full">
-          <div className="flex justify-between items-center border-b-[2px] border-black pb-1 mb-4">
-            <h1 className="text-[16px] font-black uppercase tracking-tight">Manifesto de Conferência de Drive - G300</h1>
-            <p className="text-[8px] font-bold text-slate-500 uppercase">{new Date().toLocaleString('pt-BR')} • {printData.length} Registros</p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-x-3 gap-y-2">
-            {groupedPrintData.map(([posId, items]) => {
-              const totalPosUnits = items.reduce((sum, i) => sum + (i.quantidade_total || i.quantidade || 0), 0);
-              const totalPosPallets = items.reduce((sum, i) => sum + (i.paletes || 0), 0);
-
-              // Group by Level
-              const levelGroups = new Map<string, any[]>();
-              items.forEach(item => {
-                const levels = String(item.nivel || "0").split(/[,;]/).map(l => l.trim()).filter(Boolean);
-                levels.forEach(lvl => {
-                  if (!levelGroups.has(lvl)) levelGroups.set(lvl, []);
-                  levelGroups.get(lvl)!.push(item);
-                });
-              });
-
-              const sortedLevels = Array.from(levelGroups.keys()).sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0));
-
-              if (sortedLevels.length === 0) return null;
-
-              return (
-                <div key={posId} className="avoid-break font-sans">
-                  {/* Header */}
-                  <div className="bg-[#E5E7EB] px-3 py-1 flex justify-between items-baseline border border-[#D1D5DB]">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-[12px] font-black tracking-tight">{posId}</span>
-                      <span className="text-[7px] font-bold uppercase opacity-60">Cap. {items[0]?.capacidade || "--"}</span>
-                    </div>
-                    <span className="text-[10px] font-bold">Qtd. Total: {fmtNum(totalPosUnits)}</span>
-                  </div>
-
-                  {/* Levels */}
-                  <div className="space-y-1 mt-1">
-                    {sortedLevels.map((lvl) => {
-                      const levelItems = levelGroups.get(lvl)!;
-
-                      // 1. Flatten items into individual depth entries
-                      const depthPallets: { d: number, sku: string, portion: number }[] = [];
-                      levelItems.forEach(item => {
-                        const depths = String(item.profundidade || "").split(/[,;]/).map(d => parseInt(d.trim().replace(/\D/g, ""))).filter(n => !isNaN(n));
-                        const levelsSpanned = String(item.nivel || "0").split(/[,;]/).map(l => l.trim()).filter(Boolean).length || 1;
-                        const portion = (item.quantidade_total || item.quantidade || 0) / levelsSpanned;
-
-                        depths.forEach(d => {
-                          depthPallets.push({ d, sku: String(item.produto || "VAZIO").trim().toUpperCase(), portion });
-                        });
-                      });
-
-                      // 2. Group by Depth (The physical pallet)
-                      // Map key: Depth number
-                      // Map value: Array of {sku, portion} for that depth
-                      const palletMap = new Map<number, { sku: string, portion: number }[]>();
-                      depthPallets.forEach(p => {
-                        if (!palletMap.has(p.d)) palletMap.set(p.d, []);
-                        palletMap.get(p.d)!.push({ sku: p.sku, portion: p.portion });
-                      });
-
-                      // 3. Group contiguous identical pallets (Depths with same sets of SKU+Portion)
-                      const sortedDepths = Array.from(palletMap.keys()).sort((a, b) => a - b);
-                      const mergedGroups: { depths: number[], items: { sku: string, portion: number }[] }[] = [];
-
-                      sortedDepths.forEach(d => {
-                        const currentItems = palletMap.get(d)!.sort((a, b) => a.sku.localeCompare(b.sku));
-                        const key = currentItems.map(i => `${i.sku}_${i.portion}`).join("|");
-
-                        const lastGroup = mergedGroups[mergedGroups.length - 1];
-                        const lastItemsSorted = lastGroup ? lastGroup.items.sort((a, b) => a.sku.localeCompare(b.sku)) : [];
-                        const lastKey = lastGroup ? lastItemsSorted.map(i => `${i.sku}_${i.portion}`).join("|") : null;
-
-                        if (lastGroup && key === lastKey) {
-                          lastGroup.depths.push(d);
-                        } else {
-                          mergedGroups.push({ depths: [d], items: currentItems });
-                        }
-                      });
-
-                      return (
-                        <div key={lvl} className="flex items-stretch gap-1">
-                          {/* Level Indicator (N Label) */}
-                          <div className="w-8 border border-black flex items-center justify-center shrink-0">
-                            <span className="text-[9px] font-black">N{lvl}</span>
-                          </div>
-
-                          {/* Merged Pallet Blocks */}
-                          <div className="flex-1 space-y-[-1px]">
-                            {mergedGroups.map((group, gIdx) => {
-                              const pDepthsString = group.depths.sort((a, b) => a - b).join(", ");
-
-                              return (
-                                <div key={gIdx} className="flex border border-black min-h-[1.2rem] items-stretch">
-                                  {/* P Column: Spans all SKUs in this pallet block */}
-                                  <div className="w-20 border-r border-black px-1.5 flex items-center justify-center shrink-0 bg-white">
-                                    <span className="text-[9.5px] font-bold uppercase">P {pDepthsString || "-"}</span>
-                                  </div>
-
-                                  {/* Right Side: Stack of SKU rows */}
-                                  <div className="flex-1 flex flex-col">
-                                    {group.items.map((item, iIdx) => (
-                                      <div key={iIdx} className={`flex flex-1 ${iIdx > 0 ? 'border-t border-black' : ''}`}>
-                                        {/* SKU Name Column */}
-                                        <div className="flex-1 px-2 border-r border-black flex items-center min-w-0">
-                                          <span className="text-[9.5px] font-black uppercase truncate">CÓD: {item.sku}</span>
-                                        </div>
-
-                                        {/* Individual Quantity Column */}
-                                        <div className="w-24 px-2 flex items-center justify-end shrink-0">
-                                          <span className="text-[12px] font-black">{fmtNum(item.portion)} UN</span>
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+          {isExportingPDF ? (
+            /* Layout 1: Relatório de Produtos (SKU Summary) */
+            <div className="font-sans">
+              <div className="flex justify-between items-center border-b-[2px] border-black pb-2 mb-6">
+                <div>
+                  <h1 className="text-xl font-black uppercase tracking-tight">Relação de Produtos por Avaria</h1>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase">G300 PAINEL OPERACIONAL</p>
                 </div>
-              );
-            })}
-          </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-bold uppercase">{new Date().toLocaleString('pt-BR')}</p>
+                  <p className="text-[10px] font-bold text-blue-600 uppercase">{printData.length} SKUs Encontrados</p>
+                </div>
+              </div>
+
+              <table className="w-full border-collapse border border-black text-[10px]">
+                <thead>
+                  <tr className="bg-slate-100">
+                    <th className="border border-black p-2 text-left font-black uppercase w-24">SKU</th>
+                    <th className="border border-black p-2 text-left font-black uppercase">Descrição</th>
+                    <th className="border border-black p-2 text-center font-black uppercase w-16">Peças</th>
+                    <th className="border border-black p-2 text-center font-black uppercase w-16">Paletes</th>
+                    <th className="border border-black p-2 text-center font-black uppercase w-16">Posições</th>
+                    <th className="border border-black p-2 text-left font-black uppercase w-48">Observações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {printData.map((item, idx) => (
+                    <tr key={idx} className="border border-black">
+                      <td className="border border-black p-2 font-bold">{item.produto}</td>
+                      <td className="border border-black p-2 text-[9px]">{item.descricao}</td>
+                      <td className="border border-black p-2 text-center font-bold">{fmtNum(item.quantidade_total)}</td>
+                      <td className="border border-black p-2 text-center">{item.total_paletes}</td>
+                      <td className="border border-black p-2 text-center">{item.total_posicoes}</td>
+                      <td className="border border-black p-2 text-[8px] italic">{item.observacao || "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <div className="mt-8 pt-4 border-t border-slate-200 text-center">
+                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Documento interno para conferência operacional — AG G300</p>
+              </div>
+            </div>
+          ) : (
+            /* Layout 2: Manifesto de Conferência (By Position Mapping) */
+            <>
+              <div className="flex justify-between items-center border-b-[2px] border-black pb-1 mb-4">
+                <h1 className="text-[16px] font-black uppercase tracking-tight">Manifesto de Conferência de Drive - G300</h1>
+                <p className="text-[8px] font-bold text-slate-500 uppercase">{new Date().toLocaleString('pt-BR')} • {printData.length} Registros</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                {groupedPrintData.map(([posId, items]) => {
+                  const totalPosUnits = items.reduce((sum, i) => sum + (i.quantidade_total || i.quantidade || 0), 0);
+
+                  // Group by Level
+                  const levelGroups = new Map<string, any[]>();
+                  items.forEach(item => {
+                    const levels = String(item.nivel || "0").split(/[,;]/).map(l => l.trim()).filter(Boolean);
+                    levels.forEach(lvl => {
+                      if (!levelGroups.has(lvl)) levelGroups.set(lvl, []);
+                      levelGroups.get(lvl)!.push(item);
+                    });
+                  });
+
+                  const sortedLevels = Array.from(levelGroups.keys()).sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0));
+
+                  if (sortedLevels.length === 0) return null;
+
+                  return (
+                    <div key={posId} className="avoid-break font-sans">
+                      {/* Header */}
+                      <div className="bg-[#E5E7EB] px-3 py-1 flex justify-between items-baseline border border-[#D1D5DB]">
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-[12px] font-black tracking-tight">{posId}</span>
+                          <span className="text-[7px] font-bold uppercase opacity-60">Cap. {items[0]?.capacidade || "--"}</span>
+                        </div>
+                        <span className="text-[10px] font-bold">Qtd. Total: {fmtNum(totalPosUnits)}</span>
+                      </div>
+
+                      {/* Levels */}
+                      <div className="space-y-1 mt-1">
+                        {sortedLevels.map((lvl) => {
+                          const levelItems = levelGroups.get(lvl)!;
+
+                          // 1. Flatten items into individual depth entries
+                          const depthPallets: { d: number, sku: string, portion: number }[] = [];
+                          levelItems.forEach(item => {
+                            const depths = String(item.profundidade || "").split(/[,;]/).map(d => parseInt(d.trim().replace(/\D/g, ""))).filter(n => !isNaN(n));
+                            const levelsSpanned = String(item.nivel || "0").split(/[,;]/).map(l => l.trim()).filter(Boolean).length || 1;
+                            const portion = (item.quantidade_total || item.quantidade || 0) / levelsSpanned;
+
+                            depths.forEach(d => {
+                              depthPallets.push({ d, sku: String(item.produto || "VAZIO").trim().toUpperCase(), portion });
+                            });
+                          });
+
+                          // 2. Group by Depth (The physical pallet)
+                          const palletMap = new Map<number, { sku: string, portion: number }[]>();
+                          depthPallets.forEach(p => {
+                            if (!palletMap.has(p.d)) palletMap.set(p.d, []);
+                            palletMap.get(p.d)!.push({ sku: p.sku, portion: p.portion });
+                          });
+
+                          // 3. Group contiguous identical pallets
+                          const sortedDepths = Array.from(palletMap.keys()).sort((a, b) => a - b);
+                          const mergedGroups: { depths: number[], items: { sku: string, portion: number }[] }[] = [];
+
+                          sortedDepths.forEach(d => {
+                            const currentItems = palletMap.get(d)!.sort((a, b) => a.sku.localeCompare(b.sku));
+                            const key = currentItems.map(i => `${i.sku}_${i.portion}`).join("|");
+
+                            const lastGroup = mergedGroups[mergedGroups.length - 1];
+                            const lastItemsSorted = lastGroup ? lastGroup.items.sort((a, b) => a.sku.localeCompare(b.sku)) : [];
+                            const lastKey = lastGroup ? lastItemsSorted.map(i => `${i.sku}_${i.portion}`).join("|") : null;
+
+                            if (lastGroup && key === lastKey) {
+                              lastGroup.depths.push(d);
+                            } else {
+                              mergedGroups.push({ depths: [d], items: currentItems });
+                            }
+                          });
+
+                          return (
+                            <div key={lvl} className="flex items-stretch gap-1">
+                              <div className="w-8 border border-black flex items-center justify-center shrink-0">
+                                <span className="text-[9px] font-black">N{lvl}</span>
+                              </div>
+
+                              <div className="flex-1 space-y-[-1px]">
+                                {mergedGroups.map((group, gIdx) => {
+                                  const pDepthsString = group.depths.sort((a, b) => a - b).join(", ");
+
+                                  return (
+                                    <div key={gIdx} className="flex border border-black min-h-[1.2rem] items-stretch">
+                                      <div className="w-20 border-r border-black px-1.5 flex items-center justify-center shrink-0 bg-white">
+                                        <span className="text-[9.5px] font-bold uppercase">P {pDepthsString || "-"}</span>
+                                      </div>
+
+                                      <div className="flex-1 flex flex-col">
+                                        {group.items.map((item, iIdx) => (
+                                          <div key={iIdx} className={`flex flex-1 ${iIdx > 0 ? 'border-t border-black' : ''}`}>
+                                            <div className="flex-1 px-2 border-r border-black flex items-center min-w-0">
+                                              <span className="text-[9.5px] font-black uppercase truncate">CÓD: {item.sku}</span>
+                                            </div>
+                                            <div className="w-24 px-2 flex items-center justify-end shrink-0">
+                                              <span className="text-[12px] font-black">{fmtNum(item.portion)} UN</span>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -2453,19 +2491,19 @@ export default function DashboardPage() {
                                 <div className="flex items-center gap-1">
                                   <span className="text-[8px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-tighter">Entradas:</span>
                                   <span className="text-[9px] font-black text-emerald-500 dark:text-emerald-400">
-                                    {stats?.top_moved?.reduce((acc: number, m: any) => acc + (m.entrada || 0), 0).toLocaleString('pt-BR') || "0"}
+                                    {stats?.period_entries?.toLocaleString('pt-BR') || "0"}
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-1">
                                   <span className="text-[8px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-tighter">Saídas:</span>
                                   <span className="text-[9px] font-black text-orange-500 dark:text-orange-400">
-                                    {stats?.top_moved?.reduce((acc: number, m: any) => acc + (m.saida || 0), 0).toLocaleString('pt-BR') || "0"}
+                                    {stats?.period_exits?.toLocaleString('pt-BR') || "0"}
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-1">
                                   <span className="text-[8px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-tighter">Molhados:</span>
                                   <span className="text-[9px] font-black text-blue-500 dark:text-blue-400">
-                                    {stats?.top_moved?.reduce((acc: number, m: any) => acc + (m.molhado || 0), 0).toLocaleString('pt-BR') || "0"}
+                                    {stats?.period_wet?.toLocaleString('pt-BR') || "0"}
                                   </span>
                                 </div>
                               </div>
@@ -2533,16 +2571,28 @@ export default function DashboardPage() {
                             let chartItems: any[] = [];
 
                             if (isIndividual) {
-                              chartItems = stats.top_moved.slice(0, 10).map((m: any) => ({
-                                label: m.data,
-                                sublabel: m.produto.split(' ')[0],
-                                mov: m.entrada > 0 ? "ENT" : "SAÍ",
-                                val: m.movimentacao,
-                                molhado: m.molhado || 0,
-                                isEntrada: m.entrada > 0,
-                                details: [{ sku: m.produto, val: m.movimentacao, molhado: m.molhado || 0 }]
-                              }));
-                            } else if (isWeekly) {
+                              // Agrupar por SKU para o período 'Hoje'
+                              const skuGroups: Record<string, { val: number, molhado: number, m: any }> = {};
+                              stats.top_moved.forEach((m: any) => {
+                                const sku = m.produto;
+                                if (!skuGroups[sku]) {
+                                  skuGroups[sku] = { val: 0, molhado: 0, m };
+                                }
+                                skuGroups[sku].val += m.movimentacao;
+                                skuGroups[sku].molhado += (m.molhado || 0);
+                              });
+
+                              chartItems = Object.entries(skuGroups).map(([sku, data]) => ({
+                                label: data.m.data,
+                                sublabel: sku.split(' ')[0],
+                                mov: data.m.entrada > 0 ? "ENT" : "SAÍ",
+                                val: data.val,
+                                molhado: data.molhado,
+                                isEntrada: data.m.entrada > 0,
+                                details: [{ sku, val: data.val, molhado: data.molhado }]
+                              })).sort((a, b) => b.val - a.val).slice(0, 10);
+                            }
+                            else if (isWeekly) {
                               const groups: Record<string, { ent: { val: number, molh: number, items: any[] }, sai: { val: number, molh: number, items: any[] } }> = {};
                               stats.top_moved.forEach((m: any) => {
                                 const d = m.dia_semana || "N/I";
@@ -3515,19 +3565,8 @@ export default function DashboardPage() {
                   exit={{ opacity: 0 }}
                   className="space-y-6"
                 >
-                  {loadingConfrontos && !confrontosData ? (
-                    <div className="flex justify-center flex-col items-center py-20">
-                      <div className="w-10 h-10 border-2 border-blue-600 dark:border-blue-400 border-t-transparent dark:border-t-transparent rounded-full flex items-center justify-center animate-spin"></div>
-                      <p className="mt-4 text-xs font-bold tracking-widest uppercase text-slate-600 dark:text-slate-400 transition-colors">Sincronizando</p>
-                    </div>
-                  ) : confrontosData ? (
-                    <div className={cn("transition-opacity duration-300 relative", loadingConfrontos && "opacity-50 pointer-events-none")}>
-                      {loadingConfrontos && (
-                        <div className="absolute inset-x-0 top-32 z-50 flex flex-col items-center justify-center">
-                          <div className="w-10 h-10 border-4 border-blue-600 dark:border-blue-400 border-t-transparent dark:border-t-transparent rounded-full animate-spin shadow-xl"></div>
-                          <p className="mt-2 text-xs font-bold tracking-widest uppercase text-blue-600 dark:text-blue-400 drop-shadow-md">Atualizando</p>
-                        </div>
-                      )}
+                  {confrontosData ? (
+                    <div className={cn("transition-opacity duration-300 relative", (loadingConfrontos || !confrontosData) && "opacity-50 pointer-events-none")}>
                       <AnimatePresence mode="wait">
                         <motion.div
                           key={confrontoType}
