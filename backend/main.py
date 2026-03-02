@@ -667,8 +667,14 @@ def get_quantity_totals(xl=None):
         qtd_molhado = int(df['molhado'].apply(parse_num).sum()) if 'molhado' in df.columns else 0
         qtd_tombada = int(df['tombado'].apply(parse_num).sum()) if 'tombado' in df.columns else 0
 
-        print(f"DEBUG QUANTITY TOTALS: molhado={qtd_molhado}, tombada={qtd_tombada}")
-        return {"qtd_molhado": qtd_molhado, "qtd_tombada": qtd_tombada}
+        # Count unique SKUs from "Quantidade Total" only
+        total_skus = 0
+        prod_col = next((c for c in df.columns if str(c).lower().strip() == 'produto'), None)
+        if prod_col:
+            total_skus = int(df[prod_col].astype(str).str.strip().replace(['nan', 'None', ''], pd.NA).dropna().nunique())
+
+        print(f"DEBUG QUANTITY TOTALS: molhado={qtd_molhado}, tombada={qtd_tombada}, skus={total_skus}")
+        return {"qtd_molhado": qtd_molhado, "qtd_tombada": qtd_tombada, "total_skus": total_skus}
 
     except Exception as e:
         print(f"DEBUG QUANTITY TOTALS: Erro - {e}")
@@ -768,7 +774,7 @@ async def get_stats(period: str = "hoje"):
             "total_pallets": int(df['paletes'].sum()),
             "total_quantity": int(df['quantidade_total'].sum()),
             "total_positions": int(df[df['posicao'] != 'S/P']['posicao'].nunique()),
-            "total_skus": int(df['produto'].nunique()),
+            "total_skus": qty_totals.get("total_skus", 0),
             "avg_occupancy": float(df[df['capacidade'] > 0]['ocupacao'].mean()) if not df[df['capacidade'] > 0].empty else 0,
             "qtd_molhado": qty_totals["qtd_molhado"],
             "qtd_tombada": qty_totals["qtd_tombada"],
