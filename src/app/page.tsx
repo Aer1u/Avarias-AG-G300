@@ -2741,7 +2741,7 @@ export default function DashboardPage() {
                       </div>
 
                       <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800">
-                        {stats?.top_moved && stats.top_moved.length > 0 ? (
+                        {stats?.latest_movements && stats.latest_movements.length > 0 ? (
                           <div className="flex flex-col">
                             {/* Header Row */}
                             <div className="grid grid-cols-[60px_100px_1fr_60px_80px] gap-4 px-4 py-2 border-b border-slate-100 dark:border-slate-800 text-[9px] font-black uppercase text-slate-400 tracking-widest">
@@ -2753,7 +2753,7 @@ export default function DashboardPage() {
                             </div>
 
                             <div className="divide-y divide-slate-50 dark:divide-slate-800/50">
-                              {stats.top_moved.slice(0, 5).map((mov: any, idx: number) => (
+                              {stats.latest_movements.slice(0, 5).map((mov: any, idx: number) => (
                                 <div key={idx} className="grid grid-cols-[60px_100px_1fr_60px_80px] gap-4 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors items-center">
                                   <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
                                     {mov.data || "-"}
@@ -2936,7 +2936,7 @@ export default function DashboardPage() {
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: 0.5 }}
-                      className="rounded-[2.5rem] bg-slate-900 dark:bg-slate-900/50 p-6 md:p-8 shadow-2xl border border-white/5 overflow-hidden relative group"
+                      className="rounded-[2.5rem] bg-white dark:bg-slate-900/50 p-6 md:p-8 shadow-2xl border border-slate-200 dark:border-white/5 overflow-hidden relative group transition-colors"
                     >
                       <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none group-hover:scale-110 transition-transform duration-500">
                         <MapPin size={120} className="text-blue-500" />
@@ -2945,26 +2945,26 @@ export default function DashboardPage() {
                       <div className="relative z-10 flex flex-col h-full justify-between gap-8">
                         <div className="flex items-start justify-between">
                           <div>
-                            <h3 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
+                            <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
                               Capacidade de Drives
                               <div className="group/tip relative flex items-center">
-                                <Info size={14} className="text-slate-500 cursor-help" />
-                                <div className="absolute left-full ml-2 px-3 py-2 bg-slate-900 dark:bg-slate-800 text-white text-[10px] font-bold rounded-lg opacity-0 group-hover/tip:opacity-100 transition-opacity pointer-events-none whitespace-nowrap shadow-xl border border-white/10 z-[100]">
+                                <Info size={14} className="text-slate-400 dark:text-slate-500 cursor-help" />
+                                <div className="absolute left-full ml-2 px-3 py-2 bg-slate-900 dark:bg-slate-800 text-white text-[10px] font-bold rounded-lg opacity-0 group-hover/tip:opacity-100 transition-opacity pointer-events-none whitespace-nowrap shadow-xl border border-white/10 dark:border-white/10 z-[100]">
                                   Ocupação física total do armazém
                                 </div>
                               </div>
                             </h3>
-                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Ocupação Física</p>
+                            <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Ocupação Física</p>
                           </div>
                         </div>
 
                         <div className="space-y-6">
                           <div className="space-y-2">
                             <div className="flex justify-between text-[10px] font-black uppercase tracking-wider">
-                              <span className="text-slate-400">Drives Ocupados</span>
-                              <span className="text-white">{advancedStats.totalPositions - advancedStats.vazioCount} / {advancedStats.totalPositions}</span>
+                              <span className="text-slate-400 dark:text-slate-500">Drives Ocupados</span>
+                              <span className="text-slate-900 dark:text-white">{advancedStats.totalPositions - advancedStats.vazioCount} / {advancedStats.totalPositions}</span>
                             </div>
-                            <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden">
+                            <div className="h-2 w-full bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
                               <motion.div
                                 initial={{ width: 0 }}
                                 animate={{ width: `${((advancedStats.totalPositions - advancedStats.vazioCount) / (advancedStats.totalPositions || 1)) * 100}%` }}
@@ -2975,10 +2975,10 @@ export default function DashboardPage() {
 
                           <div className="space-y-2">
                             <div className="flex justify-between text-[10px] font-black uppercase tracking-wider">
-                              <span className="text-slate-400">Capacidade Total</span>
-                              <span className="text-white">{(advancedStats.occupiedPercent || 0).toFixed(1)}%</span>
+                              <span className="text-slate-400 dark:text-slate-500">Capacidade Total</span>
+                              <span className="text-slate-900 dark:text-white">{(advancedStats.occupiedPercent || 0).toFixed(1)}%</span>
                             </div>
-                            <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden">
+                            <div className="h-2 w-full bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
                               <motion.div
                                 initial={{ width: 0 }}
                                 animate={{ width: `${advancedStats.occupiedPercent || 0}%` }}
@@ -2995,7 +2995,7 @@ export default function DashboardPage() {
                       initial={{ opacity: 0, x: 20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: 0.6 }}
-                      className="rounded-[2.5rem] bg-slate-900 dark:bg-slate-900/50 p-6 md:p-8 shadow-2xl border border-white/5 overflow-hidden relative group"
+                      className="rounded-[2.5rem] bg-white dark:bg-slate-900/50 p-6 md:p-8 shadow-2xl border border-slate-200 dark:border-white/5 overflow-hidden relative group transition-colors"
                     >
                       <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none group-hover:scale-110 transition-transform duration-500">
                         <Layers size={120} className="text-orange-500" />
@@ -3004,27 +3004,27 @@ export default function DashboardPage() {
                       <div className="relative z-10 flex flex-col h-full justify-between gap-8">
                         <div className="flex items-start justify-between">
                           <div>
-                            <h3 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
+                            <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
                               Distribuição de Mix
                               <div className="group/tip relative flex items-center">
-                                <Info size={14} className="text-slate-500 cursor-help" />
-                                <div className="absolute left-full ml-2 px-3 py-2 bg-slate-900 dark:bg-slate-800 text-white text-[10px] font-bold rounded-lg opacity-0 group-hover/tip:opacity-100 transition-opacity pointer-events-none whitespace-nowrap shadow-xl border border-white/10 z-[100]">
+                                <Info size={14} className="text-slate-400 dark:text-slate-500 cursor-help" />
+                                <div className="absolute left-full ml-2 px-3 py-2 bg-slate-900 dark:bg-slate-800 text-white text-[10px] font-bold rounded-lg opacity-0 group-hover/tip:opacity-100 transition-opacity pointer-events-none whitespace-nowrap shadow-xl border border-white/10 dark:border-white/10 z-[100]">
                                   Volume de Mono-produto vs Mixed SKUs
                                 </div>
                               </div>
                             </h3>
-                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Eficiência de Armazenagem</p>
+                            <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Eficiência de Armazenagem</p>
                           </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-8 items-end">
-                          <div className="space-y-6">
+                          <div className="space-y-4">
                             <div className="space-y-2">
                               <div className="flex justify-between text-[10px] font-black uppercase tracking-wider">
-                                <span className="text-slate-400">Mono</span>
-                                <span className="text-white">{(100 - (advancedStats.mixPercent || 0)).toFixed(1)}%</span>
+                                <span className="text-slate-400 dark:text-slate-500">Mono</span>
+                                <span className="text-slate-900 dark:text-white">{(100 - (advancedStats.mixPercent || 0)).toFixed(1)}%</span>
                               </div>
-                              <div className="h-2 w-8/12 bg-white/5 rounded-full overflow-hidden">
+                              <div className="h-2 w-8/12 bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
                                 <motion.div
                                   initial={{ width: 0 }}
                                   animate={{ width: `${100 - (advancedStats.mixPercent || 0)}%` }}
@@ -3034,10 +3034,10 @@ export default function DashboardPage() {
                             </div>
                             <div className="space-y-2">
                               <div className="flex justify-between text-[10px] font-black uppercase tracking-wider">
-                                <span className="text-slate-400">Mix</span>
-                                <span className="text-white">{(advancedStats.mixPercent || 0).toFixed(1)}%</span>
+                                <span className="text-slate-400 dark:text-slate-500">Mix</span>
+                                <span className="text-slate-900 dark:text-white">{(advancedStats.mixPercent || 0).toFixed(1)}%</span>
                               </div>
-                              <div className="h-2 w-8/12 bg-white/5 rounded-full overflow-hidden">
+                              <div className="h-2 w-8/12 bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
                                 <motion.div
                                   initial={{ width: 0 }}
                                   animate={{ width: `${advancedStats.mixPercent || 0}%` }}
@@ -3047,14 +3047,14 @@ export default function DashboardPage() {
                             </div>
                           </div>
 
-                          <div className="flex flex-col gap-4 border-l border-white/5 pl-8">
+                          <div className="flex flex-col gap-4 border-l border-slate-100 dark:border-white/5 pl-8">
                             <div>
                               <span className="text-3xl font-black text-emerald-500 tracking-tighter leading-none">{advancedStats.totalMono}</span>
-                              <p className="text-[8px] font-black text-slate-500 uppercase tracking-tight mt-1">Organizados</p>
+                              <p className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-tight mt-1">Organizados</p>
                             </div>
                             <div>
                               <span className="text-3xl font-black text-orange-500 tracking-tighter leading-none">{advancedStats.totalMixed}</span>
-                              <p className="text-[8px] font-black text-slate-500 uppercase tracking-tight mt-1">Críticos</p>
+                              <p className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-tight mt-1">Críticos</p>
                             </div>
                           </div>
                         </div>

@@ -729,7 +729,12 @@ async def get_stats(period: str = "hoje"):
         df = get_clean_data(xl=main_xl, unalloc_xl=unalloc_xl)
         mov_totals = get_movement_totals(xl=mov_xl)
         qty_totals = get_quantity_totals(xl=mov_xl)
+        
+        # CHART DATA: filtered by period
         top_moved = get_movement_data(period, xl=mov_xl)
+        
+        # PERSISTENT MOVEMENTS: always 5 most recent
+        latest_movements = get_movement_data("recente", xl=mov_xl)[:5]
         
         # Calculate divergences
         db_by_product = {}
@@ -771,6 +776,7 @@ async def get_stats(period: str = "hoje"):
             "unregistered_count": int(df[df['unregistered_error'] == True]['posicao'].nunique()),
             "unregistered_positions": list(df[df['unregistered_error'] == True]['posicao'].unique()),
             "top_moved": top_moved,
+            "latest_movements": latest_movements,
             "frequency_by_product": mov_totals.get("frequency_by_product", {}),
             "molh_frequency_by_product": mov_totals.get("molh_frequency_by_product", {})
         }
