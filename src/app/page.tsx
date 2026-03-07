@@ -5095,16 +5095,18 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => {
-                          const event = new CustomEvent("trigger-drivein-edit");
-                          window.dispatchEvent(event);
-                        }}
-                        title="Editar Posição"
-                        className="h-10 px-4 md:h-12 md:px-5 rounded-xl md:rounded-2xl flex items-center justify-center gap-2 transition-all border bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900/50 hover:bg-blue-200 dark:hover:bg-blue-800"
-                      >
-                        <span className="text-[10px] md:text-xs font-black uppercase tracking-widest">Editar</span>
-                      </button>
+                      {positionViewMode === "grade" && (
+                        <button
+                          onClick={() => {
+                            const event = new CustomEvent("trigger-drivein-edit");
+                            window.dispatchEvent(event);
+                          }}
+                          title="Editar Posição"
+                          className="h-10 px-4 md:h-12 md:px-5 rounded-xl md:rounded-2xl flex items-center justify-center gap-2 transition-all border bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900/50 hover:bg-blue-200 dark:hover:bg-blue-800"
+                        >
+                          <span className="text-[10px] md:text-xs font-black uppercase tracking-widest">Editar</span>
+                        </button>
+                      )}
                       <button
                         onClick={() => setPositionViewMode(prev => prev === "tabela" ? "grade" : "tabela")}
                         title={positionViewMode === "tabela" ? "Ver em grade" : "Ver em lista"}
