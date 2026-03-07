@@ -1250,16 +1250,21 @@ export default function DashboardPage() {
       return Math.max(max, ...levels);
     }, 0);
 
-    const calculatedDepth = parseInt(String(matches[0].profundidade || matches[0].Profundidade || "1").replace(/\D/g, "")) || 1;
-    const calculatedLevels = Math.ceil((matches[0].capacidade || 0) / calculatedDepth);
-    const finalLevelCount = Math.max(calculatedLevels, maxLevel + 1);
+    const cap = Number(matches[0].capacidade) || 0;
+    const pProf = Number(matches[0].prof_pos) || 0;
+    const pHeight = Number(matches[0].altura_pos) || 0;
+    
+    // Height priority: 1. Registry value, 2. Calc from cap/prof, 3. Max observed level
+    const finalLevelCount = pHeight || (pProf > 0 ? Math.ceil(cap / pProf) : maxLevel + 1);
+    const finalMaxDepth = pProf || (finalLevelCount > 0 ? Math.ceil(cap / finalLevelCount) : 1);
 
     return {
       id: selectedPosition,
-      capacidade: matches[0].capacidade || 0,
+      capacidade: cap,
       level_count: finalLevelCount,
-      occupied: matches.reduce((sum, item) => sum + (item.paletes || 0), 0),
-      isOverflow: (matches[0].capacidade || 0) > 0 && Math.round(matches.reduce((sum, item) => sum + (item.paletes || 0), 0)) > Math.round(matches[0].capacidade || 0),
+      max_depth: finalMaxDepth,
+      occupied: matches.reduce((sum, item) => sum + (Number(item.paletes) || 0), 0),
+      isOverflow: cap > 0 && Math.round(matches.reduce((sum, item) => sum + (Number(item.paletes) || 0), 0)) > Math.round(cap),
       is_blocked: matches[0].is_blocked || matches[0].status === "Fechado" || matches[0].status === "Bloqueado",
       observacao_pos: matches[0].observacao_pos || "",
       products: matches.map(m => ({

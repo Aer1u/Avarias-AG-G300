@@ -59,8 +59,8 @@ export function DriveInGrid({ products, capacity, levelCount, isBlocked, observa
       const d = parseInt(String(p.profundidade).replace(/\D/g, ""))
       if (!isNaN(d) && d > 0 && d <= maxDepth) {
         grid[lvl][d].push(p)
-      } else if (p.sku !== "Posição Vazia" && p.nivel == lvl) {
-        grid[lvl][1].push(p) // Fallback to first depth if only one pallet
+      } else if (p.sku !== "Posição Vazia") {
+        remainingProducts.push(p)
       }
     })
 

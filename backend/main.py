@@ -80,6 +80,8 @@ def get_registered_positions(xl=None):
         if 'posi' in c: new_cols[col] = 'posicao'
         elif 'capacidade' in c: new_cols[col] = 'capacidade'
         elif 'status' in c: new_cols[col] = 'status'
+        elif 'nivel' in c or 'nível' in c: new_cols[col] = 'altura_pos'
+        elif 'prof' in c: new_cols[col] = 'prof_pos'
         elif 'observa' in c: new_cols[col] = 'observacao_pos'
     
     df = df.rename(columns=new_cols)
