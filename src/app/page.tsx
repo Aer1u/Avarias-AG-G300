@@ -1250,10 +1250,14 @@ export default function DashboardPage() {
       return Math.max(max, ...levels);
     }, 0);
 
+    const calculatedDepth = parseInt(String(matches[0].profundidade || matches[0].Profundidade || "1").replace(/\D/g, "")) || 1;
+    const calculatedLevels = Math.ceil((matches[0].capacidade || 0) / calculatedDepth);
+    const finalLevelCount = Math.max(calculatedLevels, maxLevel + 1);
+
     return {
       id: selectedPosition,
       capacidade: matches[0].capacidade || 0,
-      level_count: matches[0].nivel || 0,
+      level_count: finalLevelCount,
       occupied: matches.reduce((sum, item) => sum + (item.paletes || 0), 0),
       isOverflow: (matches[0].capacidade || 0) > 0 && Math.round(matches.reduce((sum, item) => sum + (item.paletes || 0), 0)) > Math.round(matches[0].capacidade || 0),
       is_blocked: matches[0].is_blocked || matches[0].status === "Fechado" || matches[0].status === "Bloqueado",
@@ -1261,7 +1265,7 @@ export default function DashboardPage() {
       products: matches.map(m => ({
         sku: (m.paletes === 0 && (m.quantidade_total || 0) === 0 || !m.produto) ? "Posição Vazia" : m.produto,
         descricao: m.descricao || "-",
-        nivel: m.nivel || "Térreo",
+        nivel: (typeof m.nivel === 'number' || (typeof m.nivel === 'string' && !isNaN(parseFloat(m.nivel)))) ? Math.floor(Number(m.nivel)) : 0,
         quantidade: m.quantidade_total || 0,
         paletes: m.paletes || 0,
         profundidade: m.profundidade || m.Profundidade || "-",
@@ -5066,12 +5070,9 @@ export default function DashboardPage() {
                       <div className="text-left">
                         <h3 className="text-xl md:text-3xl font-black text-slate-900 dark:text-white transition-colors">{selectedPosition}</h3>
                         <div className="flex items-center gap-2 mt-0.5 md:mt-1">
-                          <p className={cn(
-                            "text-[8px] md:text-[10px] font-black uppercase tracking-widest transition-colors",
-                            positionDetail.isOverflow ? "text-red-600 dark:text-red-400" : "text-slate-400 dark:text-slate-500"
-                          )}>
-                            {fmtNum(positionDetail.occupied)} / {positionDetail.capacidade} Paletes • {positionDetail.level_count} Níveis
-                          </p>
+                          <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em] animate-in fade-in slide-in-from-left duration-700">
+                            {fmtNum(positionDetail.occupied)} / {positionDetail.capacidade} Paletes • {Math.round(positionDetail.level_count)} Níveis
+                          </span>
                           {positionDetail.isOverflow && (
                             <span className="flex items-center gap-1 rounded-full bg-red-100 dark:bg-red-900/30 px-2 py-0.5 text-[8px] font-black uppercase text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50">
                               <AlertCircle size={8} /> Excesso
