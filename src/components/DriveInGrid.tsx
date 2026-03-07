@@ -25,9 +25,10 @@ interface DriveInGridProps {
   isBlocked?: boolean
   observation?: string
   positionId?: string
+  onEditSuccess?: () => void
 }
 
-export function DriveInGrid({ products, capacity, levelCount, isBlocked, observation, positionId }: DriveInGridProps) {
+export function DriveInGrid({ products, capacity, levelCount, isBlocked, observation, positionId, onEditSuccess }: DriveInGridProps) {
   // 1. Identify all unique levels
   // 1. Generate range of levels based on total height
   // If levels=4, we want [3, 2, 1, 0]
@@ -115,6 +116,94 @@ export function DriveInGrid({ products, capacity, levelCount, isBlocked, observa
   })
 
   const [selectedCoords, setSelectedCoords] = React.useState<{ lvl: number; d: number } | null>(null)
+  
+  // Edit State
+  const [editingProduct, setEditingProduct] = React.useState<Product | null>(null)
+  const [isSelectingProductToEdit, setIsSelectingProductToEdit] = React.useState(false)
+  const [showPasswordPrompt, setShowPasswordPrompt] = React.useState(false)
+  const [passwordInput, setPasswordInput] = React.useState("")
+  const [passwordError, setPasswordError] = React.useState("")
+  const [isSubmitting, setIsSubmitting] = React.useState(false)
+  
+  // Onde o usuário pode mudar a senha:
+  // Basta alterar a string abaixo ("menos avarias e mais espaço") para a nova senha desejada.
+  const EDIT_PASSWORD = "menos avarias e mais espaço"
+
+  const handleEditClick = (p: Product) => {
+    setEditingProduct(p)
+    setShowPasswordPrompt(true)
+    setPasswordInput("")
+    setPasswordError("")
+  }
+
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (passwordInput === EDIT_PASSWORD) {
+      setShowPasswordPrompt(false)
+      if (isSelectingProductToEdit && products.length === 1) {
+        setEditingProduct(products[0])
+        setIsSelectingProductToEdit(false)
+      }
+    } else {
+      setPasswordError("Senha incorreta")
+    }
+  }
+
+  React.useEffect(() => {
+    const handleTriggerEdit = () => {
+      setIsSelectingProductToEdit(true)
+      setShowPasswordPrompt(true)
+      setPasswordInput("")
+      setPasswordError("")
+    }
+
+    window.addEventListener("trigger-drivein-edit", handleTriggerEdit)
+    return () => window.removeEventListener("trigger-drivein-edit", handleTriggerEdit)
+  }, [])
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingProduct) return
+    
+    setIsSubmitting(true)
+    try {
+      const payload = {
+        posicao: positionId,
+        produto: editingProduct.sku,
+        id_palete: editingProduct.id_palete || "",
+        quantidade_total: parseFloat(String(editingProduct.quantidade)),
+        nivel: parseFloat(String(editingProduct.nivel)),
+        profundidade: editingProduct.profundidade,
+        qtd_tombada: parseFloat(String(editingProduct.qtd_tombada)),
+        qtd_molhado: parseFloat(String(editingProduct.qtd_molhado)),
+        observacao: "" // Pode ser adicionado no form se necessário
+      }
+
+      const API_BASE = typeof window !== "undefined" && window.location.hostname !== "avarias-ag-g300.onrender.com"
+        ? `http://${window.location.hostname}:8000`
+        : "https://avarias-ag-g300.onrender.com"
+
+      const res = await fetch(`${API_BASE}/api/edit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      })
+
+      if (!res.ok) {
+        throw new Error("Erro ao salvar")
+      }
+
+      setEditingProduct(null)
+      if (onEditSuccess) {
+        onEditSuccess()
+      }
+    } catch (err) {
+      console.error(err)
+      alert("Erro ao salvar alterações no Google Sheets")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   if (isBlocked) {
     return (
@@ -138,7 +227,7 @@ export function DriveInGrid({ products, capacity, levelCount, isBlocked, observa
   const isMixed = uniqueSkus > 1
 
   return (
-    <div className="w-full flex flex-col lg:flex-row gap-8 pb-4">
+    <div className="w-full flex flex-col lg:flex-row gap-8 pb-4 relative">
       {/* Grid Section */}
       <div className="flex-1 overflow-x-auto custom-scrollbar pt-2">
         <div className="flex flex-col items-center min-w-full p-4">
@@ -373,14 +462,22 @@ export function DriveInGrid({ products, capacity, levelCount, isBlocked, observa
                       )}
                     </div>
                     
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-700/50">
-                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Qty / Palletes</span>
-                      <span className="text-xs font-black text-slate-900 dark:text-white">
-                        {Math.round(p.quantidade).toLocaleString('pt-BR')} <span className="text-[8px] opacity-40">UN</span> • {Number(p.paletes).toFixed(2).replace(/\.?0+$/, '')} <span className="text-[8px] opacity-40">PT</span>
-                      </span>
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-700/50">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Qty / Palletes</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black text-slate-900 dark:text-white">
+                            {Math.round(p.quantidade).toLocaleString('pt-BR')} <span className="text-[8px] opacity-40">UN</span> • {Number(p.paletes).toFixed(2).replace(/\.?0+$/, '')} <span className="text-[8px] opacity-40">PT</span>
+                          </span>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); handleEditClick(p); }}
+                            className="text-[9px] font-black uppercase bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400 px-2 py-1 rounded hover:opacity-80 transition-opacity"
+                          >
+                            Editar
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
               </div>
                 <button 
                   onClick={() => setSelectedCoords(null)}
@@ -450,6 +547,95 @@ export function DriveInGrid({ products, capacity, levelCount, isBlocked, observa
           )}
         </div>
       </motion.div>
+
+      {/* MODAL DE SENHA E EDIÇÃO */}
+      {(showPasswordPrompt || isSelectingProductToEdit || editingProduct) && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm rounded-3xl">
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl max-w-sm w-full shadow-2xl border border-slate-200 dark:border-slate-700">
+            {showPasswordPrompt ? (
+              <form onSubmit={handlePasswordSubmit} className="space-y-4">
+                <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase">Acesso Restrito</h3>
+                <p className="text-xs text-slate-500">Insira a senha de liberação para editar paletes na grade.</p>
+                <input 
+                  type="password"
+                  value={passwordInput}
+                  onChange={e => setPasswordInput(e.target.value)}
+                  placeholder="Senha"
+                  className="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white"
+                  autoFocus
+                />
+                {passwordError && <p className="text-xs text-red-500 font-bold">{passwordError}</p>}
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => { setShowPasswordPrompt(false); setEditingProduct(null); setIsSelectingProductToEdit(false); }} className="flex-1 p-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-black text-xs uppercase hover:bg-slate-200 dark:hover:bg-slate-700">Cancelar</button>
+                  <button type="submit" className="flex-1 p-3 rounded-xl bg-blue-600 text-white font-black text-xs uppercase hover:bg-blue-700 shadow-lg shadow-blue-500/20">Acessar</button>
+                </div>
+              </form>
+            ) : isSelectingProductToEdit && !editingProduct ? (
+              <div className="space-y-4">
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase leading-none">Qual Item Editar?</h3>
+                  <button type="button" onClick={() => setIsSelectingProductToEdit(false)} className="text-slate-400 hover:text-slate-900 dark:hover:text-white font-black text-[10px] uppercase">X Fechar</button>
+                </div>
+                <div className="max-h-[60vh] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                  {products.map((p, idx) => (
+                    <button 
+                      key={idx} 
+                      onClick={() => { setEditingProduct(p); setIsSelectingProductToEdit(false); }}
+                      className="w-full text-left bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-100 dark:border-slate-700/50 hover:border-blue-500 transition-colors"
+                    >
+                      <p className="text-xs font-black text-slate-900 dark:text-white mb-0.5">{p.sku}</p>
+                      <p className="text-[10px] text-slate-500 italic line-clamp-1 mb-1">{p.descricao}</p>
+                      <div className="flex justify-between items-center text-[10px] font-black uppercase">
+                         <span className="text-slate-400">Nív: {p.nivel} • Prof: {p.profundidade}</span>
+                         <span className="text-blue-600">{Math.round(p.quantidade)} UN</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : editingProduct ? (
+              <form onSubmit={handleSaveEdit} className="space-y-4">
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase leading-none">Editar Vínculo</h3>
+                  <button type="button" onClick={() => setEditingProduct(null)} className="text-slate-400 hover:text-slate-900 dark:hover:text-white font-black text-[10px] uppercase">X Fechar</button>
+                </div>
+                
+                <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800 mb-4">
+                  <p className="text-xs font-black text-slate-900 dark:text-white uppercase mb-1">{editingProduct.sku}</p>
+                  <p className="text-[10px] text-slate-500 italic line-clamp-1">{editingProduct.descricao}</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase">Qtd Fís. Total</label>
+                    <input type="number" step="0.01" value={editingProduct.quantidade} onChange={e => setEditingProduct({...editingProduct, quantidade: Number(e.target.value)})} className="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-slate-900 dark:text-white" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase">Qtd Tombada</label>
+                    <input type="number" step="0.01" value={editingProduct.qtd_tombada} onChange={e => setEditingProduct({...editingProduct, qtd_tombada: Number(e.target.value)})} className="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-slate-900 dark:text-white" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase">Qtd Molhado</label>
+                    <input type="number" step="0.01" value={editingProduct.qtd_molhado} onChange={e => setEditingProduct({...editingProduct, qtd_molhado: Number(e.target.value)})} className="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-slate-900 dark:text-white" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase">Profundidade</label>
+                    <input type="text" value={editingProduct.profundidade} onChange={e => setEditingProduct({...editingProduct, profundidade: e.target.value})} className="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-slate-900 dark:text-white" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase">Nível (Andar)</label>
+                    <input type="number" value={editingProduct.nivel} onChange={e => setEditingProduct({...editingProduct, nivel: Number(e.target.value)})} className="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-slate-900 dark:text-white" />
+                  </div>
+                </div>
+
+                <button type="submit" disabled={isSubmitting} className="w-full mt-4 p-3 rounded-xl bg-orange-600 text-white font-black text-xs uppercase hover:bg-orange-700 shadow-lg shadow-orange-500/20 disabled:opacity-50 flex items-center justify-center">
+                  {isSubmitting ? "Salvando..." : "Salvar na Planilha Online"}
+                </button>
+              </form>
+            ) : null}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
