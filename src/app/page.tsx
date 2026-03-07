@@ -60,10 +60,9 @@ type ViewType = "geral" | "posicoes" | "nao_alocados" | "produtos" | "molhados"
 type DisplayMode = "mapa" | "tabela" | "misto" | "nao_alocados"
 type SortType = "none" | "qty_desc" | "qty_asc" | "alpha_asc"
 
-// Auto-detect: local dev uses localhost, deployed uses Render backend
-const API_BASE = typeof window !== "undefined" &&
-  (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-  ? "http://127.0.0.1:8000"
+// Auto-detect: local dev uses localhost/LAN IPs, deployed uses Render backend
+const API_BASE = typeof window !== "undefined" && window.location.hostname !== "avarias-ag-g300.onrender.com"
+  ? `http://${window.location.hostname}:8000`
   : "https://avarias-ag-g300.onrender.com"
 
 // Helper: show 1 decimal only if value is < 1 (e.g., shared pallets like 0.5), otherwise integer
@@ -1252,7 +1251,10 @@ export default function DashboardPage() {
 
     const cap = Number(matches[0].capacidade) || 0;
     const pProf = Number(matches[0].prof_pos) || 0;
-    const pHeight = Number(matches[0].altura_pos) || 0;
+    const rawHeightStr = String(matches[0].altura_pos).trim();
+    const pHeight = rawHeightStr !== "" && rawHeightStr !== "undefined" && rawHeightStr !== "NaN" 
+      ? Number(rawHeightStr) + 1 
+      : 0;
     
     // Height priority: 1. Registry value, 2. Calc from cap/prof, 3. Max observed level
     const finalLevelCount = pHeight || (pProf > 0 ? Math.ceil(cap / pProf) : maxLevel + 1);
@@ -1273,7 +1275,7 @@ export default function DashboardPage() {
         nivel: (typeof m.nivel === 'number' || (typeof m.nivel === 'string' && !isNaN(parseFloat(m.nivel)))) ? Math.floor(Number(m.nivel)) : 0,
         quantidade: m.quantidade_total || 0,
         paletes: m.paletes || 0,
-        profundidade: m.profundidade || m.Profundidade || "-",
+        profundidade: m.pos_interna || m.profundidade || m.Profundidade || "-",
         qtd_por_palete: m.qtd_por_palete || m["Quantidade/palete"] || 0,
         qtd_tombada: m.qtd_tombada || 0,
         qtd_molhado: m.qtd_molhado || 0,
