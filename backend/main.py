@@ -1110,12 +1110,22 @@ class AddRequest(BaseModel):
 @app.post("/api/add")
 async def add_position(req: AddRequest):
     try:
-        cred_path = os.path.join(os.path.dirname(__file__), "credentials.json")
-        if not os.path.exists(cred_path):
-            raise HTTPException(status_code=500, detail="Arquivo credentials.json não encontrado.")
-            
         scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-        credentials = Credentials.from_service_account_file(cred_path, scopes=scopes)
+        
+        # Tenta carregar da variável de ambiente (Render) ou do arquivo local
+        google_creds_json = os.environ.get("GOOGLE_CREDENTIALS")
+        if google_creds_json:
+            try:
+                creds_dict = json.loads(google_creds_json)
+                credentials = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+            except Exception as e:
+                print(f"Erro ao carregar GOOGLE_CREDENTIALS env: {e}")
+                credentials = Credentials.from_service_account_file(cred_path, scopes=scopes)
+        else:
+            if not os.path.exists(cred_path):
+                raise HTTPException(status_code=500, detail="Arquivo credentials.json não encontrado e GOOGLE_CREDENTIALS não definida.")
+            credentials = Credentials.from_service_account_file(cred_path, scopes=scopes)
+            
         gc = gspread.authorize(credentials)
         
         sheet_id = "1q-gttvSLzCVD4x6xtVqivDeYMVvY3PIEOMEYaWnxyeM"
@@ -1126,6 +1136,22 @@ async def add_position(req: AddRequest):
             raise HTTPException(status_code=500, detail="Erro ao acessar a planilha via gspread.")
             
         headers = [str(h).lower().strip() for h in worksheet.row_values(1)]
+        
+        # Obter o índice da próxima linha real baseada na coluna A (Posição)
+        # Isso evita que o gspread sobrescreva linhas se houver células vazias em outras colunas
+        col_a_values = worksheet.col_values(1)
+        next_row_idx = len(col_a_values) + 1
+        
+        def get_col_letter(name_search):
+            for i, h in enumerate(headers):
+                if name_search in h:
+                    return chr(ord('A') + i) if i < 26 else None 
+            return None
+
+        # Detecção exata baseada nos cabeçalhos reais da planilha
+        col_id = get_col_letter('id palete') or 'J' # No seu print J é ID
+        col_total = get_col_letter('quantidade total') or 'G' # No seu print G é Total
+        col_qtd_palete = get_col_letter('quantidade/palete') or 'D' # No seu print D é Qtd/Palete
         
         # Montar a nova linha na ordem exata das colunas
         new_row = [""] * len(headers)
@@ -1145,8 +1171,11 @@ async def add_position(req: AddRequest):
                 new_row[j] = req.qtd_tombada
             elif 'molhado' in h or 'molhada' in h:
                 new_row[j] = req.qtd_molhado
-            # Deixar em branco o ID Palete (o Sheets processará/deixará vazio)
-            
+            elif 'qtd. de palete' in h or ('qtd' in h and 'palete' in h and '/' not in h):
+                # Fórmula dinâmica usando as letras de coluna reais
+                formula = f'=SE({col_id}{next_row_idx}<>""; 1/CONT.SE(${col_id}:${col_id};{col_id}{next_row_idx}); SE({col_total}{next_row_idx}=""; ""; {col_total}{next_row_idx}/{col_qtd_palete}{next_row_idx}))'
+                new_row[j] = formula
+                
         worksheet.append_row(new_row, value_input_option="USER_ENTERED")
             
         return {"status": "success", "message": "Palete adicionado com sucesso!"}
@@ -1157,5 +1186,6 @@ async def add_position(req: AddRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    # Mantendo a porta 8000 que é o padrão do frontend geralmente
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Usa a porta fornecida pelo Render ou 8000 como padrão local
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
