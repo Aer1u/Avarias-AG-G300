@@ -39,3 +39,5 @@ npm-debug.log*
 # Excel
 !backend/data/*.xlsx
 
+
+backend/credentials.json
