@@ -60,8 +60,13 @@ type ViewType = "geral" | "posicoes" | "nao_alocados" | "produtos" | "molhados"
 type DisplayMode = "mapa" | "tabela" | "misto" | "nao_alocados"
 type SortType = "none" | "qty_desc" | "qty_asc" | "alpha_asc"
 
-// Auto-detect: local dev uses localhost/LAN IPs, deployed uses Render backend
-const API_BASE = typeof window !== "undefined" && window.location.hostname !== "avarias-ag-g300.onrender.com"
+// Auto-detect: local dev uses localhost, deployed uses Render backend
+const isLocal = typeof window !== "undefined" && 
+  (window.location.hostname === "localhost" || 
+   window.location.hostname === "127.0.0.1" || 
+   window.location.hostname.startsWith("192.168."));
+
+const API_BASE = isLocal
   ? `http://${window.location.hostname}:8000`
   : "https://avarias-ag-g300.onrender.com"
 

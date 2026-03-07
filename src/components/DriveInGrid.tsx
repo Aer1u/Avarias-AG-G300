@@ -196,7 +196,12 @@ export function DriveInGrid({ products, capacity, levelCount, isBlocked, observa
         observacao: "" // Pode ser adicionado no form se necessário
       }
 
-      const API_BASE = typeof window !== "undefined" && window.location.hostname !== "avarias-ag-g300.onrender.com"
+      const isLocal = typeof window !== "undefined" && 
+        (window.location.hostname === "localhost" || 
+         window.location.hostname === "127.0.0.1" || 
+         window.location.hostname.startsWith("192.168."));
+
+      const API_BASE = isLocal
         ? `http://${window.location.hostname}:8000`
         : "https://avarias-ag-g300.onrender.com"
 
@@ -238,7 +243,12 @@ export function DriveInGrid({ products, capacity, levelCount, isBlocked, observa
         qtd_molhado: addingCoords.molhado
       }
 
-      const API_BASE = typeof window !== "undefined" && window.location.hostname !== "avarias-ag-g300.onrender.com"
+      const isLocal = typeof window !== "undefined" && 
+        (window.location.hostname === "localhost" || 
+         window.location.hostname === "127.0.0.1" || 
+         window.location.hostname.startsWith("192.168."));
+
+      const API_BASE = isLocal
         ? `http://${window.location.hostname}:8000`
         : "https://avarias-ag-g300.onrender.com"
 
