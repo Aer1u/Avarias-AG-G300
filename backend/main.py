@@ -8,6 +8,10 @@ import numpy as np
 import io
 import time
 import requests
+import gspread
+from google.oauth2.service_account import Credentials
+from pydantic import BaseModel
+from typing import Optional, Union
 
 app = FastAPI()
 
@@ -957,6 +961,196 @@ async def get_confrontos(type: str = "fisico_x_a501"):
             "itens_com_divergencia": len([x for x in resultado if x["diferenca"] != 0]),
             "dados": resultado
         }
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+class EditRequest(BaseModel):
+    posicao: str
+    produto: str
+    id_palete: Optional[str] = None
+    quantidade_total: Optional[float] = None
+    nivel: Optional[float] = None
+    profundidade: Optional[Union[float, str]] = None
+    qtd_tombada: Optional[float] = None
+    qtd_molhado: Optional[float] = None
+    observacao: Optional[str] = None
+
+@app.post("/api/edit")
+async def edit_position(req: EditRequest):
+    try:
+        cred_path = os.path.join(os.path.dirname(__file__), "credentials.json")
+        if not os.path.exists(cred_path):
+            raise HTTPException(status_code=500, detail="Arquivo credentials.json não encontrado.")
+            
+        scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+        credentials = Credentials.from_service_account_file(cred_path, scopes=scopes)
+        gc = gspread.authorize(credentials)
+        
+        sheet_id = "1q-gttvSLzCVD4x6xtVqivDeYMVvY3PIEOMEYaWnxyeM"
+        try:
+            sh = gc.open_by_key(sheet_id)
+            worksheet = sh.worksheet("Base de dados")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail="Erro ao acessar a planilha via gspread.")
+            
+        all_records = worksheet.get_all_records()
+        row_index = None
+        
+        for i, row in enumerate(all_records):
+            p_pos = str(row.get('Posição', row.get('Posicao', ''))).strip()
+            p_prod = str(row.get('Produto', row.get('SKU', ''))).strip()
+            p_id = str(row.get('ID Palete', row.get('Id Palete', ''))).strip()
+            
+            if p_pos == req.posicao and p_prod == req.produto:
+                if req.id_palete and req.id_palete not in ["None", ""]:
+                    if p_id == req.id_palete:
+                        row_index = i + 2
+                        break
+                else:
+                    row_index = i + 2
+                    break
+                    
+        if row_index is None:
+            raise HTTPException(status_code=404, detail="Registro não encontrado na planilha.")
+            
+        headers = [str(h).lower().strip() for h in worksheet.row_values(1)]
+        updates = []
+        
+        def add_update(field_keys, new_val):
+            if new_val is not None:
+                for k in field_keys:
+                    for j, h in enumerate(headers):
+                        if k in h:
+                            cell_str = gspread.utils.rowcol_to_a1(row_index, j + 1)
+                            updates.append({'range': cell_str, 'values': [[new_val]]})
+                            return
+                            
+        add_update(['quantidade total', 'qt total'], req.quantidade_total)
+        add_update(['nivel', 'nível'], req.nivel)
+        add_update(['prof'], req.profundidade)
+        add_update(['tombada', 'tombado'], req.qtd_tombada)
+        add_update(['molhado', 'molhada'], req.qtd_molhado)
+        add_update(['obsevar', 'observacao', 'status'], req.observacao)
+        
+        if updates:
+            worksheet.batch_update(updates)
+            
+        return {"status": "success", "message": "Planilha atualizada com sucesso!"}
+        
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+class AddRequest(BaseModel):
+    posicao: str
+    produto: str
+    quantidade_total: float
+    nivel: float
+    profundidade: Union[float, str]
+    qtd_tombada: float
+    qtd_molhado: float
+
+@app.post("/api/add")
+async def add_position(req: AddRequest):
+    try:
+        cred_path = os.path.join(os.path.dirname(__file__), "credentials.json")
+        if not os.path.exists(cred_path):
+            raise HTTPException(status_code=500, detail="Arquivo credentials.json não encontrado.")
+            
+        scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+        credentials = Credentials.from_service_account_file(cred_path, scopes=scopes)
+        gc = gspread.authorize(credentials)
+        
+        sheet_id = "1q-gttvSLzCVD4x6xtVqivDeYMVvY3PIEOMEYaWnxyeM"
+        try:
+            sh = gc.open_by_key(sheet_id)
+            worksheet = sh.worksheet("Base de dados")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail="Erro ao acessar a planilha via gspread.")
+            
+        headers = [str(h).lower().strip() for h in worksheet.row_values(1)]
+        
+        # Montar a nova linha na ordem exata das colunas
+        new_row = [""] * len(headers)
+        
+        for j, h in enumerate(headers):
+            if 'posi' in h:
+                new_row[j] = req.posicao
+            elif 'produto' in h or 'sku' in h:
+                new_row[j] = req.produto
+            elif 'quantidade total' in h or 'qt total' in h:
+                new_row[j] = req.quantidade_total
+            elif 'nível' in h or 'nivel' in h:
+                new_row[j] = req.nivel
+            elif 'prof' in h:
+                new_row[j] = req.profundidade
+            elif 'tombada' in h or 'tombado' in h:
+                new_row[j] = req.qtd_tombada
+            elif 'molhado' in h or 'molhada' in h:
+                new_row[j] = req.qtd_molhado
+            # Deixar em branco as outras colunas (como ID Palete, que é opcional)
+            
+        worksheet.append_row(new_row, value_input_option="USER_ENTERED")
+            
+        return {"status": "success", "message": "Palete adicionado com sucesso!"}
+        
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+class AddRequest(BaseModel):
+    posicao: str
+    produto: str
+    quantidade_total: float
+    nivel: float
+    profundidade: Union[float, str]
+    qtd_tombada: float
+    qtd_molhado: float
+
+@app.post("/api/add")
+async def add_position(req: AddRequest):
+    try:
+        cred_path = os.path.join(os.path.dirname(__file__), "credentials.json")
+        if not os.path.exists(cred_path):
+            raise HTTPException(status_code=500, detail="Arquivo credentials.json não encontrado.")
+            
+        scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+        credentials = Credentials.from_service_account_file(cred_path, scopes=scopes)
+        gc = gspread.authorize(credentials)
+        
+        sheet_id = "1q-gttvSLzCVD4x6xtVqivDeYMVvY3PIEOMEYaWnxyeM"
+        try:
+            sh = gc.open_by_key(sheet_id)
+            worksheet = sh.worksheet("Base de dados")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail="Erro ao acessar a planilha via gspread.")
+            
+        headers = [str(h).lower().strip() for h in worksheet.row_values(1)]
+        
+        # Montar a nova linha na ordem exata das colunas
+        new_row = [""] * len(headers)
+        
+        for j, h in enumerate(headers):
+            if 'posi' in h:
+                new_row[j] = req.posicao
+            elif 'produto' in h or 'sku' in h:
+                new_row[j] = req.produto
+            elif 'quantidade total' in h or 'qt total' in h:
+                new_row[j] = req.quantidade_total
+            elif 'nível' in h or 'nivel' in h:
+                new_row[j] = req.nivel
+            elif 'prof' in h:
+                new_row[j] = req.profundidade
+            elif 'tombada' in h or 'tombado' in h:
+                new_row[j] = req.qtd_tombada
+            elif 'molhado' in h or 'molhada' in h:
+                new_row[j] = req.qtd_molhado
+            # Deixar em branco o ID Palete (o Sheets processará/deixará vazio)
+            
+        worksheet.append_row(new_row, value_input_option="USER_ENTERED")
+            
+        return {"status": "success", "message": "Palete adicionado com sucesso!"}
+        
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))

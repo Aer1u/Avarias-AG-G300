@@ -118,6 +118,8 @@ export function DriveInGrid({ products, capacity, levelCount, isBlocked, observa
   const [selectedCoords, setSelectedCoords] = React.useState<{ lvl: number; d: number } | null>(null)
   
   // Edit State
+  const [isEditModeActive, setIsEditModeActive] = React.useState(false)
+  const [addingCoords, setAddingCoords] = React.useState<{ lvl: number; d: number; sku: string; qty: number; molhado: number; tombado: number } | null>(null)
   const [editingProduct, setEditingProduct] = React.useState<Product | null>(null)
   const [isSelectingProductToEdit, setIsSelectingProductToEdit] = React.useState(false)
   const [showPasswordPrompt, setShowPasswordPrompt] = React.useState(false)
@@ -131,15 +133,20 @@ export function DriveInGrid({ products, capacity, levelCount, isBlocked, observa
 
   const handleEditClick = (p: Product) => {
     setEditingProduct(p)
-    setShowPasswordPrompt(true)
-    setPasswordInput("")
-    setPasswordError("")
+    if (isEditModeActive) {
+      setShowPasswordPrompt(false)
+    } else {
+      setShowPasswordPrompt(true)
+      setPasswordInput("")
+      setPasswordError("")
+    }
   }
 
   const handlePasswordSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (passwordInput === EDIT_PASSWORD) {
       setShowPasswordPrompt(false)
+      setIsEditModeActive(true) // Persists Edit Mode
       if (isSelectingProductToEdit && products.length === 1) {
         setEditingProduct(products[0])
         setIsSelectingProductToEdit(false)
@@ -151,10 +158,20 @@ export function DriveInGrid({ products, capacity, levelCount, isBlocked, observa
 
   React.useEffect(() => {
     const handleTriggerEdit = () => {
-      setIsSelectingProductToEdit(true)
-      setShowPasswordPrompt(true)
-      setPasswordInput("")
-      setPasswordError("")
+      setIsEditModeActive(prev => {
+        if (prev) {
+          // If already active, turn it off
+          setEditingProduct(null)
+          setAddingCoords(null)
+          return false
+        }
+        // Engage edit mode sequence
+        setIsSelectingProductToEdit(false)
+        setShowPasswordPrompt(true)
+        setPasswordInput("")
+        setPasswordError("")
+        return false // Wait for successful password login
+      })
     }
 
     window.addEventListener("trigger-drivein-edit", handleTriggerEdit)
@@ -205,6 +222,44 @@ export function DriveInGrid({ products, capacity, levelCount, isBlocked, observa
     }
   }
 
+  const handleAddSave = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!addingCoords || !addingCoords.sku || addingCoords.qty <= 0) return
+    
+    setIsSubmitting(true)
+    try {
+      const payload = {
+        posicao: positionId,
+        produto: addingCoords.sku,
+        quantidade_total: addingCoords.qty,
+        nivel: addingCoords.lvl,
+        profundidade: addingCoords.d,
+        qtd_tombada: addingCoords.tombado,
+        qtd_molhado: addingCoords.molhado
+      }
+
+      const API_BASE = typeof window !== "undefined" && window.location.hostname !== "avarias-ag-g300.onrender.com"
+        ? `http://${window.location.hostname}:8000`
+        : "https://avarias-ag-g300.onrender.com"
+
+      const res = await fetch(`${API_BASE}/api/add`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      })
+
+      if (!res.ok) throw new Error("Erro ao salvar")
+
+      setAddingCoords(null)
+      if (onEditSuccess) onEditSuccess()
+    } catch (err) {
+      console.error(err)
+      alert("Erro ao salvar no Google Sheets")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   if (isBlocked) {
     return (
       <div className="flex flex-col items-center justify-center py-20 bg-slate-50/50 dark:bg-slate-800/10 rounded-[2.5rem] border border-dashed border-slate-200 dark:border-slate-800">
@@ -227,7 +282,29 @@ export function DriveInGrid({ products, capacity, levelCount, isBlocked, observa
   const isMixed = uniqueSkus > 1
 
   return (
-    <div className="w-full flex flex-col lg:flex-row gap-8 pb-4 relative">
+    <div className="w-full flex flex-col gap-4 relative">
+      {isEditModeActive && (
+        <div className="w-full bg-red-600/90 text-white rounded-xl p-3 flex justify-between items-center shadow-lg shadow-red-600/20 backdrop-blur-sm z-10 sticky top-0 border border-red-500/50">
+          <div className="flex items-center gap-3">
+            <span className="flex h-3 w-3 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
+            </span>
+            <span className="text-sm font-black uppercase tracking-widest">Modo de Edição Ativo</span>
+          </div>
+          <button 
+            onClick={() => {
+              setIsEditModeActive(false)
+              setEditingProduct(null)
+              setAddingCoords(null)
+            }}
+            className="text-[10px] font-black uppercase bg-black/20 hover:bg-black/40 px-3 py-1.5 rounded-lg transition-colors border border-black/10"
+          >
+            Sair da Edição
+          </button>
+        </div>
+      )}
+      <div className="w-full flex flex-col lg:flex-row gap-8 pb-4 relative">
       {/* Grid Section */}
       <div className="flex-1 overflow-x-auto custom-scrollbar pt-2">
         <div className="flex flex-col items-center min-w-full p-4">
@@ -363,8 +440,21 @@ export function DriveInGrid({ products, capacity, levelCount, isBlocked, observa
                                   )}
                                 </div>
                               ) : (
-                                <div className="flex flex-col items-center gap-1 opacity-20">
-                                  <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">VAZIO</span>
+                                <div className="flex flex-col items-center justify-center w-full h-full gap-1 opacity-40 group-hover:opacity-100 transition-opacity">
+                                  {isEditModeActive ? (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setAddingCoords({ lvl, d, sku: "", qty: 0, molhado: 0, tombado: 0 })
+                                      }}
+                                      className="h-10 w-10 flex items-center justify-center bg-blue-600 rounded-full text-white shadow-lg hover:scale-110 hover:bg-blue-500 transition-all cursor-pointer opacity-100 ring-4 ring-blue-500/20"
+                                      title="Adicionar Novo Palete Aqui"
+                                    >
+                                      <span className="text-2xl font-light mb-1">+</span>
+                                    </button>
+                                  ) : (
+                                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest group-hover:opacity-20 text-center px-1">VAZIO</span>
+                                  )}
                                 </div>
                               )}
                             </motion.div>
@@ -548,8 +638,8 @@ export function DriveInGrid({ products, capacity, levelCount, isBlocked, observa
         </div>
       </motion.div>
 
-      {/* MODAL DE SENHA E EDIÇÃO */}
-      {(showPasswordPrompt || isSelectingProductToEdit || editingProduct) && (
+      {/* MODAL DE SENHA E EDIÇÃO/ADIÇÃO */}
+      {(showPasswordPrompt || isSelectingProductToEdit || editingProduct || addingCoords) && (
         <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm rounded-3xl">
           <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl max-w-sm w-full shadow-2xl border border-slate-200 dark:border-slate-700">
             {showPasswordPrompt ? (
@@ -632,10 +722,48 @@ export function DriveInGrid({ products, capacity, levelCount, isBlocked, observa
                   {isSubmitting ? "Salvando..." : "Salvar na Planilha Online"}
                 </button>
               </form>
+            ) : addingCoords ? (
+              <form onSubmit={handleAddSave} className="space-y-4">
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase leading-none">Adicionar Palete</h3>
+                  <button type="button" onClick={() => setAddingCoords(null)} className="text-slate-400 hover:text-slate-900 dark:hover:text-white font-black text-[10px] uppercase">X Fechar</button>
+                </div>
+                
+                <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl border border-blue-100 dark:border-blue-800/50 mb-4 flex justify-between items-center text-blue-800 dark:text-blue-300">
+                  <span className="text-xs font-black uppercase">Nível: {addingCoords.lvl}</span>
+                  <span className="text-xs font-black uppercase">Profundidade: {addingCoords.d}</span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase">Código/SKU do Produto *</label>
+                    <input type="text" value={addingCoords.sku} onChange={e => setAddingCoords({...addingCoords, sku: e.target.value.toUpperCase()})} className="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-slate-900 dark:text-white" placeholder="Ex: G12345" required autoFocus />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase">Qtd Fís. Total *</label>
+                    <input type="number" step="0.01" value={addingCoords.qty || ""} onChange={e => setAddingCoords({...addingCoords, qty: Number(e.target.value)})} className="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-slate-900 dark:text-white" required />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-slate-400 uppercase">Qtd Tombada</label>
+                      <input type="number" step="0.01" value={addingCoords.tombado || ""} onChange={e => setAddingCoords({...addingCoords, tombado: Number(e.target.value)})} className="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-slate-900 dark:text-white" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-slate-400 uppercase">Qtd Molhado</label>
+                      <input type="number" step="0.01" value={addingCoords.molhado || ""} onChange={e => setAddingCoords({...addingCoords, molhado: Number(e.target.value)})} className="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-slate-900 dark:text-white" />
+                    </div>
+                  </div>
+                </div>
+
+                <button type="submit" disabled={isSubmitting || addingCoords.qty <= 0 || !addingCoords.sku} className="w-full mt-4 p-3 rounded-xl bg-blue-600 text-white font-black text-xs uppercase hover:bg-blue-700 shadow-lg shadow-blue-500/20 disabled:opacity-50 flex items-center justify-center">
+                  {isSubmitting ? "Adicionando..." : "Salvar na Planilha Online"}
+                </button>
+              </form>
             ) : null}
           </div>
         </div>
       )}
+    </div>
     </div>
   )
 }
