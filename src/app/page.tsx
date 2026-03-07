@@ -1276,7 +1276,8 @@ export default function DashboardPage() {
         profundidade: m.profundidade || m.Profundidade || "-",
         qtd_por_palete: m.qtd_por_palete || m["Quantidade/palete"] || 0,
         qtd_tombada: m.qtd_tombada || 0,
-        qtd_molhado: m.qtd_molhado || 0
+        qtd_molhado: m.qtd_molhado || 0,
+        id_palete: m.id_palete || ""
       }))
     }
   }, [selectedPosition, data])

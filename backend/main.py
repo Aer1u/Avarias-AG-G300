@@ -364,7 +364,7 @@ def get_clean_data(xl=None, unalloc_xl=None):
         # Fallback para o comportamento anterior se a aba de cadastro falhar
         df = pd.concat([df_alloc, df_unalloc], ignore_index=True)
 
-    required_cols = ['produto', 'quantidade_total', 'paletes', 'capacidade', 'posicao', 'nivel', 'observacao', 'observacao_pos', 'status', 'id_palete', 'qtd_tombada', 'qtd_molhado', 'qtd_por_palete', 'is_blocked']
+    required_cols = ['produto', 'quantidade_total', 'paletes', 'capacidade', 'posicao', 'nivel', 'profundidade', 'observacao', 'observacao_pos', 'status', 'id_palete', 'qtd_tombada', 'qtd_molhado', 'qtd_por_palete', 'is_blocked']
     for rc in required_cols:
         if rc not in df.columns:
             if rc == 'is_blocked':
@@ -375,7 +375,7 @@ def get_clean_data(xl=None, unalloc_xl=None):
                 df[rc] = 'S/P'
             elif rc == 'status':
                 df[rc] = 'Aberto'
-            elif rc == 'nivel':
+            elif rc in ['nivel', 'profundidade']:
                 df[rc] = '-'
             else:
                 df[rc] = 'N/A'
@@ -497,11 +497,21 @@ async def health_check():
 @app.get("/api/data")
 async def read_data():
     try:
-        df = get_clean_data()
+        main_xl_content = requests.get(EXCEL_URL, timeout=30).content
+        main_xl = pd.ExcelFile(io.BytesIO(main_xl_content))
+        unalloc_xl_content = requests.get(UNALLOCATED_GSHEET_URL, timeout=30).content
+        unalloc_xl = pd.ExcelFile(io.BytesIO(unalloc_xl_content))
+        
+        df = get_clean_data(xl=main_xl, unalloc_xl=unalloc_xl)
         return df.to_dict(orient="records")
     except Exception as e:
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+        # Se falhar o download de 30s, tenta o fallback pelo comportamento padrão
+        try:
+            df = get_clean_data()
+            return df.to_dict(orient="records")
+        except:
+            raise HTTPException(status_code=500, detail=str(e))
 
 def get_movement_totals(xl=None):
     try:

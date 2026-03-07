@@ -15,6 +15,7 @@ interface Product {
   qtd_por_palete: number
   qtd_tombada: number
   qtd_molhado: number
+  id_palete?: string
 }
 
 interface DriveInGridProps {
@@ -64,16 +65,49 @@ export function DriveInGrid({ products, capacity, levelCount, isBlocked, observa
       }
     })
 
-    // Then, distribute remaining products into available slots
-    let currentDepth = 1
+    // Group fractional or shared-id products together before distributing
+    const groupedById = new Map<string, Product[]>()
+    const fractionals: Product[] = []
+    const wholePallets: Product[] = []
+
     remainingProducts.forEach(p => {
-      // Find next available depth for this product
-      let palletsToPlace = Math.max(1, Math.round(p.paletes))
+      if (p.id_palete) {
+        if (!groupedById.has(p.id_palete)) groupedById.set(p.id_palete, [])
+        groupedById.get(p.id_palete)!.push(p)
+      } else if (p.paletes > 0 && p.paletes < 0.99) {
+        fractionals.push(p)
+      } else {
+        wholePallets.push(p)
+      }
+    })
+
+    const finalGroups: Product[][] = Array.from(groupedById.values())
+    
+    // Group fractionals by summing to ~1
+    let currentGroup: Product[] = []
+    let currentSum = 0
+    fractionals.forEach(p => {
+      currentGroup.push(p)
+      currentSum += p.paletes
+      if (currentSum >= 0.95) {
+        finalGroups.push(currentGroup)
+        currentGroup = []
+        currentSum = 0
+      }
+    })
+    if (currentGroup.length > 0) finalGroups.push(currentGroup)
+    wholePallets.forEach(p => finalGroups.push([p]))
+
+    // Distribute grouped products into available slots
+    let currentDepth = 1
+    finalGroups.forEach(group => {
+      const totalPallets = group.reduce((sum, p) => sum + p.paletes, 0)
+      let cellsNeeded = Math.max(1, Math.round(totalPallets))
       
-      while (palletsToPlace > 0 && currentDepth <= maxDepth) {
+      while (cellsNeeded > 0 && currentDepth <= maxDepth) {
         if (grid[lvl][currentDepth].length === 0) {
-          grid[lvl][currentDepth].push(p)
-          palletsToPlace--
+          grid[lvl][currentDepth].push(...group)
+          cellsNeeded--
         }
         currentDepth++
       }
@@ -94,7 +128,8 @@ export function DriveInGrid({ products, capacity, levelCount, isBlocked, observa
     )
   }
 
-  const selectedProduct = selectedCoords ? grid[selectedCoords.lvl][selectedCoords.d][0] : null
+  const selectedCellProducts = selectedCoords ? grid[selectedCoords.lvl][selectedCoords.d] : []
+  const selectedProduct = selectedCellProducts[0] || null
 
   // Aggregated Position Stats
   const totalQty = products.reduce((sum, p) => sum + p.quantidade, 0)
@@ -142,9 +177,10 @@ export function DriveInGrid({ products, capacity, levelCount, isBlocked, observa
                           const isSelected = selectedCoords?.lvl === lvl && selectedCoords?.d === d
                           const hasWet = cellProducts.some(p => p.qtd_molhado > 0)
                           const hasTilted = cellProducts.some(p => p.qtd_tombada > 0)
-                          const sku = !isEmpty ? cellProducts[0].sku : ""
-                          const description = !isEmpty ? cellProducts[0].descricao : ""
-                          const qty = !isEmpty ? cellProducts.reduce((sum, p) => sum + p.quantidade, 0) : 0
+                          const isMixedCell = cellProducts.length > 1
+                          const sku = !isEmpty ? (isMixedCell ? `${cellProducts.length} SKUs` : cellProducts[0].sku) : ""
+                          const description = !isEmpty ? (isMixedCell ? "Múltiplos produtos neste palete" : cellProducts[0].descricao) : ""
+                          const qty = !isEmpty ? Math.round(cellProducts.reduce((sum, p) => sum + p.quantidade, 0)) : 0
                           const formattedLvl = isNaN(val) ? lvl : Math.floor(val).toString()
                           
                           return (
@@ -169,6 +205,8 @@ export function DriveInGrid({ products, capacity, levelCount, isBlocked, observa
                                       ? "bg-blue-600" 
                                       : hasTilted
                                       ? "bg-red-600"
+                                      : isMixedCell
+                                      ? "bg-amber-600 dark:bg-amber-700"
                                       : "bg-[#7A5134] dark:bg-[#5D3D27]",
                                     "border border-black/10"
                                   )}
@@ -195,6 +233,11 @@ export function DriveInGrid({ products, capacity, levelCount, isBlocked, observa
                                               <AlertCircle size={10} className="text-white fill-white" />
                                           </div>
                                       )}
+                                      {isMixedCell && !hasWet && !hasTilted && (
+                                          <div className="h-4 px-1.5 rounded-full bg-amber-800 flex items-center justify-center border border-white/20">
+                                              <span className="text-[8px] font-black text-white uppercase mt-0.5">Mix</span>
+                                          </div>
+                                      )}
                                   </div>
 
                                   {/* Structured Tooltip (No moving parts) */}
@@ -208,9 +251,9 @@ export function DriveInGrid({ products, capacity, levelCount, isBlocked, observa
                                                 </div>
                                                 <div className={cn(
                                                     "px-1.5 py-0.5 rounded text-[7px] font-black uppercase text-white",
-                                                    hasWet ? "bg-blue-600" : hasTilted ? "bg-red-600" : "bg-[#7A5134]"
+                                                    hasWet ? "bg-blue-600" : hasTilted ? "bg-red-600" : isMixedCell ? "bg-amber-600" : "bg-[#7A5134]"
                                                 )}>
-                                                    {hasWet ? "Molhado" : hasTilted ? "Tombado" : "Normal"}
+                                                    {hasWet ? "Molhado" : hasTilted ? "Tombado" : isMixedCell ? "Misto" : "Normal"}
                                                 </div>
                                             </div>
                                             <p className="text-[10px] text-slate-300 leading-tight mb-3 line-clamp-2 italic">{description}</p>
@@ -221,7 +264,7 @@ export function DriveInGrid({ products, capacity, levelCount, isBlocked, observa
                                                 </div>
                                                 <div className="text-right">
                                                     <span className="text-[8px] font-bold text-slate-500 uppercase block">Paletes</span>
-                                                    <span className="font-black">{cellProducts[0].paletes} PT</span>
+                                                    <span className="font-black">{Math.ceil(cellProducts.reduce((sum, p) => sum + p.paletes, 0))} PT</span>
                                                 </div>
                                             </div>
                                             {/* Static Arrow - High Contrast Visibility */}
@@ -302,58 +345,49 @@ export function DriveInGrid({ products, capacity, levelCount, isBlocked, observa
                 </button>
               </div>
 
-              <div className="space-y-4">
-                {/* Product Info Compact */}
-                <div className="space-y-1">
-                  <p className="text-[14px] font-black text-slate-900 dark:text-white leading-tight">{selectedProduct.sku}</p>
-                  <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 leading-snug line-clamp-2 italic">
-                    {selectedProduct.descricao}
-                  </p>
-                </div>
-
-                {/* Refined Badges */}
-                <div className="flex gap-1.5">
-                  <div className={cn(
-                    "px-2 py-1 rounded-md text-[9px] font-black uppercase flex items-center gap-1.5",
-                    selectedProduct.qtd_molhado > 0 ? "bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400" : "bg-slate-50 text-slate-400 dark:bg-slate-800 dark:text-slate-500"
-                  )}>
-                    <Droplet size={10} className={selectedProduct.qtd_molhado > 0 ? "fill-current" : ""} />
-                    {selectedProduct.qtd_molhado > 0 ? "Molhado" : "Seco"}
+              <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
+                {selectedCellProducts.map((p, idx) => (
+                  <div key={idx} className="bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-100 dark:border-slate-700/50 space-y-3">
+                    <div className="space-y-1">
+                      <p className="text-[14px] font-black text-slate-900 dark:text-white leading-tight">{p.sku}</p>
+                      <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400 leading-snug line-clamp-2 italic">
+                        {p.descricao}
+                      </p>
+                    </div>
+                    
+                    <div className="flex gap-1.5">
+                      {p.qtd_molhado > 0 && (
+                        <div className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase flex items-center gap-1 bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400">
+                          <Droplet size={8} className="fill-current" /> Molhado
+                        </div>
+                      )}
+                      {p.qtd_tombada > 0 && (
+                        <div className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase flex items-center gap-1 bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400">
+                          <AlertCircle size={8} className="fill-current" /> Tombado
+                        </div>
+                      )}
+                      {p.qtd_molhado === 0 && p.qtd_tombada === 0 && (
+                        <div className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+                          Normal
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-700/50">
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Qty / Palletes</span>
+                      <span className="text-xs font-black text-slate-900 dark:text-white">
+                        {Math.round(p.quantidade).toLocaleString('pt-BR')} <span className="text-[8px] opacity-40">UN</span> • {Number(p.paletes).toFixed(2).replace(/\.?0+$/, '')} <span className="text-[8px] opacity-40">PT</span>
+                      </span>
+                    </div>
                   </div>
-                  <div className={cn(
-                    "px-2 py-1 rounded-md text-[9px] font-black uppercase flex items-center gap-1.5",
-                    selectedProduct.qtd_tombada > 0 ? "bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400" : "bg-slate-50 text-slate-400 dark:bg-slate-800 dark:text-slate-500"
-                  )}>
-                    <AlertCircle size={10} className={selectedProduct.qtd_tombada > 0 ? "fill-current" : ""} />
-                    {selectedProduct.qtd_tombada > 0 ? "Tombado" : "Regular"}
-                  </div>
-                </div>
-
-                <div className="h-px bg-slate-100 dark:bg-slate-800" />
-
-                {/* Metrics Stack */}
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Estoque Total</span>
-                    <span className="text-sm font-black text-slate-900 dark:text-white">
-                      {selectedProduct.quantidade.toLocaleString('pt-BR')} <span className="text-[10px] opacity-40">UN</span>
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Capacidade</span>
-                    <span className="text-sm font-black text-slate-900 dark:text-white">
-                      {selectedProduct.paletes} <span className="text-[10px] opacity-40">PT</span>
-                    </span>
-                  </div>
-                </div>
-
+                ))}
+              </div>
                 <button 
                   onClick={() => setSelectedCoords(null)}
-                  className="w-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-200 dark:hover:bg-slate-700 transition-all active:scale-95"
+                  className="w-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-200 dark:hover:bg-slate-700 transition-all active:scale-95 mt-4"
                 >
                   Fechar Detalhes
                 </button>
-              </div>
             </div>
           ) : (
             <div className="space-y-6">
