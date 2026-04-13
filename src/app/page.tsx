@@ -5228,8 +5228,8 @@ function DashboardPage() {
                                               }
                                             }}
                                             draggable={!isComposite}
-                                            onDragStart={!isComposite ? (e) => handleDragStart(e, singleItem) : undefined}
-                                            onDragEnd={handleDragEnd}
+                                            onDragStart={!isComposite ? (e: any) => handleDragStart(e, singleItem) : undefined}
+                                            onDragEnd={(e: any) => handleDragEnd(e)}
                                             className={cn(
                                               "group transition-all duration-200 relative",
                                               isComposite ? "border-b-2 border-slate-200 dark:border-slate-700/50" : "border-b border-slate-100 dark:border-slate-800",
@@ -5322,7 +5322,7 @@ function DashboardPage() {
                                                 transition={{ delay: si * 0.04 }}
                                                 draggable
                                                 onDragStart={(e: any) => handleDragStart(e, sub)}
-                                                onDragEnd={handleDragEnd}
+                                                onDragEnd={(e: any) => handleDragEnd(e)}
                                                 className={cn(
                                                   "bg-blue-50/30 dark:bg-blue-500/5 border-b border-blue-100/50 dark:border-blue-500/10 cursor-grab active:cursor-grabbing",
                                                   draggedItem?.id === sub.id ? "opacity-50" : ""
