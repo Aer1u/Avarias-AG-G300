@@ -289,16 +289,15 @@ function DashboardPage() {
          const insertSource = {
             'Posição': src.posicao,
             'Id Palete': finalTargetId,
-            'Código': src.codigo,
+            'Código': src.produto,
             'Quantidade': qtToMove,
             'Nível': src.nivel,
             'Profundidade': src.profundidade,
-            'Parte Tombada': src.parte_tombada,
-            'Parte Molhada': src.parte_molhada,
-            'Observação': src.observacao,
-            'Vencimento': src.vencimento,
-            'Lote': src.lote,
-            'Responsável Pela Atualização': user?.email || 'via_painel'
+            'Parte Tombada': src.qtd_tombada || 0,
+            'Parte Molhada': src.qtd_molhado || 0,
+            'Observação': src.observacao || null,
+            'Vencimento': src.vencimento || null,
+            'Lote': src.lote || null
          };
          
          const { error: insErr } = await supabase.from('mapeamento').insert(insertSource);
