@@ -203,7 +203,7 @@ function DashboardPage() {
   const [transferPayload, setTransferPayload] = useState<{
     sourceItem: any;
     targetId: string | null; // null => desagrupar, ID => group, 'NEW' => criar novo mix
-    targetType: 'mix' | 'ungroup' | 'new_mix';
+    targetType: 'mix' | 'ungroup' | 'new_mix' | 'new_standalone_mix';
     targetBaseItem?: any;
   } | null>(null)
   const [transferQuantity, setTransferQuantity] = useState<string>("")
@@ -213,6 +213,15 @@ function DashboardPage() {
     setDraggedItem(item)
     e.dataTransfer.effectAllowed = 'copyMove'
     e.dataTransfer.setData('application/json', JSON.stringify(item.id))
+  }
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    // Só limpamos o estado visual se o drag foi cancelado (dropEffect === 'none')
+    // Se houve um drop válido, o próprio Modal ou a confirmação limparão o estado.
+    if (e.dataTransfer.dropEffect === 'none') {
+      setDraggedItem(null)
+    }
+    setDragOverTarget(null)
   }
 
   const handleDragOver = (e: React.DragEvent, targetId: string) => {
@@ -226,12 +235,12 @@ function DashboardPage() {
     setDragOverTarget(null)
   }
 
-  const handleDrop = (e: React.DragEvent, targetType: 'mix' | 'ungroup' | 'new_mix', targetId: string | null, targetBaseItem?: any) => {
+  const handleDrop = (e: React.DragEvent, targetType: 'mix' | 'ungroup' | 'new_mix' | 'new_standalone_mix', targetId: string | null, targetBaseItem?: any) => {
     e.preventDefault()
     setDragOverTarget(null)
     if (!draggedItem) return
 
-    // Se no houver mudana vlida
+    // Se n‹o houver mudana v‡lida
     if (draggedItem.id === targetBaseItem?.id) return
     if (targetType === 'mix' && draggedItem.id_palete === targetId) return
     if (targetType === 'ungroup' && !draggedItem.id_palete) return
@@ -239,7 +248,6 @@ function DashboardPage() {
     setTransferPayload({ sourceItem: draggedItem, targetId, targetType, targetBaseItem })
     setTransferQuantity(draggedItem.quantidade_total?.toString() || "0")
     setTransferModalOpen(true)
-    setDraggedItem(null)
   }
 
   const getNextPalletId = async () => {
@@ -275,6 +283,8 @@ function DashboardPage() {
          if (transferPayload.targetBaseItem) {
            await supabase.from('mapeamento').update({ 'Id Palete': finalTargetId }).eq('id', transferPayload.targetBaseItem.id);
          }
+      } else if (transferPayload.targetType === 'new_standalone_mix') {
+         finalTargetId = await getNextPalletId();
       } else if (transferPayload.targetType === 'ungroup') {
          finalTargetId = null;
       }
@@ -314,6 +324,39 @@ function DashboardPage() {
       setIsTransferring(false);
       setTransferModalOpen(false);
       setTransferPayload(null);
+      setDraggedItem(null);
+    }
+  }
+
+  const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [deleteQuantity, setDeleteQuantity] = useState<string>('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const executeDeleteFromChao = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      const dbQty = parseFloat(deleteTarget.quantidade_total || "0");
+      const qtToDelete = parseFloat(deleteQuantity.replace(',', '.'));
+      
+      if (isNaN(qtToDelete) || qtToDelete <= 0 || qtToDelete > dbQty) {
+        throw new Error("Quantidade inválida ou superior ao total disponível.");
+      }
+
+      if (qtToDelete === dbQty) {
+        const { error } = await supabase.from('mapeamento').delete().eq('id', deleteTarget.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('mapeamento').update({ 'Quantidade': dbQty - qtToDelete }).eq('id', deleteTarget.id);
+        if (error) throw error;
+      }
+      
+      await fetchData();
+    } catch (err: any) {
+      alert("Erro ao excluir registro: " + (err.message || err));
+    } finally {
+      setIsDeleting(false);
+      setDeleteTarget(null);
     }
   }
 
@@ -423,7 +466,7 @@ function DashboardPage() {
     }
   }
 
-  const rowsPerPage = 10 // Posições por página
+  const [rowsPerPage, setRowsPerPage] = useState<number | 'ALL'>('ALL') // Posições por página
 
   const handleVerNoMapa = (posId: string) => {
     setActiveView("posicoes");
@@ -1677,11 +1720,12 @@ function DashboardPage() {
   }, [processedData, search])
 
   // Pagination Logic
-  const totalPages = Math.ceil(filteredData.length / rowsPerPage)
+  const totalPages = rowsPerPage === 'ALL' ? 1 : Math.ceil(filteredData.length / rowsPerPage)
   const paginatedData = useMemo(() => {
+    if (rowsPerPage === 'ALL') return filteredData;
     const start = (currentPage - 1) * rowsPerPage
     return filteredData.slice(start, start + rowsPerPage)
-  }, [filteredData, currentPage])
+  }, [filteredData, currentPage, rowsPerPage])
 
   useEffect(() => {
     setCurrentPage(1)
@@ -4193,10 +4237,25 @@ function DashboardPage() {
 
                       {!loading && totalPages >= 1 && (
                         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-4 pb-12 transition-colors">
-                          <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest order-2 sm:order-1">Página {currentPage} de {totalPages}</span>
-                          <div className="flex gap-3 order-1 sm:order-2">
-                            <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} className="flex-1 sm:flex-none p-4 sm:p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 shadow-sm transition-all active:scale-95 transition-colors"><ChevronLeft size={18} /></button>
-                            <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} className="flex-1 sm:flex-none p-4 sm:p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 shadow-sm transition-all active:scale-95 transition-colors"><ChevronRight size={18} /></button>
+                          <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest order-2 sm:order-1">
+                            {rowsPerPage === 'ALL' ? `Exibindo todos os ${filteredData.length} itens` : `Página ${currentPage} de ${totalPages}`}
+                          </span>
+                          <div className="flex gap-3 order-1 sm:order-2 items-center">
+                            <button 
+                              onClick={() => {
+                                setRowsPerPage(prev => prev === 'ALL' ? 10 : 'ALL')
+                                setCurrentPage(1)
+                              }}
+                              className="px-4 py-2 sm:px-3 sm:py-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
+                            >
+                              {rowsPerPage === 'ALL' ? "Voltar ao padrão" : "Ver todos"}
+                            </button>
+                            {rowsPerPage !== 'ALL' && (
+                              <>
+                                <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} className="flex-1 sm:flex-none p-4 sm:p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 shadow-sm transition-all active:scale-95 transition-colors"><ChevronLeft size={18} /></button>
+                                <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} className="flex-1 sm:flex-none p-4 sm:p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 shadow-sm transition-all active:scale-95 transition-colors"><ChevronRight size={18} /></button>
+                              </>
+                            )}
                           </div>
                         </div>
                       )}
@@ -5041,166 +5100,244 @@ function DashboardPage() {
                           }
                         }
                       });
-                      return (
-                        <div className="rounded-3xl md:rounded-[2.5rem] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-xl dark:shadow-slate-950/50 overflow-x-auto custom-scrollbar transition-colors">
-                          <table className="w-full min-w-[700px] text-left">
-                            <thead>
-                              <tr className="border-b border-slate-100 dark:border-slate-800">
-
-                                <th className="px-4 py-3 text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 w-8"></th>
-                                <th className="px-4 py-3 text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">ID Palete</th>
-                                <th className="px-4 py-3 text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Produto</th>
-                                <th className="px-4 py-3 text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Descrição</th>
-                                <th className="px-4 py-3 text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 text-right">Qtd Total</th>
-                                <th className="px-4 py-3 text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Observação</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {grouped.map((group, gi) => {
-                                const isExpanded = expandedPallets.has(group.key);
-                                const totalQty = group.items.reduce((s: number, i: any) => s + (Number(i.quantidade_total) || 0), 0);
-                                const isComposite = !group.isSimple && group.items.length > 1;
-                                const singleItem = group.items[0];
-                                return (
-                                  <React.Fragment key={group.key}>
-                                    <tr 
-                                        key={group.key} 
-                                        onClick={() => isComposite && togglePallet(group.key)}
-                                        onDragOver={(e) => {
-                                          if (draggedItem && draggedItem.id !== singleItem?.id && group.label !== draggedItem.id_palete) {
-                                            handleDragOver(e, group.label);
-                                          }
-                                        }}
-                                        onDragLeave={handleDragLeave}
-                                        onDrop={(e) => {
-                                           if (draggedItem && draggedItem.id !== singleItem?.id && group.label !== draggedItem.id_palete) {
-                                             if (isComposite) {
-                                               handleDrop(e, 'mix', group.label, group);
-                                             } else {
-                                               handleDrop(e, 'new_mix', null, singleItem);
-                                             }
-                                           }
-                                        }}
-                                        draggable={!isComposite}
-                                        onDragStart={!isComposite ? (e) => handleDragStart(e, singleItem) : undefined}
-                                        onDragEnd={() => setDraggedItem(null)}
-                                        className={cn(
-                                          "group transition-all duration-200",
-                                          isComposite ? "border-b-2 border-slate-200 dark:border-slate-700/50" : "border-b border-slate-100 dark:border-slate-800",
-                                          isComposite ? "cursor-pointer hover:bg-blue-50/50 dark:hover:bg-blue-500/5" : "hover:bg-slate-50/50 dark:hover:bg-slate-800/30",
-                                          dragOverTarget === group.label ? "bg-blue-100/50 dark:bg-blue-900/30 ring-2 ring-blue-400 inset-0" : "",
-                                          draggedItem?.id === singleItem?.id ? "opacity-50" : ""
-                                        )}
-                                      >
-
-                                      {/* Expand toggle */}
-                                      <td className="px-2 py-3 w-8">
-                                        {isComposite ? (
-                                          <span className={cn("inline-flex items-center justify-center h-5 w-5 rounded-full text-blue-500 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 transition-transform", isExpanded && "rotate-90")}>
-                                            <ChevronRight size={12} strokeWidth={3} />
-                                          </span>
-                                        ) : null}
-                                      </td>
-                                      {/* ID Palete */}
-                                      <td className="px-4 py-3">
-                                        {group.isSimple ? (
-                                          <span className="text-[10px] italic text-slate-400 dark:text-slate-500">Palete Simples</span>
-                                        ) : (
-                                          <div className="flex items-center gap-2">
-                                            <span className="text-[10px] font-black text-blue-500 dark:text-blue-300 tracking-wide">{group.label}</span>
-                                            {isComposite && (
-                                              <span className="text-[8px] font-bold text-blue-400 dark:text-blue-500 bg-blue-50 dark:bg-blue-500/10 px-1.5 py-0.5 rounded-full">{group.items.length} SKUs</span>
-                                            )}
-                                          </div>
-                                        )}
-                                      </td>
-                                      {/* Produto: show on simple/single, show dash on composite */}
-                                      <td className="px-4 py-3">
-                                        {isComposite ? (
-                                          <span className="text-[10px] text-slate-300 dark:text-slate-600 italic">— misto —</span>
-                                        ) : (
-                                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300 tracking-tight">{singleItem.produto || "—"}</span>
-                                        )}
-                                      </td>
-                                      {/* Descrição */}
-                                      <td className="px-4 py-3 max-w-[200px]">
-                                        {isComposite ? (
-                                          <span className="text-[9px] text-slate-400 italic">{group.items.length} produtos diferentes</span>
-                                        ) : (
-                                          <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase truncate block max-w-[200px]">{singleItem.descricao || "—"}</span>
-                                        )}
-                                      </td>
-                                      {/* Qtd Total */}
-                                      <td className="px-4 py-3 text-right">
-                                        <span className="text-sm font-black text-slate-700 dark:text-slate-300">{fmtNum(totalQty)}</span>
-                                      </td>
-                                      {/* Observação */}
-                                      <td className="px-4 py-3">
-                                        {!isComposite && (() => {
-                                          const obs = singleItem.observacao;
-                                          const strObs = obs && obs !== 0 ? String(obs) : "-";
-                                          const isCrit = strObs.endsWith("!");
-                                          return (
-                                            <span className={cn("text-[10px] italic truncate block max-w-[180px] px-2 py-0.5 rounded-lg w-fit",
-                                              isCrit ? "text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-900/50 not-italic" : "text-slate-400 dark:text-slate-500"
-                                            )}>{strObs}</span>
-                                          );
-                                        })()}
-                                      </td>
-                                    </tr>
-                                    {/* Sub-rows: composition of composite pallets */}
-                                    <AnimatePresence>
-                                      {isComposite && isExpanded && group.items.map((sub: any, si: number) => (
-                                        <motion.tr 
-                                            key={sub.id} 
-                                            initial={{ opacity: 0, y: -4 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            exit={{ opacity: 0, y: -4, transition: { duration: 0.1 } }}
-                                            transition={{ delay: si * 0.04 }}
-                                            draggable
-                                            onDragStart={(e: any) => handleDragStart(e, sub)}
-                                            onDragEnd={() => setDraggedItem(null)}
+                      const renderPalletTable = (title: string, groupData: typeof grouped, isEmptyText: string, isAgrupados: boolean) => (
+                        <div 
+                          className={cn("flex flex-col h-[calc(100vh-320px)] min-h-[500px] rounded-3xl md:rounded-[2.5rem] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-xl dark:shadow-slate-950/50 overflow-hidden transition-colors relative",
+                            isAgrupados && dragOverTarget === "LEFT_TABLE_CONTAINER" ? "ring-4 ring-blue-500/50 bg-blue-50/5 dark:bg-blue-900/10" : ""
+                          )}
+                          onDragOver={(e) => {
+                            if (isAgrupados && draggedItem && !draggedItem.id_palete) {
+                              e.preventDefault();
+                              if (dragOverTarget !== "LEFT_TABLE_CONTAINER") {
+                                handleDragOver(e, "LEFT_TABLE_CONTAINER");
+                              }
+                            }
+                          }}
+                          onDragLeave={(e) => {
+                            if (isAgrupados && dragOverTarget === "LEFT_TABLE_CONTAINER") {
+                               handleDragLeave(e);
+                            }
+                          }}
+                          onDrop={(e) => {
+                            if (isAgrupados && draggedItem && !draggedItem.id_palete) {
+                               e.preventDefault();
+                               e.stopPropagation();
+                               if (dragOverTarget === "LEFT_TABLE_CONTAINER") {
+                                  handleDrop(e, 'new_standalone_mix', null, null);
+                               }
+                            }
+                          }}
+                        >
+                          <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex justify-between items-center">
+                            <h4 className="text-sm font-black text-slate-800 dark:text-slate-200 tracking-tight">{title}</h4>
+                            <span className="text-[10px] font-bold text-slate-500 bg-slate-200 dark:bg-slate-700 px-2.5 py-1 rounded-full">{groupData.length} registros</span>
+                          </div>
+                          <div className="flex-1 overflow-x-auto overflow-y-auto custom-scrollbar relative">
+                            {groupData.length === 0 ? (
+                              <div className="absolute inset-0 flex items-center justify-center text-sm font-medium text-slate-400 dark:text-slate-500 italic p-6 text-center">
+                                {isEmptyText}
+                              </div>
+                            ) : (
+                              <table className="w-full min-w-[500px] text-left">
+                                <thead className="sticky top-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm z-10">
+                                  <tr className="border-b border-slate-100 dark:border-slate-800">
+                                    <th className="px-3 py-3 text-[9px] font-black uppercase tracking-widest text-slate-400 w-6"></th>
+                                    <th className="px-3 py-3 text-[9px] font-black uppercase tracking-widest text-slate-400">ID Palete</th>
+                                    <th className="px-3 py-3 text-[9px] font-black uppercase tracking-widest text-slate-400">Produto</th>
+                                    <th className="px-3 py-3 text-[9px] font-black uppercase tracking-widest text-slate-400">Descrição</th>
+                                    <th className="px-3 py-3 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right">Qtd</th>
+                                    <th className="px-3 py-3 text-[9px] font-black uppercase tracking-widest text-slate-400">Obs</th>
+                                    {user && <th className="px-3 py-3 text-[9px] font-black uppercase tracking-widest text-slate-400 text-center w-8">Ação</th>}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {groupData.map((group, gi) => {
+                                    const isExpanded = expandedPallets.has(group.key);
+                                    const totalQty = group.items.reduce((s: number, i: any) => s + (Number(i.quantidade_total) || 0), 0);
+                                    const isComposite = !group.isSimple;
+                                    const singleItem = group.items[0];
+                                    return (
+                                      <React.Fragment key={group.key}>
+                                        <tr 
+                                            key={group.key} 
+                                            onClick={() => isComposite && togglePallet(group.key)}
+                                            onDragOver={(e) => {
+                                              if (draggedItem && draggedItem.id !== singleItem?.id && group.label !== draggedItem.id_palete) {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                handleDragOver(e, group.key);
+                                              }
+                                            }}
+                                            onDragLeave={handleDragLeave}
+                                            onDrop={(e) => {
+                                              if (draggedItem && draggedItem.id !== singleItem?.id && group.label !== draggedItem.id_palete) {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                if (isComposite) {
+                                                  handleDrop(e, 'mix', group.label, group);
+                                                } else {
+                                                  handleDrop(e, 'new_mix', null, singleItem);
+                                                }
+                                              }
+                                            }}
+                                            draggable={!isComposite}
+                                            onDragStart={!isComposite ? (e) => handleDragStart(e, singleItem) : undefined}
+                                            onDragEnd={handleDragEnd}
                                             className={cn(
-                                              "bg-blue-50/30 dark:bg-blue-500/5 border-b border-blue-100/50 dark:border-blue-500/10 cursor-grab active:cursor-grabbing",
-                                              draggedItem?.id === sub.id ? "opacity-50" : ""
+                                              "group transition-all duration-200 relative",
+                                              isComposite ? "border-b-2 border-slate-200 dark:border-slate-700/50" : "border-b border-slate-100 dark:border-slate-800",
+                                              isComposite ? "cursor-pointer hover:bg-blue-50/50 dark:hover:bg-blue-500/5" : "hover:bg-slate-50/50 dark:hover:bg-slate-800/30",
+                                              dragOverTarget === group.key ? "bg-blue-100/50 dark:bg-blue-900/30 ring-2 ring-blue-400 z-10" : "",
+                                              draggedItem?.id === singleItem?.id ? "opacity-50" : ""
                                             )}
                                           >
-
-                                          <td className="px-2 py-2">
-                                            <div className="w-px h-full bg-blue-200 dark:bg-blue-700 mx-auto opacity-50"></div>
+                                          {/* Expand toggle */}
+                                          <td className="px-2 py-3 w-6">
+                                            {isComposite ? (
+                                              <span className={cn("inline-flex items-center justify-center h-5 w-5 rounded-full text-blue-500 bg-blue-50 dark:bg-blue-500/10 transition-transform", isExpanded && "rotate-90")}>
+                                                <ChevronRight size={12} strokeWidth={3} />
+                                              </span>
+                                            ) : null}
                                           </td>
-                                          <td className="px-4 py-2">
-                                            <span className="text-[10px] font-bold text-blue-500 dark:text-blue-400 pl-3 border-l-2 border-blue-200 dark:border-blue-700">╰ item {si + 1}</span>
+                                          {/* ID Palete */}
+                                          <td className="px-3 py-3">
+                                            {group.isSimple ? (
+                                              <span className="text-[10px] italic text-slate-400">S/ ALOCAÇÃO</span>
+                                            ) : (
+                                              <div className="flex items-center gap-1.5 flex-wrap">
+                                                <span className="text-[10px] font-black text-blue-500 dark:text-blue-300 tracking-wide">{group.label}</span>
+                                                {isComposite && (
+                                                  <span className="text-[8px] font-bold text-blue-400 bg-blue-50 dark:bg-blue-500/10 px-1.5 py-0.5 rounded-full whitespace-nowrap">{group.items.length} SKUs</span>
+                                                )}
+                                              </div>
+                                            )}
                                           </td>
-                                          <td className="px-4 py-2">
-                                            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{sub.produto || "—"}</span>
+                                          {/* Produto */}
+                                          <td className="px-3 py-3">
+                                            {isComposite ? (
+                                              <span className="text-[10px] text-slate-300 dark:text-slate-600 italic">—</span>
+                                            ) : (
+                                              <span className="text-xs font-bold text-slate-700 dark:text-slate-300 tracking-tight">{singleItem.produto || "—"}</span>
+                                            )}
                                           </td>
-                                          <td className="px-4 py-2 max-w-[200px]">
-                                            <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase truncate block max-w-[200px]">{sub.descricao || "—"}</span>
+                                          {/* Descrição */}
+                                          <td className="px-3 py-3 max-w-[150px]">
+                                            {isComposite ? (
+                                              <span className="text-[9px] text-slate-400 italic">Palete misto com {group.items.length} itens</span>
+                                            ) : (
+                                              <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase truncate block max-w-[150px]">{singleItem.descricao || "—"}</span>
+                                            )}
                                           </td>
-                                          <td className="px-4 py-2 text-right">
-                                            <span className="text-xs font-bold text-slate-600 dark:text-slate-400">{fmtNum(sub.quantidade_total)}</span>
+                                          {/* Qtd Total */}
+                                          <td className="px-3 py-3 text-right">
+                                            <span className="text-sm font-black text-slate-700 dark:text-slate-300">{fmtNum(totalQty)}</span>
                                           </td>
-                                          <td className="px-4 py-2">
-                                            {(() => {
-                                              const obs = sub.observacao;
+                                          {/* Observação */}
+                                          <td className="px-3 py-3">
+                                            {!isComposite && (() => {
+                                              const obs = singleItem.observacao;
                                               const strObs = obs && obs !== 0 ? String(obs) : "-";
                                               const isCrit = strObs.endsWith("!");
                                               return (
-                                                <span className={cn("text-[10px] italic truncate block max-w-[180px]",
-                                                  isCrit ? "text-red-400 font-bold not-italic" : "text-slate-300 dark:text-slate-600"
+                                                <span className={cn("text-[10px] italic truncate block max-w-[100px] px-1.5 py-0.5 rounded w-fit",
+                                                  isCrit ? "text-red-500 bg-red-50 dark:bg-red-950/30 border border-red-100 not-italic" : "text-slate-400"
                                                 )}>{strObs}</span>
                                               );
                                             })()}
                                           </td>
-                                        </motion.tr>
-                                      ))}
-                                    </AnimatePresence>
-                                  </React.Fragment>
-                                );
-                              })}
-                            </tbody>
-                          </table>
+                                          {/* Ação */}
+                                          {user && (
+                                            <td className="px-3 py-3 text-center">
+                                              {!isComposite && (
+                                                <button
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setDeleteTarget(singleItem);
+                                                    setDeleteQuantity(String(singleItem.quantidade_total || "0"));
+                                                  }}
+                                                  className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                                                  title="Excluir"
+                                                >
+                                                  <Trash2 size={14} />
+                                                </button>
+                                              )}
+                                            </td>
+                                          )}
+                                        </tr>
+                                        {/* Sub-rows */}
+                                        <AnimatePresence>
+                                          {isComposite && isExpanded && group.items.map((sub: any, si: number) => (
+                                            <motion.tr 
+                                                key={sub.id} 
+                                                initial={{ opacity: 0, y: -4 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                exit={{ opacity: 0, y: -4, transition: { duration: 0.1 } }}
+                                                transition={{ delay: si * 0.04 }}
+                                                draggable
+                                                onDragStart={(e: any) => handleDragStart(e, sub)}
+                                                onDragEnd={handleDragEnd}
+                                                className={cn(
+                                                  "bg-blue-50/30 dark:bg-blue-500/5 border-b border-blue-100/50 dark:border-blue-500/10 cursor-grab active:cursor-grabbing",
+                                                  draggedItem?.id === sub.id ? "opacity-50" : ""
+                                                )}
+                                              >
+                                              <td className="px-2 py-2">
+                                                <div className="w-px h-full bg-blue-200 dark:bg-blue-700 mx-auto opacity-50"></div>
+                                              </td>
+                                              <td className="px-3 py-2">
+                                                <span className="text-[9px] font-bold text-blue-500 dark:text-blue-400 pl-2 border-l-2 border-blue-200">╰ sub-item</span>
+                                              </td>
+                                              <td className="px-3 py-2">
+                                                <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">{sub.produto || "—"}</span>
+                                              </td>
+                                              <td className="px-3 py-2 max-w-[150px]">
+                                                <span className="text-[9px] text-slate-400 uppercase truncate block max-w-[150px]">{sub.descricao || "—"}</span>
+                                              </td>
+                                              <td className="px-3 py-2 text-right">
+                                                <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400">{fmtNum(sub.quantidade_total)}</span>
+                                              </td>
+                                              <td className="px-3 py-2">
+                                                {(() => {
+                                                  const obs = sub.observacao;
+                                                  const strObs = obs && obs !== 0 ? String(obs) : "-";
+                                                  return <span className="text-[9px] text-slate-400 truncate block max-w-[80px]">{strObs}</span>;
+                                                })()}
+                                              </td>
+                                              {user && (
+                                                <td className="px-3 py-2 text-center">
+                                                  <button
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      setDeleteTarget(sub);
+                                                      setDeleteQuantity(String(sub.quantidade_total || "0"));
+                                                    }}
+                                                    className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                                                    title="Excluir sub-item"
+                                                  >
+                                                    <Trash2 size={12} />
+                                                  </button>
+                                                </td>
+                                              )}
+                                            </motion.tr>
+                                          ))}
+                                        </AnimatePresence>
+                                      </React.Fragment>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            )}
+                          </div>
+                        </div>
+                      );
+
+                      const agrupados = grouped.filter(g => !g.isSimple);
+                      const desagrupados = grouped.filter(g => g.isSimple);
+
+                      return (
+                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start w-full">
+                          {renderPalletTable("Paletes Agrupados", agrupados, "Nenhum palete agrupado no momento.", true)}
+                          {renderPalletTable("Livres (Sem Alocação / Sem Agrupamento)", desagrupados, "Nenhum item livre. Todos estão agrupados ou a lista está vazia.", false)}
                         </div>
                       );
                     })()
@@ -5239,10 +5376,25 @@ function DashboardPage() {
                   {
                     (displayMode === "tabela" || displayMode === "nao_alocados") && totalPages >= 1 && (
                       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-4 pb-12 transition-colors">
-                        <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest order-2 sm:order-1">Página {currentPage} de {totalPages}</span>
-                        <div className="flex gap-3 order-1 sm:order-2">
-                          <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} className="flex-1 sm:flex-none p-4 sm:p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 shadow-sm transition-all active:scale-95 transition-colors"><ChevronLeft size={18} /></button>
-                          <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} className="flex-1 sm:flex-none p-4 sm:p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 shadow-sm transition-all active:scale-95 transition-colors"><ChevronRight size={18} /></button>
+                        <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest order-2 sm:order-1">
+                          {rowsPerPage === 'ALL' ? `Exibindo todos os ${filteredData.length} itens` : `Página ${currentPage} de ${totalPages}`}
+                        </span>
+                        <div className="flex gap-3 order-1 sm:order-2 items-center">
+                          <button 
+                            onClick={() => {
+                              setRowsPerPage(prev => prev === 'ALL' ? 10 : 'ALL')
+                              setCurrentPage(1)
+                            }}
+                            className="px-4 py-2 sm:px-3 sm:py-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
+                          >
+                            {rowsPerPage === 'ALL' ? "Voltar ao padrão" : "Ver todos"}
+                          </button>
+                          {rowsPerPage !== 'ALL' && (
+                            <>
+                              <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} className="flex-1 sm:flex-none p-4 sm:p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 shadow-sm transition-all active:scale-95 transition-colors"><ChevronLeft size={18} /></button>
+                              <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} className="flex-1 sm:flex-none p-4 sm:p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 shadow-sm transition-all active:scale-95 transition-colors"><ChevronRight size={18} /></button>
+                            </>
+                          )}
                         </div>
                       </div>
                     )
@@ -7375,14 +7527,15 @@ function DashboardPage() {
 
       {/* Global Ungroup Drop Zone */}
       <AnimatePresence>
-        {draggedItem && (
+        {draggedItem && draggedItem.id_palete && (
           <motion.div 
-            initial={{ y: 200, opacity: 0 }}
+            initial={{ y: 50, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 200, opacity: 0 }}
+            exit={{ y: 50, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 400, damping: 25 }}
             className={cn(
-              "fixed bottom-8 left-1/2 -translate-x-1/2 w-96 h-28 bg-red-500/10 backdrop-blur-xl border-2 border-dashed rounded-3xl flex items-center justify-center flex-col z-[100] shadow-2xl transition-all duration-300",
-              dragOverTarget === 'global_ungroup' ? "border-red-500 bg-red-500/20 shadow-red-500/40 scale-105" : "border-red-500/50 shadow-red-500/10"
+              "fixed bottom-8 left-1/2 -translate-x-1/2 w-96 h-28 bg-red-500/10 backdrop-blur-xl border-2 border-dashed rounded-3xl flex items-center justify-center flex-col z-[100] shadow-2xl",
+              dragOverTarget === 'global_ungroup' ? "border-red-500 bg-red-500/20 shadow-red-500/40 scale-105 transition-all duration-150" : "border-red-500/50 shadow-red-500/10 transition-all duration-150"
             )}
             onDragOver={(e) => { e.preventDefault(); handleDragOver(e, 'global_ungroup'); }}
             onDragLeave={handleDragLeave}
@@ -7412,6 +7565,7 @@ function DashboardPage() {
                 if (!isTransferring) {
                   setTransferModalOpen(false);
                   setTransferPayload(null);
+                  setDraggedItem(null);
                 }
               }}
             />
@@ -7428,12 +7582,17 @@ function DashboardPage() {
                 </div>
                 
                 <h3 className="text-lg font-black text-slate-800 dark:text-slate-200 text-center uppercase tracking-tight mb-2">
-                  {transferPayload.targetType === 'mix' ? `Mover para Mix` : transferPayload.targetType === 'new_mix' ? `Criar Novo Mix` : `Desagrupar`}
+                  {transferPayload.targetType === 'mix' 
+                    ? `Mover para Mix` 
+                    : (transferPayload.targetType === 'new_mix' || transferPayload.targetType === 'new_standalone_mix') 
+                      ? `Criar Novo Mix` 
+                      : `Desagrupar`}
                 </h3>
                 
                 <p className="text-xs text-center text-slate-500 dark:text-slate-400 mb-6 px-4">
                   {transferPayload.targetType === 'mix' && `Adicionando ao palete ${transferPayload.targetId}.`}
                   {transferPayload.targetType === 'new_mix' && `Juntando com ${transferPayload.targetBaseItem?.produto || 'item selecionado'} para criar novo mix.`}
+                  {transferPayload.targetType === 'new_standalone_mix' && `Criando um novo palete agrupado.`}
                   {transferPayload.targetType === 'ungroup' && `Retirando do mix atual.`}
                 </p>
 
@@ -7464,7 +7623,7 @@ function DashboardPage() {
                 <div className="flex gap-3">
                   <button
                     disabled={isTransferring}
-                    onClick={() => { setTransferModalOpen(false); setTransferPayload(null); }}
+                    onClick={() => { setTransferModalOpen(false); setTransferPayload(null); setDraggedItem(null); }}
                     className="flex-1 py-4 text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                   >
                     CANCELAR
@@ -7475,6 +7634,93 @@ function DashboardPage() {
                     className="flex-[2] py-4 text-xs font-black text-white bg-blue-600 dark:bg-blue-500 rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/20 disabled:opacity-50"
                   >
                     {isTransferring ? 'PROCESSANDO...' : 'CONFIRMAR MOVER'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {deleteTarget && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              onClick={() => !isDeleting && setDeleteTarget(null)}
+            />
+            {/* Modal Box */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden"
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 mb-4 mx-auto">
+                  <Trash2 size={24} />
+                </div>
+                
+                <h3 className="text-lg font-black text-slate-800 dark:text-slate-200 text-center uppercase tracking-tight mb-2">
+                  Confirmar Exclusão
+                </h3>
+                
+                <p className="text-sm text-center text-slate-500 dark:text-slate-400 mb-6 px-4">
+                  Deseja excluir as unidades deste registro do sistema? <b>Essa ação não pode ser desfeita.</b>
+                </p>
+
+                <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-4 mb-6">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Produto</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Max</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-black text-slate-700 dark:text-slate-200 truncate pr-4">{deleteTarget.produto || "Desconhecido"}</span>
+                    <span className="text-sm font-bold text-red-600 dark:text-red-400">
+                      {deleteTarget.quantidade_total}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-2 mb-8">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Quantidade a Excluir</label>
+                  <input
+                    type="number"
+                    value={deleteQuantity}
+                    onChange={(e) => setDeleteQuantity(e.target.value)}
+                    max={deleteTarget.quantidade_total}
+                    className="w-full h-14 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-center text-xl font-black text-slate-800 dark:text-white focus:border-red-500 focus:ring-4 focus:ring-red-500/20 outline-none transition-all"
+                  />
+                  <div className="flex justify-between mt-2 px-1">
+                     <span className="text-[10px] text-slate-400">Excluir tudo?</span>
+                     <button
+                        onClick={() => setDeleteQuantity(String(deleteTarget.quantidade_total || "0"))} 
+                        className="text-[10px] font-black text-red-500 uppercase tracking-widest hover:underline"
+                     >
+                        Preencher ALL
+                     </button>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    disabled={isDeleting}
+                    onClick={() => setDeleteTarget(null)}
+                    className="flex-1 py-4 text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                  >
+                    CANCELAR
+                  </button>
+                  <button
+                    disabled={isDeleting}
+                    onClick={executeDeleteFromChao}
+                    className="flex-[2] py-4 text-xs font-black text-white bg-red-600 dark:bg-red-500 rounded-xl hover:bg-red-700 transition-colors shadow-lg shadow-red-500/20 disabled:opacity-50"
+                  >
+                    {isDeleting ? 'EXCLUINDO...' : 'SIM, EXCLUIR'}
                   </button>
                 </div>
               </div>
