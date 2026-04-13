@@ -172,6 +172,33 @@ export function DriveInGrid({
         'Id Palete': finalId
       }))
 
+      // Decrement from "Chão" before returning
+      for (const item of items) {
+        const qtyToConsume = typeof item.qty === 'number' ? item.qty : 0;
+        if (qtyToConsume <= 0) continue;
+        
+        const { data: floorData, error: floorFetchError } = await supabase
+          .from('mapeamento')
+          .select('id, Quantidade')
+          .eq('Código', item.sku)
+          .eq('Posição', 'Chão')
+          .limit(1);
+
+        if (floorFetchError) throw floorFetchError;
+
+        if (floorData && floorData.length > 0) {
+          const floorRecord = floorData[0];
+          const floorNewQty = floorRecord.Quantidade - qtyToConsume;
+          if (floorNewQty <= 0) {
+            const { error: delErr } = await supabase.from('mapeamento').delete().eq('id', floorRecord.id);
+            if (delErr) throw delErr;
+          } else {
+            const { error: updErr } = await supabase.from('mapeamento').update({ 'Quantidade': floorNewQty }).eq('id', floorRecord.id);
+            if (updErr) throw updErr;
+          }
+        }
+      }
+
       const { error } = await supabase
         .from('mapeamento')
         .insert(rowsToInsert)
