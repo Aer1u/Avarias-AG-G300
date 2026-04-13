@@ -55,6 +55,7 @@ import {
   LogIn,
   LogOut,
   AtSign,
+  Plus,
   PlusSquare,
   AlertTriangle
 } from "lucide-react"
@@ -209,6 +210,15 @@ function DashboardPage() {
   const [transferQuantity, setTransferQuantity] = useState<string>("")
   const [isTransferring, setIsTransferring] = useState(false)
 
+  // -- ADICIONAR ITEM NO CHÃO --
+  const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false)
+  const [isCreatingItem, setIsCreatingItem] = useState(false)
+  const [newItemData, setNewItemData] = useState({
+    produto: "",
+    quantidade: "",
+    observacao: ""
+  })
+
   const handleDragStart = (e: React.DragEvent, item: any) => {
     setDraggedItem(item)
     e.dataTransfer.effectAllowed = 'copyMove'
@@ -357,6 +367,43 @@ function DashboardPage() {
     } finally {
       setIsDeleting(false);
       setDeleteTarget(null);
+    }
+  }
+
+  const handleCreateNewItem = async () => {
+    if (!newItemData.produto || !newItemData.quantidade) {
+      alert("SKU e Quantidade são obrigatórios.");
+      return;
+    }
+
+    setIsCreatingItem(true);
+    try {
+      const qty = Math.round(parseFloat(newItemData.quantidade.replace(',', '.')));
+      if (isNaN(qty) || qty <= 0) {
+        throw new Error("Quantidade inválida.");
+      }
+
+      const { error } = await supabase.from('mapeamento').insert({
+        'Código': newItemData.produto.trim().toUpperCase(),
+        'Quantidade': qty,
+        'Observação': newItemData.observacao.trim() || null,
+        'Posição': null,
+        'Id Palete': null
+      });
+
+      if (error) throw error;
+
+      await fetchData();
+      setIsAddItemModalOpen(false);
+      setNewItemData({
+        produto: "",
+        quantidade: "",
+        observacao: ""
+      });
+    } catch (err: any) {
+      alert("Erro ao criar item: " + (err.message || err));
+    } finally {
+      setIsCreatingItem(false);
     }
   }
 
@@ -5380,6 +5427,15 @@ function DashboardPage() {
                           {rowsPerPage === 'ALL' ? `Exibindo todos os ${filteredData.length} itens` : `Página ${currentPage} de ${totalPages}`}
                         </span>
                         <div className="flex gap-3 order-1 sm:order-2 items-center">
+                          {user && (
+                            <button
+                              onClick={() => setIsAddItemModalOpen(true)}
+                              className="px-4 py-2 sm:px-3 sm:py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg shadow-blue-500/20 transition-all active:scale-95 whitespace-nowrap"
+                            >
+                              <Plus size={14} />
+                              <span>Adicionar Item</span>
+                            </button>
+                          )}
                           <button 
                             onClick={() => {
                               setRowsPerPage(prev => prev === 'ALL' ? 10 : 'ALL')
@@ -7721,6 +7777,114 @@ function DashboardPage() {
                     className="flex-[2] py-4 text-xs font-black text-white bg-red-600 dark:bg-red-500 rounded-xl hover:bg-red-700 transition-colors shadow-lg shadow-red-500/20 disabled:opacity-50"
                   >
                     {isDeleting ? 'EXCLUINDO...' : 'SIM, EXCLUIR'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Add Item Modal */}
+      <AnimatePresence>
+        {isAddItemModalOpen && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              onClick={() => !isCreatingItem && setIsAddItemModalOpen(false)}
+            />
+            {/* Modal Box */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden"
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                      <PlusSquare size={20} />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-black text-slate-800 dark:text-slate-200 uppercase tracking-tight">Novo Item</h3>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Adicionar ao Chão (Sem Alocação)</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setIsAddItemModalOpen(false)}
+                    className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-400 transition-colors"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {/* SKU */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">SKU (Código) *</label>
+                    <input
+                      type="text"
+                      placeholder="EX: 12345"
+                      value={newItemData.produto}
+                      onChange={(e) => setNewItemData(prev => ({ ...prev, produto: e.target.value }))}
+                      className="w-full h-12 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-4 text-sm font-bold text-slate-700 dark:text-white focus:border-blue-500 outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600"
+                    />
+                  </div>
+
+                  {/* Quantidade */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Quantidade (Inteira) *</label>
+                    <input
+                      type="number"
+                      step="1"
+                      placeholder="Somente números inteiros"
+                      value={newItemData.quantidade}
+                      onChange={(e) => setNewItemData(prev => ({ ...prev, quantidade: e.target.value }))}
+                      className="w-full h-12 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-4 text-sm font-bold text-slate-700 dark:text-white focus:border-blue-500 outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600"
+                    />
+                  </div>
+
+                  {/* Observação */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Observação</label>
+                    <textarea
+                      placeholder="Notas adicionais..."
+                      value={newItemData.observacao}
+                      onChange={(e) => setNewItemData(prev => ({ ...prev, observacao: e.target.value }))}
+                      className="w-full h-24 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-4 text-sm font-bold text-slate-700 dark:text-white focus:border-blue-500 outline-none transition-all resize-none placeholder:text-slate-300 dark:placeholder:text-slate-600"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-3 mt-8">
+                  <button
+                    disabled={isCreatingItem}
+                    onClick={() => setIsAddItemModalOpen(false)}
+                    className="flex-1 py-4 text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                  >
+                    CANCELAR
+                  </button>
+                  <button
+                    disabled={isCreatingItem}
+                    onClick={handleCreateNewItem}
+                    className="flex-[2] py-4 text-xs font-black text-white bg-blue-600 dark:bg-blue-500 rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isCreatingItem ? (
+                      <>
+                        <RefreshCw size={14} className="animate-spin" />
+                        <span>CRIANDO...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check size={14} />
+                        <span>SALVAR ITEM</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
