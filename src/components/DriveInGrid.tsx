@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { Package, AlertCircle, Droplet, Lock, ArrowLeft, RefreshCw, Edit2, Trash2 } from "lucide-react"
+import { Package, AlertCircle, Droplet, Lock, ArrowLeft, RefreshCw, Edit2, Trash2, Check, CheckSquare, Square, PlusSquare, XSquare, X } from "lucide-react"
 import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
@@ -70,9 +70,31 @@ export function DriveInGrid({
   
   // Edit State
   const [isEditModeActive, setIsEditModeActive] = React.useState(false)
+  const [selectedGaps, setSelectedGaps] = React.useState<Set<string>>(new Set())
   const [addingCoords, setAddingCoords] = React.useState<{ lvl: number; d: number } | null>(null)
   const [editingProduct, setEditingProduct] = React.useState<LocalProduct | null>(null)
   const [isSelectingProductToEdit, setIsSelectingProductToEdit] = React.useState(false)
+
+  const toggleGapSelection = (lvl: number, d: number) => {
+    const key = `${lvl}-${d}`
+    setSelectedGaps(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  const selectAllGaps = () => {
+    setSelectedGaps(prev => {
+      if (prev.size === levels.length * depths.length) return new Set()
+      const next = new Set<string>()
+      levels.forEach(lvl => {
+        depths.forEach(d => next.add(`${lvl}-${d}`))
+      })
+      return next
+    })
+  }
 
   // Local display hint only (may not reflect global state perfectly if not refreshed, but page.tsx syncs it)
   const maxPId = React.useMemo(() => {
@@ -120,67 +142,85 @@ export function DriveInGrid({
     
     setIsSubmitting(true)
     try {
-      // Check if the current slot already has items (which means it's becoming or is a MIX)
-      let slotExistingMixId = null;
-      let slotHasItems = false;
+      // If we have multi-selection active and the starting addingCoords is part of it, 
+      // we apply the SAME addition to ALL selected slots.
+      const targetKeys = selectedGaps.size > 0 && selectedGaps.has(`${addingCoords.lvl}-${addingCoords.d}`)
+        ? Array.from(selectedGaps)
+        : [`${addingCoords.lvl}-${addingCoords.d}`];
 
-      if (grid[addingCoords.lvl] && grid[addingCoords.lvl][addingCoords.d]) {
-         const existingItems = grid[addingCoords.lvl][addingCoords.d];
-         if (existingItems.length > 0) {
-            slotHasItems = true;
-            // Find if it already has an explicit mix ID
-            const mixIdObj = existingItems.find(i => i.id_palete && i.id_palete.startsWith('P.'));
-            if (mixIdObj) {
-               slotExistingMixId = mixIdObj.id_palete;
-            }
-         }
-      }
+      const batchMixId = targetKeys.length > 1 ? await getNextPalletIdFromDB() : null;
+      let mixIdCounter = 0;
 
-      let finalId: string | null = null;
-      
-      if (slotExistingMixId) {
-        // If it's already a Mix, inherit the existing ID
-        finalId = slotExistingMixId;
-      } else if (slotHasItems || items.length > 1) {
-        // If adding to an existing single item (making it a mix) OR adding a multi-item mix, generate new ID
-        finalId = await getNextPalletIdFromDB();
+      for (const key of targetKeys) {
+        const [targetLvl, targetD] = key.split('-').map(Number);
         
-        // If we are turning an existing single item into a MIX, update that existing item's ID in the DB
-        if (slotHasItems && finalId) {
-           await supabase
-             .from('mapeamento')
-             .update({ 'Id Palete': finalId })
-             .match({ 
-               'Posição': positionId,
-               'Nível': addingCoords.lvl,
-               'Profundidade': addingCoords.d
-             })
-             .is('Id Palete', null); // Only update items that don't have an ID yet
+        // Check if the current slot already has items
+        let slotExistingMixId = null;
+        let slotHasItems = false;
+
+        if (grid[targetLvl] && grid[targetLvl][targetD]) {
+           const existingItems = grid[targetLvl][targetD];
+           if (existingItems.length > 0) {
+              slotHasItems = true;
+              const mixIdObj = existingItems.find(i => i.id_palete && i.id_palete.startsWith('P.'));
+              if (mixIdObj) {
+                 slotExistingMixId = mixIdObj.id_palete;
+              }
+           }
         }
-      } else if (generatedId && items.length > 1) {
-        finalId = await getNextPalletIdFromDB();
+
+        let finalId: string | null = null;
+        if (slotExistingMixId) {
+          finalId = slotExistingMixId;
+        } else if (slotHasItems || items.length > 1) {
+          // If we're doing a batch add of multiple items, they might need unique IDs OR we can use the batch one
+          // For now, if it's a batch add, we use the same batchMixId for all if it's a mix
+          finalId = batchMixId || await getNextPalletIdFromDB();
+          
+          if (slotHasItems && finalId) {
+             await supabase
+               .from('mapeamento')
+               .update({ 'Id Palete': finalId })
+               .match({ 
+                 'Posição': positionId,
+                 'Nível': targetLvl,
+                 'Profundidade': targetD
+               })
+               .is('Id Palete', null);
+          }
+        }
+
+        const rowsToInsert = items.map(item => ({
+          'Posição': positionId,
+          'Código': item.sku,
+          'Quantidade': typeof item.qty === 'number' ? item.qty : 0,
+          'Nível': targetLvl,
+          'Profundidade': targetD,
+          'Parte Tombada': typeof item.qtyTilted === 'number' ? item.qtyTilted : 0,
+          'Parte Molhada': typeof item.qtyWet === 'number' ? item.qtyWet : 0,
+          'Id Palete': finalId
+        }));
+
+        const { error } = await supabase
+          .from('mapeamento')
+          .insert(rowsToInsert);
+
+        if (error) throw error;
       }
 
-      const rowsToInsert = items.map(item => ({
-        'Posição': positionId,
-        'Código': item.sku,
-        'Quantidade': typeof item.qty === 'number' ? item.qty : 0,
-        'Nível': addingCoords.lvl,
-        'Profundidade': addingCoords.d,
-        'Parte Tombada': typeof item.qtyTilted === 'number' ? item.qtyTilted : 0,
-        'Parte Molhada': typeof item.qtyWet === 'number' ? item.qtyWet : 0,
-        'Id Palete': finalId
-      }))
+      // Decrement from "Chão" only once per SKU total
+      const skuTotals = new Map<string, number>();
+      items.forEach(it => {
+        const qty = typeof it.qty === 'number' ? it.qty : 0;
+        skuTotals.set(it.sku, (skuTotals.get(it.sku) || 0) + (qty * targetKeys.length));
+      });
 
-      // Decrement from "Chão" before returning
-      for (const item of items) {
-        const qtyToConsume = typeof item.qty === 'number' ? item.qty : 0;
-        if (qtyToConsume <= 0) continue;
-        
+      for (const [sku, totalToConsume] of skuTotals.entries()) {
+        if (totalToConsume <= 0) continue;
         const { data: floorData, error: floorFetchError } = await supabase
           .from('mapeamento')
           .select('id, Quantidade')
-          .eq('Código', item.sku)
+          .eq('Código', sku)
           .eq('Posição', 'Chão')
           .limit(1);
 
@@ -188,31 +228,73 @@ export function DriveInGrid({
 
         if (floorData && floorData.length > 0) {
           const floorRecord = floorData[0];
-          const floorNewQty = floorRecord.Quantidade - qtyToConsume;
+          const floorNewQty = floorRecord.Quantidade - totalToConsume;
           if (floorNewQty <= 0) {
-            const { error: delErr } = await supabase.from('mapeamento').delete().eq('id', floorRecord.id);
-            if (delErr) throw delErr;
+            await supabase.from('mapeamento').delete().eq('id', floorRecord.id);
           } else {
-            const { error: updErr } = await supabase.from('mapeamento').update({ 'Quantidade': floorNewQty }).eq('id', floorRecord.id);
-            if (updErr) throw updErr;
+            await supabase.from('mapeamento').update({ 'Quantidade': floorNewQty }).eq('id', floorRecord.id);
           }
         }
       }
 
-      const { error } = await supabase
-        .from('mapeamento')
-        .insert(rowsToInsert)
-
-      if (error) throw error
-
       setAddingCoords(null)
+      setSelectedGaps(new Set())
       if (onEditSuccess) onEditSuccess()
     } catch (err) {
-      console.error("Save error:", JSON.stringify(err), err)
-      const msg = (err as any)?.message || (err as any)?.details || JSON.stringify(err)
-      alert("Erro ao salvar: " + msg)
+      console.error("Save error:", err)
+      alert("Erro ao salvar: " + ((err as any)?.message || JSON.stringify(err)))
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const handleBatchMoveToFloor = async () => {
+    if (selectedGaps.size === 0) return;
+    
+    const itemsToMove: Product[] = [];
+    selectedGaps.forEach(key => {
+      const [lvl, d] = key.split('-').map(Number);
+      if (grid[lvl] && grid[lvl][d]) {
+        itemsToMove.push(...grid[lvl][d]);
+      }
+    });
+
+    if (itemsToMove.length === 0) {
+      setSelectedGaps(new Set());
+      return;
+    }
+
+    if (!window.confirm(`Mover ${itemsToMove.length} itens (de ${selectedGaps.size} grades) para o Chão?`)) return;
+
+    setIsSubmitting(true);
+    try {
+      const ids = itemsToMove.map(p => p.id).filter(Boolean);
+      const newRows = itemsToMove.map(p => ({
+        'Posição': 'Chão',
+        'Nível': 0,
+        'Profundidade': 1,
+        'Código': p.sku,
+        'Quantidade': p.quantidade,
+        'Parte Tombada': p.qtd_tombada || 0,
+        'Parte Molhada': p.qtd_molhado || 0,
+        'Id Palete': null // Clear IDs when moving to floor in bulk
+      }));
+
+      // Insert all into floor
+      const { error: insErr } = await supabase.from('mapeamento').insert(newRows);
+      if (insErr) throw insErr;
+
+      // Delete all from Drive-in
+      const { error: delErr } = await supabase.from('mapeamento').delete().in('id', ids);
+      if (delErr) throw delErr;
+
+      setSelectedGaps(new Set());
+      if (onEditSuccess) onEditSuccess();
+    } catch (err) {
+      console.error("Batch Move Error:", err);
+      alert("Erro na operação em lote");
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -313,6 +395,7 @@ export function DriveInGrid({
         if (prev) {
           setEditingProduct(null)
           setAddingCoords(null)
+          setSelectedGaps(new Set())
           return false
         }
         return true
@@ -764,7 +847,7 @@ export function DriveInGrid({
                           const sku = !isEmpty ? (isMixedCell ? `${cellProducts.length} Prods` : cellProducts[0].sku) : ""
                           const description = !isEmpty ? (isMixedCell ? "Múltiplos produtos neste palete" : cellProducts[0].descricao) : ""
                           const qty = !isEmpty ? Math.round(cellProducts.reduce((sum, p) => sum + p.quantidade, 0)) : 0
-                          const formattedLvl = isNaN(val) ? lvl : Math.floor(val).toString()
+                          const isGridSelected = selectedGaps.has(`${lvl}-${d}`)
                           
                           return (
                             <div 
@@ -772,17 +855,38 @@ export function DriveInGrid({
                               data-grid-slot="true"
                               data-lvl={lvl}
                               data-d={d}
-                              onClick={() => !isEmpty && setSelectedCoords(isSelected ? null : { lvl, d })}
+                              onClick={() => {
+                                if (isEditModeActive) {
+                                  toggleGapSelection(lvl, d)
+                                } else if (!isEmpty) {
+                                  setSelectedCoords(isSelected ? null : { lvl, d })
+                                }
+                              }}
                               className={cn(
-                                "w-28 h-28 rounded-xl border relative group flex items-center justify-center p-2 text-center transition-all duration-200",
+                                "w-28 h-28 rounded-xl border relative group flex items-center justify-center p-2 text-center transition-all duration-200 cursor-pointer overflow-hidden",
                                 isEmpty 
                                   ? "bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800"
                                   : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700",
                                 !draggingCoords && "hover:scale-[1.04]",
                                 isSelected && "border-[3px] border-blue-600 dark:border-blue-500 z-20 scale-[1.02]",
+                                isGridSelected && "border-orange-500 ring-4 ring-orange-500/10 bg-orange-50/5 dark:bg-orange-950/10 z-20",
                                 (draggingCoords?.lvl === lvl && draggingCoords?.d === d) && "z-[60]"
                               )}
                             >
+                              {/* Multi-Selection Indicator */}
+                              {isEditModeActive && (
+                                <div className="absolute top-2 right-2 z-30">
+                                  {isGridSelected ? (
+                                    <div className="bg-orange-500 text-white rounded-md p-0.5 shadow-sm">
+                                      <Check size={12} strokeWidth={4} />
+                                    </div>
+                                  ) : (
+                                    <div className="bg-white/50 dark:bg-slate-800/50 text-slate-300 dark:text-slate-600 rounded-md p-0.5 opacity-40 group-hover:opacity-100 transition-opacity">
+                                      <Square size={12} />
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                               {!isEmpty ? (
                                 <motion.div 
                                   drag={isEditModeActive}
@@ -1121,6 +1225,55 @@ export function DriveInGrid({
           )}
         </div>
       </motion.div>
+
+      {/* Batch Action Bar - Only in Edit Mode */}
+      <AnimatePresence>
+        {isEditModeActive && selectedGaps.size > 0 && (
+          <motion.div
+            initial={{ y: 50, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 50, opacity: 0 }}
+            className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[130] w-full max-w-xl px-4"
+          >
+            <div className="bg-slate-900 shadow-2xl rounded-2xl p-3 border border-white/10 flex items-center justify-between gap-4 backdrop-blur-md">
+              <div className="flex items-center gap-4 pl-4 border-r border-white/10 pr-6">
+                <div className="h-10 w-10 rounded-xl bg-orange-600 flex items-center justify-center text-white font-black shadow-lg shadow-orange-500/30">
+                  {selectedGaps.size}
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-white tracking-tight leading-none">Grades Selecionadas</h4>
+                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1">Ação em lote</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const first = Array.from(selectedGaps)[0];
+                    const [lvl, d] = first.split('-').map(Number);
+                    setAddingCoords({ lvl, d });
+                  }}
+                  className="h-10 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/20 flex items-center gap-2"
+                >
+                  <PlusSquare size={16} /> Adicionar em Lote
+                </button>
+                <button
+                  onClick={handleBatchMoveToFloor}
+                  className="h-10 px-4 rounded-xl bg-white/10 hover:bg-rose-600 text-white text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border border-white/10"
+                >
+                  <Trash2 size={16} /> Esvaziar
+                </button>
+                <button
+                  onClick={() => setSelectedGaps(new Set())}
+                  className="h-10 w-10 flex items-center justify-center text-slate-400 hover:text-white transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       </div>
 
       {/* MODAL DE SENHA E EDIÇÃO/ADIÇÃO */}

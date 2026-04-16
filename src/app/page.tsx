@@ -57,7 +57,9 @@ import {
   AtSign,
   Plus,
   PlusSquare,
-  AlertTriangle
+  AlertTriangle,
+  Scissors,
+  GitMerge
 } from "lucide-react"
 import { MetricCard } from "@/components/MetricCard"
 import { WarehouseTable } from "@/components/WarehouseTable"
@@ -180,6 +182,9 @@ function DashboardPage() {
   const [palletHistoryFilter, setPalletHistoryFilter] = useState<'hoje' | 'dias'>('hoje')
   const [dailyHistoryRecords, setDailyHistoryRecords] = useState<{ date: string, value: number }[]>([])
 
+  const [baseCodigosMap, setBaseCodigosMap] = useState<Map<string, any>>(new Map())
+  const [mergeQuantities, setMergeQuantities] = useState<Record<string, number>>({})
+
   const surplusDivergences = useMemo(() =>
     stats?.divergences?.filter((d: any) => d.diff > 0) || [],
     [stats?.divergences]
@@ -193,9 +198,12 @@ function DashboardPage() {
   const [expandedPallets, setExpandedPallets] = useState<Set<string>>(new Set())
   const togglePallet = (key: string) => setExpandedPallets(prev => {
     const next = new Set(prev)
-    next.has(key) ? next.delete(key) : next.add(key)
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
     return next
   })
+
+
 
   // -- DRAG AND DROP PALETES --
   const [draggedItem, setDraggedItem] = useState<any>(null)
@@ -209,6 +217,16 @@ function DashboardPage() {
   } | null>(null)
   const [transferQuantity, setTransferQuantity] = useState<string>("")
   const [isTransferring, setIsTransferring] = useState(false)
+
+  // -- DIVIDIR / JUNTAR PALETES --
+  const [splitModalOpen, setSplitModalOpen] = useState(false)
+  const [splitTarget, setSplitTarget] = useState<any>(null)
+  const [splitQtyPerPallet, setSplitQtyPerPallet] = useState("")
+  const [isSplitting, setIsSplitting] = useState(false)
+  const [mergeModalOpen, setMergeModalOpen] = useState(false)
+  const [mergeTarget, setMergeTarget] = useState<{ sku: string; items: any[] } | null>(null)
+  const [isMerging, setIsMerging] = useState(false)
+  const [selectedMergeIds, setSelectedMergeIds] = useState<Set<any>>(new Set())
 
   // -- ADICIONAR ITEM NO CHÃO --
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false)
@@ -367,6 +385,178 @@ function DashboardPage() {
     } finally {
       setIsDeleting(false);
       setDeleteTarget(null);
+    }
+  }
+
+  // -- DIVIDIR PALETES --
+  const handleSplitPallets = async () => {
+    if (!splitTarget) return
+    const totalQty = parseFloat(splitTarget.quantidade_total || splitTarget.Quantidade || "0")
+    const qtyPerPallet = parseInt(splitQtyPerPallet.replace(',', '.'))
+
+    if (isNaN(qtyPerPallet) || qtyPerPallet <= 0) {
+      alert("Informe uma quantidade por palete válida.")
+      return
+    }
+    if (qtyPerPallet >= totalQty) {
+      alert("A quantidade por palete deve ser menor que a quantidade total.")
+      return
+    }
+
+    setIsSplitting(true)
+    try {
+      const p1Qty = Math.round((totalQty - qtyPerPallet) * 1000) / 1000;
+      const p2Qty = qtyPerPallet;
+
+      const { error: updErr } = await supabase.from('mapeamento')
+        .update({ 'Quantidade': p1Qty })
+        .eq('id', splitTarget.id);
+      if (updErr) throw updErr;
+
+      const { error: insErr } = await supabase.from('mapeamento').insert([{
+        'Código': splitTarget.produto,
+        'Quantidade': p2Qty,
+        'Posição': null,
+        'Nível': 0,
+        'Profundidade': 1,
+        'Parte Tombada': 0,
+        'Parte Molhada': 0,
+        'Id Palete': null,
+        'Observação': splitTarget.observacao || null
+      }]);
+      if (insErr) throw insErr;
+
+      await fetchData()
+      setSplitModalOpen(false)
+      setSplitTarget(null)
+      setSplitQtyPerPallet("")
+    } catch (err: any) {
+      alert("Erro ao dividir: " + (err.message || err));
+    } finally {
+      setIsSplitting(false)
+    }
+  }
+
+  // -- JUNTAR OU REDISTRIBUIR PALETES DO MESMO CÓDIGO --
+  const handleMergeBySku = async (isAutoForm: boolean = false) => {
+    if (!mergeTarget) return
+    const itemsToMerge = mergeTarget.items.filter(i => selectedMergeIds.has(i.id))
+    if (itemsToMerge.length < 2 && !isAutoForm) {
+      alert("Selecione pelo menos 2 paletes para movimentar.")
+      return
+    }
+
+    setIsMerging(true)
+    try {
+      if (isAutoForm) {
+        // Lógica do Auto Formar (deleta os selecionados e recria no chão pela Grade)
+        let totalToAutoForm = 0;
+        const allIdsToDelete = [];
+        for (const item of itemsToMerge) {
+           totalToAutoForm += parseFloat(item.quantidade_total) || 0;
+           allIdsToDelete.push(item.id);
+        }
+        
+        if (allIdsToDelete.length > 0) {
+           const { error: delErr } = await supabase.from('mapeamento').delete().in('id', allIdsToDelete);
+           if (delErr) throw delErr;
+        }
+
+        const src = itemsToMerge[0];
+        const newItems = [];
+        const grade = Number(baseCodigosMap.get(mergeTarget.sku)?.grade) || 0;
+        if (grade > 0) {
+          let remaining = totalToAutoForm;
+          while (remaining > 0) {
+             const qtyToInsert = Math.min(grade, remaining);
+             newItems.push({
+              'Código': mergeTarget.sku,
+              'Quantidade': qtyToInsert,
+              'Posição': src?.posicao || null,
+              'Nível': src?.nivel || 0,
+              'Profundidade': src?.profundidade || 1,
+              'Parte Tombada': 0,
+              'Parte Molhada': 0,
+              'Id Palete': null,
+              'Observação': src?.observacao || null
+             });
+             remaining = Math.round((remaining - qtyToInsert) * 1000) / 1000;
+          }
+        } else {
+           newItems.push({
+              'Código': mergeTarget.sku,
+              'Quantidade': totalToAutoForm,
+              'Posição': src?.posicao || null,
+              'Nível': src?.nivel || 0,
+              'Profundidade': src?.profundidade || 1,
+              'Parte Tombada': 0,
+              'Parte Molhada': 0,
+              'Id Palete': null,
+              'Observação': src?.observacao || null
+           });
+        }
+        
+        if (newItems.length > 0) {
+            const { error: insErr } = await supabase.from('mapeamento').insert(newItems);
+            if (insErr) throw insErr;
+        }
+
+      } else {
+        // Lógica Distributiva ("agrupar dentro da quantidade DISPONIVEL")
+        let currentTotal = 0;
+        let newTotal = 0;
+        const updates = [];
+        const deletes = [];
+
+        for (const item of itemsToMerge) {
+          const available = parseFloat(item.quantidade_total) || 0;
+          currentTotal += available;
+          
+          const finalQtyStr = mergeQuantities[item.id];
+          let finalQty = available;
+          if (finalQtyStr !== undefined && finalQtyStr !== "") {
+             finalQty = parseFloat(String(finalQtyStr));
+             if (isNaN(finalQty)) finalQty = 0;
+          }
+
+          newTotal += finalQty;
+
+          if (finalQty <= 0) {
+            deletes.push(item.id);
+          } else if (finalQty !== available) {
+            updates.push({ id: item.id, qty: finalQty });
+          }
+        }
+
+        currentTotal = Math.round(currentTotal * 1000) / 1000;
+        newTotal = Math.round(newTotal * 1000) / 1000;
+
+        if (newTotal !== currentTotal) {
+          alert("A quantidade total resultante deve ser igual à quantidade total selecionada: " + currentTotal);
+          setIsMerging(false);
+          return;
+        }
+
+        if (deletes.length > 0) {
+           const { error: delErr } = await supabase.from('mapeamento').delete().in('id', deletes);
+           if (delErr) throw delErr;
+        }
+
+        for (const update of updates) {
+           const { error: updErr } = await supabase.from('mapeamento').update({ 'Quantidade': update.qty }).eq('id', update.id);
+           if (updErr) throw updErr;
+        }
+      }
+
+      await fetchData()
+      setMergeModalOpen(false)
+      setMergeTarget(null)
+      setSelectedMergeIds(new Set())
+      setMergeQuantities({})
+    } catch (err: any) {
+      alert("Erro ao juntar paletes: " + (err.message || err))
+    } finally {
+      setIsMerging(false)
     }
   }
 
@@ -1110,6 +1300,7 @@ function DashboardPage() {
       });
 
       setData(combinedData);
+      setBaseCodigosMap(skuLookup);
 
       // 3. Calculate Stats include movements and system snapshot
       const hojeStats = calculateStatsFromData(combinedData, historicoRaw, "hoje", skuLookup);
@@ -2114,6 +2305,18 @@ function DashboardPage() {
                   </div>
                 </div>
               </div>
+            )
+          }
+        },
+        {
+          header: "Grade",
+          accessor: "produto",
+          render: (val: string) => {
+            const gradeVal = baseCodigosMap.get(val)?.grade
+            return (
+              <span className="text-slate-500 dark:text-slate-400 font-medium tracking-tight">
+                {gradeVal ? fmtNum(Number(gradeVal)) : "-"}
+              </span>
             )
           }
         },
@@ -3122,7 +3325,7 @@ function DashboardPage() {
                                     return `<tr><td>${c.produto}</td><td>${c.descricao}</td><td>${qtdFisicaAjustada}</td><td>${c.qtd_sistema}</td><td>${saldo}</td></tr>`;
                                   }).join('');
 
-                                  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Confronto ${typeLabel} - ${filterLabel}</title><style>body{font-family:sans-serif;font-size:12px;padding:20px}h2{margin-bottom:16px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#1e3a8a;color:white}tr:nth-child(even){background:#f8fafc}@media print{button{display:none}}</style></head><body><h2>Confronto de Saldos â€” ${typeLabel} (${filterLabel})</h2><p style="color:#64748b;margin-bottom:12px">Gerado em ${new Date().toLocaleString('pt-BR')}</p><table><thead><tr><th>Código</th><th>Descrição</th><th>Qtd Física</th><th>Qtd Sistema</th><th>Saldo</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+                                  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Confronto ${typeLabel} - ${filterLabel}</title><style>body{font-family:sans-serif;font-size:12px;padding:20px}h2{margin-bottom:16px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#1e3a8a;color:white}tr:nth-child(even){background:#f8fafc}@media print{button{display:none}}</style></head><body><h2>Confronto de Saldos - ${typeLabel} (${filterLabel})</h2><p style="color:#64748b;margin-bottom:12px">Gerado em ${new Date().toLocaleString('pt-BR')}</p><table><thead><tr><th>Código</th><th>Descrição</th><th>Qtd Física</th><th>Qtd Sistema</th><th>Saldo</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
                                   const w = window.open('', '_blank');
                                   if (w) { w.document.write(html); w.document.close(); w.focus(); w.print(); }
                                 }}
@@ -4692,7 +4895,7 @@ function DashboardPage() {
                         <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
                           <button
                             onClick={() => setMixedSort("name_asc")}
-                            title="Nome (A â†’ Z)"
+                            title="Nome (A → Z)"
                             className={cn(
                               "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all",
                               mixedSort === "name_asc" ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
@@ -4702,7 +4905,7 @@ function DashboardPage() {
                           </button>
                           <button
                             onClick={() => setMixedSort("name_desc")}
-                            title="Nome (Z â†’ A)"
+                            title="Nome (Z → A)"
                             className={cn(
                               "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all",
                               mixedSort === "name_desc" ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
@@ -4810,7 +5013,7 @@ function DashboardPage() {
                                     </div>
                                   )}
                                 </div>
-                              </motion.div>
+                            </motion.div>
                           ))
                         )}
                       </div>
@@ -5147,7 +5350,7 @@ function DashboardPage() {
                           }
                         }
                       });
-                      const renderPalletTable = (title: string, groupData: typeof grouped, isEmptyText: string, isAgrupados: boolean) => (
+                      const renderPalletTable = (title: string, groupData: typeof grouped, isEmptyText: string, isAgrupados: boolean, freePallets?: typeof grouped) => (
                         <div 
                           className={cn("flex flex-col h-[calc(100vh-320px)] min-h-[500px] rounded-3xl md:rounded-[2.5rem] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-xl dark:shadow-slate-950/50 overflow-hidden transition-colors relative",
                             isAgrupados && dragOverTarget === "LEFT_TABLE_CONTAINER" ? "ring-4 ring-blue-500/50 bg-blue-50/5 dark:bg-blue-900/10" : ""
@@ -5296,17 +5499,61 @@ function DashboardPage() {
                                           {user && (
                                             <td className="px-3 py-3 text-center">
                                               {!isComposite && (
-                                                <button
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setDeleteTarget(singleItem);
-                                                    setDeleteQuantity(String(singleItem.quantidade_total || "0"));
-                                                  }}
-                                                  className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
-                                                  title="Excluir"
-                                                >
-                                                  <Trash2 size={14} />
-                                                </button>
+                                                <div className="flex items-center justify-center gap-1">
+                                                  {/* Dividir: só aparece quando qty > 1 */}
+                                                  {(Number(singleItem.quantidade_total) > 1) && (
+                                                    <button
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setSplitTarget(singleItem);
+                                                        setSplitQtyPerPallet("");
+                                                        setSplitModalOpen(true);
+                                                      }}
+                                                      className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"
+                                                      title="Retirar peças"
+                                                    >
+                                                      <Scissors size={13} />
+                                                    </button>
+                                                  )}
+                                                  {/* Juntar: só aparece quando há mais de 1 linha do mesmo SKU na lista livre */}
+                                                  {(() => {
+                                                    const sameSku = freePallets
+                                                      ? freePallets.filter(g => g.items[0]?.produto === singleItem.produto)
+                                                      : [];
+                                                    if (sameSku.length > 1) {
+                                                      return (
+                                                        <button
+                                                          onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            const ids = sameSku.map(g => g.items[0].id);
+                                                            setMergeTarget({
+                                                              sku: singleItem.produto,
+                                                              items: sameSku.map(g => g.items[0])
+                                                            });
+                                                            setSelectedMergeIds(new Set(ids));
+                                                            setMergeModalOpen(true);
+                                                          }}
+                                                          className="p-1.5 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-colors"
+                                                          title="Mover peças"
+                                                        >
+                                                          <GitMerge size={13} />
+                                                        </button>
+                                                      );
+                                                    }
+                                                    return null;
+                                                  })()}
+                                                  <button
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      setDeleteTarget(singleItem);
+                                                      setDeleteQuantity(String(singleItem.quantidade_total || "0"));
+                                                    }}
+                                                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                                                    title="Excluir"
+                                                  >
+                                                    <Trash2 size={13} />
+                                                  </button>
+                                                </div>
                                               )}
                                             </td>
                                           )}
@@ -5384,7 +5631,7 @@ function DashboardPage() {
                       return (
                         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start w-full">
                           {renderPalletTable("Paletes Agrupados", agrupados, "Nenhum palete agrupado no momento.", true)}
-                          {renderPalletTable("Livres (Sem Alocação / Sem Agrupamento)", desagrupados, "Nenhum item livre. Todos estão agrupados ou a lista está vazia.", false)}
+                          {renderPalletTable("Livres (Sem Alocação / Sem Agrupamento)", desagrupados, "Nenhum item livre. Todos estão agrupados ou a lista está vazia.", false, desagrupados)}
                         </div>
                       );
                     })()
@@ -7021,7 +7268,7 @@ function DashboardPage() {
                         <h3 className="text-xl md:text-3xl font-black text-slate-900 dark:text-white transition-colors">{selectedPosition}</h3>
                         <div className="flex items-center gap-2 mt-0.5 md:mt-1">
                           <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em] animate-in fade-in slide-in-from-left duration-700">
-                            {fmtNum(positionDetail.occupied)} / {positionDetail.capacidade} Paletes â€¢ {Math.round(positionDetail.level_count)} Níveis (0-{Math.round(positionDetail.level_count) - 1})
+                            {fmtNum(positionDetail.occupied)} / {positionDetail.capacidade} Paletes • {Math.round(positionDetail.level_count)} Níveis (0-{Math.round(positionDetail.level_count) - 1})
                           </span>
                           {positionDetail.isOverflow && (
                             <span className="flex items-center gap-1 rounded-full bg-red-100 dark:bg-red-900/30 px-2 py-0.5 text-[8px] font-black uppercase text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50">
@@ -7696,6 +7943,182 @@ function DashboardPage() {
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
+
+      {/* ── DIVIDIR PALETE MODAL ── */}
+      <AnimatePresence>
+        {splitModalOpen && splitTarget && (() => {
+          const total = Number(splitTarget.quantidade_total) || 0
+          const extractedQty = parseInt(splitQtyPerPallet) || 0
+          const isValid = extractedQty > 0 && extractedQty < total
+          const remaining = total - extractedQty
+          return (
+            <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+                onClick={() => !isSplitting && (setSplitModalOpen(false), setSplitTarget(null), setSplitQtyPerPallet(""))}
+              />
+              <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="relative w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden"
+              >
+                <div className="p-6">
+                  <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 mb-4 mx-auto">
+                    <Scissors size={24} />
+                  </div>
+                  <h3 className="text-lg font-black text-slate-800 dark:text-slate-200 text-center uppercase tracking-tight mb-1">Retirar peças</h3>
+                  <p className="text-[11px] text-center text-slate-500 dark:text-slate-400 mb-5">
+                    Retirar peças de <span className="font-black text-slate-700 dark:text-slate-200">{splitTarget.produto}</span> ({total} un.) para enviar pro chão.
+                  </p>
+
+                  <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-4 mb-4 space-y-2">
+                    <div className="flex justify-between text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                      <span>Total do palete</span>
+                      <span className="text-slate-700 dark:text-slate-300">{total} un.</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 mb-4">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Quantidade a retirar</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={total - 1}
+                      value={splitQtyPerPallet}
+                      onChange={e => setSplitQtyPerPallet(e.target.value)}
+                      placeholder="ex: 10"
+                      className="w-full h-14 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-center text-xl font-black text-slate-800 dark:text-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 outline-none transition-all"
+                    />
+                  </div>
+
+                  {isValid && (
+                    <div className="bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 rounded-2xl p-3 mb-5">
+                      <p className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest mb-2">Resultado</p>
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-700 rounded-xl px-3 py-2">
+                          <span className="text-[11px] font-black text-slate-700 dark:text-slate-300">Nova Quantidade (Palete):</span>
+                          <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 ml-auto">{remaining} un.</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-700 rounded-xl px-3 py-2">
+                          <span className="text-[11px] font-black text-slate-700 dark:text-slate-300">1 Novo Palete criado com:</span>
+                          <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 ml-auto">{extractedQty} un.</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex gap-3">
+                    <button disabled={isSplitting} onClick={() => { setSplitModalOpen(false); setSplitTarget(null); setSplitQtyPerPallet("") }}
+                      className="flex-1 py-4 text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                      CANCELAR
+                    </button>
+                    <button disabled={isSplitting || !isValid} onClick={handleSplitPallets}
+                      className="flex-[2] py-4 text-xs font-black text-white bg-blue-600 dark:bg-blue-500 rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/20 disabled:opacity-40 flex items-center justify-center gap-2">
+                      {isSplitting ? <><RefreshCw size={14} className="animate-spin" /> RETIRANDO...</> : <><Scissors size={14} /> RETIRAR PEÇAS</>}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )
+        })()}
+      </AnimatePresence>
+
+      {/* ── JUNTAR OU MOVER PALETES MODAL ── */}
+      <AnimatePresence>
+        {mergeModalOpen && mergeTarget && (() => {
+          const itemsToRender = mergeTarget.items.filter(i => selectedMergeIds.has(i.id))
+          
+          const totalDisponivel = itemsToRender.reduce((s, i) => s + (parseFloat(i.quantidade_total) || 0), 0)
+          
+          const totalResultante = itemsToRender.reduce((s, i) => {
+             const val = mergeQuantities[i.id];
+             const qty = (val !== undefined && val !== "") ? parseFloat(String(val)) : (parseFloat(i.quantidade_total) || 0);
+             return s + (isNaN(qty) ? 0 : qty);
+          }, 0)
+          
+          const isValidGroup = Math.abs(totalResultante - totalDisponivel) < 0.001
+          
+          const grade = Number(baseCodigosMap.get(mergeTarget.sku)?.grade) || 0;
+          const fullPallets = grade > 0 ? Math.floor(totalDisponivel / grade) : 0;
+          const remainder = grade > 0 ? (totalDisponivel % grade) : 0;
+
+          return (
+            <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+                onClick={() => !isMerging && (setMergeModalOpen(false), setMergeTarget(null), setMergeQuantities({}))}
+              />
+              <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="relative w-full max-w-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden"
+              >
+                <div className="p-6">
+                  <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 mb-4 mx-auto">
+                    <GitMerge size={24} />
+                  </div>
+                  <h3 className="text-xl font-black text-slate-800 dark:text-slate-200 text-center uppercase tracking-tight mb-1">Mover Peças</h3>
+                  <p className="text-[11px] text-center text-slate-500 dark:text-slate-400 mb-5 leading-tight">
+                    Os <span className="font-black text-slate-700 dark:text-slate-200">{itemsToRender.length} paletes</span> selecionados do <span className="font-black text-emerald-600 dark:text-emerald-400">{mergeTarget.sku}</span>.<br />
+                    Ajuste a quantidade <span className="underline">final</span> de cada palete. O total deve se manter o mesmo.
+                  </p>
+
+                  <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-4 mb-5 space-y-2 max-h-72 overflow-y-auto custom-scrollbar">
+                    {itemsToRender.map((item, idx) => {
+                      const avail = Number(item.quantidade_total) || 0;
+                      const val = mergeQuantities[item.id] !== undefined ? mergeQuantities[item.id] : avail;
+                      return (
+                        <div key={item.id || idx} className="flex justify-between items-center text-xs py-1.5 border-b border-slate-100 dark:border-slate-800/60 last:border-0 gap-2">
+                          <span className="text-slate-600 dark:text-slate-400 font-medium tracking-wide">
+                            Palete {idx + 1}
+                          </span>
+                          <input 
+                            type="number" 
+                            min="0"
+                            value={val}
+                            onChange={(e) => setMergeQuantities(prev => ({...prev, [item.id]: e.target.value === "" ? "" : Math.max(0, Number(e.target.value))}))}
+                            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 text-right font-black text-slate-700 dark:text-slate-300 w-24 outline-none focus:border-emerald-500 text-sm"
+                          />
+                        </div>
+                      )
+                    })}
+                    <div className="flex justify-between items-center text-xs pt-3 mt-1 border-t border-slate-200 dark:border-slate-700 font-black">
+                      <span className={`uppercase tracking-widest gap-2 flex items-center ${isValidGroup ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 font-bold'}`}>
+                        Total Resultante
+                      </span>
+                      <span className={`text-sm ${isValidGroup ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 font-bold'}`}>
+                        {fmtNum(totalResultante)} / {fmtNum(totalDisponivel)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-3">
+                    {grade > 0 && (
+                       <button disabled={isMerging || totalDisponivel <= 0} onClick={() => handleMergeBySku(true)}
+                         className="w-full py-4 text-sm font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-colors disabled:opacity-40 flex flex-col items-center justify-center gap-1.5 shadow-sm">
+                         <div className="flex items-center gap-2">
+                           {isMerging ? <RefreshCw size={16} className="animate-spin" /> : <Layers size={16} />} 
+                           AUTO FORMAR (Grade: {fmtNum(grade)})
+                         </div>
+                         <span className="text-[10px] font-medium opacity-80 normal-case">
+                           {fullPallets > 0 || remainder > 0 ? `Vai recriar ${fullPallets > 0 ? `${fullPallets}x de ${fmtNum(grade)}` : ''}${fullPallets > 0 && remainder > 0 ? ' e ' : ''}${remainder > 0 ? `1x de ${fmtNum(remainder)}` : ''} no chão` : 'Selecione as quantidades'}
+                         </span>
+                       </button>
+                    )}
+                    <div className="flex gap-3">
+                      <button disabled={isMerging} onClick={() => { setMergeModalOpen(false); setMergeTarget(null); setMergeQuantities({}) }}
+                        className="flex-1 py-3 text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                        CANCELAR
+                      </button>
+                      <button disabled={isMerging || !isValidGroup} onClick={() => handleMergeBySku(false)}
+                        className="flex-[2] py-3 text-xs font-black text-white bg-emerald-600 dark:bg-emerald-500 rounded-xl hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-500/20 disabled:opacity-40 flex items-center justify-center gap-2">
+                        {isMerging ? <><RefreshCw size={14} className="animate-spin" /> SALVANDO...</> : <><GitMerge size={14} /> CONFIRMAR</>}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )
+        })()}
       </AnimatePresence>
 
       {/* Delete Confirmation Modal */}
