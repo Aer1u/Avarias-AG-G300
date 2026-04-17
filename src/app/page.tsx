@@ -183,7 +183,7 @@ function DashboardPage() {
   const [dailyHistoryRecords, setDailyHistoryRecords] = useState<{ date: string, value: number }[]>([])
 
   const [baseCodigosMap, setBaseCodigosMap] = useState<Map<string, any>>(new Map())
-  const [mergeQuantities, setMergeQuantities] = useState<Record<string, number>>({})
+  const [mergeQuantities, setMergeQuantities] = useState<Record<string, number | string>>({})
 
   const surplusDivergences = useMemo(() =>
     stats?.divergences?.filter((d: any) => d.diff > 0) || [],
@@ -514,7 +514,7 @@ function DashboardPage() {
           
           const finalQtyStr = mergeQuantities[item.id];
           let finalQty = available;
-          if (finalQtyStr !== undefined && finalQtyStr !== "") {
+          if (finalQtyStr !== undefined && finalQtyStr !== "" && finalQtyStr !== null) {
              finalQty = parseFloat(String(finalQtyStr));
              if (isNaN(finalQty)) finalQty = 0;
           }
