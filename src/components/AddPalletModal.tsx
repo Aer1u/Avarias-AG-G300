@@ -9,6 +9,7 @@ export interface PalletItemForm {
   qty: number | '';
   qtyWet: number | '';
   qtyTilted: number | '';
+  descricao?: string;
 }
 
 interface AddPalletModalProps {
@@ -31,7 +32,7 @@ export function AddPalletModal({
   destinationDepth
 }: AddPalletModalProps) {
   const [items, setItems] = useState<PalletItemForm[]>([
-    { id: '1', sku: '', qty: '', qtyWet: '', qtyTilted: '' }
+    { id: '1', sku: '', qty: '', qtyWet: '', qtyTilted: '', descricao: '' }
   ]);
   const [currentTime, setCurrentTime] = useState<string>('');
   const [activeSearchIndex, setActiveSearchIndex] = useState<number | null>(null);
@@ -40,7 +41,7 @@ export function AddPalletModal({
 
   useEffect(() => {
     if (isOpen) {
-      setItems([{ id: Date.now().toString(), sku: '', qty: '', qtyWet: '', qtyTilted: '' }]);
+      setItems([{ id: Date.now().toString(), sku: '', qty: '', qtyWet: '', qtyTilted: '', descricao: '' }]);
       setActiveSearchIndex(null);
       const now = new Date();
       setCurrentTime(now.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }));
@@ -68,7 +69,7 @@ export function AddPalletModal({
   const handleAddItem = () => {
     setItems((prev) => [
       ...prev,
-      { id: Date.now().toString(), sku: '', qty: '', qtyWet: '', qtyTilted: '' }
+      { id: Date.now().toString(), sku: '', qty: '', qtyWet: '', qtyTilted: '', descricao: '' }
     ]);
   };
 
@@ -76,8 +77,8 @@ export function AddPalletModal({
     setItems(prev => prev.filter(i => i.id !== id));
   };
 
-  const handleChangeSku = (id: string, sku: string) => {
-    setItems(prev => prev.map(i => i.id === id ? { ...i, sku, qty: '', qtyWet: '', qtyTilted: '' } : i));
+  const handleChangeSku = (id: string, sku: string, descricao?: string) => {
+    setItems(prev => prev.map(i => i.id === id ? { ...i, sku, descricao: descricao || i.descricao, qty: '', qtyWet: '', qtyTilted: '' } : i));
   };
 
   const handleChangeQtyRaw = (id: string, field: 'qty' | 'qtyWet' | 'qtyTilted', val: string) => {
@@ -207,7 +208,7 @@ export function AddPalletModal({
                                   .slice(0, 10);
                                 if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedIndex(p => (p + 1) % (filtered.length || 1)); }
                                 else if (e.key === 'ArrowUp') { e.preventDefault(); setSelectedIndex(p => (p - 1 + (filtered.length || 1)) % (filtered.length || 1)); }
-                                else if (e.key === 'Enter' && filtered[selectedIndex]) { e.preventDefault(); handleChangeSku(item.id, filtered[selectedIndex].produto); setActiveSearchIndex(null); }
+                                else if (e.key === 'Enter' && filtered[selectedIndex]) { e.preventDefault(); handleChangeSku(item.id, filtered[selectedIndex].produto, (filtered[selectedIndex] as any).descricao); setActiveSearchIndex(null); }
                                 else if (e.key === 'Escape') setActiveSearchIndex(null);
                               }
                             }}
@@ -237,7 +238,7 @@ export function AddPalletModal({
                                       <button
                                         key={stock.produto} type="button"
                                         onMouseDown={(e) => e.preventDefault()}
-                                        onClick={() => { handleChangeSku(item.id, stock.produto); setActiveSearchIndex(null); }}
+                                        onClick={() => { handleChangeSku(item.id, stock.produto, (stock as any).descricao); setActiveSearchIndex(null); }}
                                         onMouseEnter={() => setSelectedIndex(idx)}
                                         className={cn(
                                           "w-full px-3 py-2 flex items-center justify-between text-left border-b border-slate-50 dark:border-slate-800 last:border-0 transition-colors",
