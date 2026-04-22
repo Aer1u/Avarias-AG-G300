@@ -68,10 +68,13 @@ import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
 import RegistrosTab from "@/components/RegistrosTab"
+import { OriginDonutChart } from "@/components/OriginDonutChart"
 
-type ViewType = "geral" | "posicoes" | "nao_alocados" | "produtos" | "molhados"
-type DisplayMode = "mapa" | "tabela" | "misto" | "nao_alocados"
+type ViewType = "geral" | "posicoes" | "nao_alocados" | "produtos" | "molhados" | "quarentena"
+type DisplayMode = "mapa" | "tabela" | "misto" | "nao_alocados" | "quarentena"
 type SortType = "none" | "qty_desc" | "qty_asc" | "alpha_asc"
+
+let nextTempId = 1;
 
 // Auto-detect: local dev uses localhost, deployed uses Render backend
 const isLocal = typeof window !== "undefined" &&
@@ -107,12 +110,262 @@ export const parseBrNum = (val: any): number => {
   return Number(s) || 0;
 };
 
+
+const processHistoryMovements = (historicoRaw: any[] = [], period: "hoje" | "semana" | "mensal" | "all" = "all", skuLookup?: Map<string, any>) => {
+    const registrosBySku = new Map<string, number>();
+    const regCountBySku = new Map<string, number>();
+    const regIncidenceBySku: Record<string, number> = {};
+    const allSkuBalance = new Map<string, number>();
+    const absoluteSkusSet = new Set<string>();
+
+    let global_entries = 0;
+    let global_exits = 0;
+    let period_entries = 0;
+    let period_exits = 0;
+    let actual_today_entries = 0;
+    let actual_today_exits = 0;
+    let absolute_entries = 0;
+    let absolute_exits = 0;
+    let absolute_today_net = 0;
+    let absolute_yesterday_net = 0;
+
+    const todayDate = new Date();
+    const todayStr = todayDate.toISOString().split('T')[0];
+    const yesterdayDate = new Date(todayDate);
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
+
+    const day = todayDate.getDay();
+    const diff = (day === 0 ? -6 : 1) - day;
+    const monday = new Date(todayDate);
+    monday.setDate(todayDate.getDate() + diff);
+    monday.setHours(0, 0, 0, 0);
+
+    const allFormattedMovements = historicoRaw.reduce((acc: any[], m: any) => {
+      const ent = parseBrNum(m['Entrada'] || m['entrada']);
+      const sai = parseBrNum(m['Saída'] || m['saida'] || m['Saida'] || m['saída']);
+      const skuRaw = String(m['Produto'] || m['produto'] || m['Código'] || m['codigo'] || m['Codigo'] || "").trim().toUpperCase();
+      const sku = skuRaw.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const dataStr = m['Data'] || m['data'] || m['created_at'] || '';
+      const origRaw = m['Origem'] || m['origem'] || '-';
+      const orig = origRaw.toLowerCase().trim();
+
+      if (sku && sku !== "-" && sku !== "NAN") {
+        absoluteSkusSet.add(sku);
+        allSkuBalance.set(sku, (allSkuBalance.get(sku) || 0) + (ent - sai));
+        regCountBySku.set(sku, (regCountBySku.get(sku) || 0) + 1);
+      }
+      absolute_entries += ent;
+      absolute_exits += sai;
+
+      let timestamp = 0;
+      let isoDate = "";
+      if (dataStr) {
+        const d = new Date(dataStr);
+        timestamp = d.getTime();
+        if (!isNaN(timestamp)) {
+          isoDate = d.toISOString().split('T')[0];
+          if (isoDate === todayStr) absolute_today_net += (ent - sai);
+          else if (isoDate === yesterdayStr) absolute_yesterday_net += (ent - sai);
+        }
+      }
+
+      if (!orig.includes('mapeamento') && !orig.includes('ajuste')) {
+        if (sku && sku !== "-" && sku !== "NAN") {
+          registrosBySku.set(sku, (registrosBySku.get(sku) || 0) + (ent - sai));
+        }
+        global_entries += ent;
+        global_exits += sai;
+
+        let isInPeriod = false;
+        let isToday = false;
+        if (isoDate) {
+          isToday = (isoDate === todayStr);
+          if (period === "hoje") isInPeriod = isToday;
+          else if (period === "semana") isInPeriod = timestamp >= monday.getTime();
+          else if (period === "mensal") {
+             const d = new Date(timestamp);
+             isInPeriod = d.getFullYear() === todayDate.getFullYear();
+          } else isInPeriod = true;
+        }
+
+        if (isToday) {
+          actual_today_entries += ent;
+          actual_today_exits += sai;
+        }
+        if (isInPeriod) {
+          period_entries += ent;
+          period_exits += sai;
+          if (ent > 0 && sku) regIncidenceBySku[sku] = (regIncidenceBySku[sku] || 0) + 1;
+        }
+
+        if (ent > 0 || sai > 0 || sku !== "") {
+          const lookup = skuLookup?.get(sku);
+          acc.push({
+            id: m.id || Math.random(),
+            produto: sku,
+            descricao: lookup?.descricao || 'Produto não cadastrado',
+            movimentacao: ent > 0 ? ent : sai,
+            entrada: ent > 0,
+            entrada_val: ent,
+            saida_val: sai,
+            molhado: parseBrNum(m['Molhado'] || m['molhado']),
+            data: dataStr,
+            timestamp,
+            tipo: ent > 0 ? 'entrada' : 'saída',
+            origem: origRaw,
+            isInPeriod: isInPeriod
+          });
+        }
+      }
+      return acc;
+    }, []).sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0));
+
+    return {
+      registrosBySku,
+      regCountBySku,
+      regIncidenceBySku,
+      allSkuBalance,
+      absoluteSkusSet,
+      global_entries,
+      global_exits,
+      period_entries,
+      period_exits,
+      actual_today_entries,
+      actual_today_exits,
+      absolute_entries,
+      absolute_exits,
+      absolute_today_net,
+      absolute_yesterday_net,
+      allFormattedMovements
+    };
+};
+
+const calculateStatsFromData = (allData: any[], processedHistory: any) => {
+    const { 
+      registrosBySku, regCountBySku, regIncidenceBySku, allSkuBalance, absoluteSkusSet,
+      global_entries, global_exits, period_entries, period_exits,
+      actual_today_entries, actual_today_exits, absolute_entries, absolute_exits,
+      absolute_today_net, absolute_yesterday_net, allFormattedMovements
+    } = processedHistory;
+
+    const mappedDriveInBySku = new Map<string, number>();
+    const chaoBySku = new Map<string, number>();
+    const skuMap = new Map<string, number>();
+    const frequencyMap: Record<string, number> = {};
+    const molhFrequencyMap: Record<string, number> = {};
+    
+    // 4. Process Current Mapping (How much of the total is stored)
+    allData.forEach(item => {
+      const sku = String(item.produto || "").trim().toUpperCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      if (!sku || sku === "-" || sku === "nan") return;
+
+      const total = Number(item.quantidade_total) || 0;
+      skuMap.set(sku, (skuMap.get(sku) || 0) + total);
+      frequencyMap[sku] = (frequencyMap[sku] || 0) + 1;
+      if (Number(item.qtd_molhado) > 0) molhFrequencyMap[sku] = (molhFrequencyMap[sku] || 0) + 1;
+
+      if (item.is_unallocated_source) {
+        chaoBySku.set(sku, (chaoBySku.get(sku) || 0) + total);
+      } else {
+        mappedDriveInBySku.set(sku, (mappedDriveInBySku.get(sku) || 0) + total);
+      }
+    });
+
+    // 5. Compute Final Availability and Registration Divergences
+    const unregisteredPositions = new Set<string>();
+    allData.forEach(item => {
+      if (item.is_unregistered) unregisteredPositions.add(item.posicao);
+    });
+
+    const allSkus = new Set([...registrosBySku.keys(), ...chaoBySku.keys(), ...mappedDriveInBySku.keys()]);
+    const divergences = Array.from(allSkus).map(sku => {
+      const systemTotal = registrosBySku.get(sku) || 0;
+      const inChao = chaoBySku.get(sku) || 0;
+      const mappedDriveIn = mappedDriveInBySku.get(sku) || 0;
+      const totalAvailable = Math.max(inChao, systemTotal - mappedDriveIn);
+
+      return {
+        produto: sku,
+        available: totalAvailable
+      };
+    }).filter(d => d.available > 0);
+
+    // Use absolute balance (allSkuBalance) for pendências and divergenciasLupa (Lupa)
+    // Pendências: Total Registrado (qty) > Mapeado (qty) - temos registro, mas falta o físico
+    const allSkusSet = new Set([...allSkuBalance.keys(), ...skuMap.keys()]);
+    const pendencias = Array.from(allSkusSet).map(sku => {
+      const regQty = allSkuBalance.get(sku) || 0;
+      const mapQty = skuMap.get(sku) || 0;
+      const diff = regQty - mapQty;
+      return { sku, regQty, mapQty, diff };
+    }).filter(p => p.diff > 0).sort((a, b) => b.diff - a.diff);
+
+    // Divergências (Lupa): Mapeado (qty) > Total Registrado (qty) - sobra no físico, falta no registro
+    const divergenciasLupa = Array.from(allSkusSet).map(sku => {
+      const regQty = allSkuBalance.get(sku) || 0;
+      const mapQty = skuMap.get(sku) || 0;
+      const diff = mapQty - regQty;
+      return { sku, regQty, mapQty, diff };
+    }).filter(p => p.diff > 0).sort((a, b) => b.diff - a.diff);
+
+    const total_drive_qty = Array.from(mappedDriveInBySku.values()).reduce((sum, v) => sum + v, 0);
+    // Calculate mixed pallets count from the provided data
+    const palletGroupsInternal = new Map<string, string[]>();
+    allData.forEach(item => {
+       const pid = String(item.id_palete || "").trim();
+       if (!pid || pid === "0" || pid === "NaN") return;
+       if (!palletGroupsInternal.has(pid)) palletGroupsInternal.set(pid, []);
+       palletGroupsInternal.get(pid)?.push(String(item.produto || ""));
+    });
+    
+    let mixedCount = 0;
+    palletGroupsInternal.forEach(skus => {
+       if (new Set(skus).size > 1) mixedCount++;
+    });
+
+    const mixed_pallets_count = mixedCount;
+
+    return {
+      total_quantity: global_entries - global_exits, // Operational total
+      absolute_total_quantity: absolute_entries - absolute_exits, // Estoque registrado (Entradas - Saídas)
+      total_pallets: allData.reduce((sum, item) => sum + (item.paletes || 0), 0),
+      total_skus: registrosBySku.size,
+      absolute_total_skus: absoluteSkusSet.size,
+      movement_pieces: registrosBySku.size,
+      today_net: absolute_today_net,
+      yesterday_net: absolute_yesterday_net,
+      total_entries: global_entries,
+      total_exits: global_exits,
+      period_entries,
+      period_exits,
+      total_capacity: allData.reduce((sum, item) => sum + (Number(item.capacidade) || 0), 0),
+      qtd_molhado: allData.reduce((sum, item) => sum + (Number(item.qtd_molhado) || 0), 0),
+      qtd_tombada: allData.reduce((sum, item) => sum + (Number(item.qtd_tombada) || 0), 0),
+      frequency_by_product: frequencyMap,
+      molh_frequency_by_product: molhFrequencyMap,
+      mixed_pallets_consolidated: mixed_pallets_count,
+      latest_movements: allFormattedMovements,
+      period_movements: allFormattedMovements.filter((m: any) => m.isInPeriod),
+      top_moved: allFormattedMovements.slice(0, 10),
+      divergences: divergences,
+      unregistered_count: unregisteredPositions.size,
+      unregistered_positions: Array.from(unregisteredPositions),
+      reg_incidence_by_sku: regIncidenceBySku,
+      total_drive_qty: total_drive_qty,
+      mixed_pallets_count: mixed_pallets_count,
+      pendencias: pendencias,
+      pendenciasCount: pendencias.length,
+      divergenciasLupa: divergenciasLupa
+    };
+  };
+
 function DashboardPage() {
   const normalizeSku = (s: string) => String(s || "").trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
   const [data, setData] = useState<any[]>([])
   const [movimentosRaw, setMovimentosRaw] = useState<any[]>([])
-  const [stats, setStats] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [activeView, setActiveView] = useState<ViewType>("geral")
@@ -157,8 +410,6 @@ function DashboardPage() {
   const [confrontosData, setConfrontosData] = useState<any>(null)
   const [loadingConfrontos, setLoadingConfrontos] = useState(false)
   const [errorConfrontos, setErrorConfrontos] = useState<string | null>(null)
-  const [statsCache, setStatsCache] = useState<Record<string, any>>({})
-  const [globalStats, setGlobalStats] = useState<any>(null)
   const [confrontosCache, setConfrontosCache] = useState<Record<string, any>>({})
   const [confrontoFilter, setConfrontoFilter] = useState<"all" | "divergent" | "match" | "excess" | "missing" | "adjusted">("all")
   const [confrontoSearch, setConfrontoSearch] = useState("")
@@ -173,6 +424,9 @@ function DashboardPage() {
   const [showTopSkusMenu, setShowTopSkusMenu] = useState(false)
   const [movementPeriod, setMovementPeriod] = useState<"hoje" | "semana" | "mensal">("hoje")
   const [showMovementMenu, setShowMovementMenu] = useState(false)
+  const [originTypeFilter, setOriginTypeFilter] = useState<'entrada' | 'saída'>('entrada')
+  const [originPeriod, setOriginPeriod] = useState<"hoje" | "semana" | "mensal" | "tudo">("tudo")
+  const [showOriginPeriodMenu, setShowOriginPeriodMenu] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [blinkPosition, setBlinkPosition] = useState<string | null>(null)
   const [positionViewMode, setPositionViewMode] = useState<"tabela" | "grade">("tabela")
@@ -181,17 +435,62 @@ function DashboardPage() {
   const [palletHistory, setPalletHistory] = useState<{ t14: number, t17: number, t22: number, prevT22: number }>({ t14: 0, t17: 0, t22: 0, prevT22: 0 })
   const [palletHistoryFilter, setPalletHistoryFilter] = useState<'hoje' | 'dias'>('hoje')
   const [dailyHistoryRecords, setDailyHistoryRecords] = useState<{ date: string, value: number }[]>([])
+  const [hoveredBarId, setHoveredBarId] = useState<string | null>(null)
 
   const [baseCodigosMap, setBaseCodigosMap] = useState<Map<string, any>>(new Map())
   const [mergeQuantities, setMergeQuantities] = useState<Record<string, number | string>>({})
 
+  // -- ESTADOS PARA ALTERAÇÕES PENDENTES (SALVAMENTO COM CONFIRMAÇÃO) --
+  const [pendingChanges, setPendingChanges] = useState<any[]>([])
+  const [isCommitting, setIsCommitting] = useState(false)
+
+  // -- APLICAÇÃO DE ALTERAÇÕES PENDENTES NO ESTADO GLOBAL --
+  const effectiveData = useMemo(() => {
+    if (pendingChanges.length === 0) return data;
+
+    const adds = [];
+    const deletes = new Set();
+    const updatesMap = new Map();
+
+    for (const change of pendingChanges) {
+      const id = String(change.payload?.id || change.id);
+      if (change.type === 'ADD') {
+        adds.push(change.payload);
+      } else if (change.type === 'DELETE') {
+        deletes.add(id);
+      } else if (change.type === 'UPDATE') {
+        updatesMap.set(id, { ...(updatesMap.get(id) || {}), ...change.payload });
+      }
+    }
+
+    const result = data
+      .filter(item => !deletes.has(String(item.id)))
+      .map(item => {
+        const update = updatesMap.get(String(item.id));
+        return update ? { ...item, ...update } : item;
+      });
+
+    return [...result, ...adds];
+  }, [data, pendingChanges]);
+
+  const processedHistory = useMemo(() => processHistoryMovements(movimentosRaw, movementPeriod, baseCodigosMap), [movimentosRaw, movementPeriod, baseCodigosMap]);
+  const processedHistoryGlobal = useMemo(() => processHistoryMovements(movimentosRaw, "hoje", baseCodigosMap), [movimentosRaw, baseCodigosMap]);
+
+  // Optimize: Combine stats calculation if possible, or ensure it's not wasteful
+  const stats = useMemo(() => calculateStatsFromData(effectiveData, processedHistory), [effectiveData, processedHistory]);
+  const globalStats = useMemo(() => calculateStatsFromData(effectiveData, processedHistoryGlobal), [effectiveData, processedHistoryGlobal]);
+
+  const effectiveDivergences = useMemo(() => {
+    return stats.divergences || [];
+  }, [stats.divergences]);
+
   const surplusDivergences = useMemo(() =>
-    stats?.divergences?.filter((d: any) => d.diff > 0) || [],
-    [stats?.divergences]
+    effectiveDivergences.filter((d: any) => d.diff > 0 || d.available > 0) || [],
+    [effectiveDivergences]
   )
   const missingDivergences = useMemo(() =>
-    stats?.divergences?.filter((d: any) => d.diff < 0) || [],
-    [stats?.divergences]
+    effectiveDivergences.filter((d: any) => d.diff < 0 && d.available <= 0) || [],
+    [effectiveDivergences]
   )
 
   // -- HIERARQUIA DE PALETES (Chão) --
@@ -566,35 +865,43 @@ function DashboardPage() {
       return;
     }
 
-    setIsCreatingItem(true);
-    try {
-      const qty = Math.round(parseFloat(newItemData.quantidade.replace(',', '.')));
-      if (isNaN(qty) || qty <= 0) {
-        throw new Error("Quantidade inválida.");
-      }
+    const qty = Math.round(parseFloat(newItemData.quantidade.replace(',', '.')));
+    if (isNaN(qty) || qty <= 0) {
+      alert("Quantidade inválida.");
+      return;
+    }
 
-      const { error } = await supabase.from('mapeamento').insert({
+    const tempId = `novo_${nextTempId++}`;
+    setPendingChanges(prev => [...prev, {
+      id: tempId,
+      type: 'ADD',
+      payload: {
+        id: tempId, // Will be replaced by DB serial/uuid
         'Código': newItemData.produto.trim().toUpperCase(),
         'Quantidade': qty,
         'Observação': newItemData.observacao.trim() || null,
         'Posição': null,
-        'Id Palete': null
-      });
+        'Id Palete': null,
+        // Common access
+        sku: newItemData.produto.trim().toUpperCase(),
+        quantidade_total: qty,
+        nv: null,
+        pr: null
+      },
+      audit: {
+        acao: 'ADICIONAR_ESTOQUE',
+        sku: newItemData.produto.trim().toUpperCase(),
+        posicao: 'GERAL',
+        quantidade: qty
+      }
+    }]);
 
-      if (error) throw error;
-
-      await fetchData();
-      setIsAddItemModalOpen(false);
-      setNewItemData({
-        produto: "",
-        quantidade: "",
-        observacao: ""
-      });
-    } catch (err: any) {
-      alert("Erro ao criar item: " + (err.message || err));
-    } finally {
-      setIsCreatingItem(false);
-    }
+    setIsAddItemModalOpen(false);
+    setNewItemData({
+      produto: "",
+      quantidade: "",
+      observacao: ""
+    });
   }
 
   // -- AUTENTICAÇÍO SUPABASE --
@@ -639,6 +946,145 @@ function DashboardPage() {
       setIsLoggingIn(false)
     }
   }
+  const commitChanges = async () => {
+    if (pendingChanges.length === 0) return;
+    setIsCommitting(true);
+    try {
+      // Group by SKU to minimize floor records operations
+      const adds = pendingChanges.filter(c => c.type === 'ADD');
+      const deletes = pendingChanges.filter(c => c.type === 'DELETE');
+      const updates = pendingChanges.filter(c => c.type === 'UPDATE');
+
+      // 1. Process Additions
+      for (const change of adds) {
+        // payload in ADD already has the table fields
+        // Remove temporary id if present to let DB generate one
+        const { id, sku, quantidade_total, nv, pr, posicao, ...cleanPayload } = change.payload as any;
+        const { error } = await supabase.from('mapeamento').insert(cleanPayload);
+        if (error) throw error;
+        
+        // ONLY consume from floor if we are adding to a specific position (not null)
+        const targetPos = cleanPayload['Posição'];
+        if (targetPos && targetPos !== 'Chão') {
+          const skuCode = cleanPayload['Código'];
+          const qty = cleanPayload['Quantidade'];
+          const { data: floorData, error: floorFetchErr } = await supabase.from('mapeamento')
+            .select('id, Quantidade')
+            .eq('Posição', 'Chão')
+            .eq('Código', skuCode)
+            .limit(1);
+          
+          if (floorFetchErr) throw floorFetchErr;
+
+          if (floorData && floorData.length > 0) {
+            const rec = floorData[0];
+            const rem = rec.Quantidade - qty;
+            if (rem <= 0) {
+              const { error: delErr } = await supabase.from('mapeamento').delete().eq('id', rec.id);
+              if (delErr) throw delErr;
+            } else {
+              const { error: updErr } = await supabase.from('mapeamento').update({ 'Quantidade': rem }).eq('id', rec.id);
+              if (updErr) throw updErr;
+            }
+          }
+        }
+      }
+
+      // 2. Process Deletions
+      for (const change of deletes) {
+        const { error: delErr } = await supabase.from('mapeamento').delete().eq('id', change.payload.id);
+        if (delErr) throw delErr;
+
+        // Return to Floor
+        const { error: insErr } = await supabase.from('mapeamento').insert({
+          'Posição': 'Chão',
+          'Código': change.payload['Código'],
+          'Quantidade': change.payload['Quantidade'],
+          'Nível': 0,
+          'Profundidade': 1,
+          'Parte Tombada': change.payload['Parte Tombada'] || 0,
+          'Parte Molhada': change.payload['Parte Molhada'] || 0,
+          'Id Palete': null
+        });
+        if (insErr) throw insErr;
+      }
+
+
+      // 3. Process Updates
+      for (const change of updates) {
+        // payload in UPDATE might have the reactive keys (lowercase), we must clean it for DB
+        const { 
+          id, sku, quantidade_total, nivel, profundidade, qtd_tombada, qtd_molhado, nv, pr, posicao, ...cleanPayload 
+        } = change.payload as any;
+
+        const { error: updErr } = await supabase.from('mapeamento').update(cleanPayload).eq('id', id);
+        if (updErr) throw updErr;
+
+        // Adjustment of floor stock if quantity changed
+        if (change.audit?.quantidade !== undefined && change.audit?.quantidade_anterior !== undefined) {
+           const diff = change.audit.quantidade - change.audit.quantidade_anterior;
+           const skuCode = change.audit.sku;
+           if (diff !== 0) {
+              if (diff > 0) {
+                 const { data: floorData, error: fFetchErr } = await supabase.from('mapeamento').select('id, Quantidade').eq('Posição', 'Chão').eq('Código', skuCode).limit(1);
+                 if (fFetchErr) throw fFetchErr;
+
+                 if (floorData && floorData.length > 0) {
+                    const rec = floorData[0];
+                    const rem = rec.Quantidade - diff;
+                    if (rem <= 0) {
+                       const { error: fDelErr } = await supabase.from('mapeamento').delete().eq('id', rec.id);
+                       if (fDelErr) throw fDelErr;
+                    } else {
+                       const { error: fUpdErr } = await supabase.from('mapeamento').update({ 'Quantidade': rem }).eq('id', rec.id);
+                       if (fUpdErr) throw fUpdErr;
+                    }
+                 }
+              } else {
+                 const { error: fInsErr } = await supabase.from('mapeamento').insert({
+                    'Posição': 'Chão', 'Código': skuCode, 'Quantidade': Math.abs(diff), 'Nível': 0, 'Profundidade': 1, 'Id Palete': null
+                 });
+                 if (fInsErr) throw fInsErr;
+              }
+           }
+        }
+      }
+
+      // 4. Audit History
+      const historyEntries = pendingChanges.map(c => ({
+        usuario: user?.email || 'desconhecido',
+        tipo_acao: c.audit.acao,
+        sku: c.audit.sku || 'N/A',
+        posicao: c.audit.posicao || 'N/A',
+        nivel_origem: c.audit.nivel_anterior !== undefined ? c.audit.nivel_anterior : null,
+        prof_origem: c.audit.prof_anterior !== undefined ? c.audit.prof_anterior : null,
+        nivel_destino: c.audit.nivel !== undefined ? c.audit.nivel : null,
+        prof_destino: c.audit.profundidade !== undefined ? c.audit.profundidade : null,
+        quantidade: c.audit.quantidade || 0,
+        id_palete: c.audit.id_palete || null,
+        detalhes: JSON.stringify(c.audit)
+      }));
+      const { error: histErr } = await supabase.from('historico_mapeamento').insert(historyEntries);
+      if (histErr) {
+        // Audit log failure should not block the actual save.
+        // Most common cause: RLS policy missing on historico_mapeamento.
+        console.warn("⚠️ Histórico não registrado (RLS ou permissão):", histErr.message);
+      }
+
+      setPendingChanges([]);
+      await fetchData();
+      if (histErr) {
+        alert("✅ Alterações salvas!\n⚠️ Histórico de movimentação não pôde ser registrado (verifique as políticas RLS da tabela 'historico_mapeamento' no Supabase).");
+      } else {
+        alert("✅ Alterações salvas no banco com sucesso!");
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert("Erro ao persistir alterações: " + err.message);
+    } finally {
+      setIsCommitting(false);
+    }
+  }
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -657,6 +1103,7 @@ function DashboardPage() {
   const [showAjustesMenu, setShowAjustesMenu] = useState(false)
   const [showImportarAjustesModal, setShowImportarAjustesModal] = useState(false)
   const [importarAjustesText, setImportarAjustesText] = useState("")
+
 
   // -- ESTADOS PARA IMPORTAÇÍO DE A501 (SNAPSHOT SISTEMA) --
   const [modalImportA501Open, setModalImportA501Open] = useState(false)
@@ -766,256 +1213,6 @@ function DashboardPage() {
     setTheme(prev => prev === "light" ? "dark" : "light")
   }
 
-  const calculateStatsFromData = (allData: any[], historicoRaw: any[] = [], period: "hoje" | "semana" | "mensal" | "all" = "all", skuLookup?: Map<string, any>) => {
-    // 1. Unified state for calculation
-    const registrosBySku = new Map<string, number>();
-    const regCountBySku = new Map<string, number>();
-    const mappedDriveInBySku = new Map<string, number>();
-    const chaoBySku = new Map<string, number>();
-    const skuMap = new Map<string, number>();
-    const frequencyMap: Record<string, number> = {};
-    const molhFrequencyMap: Record<string, number> = {};
-    const regIncidenceBySku: Record<string, number> = {};
-
-    let global_entries = 0;
-    let global_exits = 0;
-    let period_entries = 0;
-    let period_exits = 0;
-    let actual_today_entries = 0;
-    let actual_today_exits = 0;
-
-    // Absolute totals including EVERYTHING (even ajuste/mapeamento)
-    let absolute_entries = 0;
-    let absolute_exits = 0;
-    const absoluteSkusSet = new Set<string>();
-    // Balance per SKU from ALL records (no origin filter) — used for pendências
-    const allSkuBalance = new Map<string, number>();
-    let absolute_today_net = 0;
-    let absolute_yesterday_net = 0;
-    const todayDate = new Date();
-    const todayStr = todayDate.toISOString().split('T')[0];
-    const yesterdayDate = new Date(todayDate);
-    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
-
-    historicoRaw.forEach(m => {
-      const ent = parseBrNum(m['Entrada'] || m['entrada']);
-      const sai = parseBrNum(m['Saída'] || m['saida'] || m['Saida'] || m['saída']);
-      const sku = String(m['Produto'] || m['produto'] || m['Código'] || m['codigo'] || m['Codigo'] || "").trim().toUpperCase()
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      
-      if (sku && sku !== "-" && sku !== "NAN") {
-        absoluteSkusSet.add(sku);
-        allSkuBalance.set(sku, (allSkuBalance.get(sku) || 0) + (ent - sai));
-        // Global record count per SKU (Total 1,344)
-        regCountBySku.set(sku, (regCountBySku.get(sku) || 0) + 1);
-      }
-      absolute_entries += ent;
-      absolute_exits += sai;
-
-      // Cálculo da variação real de hoje e ontem (total absoluto)
-      const dataStr = m['Data'] || m['data'] || m['created_at'] || '';
-      if (dataStr) {
-        const d = new Date(dataStr);
-        if (!isNaN(d.getTime())) {
-          const dStr = d.toISOString().split('T')[0];
-          if (dStr === todayStr) {
-            absolute_today_net += (ent - sai);
-          } else if (dStr === yesterdayStr) {
-            absolute_yesterday_net += (ent - sai);
-          }
-        }
-      }
-    });
-
-    // 2. Date calculations
-    const day = todayDate.getDay();
-    const diff = (day === 0 ? -6 : 1) - day;
-    const monday = new Date(todayDate);
-    monday.setDate(todayDate.getDate() + diff);
-    monday.setHours(0, 0, 0, 0);
-    const firstOfMonth = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
-
-
-    // 3. Process Movements (Principal Source of Truth for Totals)
-    const allFormattedMovements = historicoRaw.filter(m => {
-      // Exclude 'ajuste' and 'mapeamento' from the chart and incidence
-      const orig = String(m['Origem'] || m['origem'] || '').toLowerCase().trim();
-      return !orig.includes('mapeamento') && !orig.includes('ajuste');
-    }).map(m => {
-      // Robust field mapping for SKU/Product
-      const sku = String(m['Produto'] || m['produto'] || m['Código'] || m['codigo'] || m['Codigo'] || "").trim().toUpperCase()
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
-      // Robust field mapping for Quantities
-      const ent = parseBrNum(m['Entrada'] || m['entrada']);
-      const sai = parseBrNum(m['Saída'] || m['saida'] || m['Saida'] || m['saída']);
-
-      const data = m['Data'] || m['data'] || m['created_at'] || '';
-      const origem = m['Origem'] || m['origem'] || '-';
-
-      if (sku && sku !== "-" && sku !== "NAN") {
-        registrosBySku.set(sku, (registrosBySku.get(sku) || 0) + (ent - sai));
-      }
-
-      global_entries += ent;
-      global_exits += sai;
-
-      let isInPeriod = true;
-      let isToday = false;
-      if (data) {
-        const d = new Date(data);
-        const isValidDate = !isNaN(d.getTime());
-
-        if (!isValidDate) {
-          isInPeriod = false;
-        } else {
-          const isoDate = d.toISOString().split('T')[0];
-          isToday = (isoDate === todayStr);
-          if (period === "hoje") isInPeriod = isToday;
-          else if (period === "semana") isInPeriod = d >= monday;
-          else if (period === "mensal") isInPeriod = d.getFullYear() === todayDate.getFullYear();
-          else isInPeriod = true;
-        }
-      } else {
-        isInPeriod = false;
-      }
-
-      if (isToday) {
-        actual_today_entries += ent;
-        actual_today_exits += sai;
-      }
-
-      if (isInPeriod) {
-        period_entries += ent;
-        period_exits += sai;
-      }
-
-      const lookup = skuLookup?.get(sku);
-      return {
-        id: m.id || Math.random(),
-        produto: sku,
-        descricao: lookup?.descricao || 'Produto não cadastrado',
-        movimentacao: ent > 0 ? ent : sai,
-        entrada: ent > 0,
-        entrada_val: ent,
-        saida_val: sai,
-        molhado: parseBrNum(m['Molhado'] || m['molhado']),
-        data: data,
-        tipo: ent > 0 ? 'entrada' : 'saída',
-        origem: origem,
-        isInPeriod: isInPeriod
-      };
-    }).filter(m => m.movimentacao > 0 || m.produto !== "");
-
-    // 3.5 Calculate filtered incidence (Entries only, no Adjustment/Mapping)
-    allFormattedMovements.forEach(m => {
-      if (!m.isInPeriod) return;
-      // Only count entries (m.entrada_val > 0)
-      // Note: All movements here are already filtered to exclude 'ajuste' and 'mapeamento'
-      if (m.entrada_val > 0) {
-        regIncidenceBySku[m.produto] = (regIncidenceBySku[m.produto] || 0) + 1;
-      }
-    });
-
-    const sortedFormattedMovements = [...allFormattedMovements].sort((a, b) => {
-      if (!a.data || !b.data) return 0;
-      const db = new Date(b.data).getTime();
-      const da = new Date(a.data).getTime();
-      return (isNaN(db) ? 0 : db) - (isNaN(da) ? 0 : da);
-    });
-
-    // 4. Process Current Mapping (How much of the total is stored)
-    allData.forEach(item => {
-      const sku = String(item.produto || "").trim().toUpperCase()
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      if (!sku || sku === "-" || sku === "nan") return;
-
-      const total = Number(item.quantidade_total) || 0;
-      skuMap.set(sku, (skuMap.get(sku) || 0) + total);
-      frequencyMap[sku] = (frequencyMap[sku] || 0) + 1;
-      if (Number(item.qtd_molhado) > 0) molhFrequencyMap[sku] = (molhFrequencyMap[sku] || 0) + 1;
-
-      if (item.is_unallocated_source) {
-        chaoBySku.set(sku, (chaoBySku.get(sku) || 0) + total);
-      } else {
-        mappedDriveInBySku.set(sku, (mappedDriveInBySku.get(sku) || 0) + total);
-      }
-    });
-
-    // 5. Compute Final Availability and Registration Divergences
-    const unregisteredPositions = new Set<string>();
-    allData.forEach(item => {
-      if (item.is_unregistered) unregisteredPositions.add(item.posicao);
-    });
-
-    const allSkus = new Set([...registrosBySku.keys(), ...chaoBySku.keys(), ...mappedDriveInBySku.keys()]);
-    const divergences = Array.from(allSkus).map(sku => {
-      const systemTotal = registrosBySku.get(sku) || 0;
-      const inChao = chaoBySku.get(sku) || 0;
-      const mappedDriveIn = mappedDriveInBySku.get(sku) || 0;
-      const totalAvailable = Math.max(inChao, systemTotal - mappedDriveIn);
-
-      return {
-        produto: sku,
-        available: totalAvailable
-      };
-    }).filter(d => d.available > 0);
-
-    // Use absolute balance (allSkuBalance) for pendências and divergenciasLupa (Lupa)
-    // Pendências: Total Registrado (qty) > Mapeado (qty) - temos registro, mas falta o físico
-    const allSkusSet = new Set([...allSkuBalance.keys(), ...skuMap.keys()]);
-    const pendencias = Array.from(allSkusSet).map(sku => {
-      const regQty = allSkuBalance.get(sku) || 0;
-      const mapQty = skuMap.get(sku) || 0;
-      const diff = regQty - mapQty;
-      return { sku, regQty, mapQty, diff };
-    }).filter(p => p.diff > 0).sort((a, b) => b.diff - a.diff);
-
-    // Divergências (Lupa): Mapeado (qty) > Total Registrado (qty) - sobra no físico, falta no registro
-    const divergenciasLupa = Array.from(allSkusSet).map(sku => {
-      const regQty = allSkuBalance.get(sku) || 0;
-      const mapQty = skuMap.get(sku) || 0;
-      const diff = mapQty - regQty;
-      return { sku, regQty, mapQty, diff };
-    }).filter(p => p.diff > 0).sort((a, b) => b.diff - a.diff);
-
-    const total_drive_qty = Array.from(mappedDriveInBySku.values()).reduce((sum, v) => sum + v, 0);
-    const mixed_pallets_count = 0; // Calculated via mixedPalletsData useMemo (needs data state)
-
-    return {
-      total_quantity: global_entries - global_exits, // Operational total
-      absolute_total_quantity: absolute_entries - absolute_exits, // Estoque registrado (Entradas - Saídas)
-      total_pallets: allData.reduce((sum, item) => sum + (item.paletes || 0), 0),
-      total_skus: registrosBySku.size,
-      absolute_total_skus: absoluteSkusSet.size,
-      movement_pieces: registrosBySku.size,
-      today_net: absolute_today_net,
-      yesterday_net: absolute_yesterday_net,
-      total_entries: global_entries,
-      total_exits: global_exits,
-      period_entries,
-      period_exits,
-      total_capacity: allData.reduce((sum, item) => sum + (Number(item.capacidade) || 0), 0),
-      qtd_molhado: allData.reduce((sum, item) => sum + (Number(item.qtd_molhado) || 0), 0),
-      qtd_tombada: allData.reduce((sum, item) => sum + (Number(item.qtd_tombada) || 0), 0),
-      frequency_by_product: frequencyMap,
-      molh_frequency_by_product: molhFrequencyMap,
-      mixed_pallets_consolidated: mixed_pallets_count,
-      latest_movements: allFormattedMovements,
-      period_movements: allFormattedMovements.filter(m => m.isInPeriod),
-      top_moved: allFormattedMovements.slice(0, 10),
-      divergences: divergences,
-      unregistered_count: unregisteredPositions.size,
-      unregistered_positions: Array.from(unregisteredPositions),
-      reg_incidence_by_sku: regIncidenceBySku,
-      total_drive_qty: total_drive_qty,
-      mixed_pallets_count: mixed_pallets_count,
-      pendencias: pendencias,
-      pendenciasCount: pendencias.length,
-      divergenciasLupa: divergenciasLupa
-    };
-  };
 
   const fetchAllSupabaseData = async (tableName: string) => {
     let allData: any[] = [];
@@ -1301,21 +1498,8 @@ function DashboardPage() {
 
       setData(combinedData);
       setBaseCodigosMap(skuLookup);
+      // stats are now reactive via useMemo on effectiveData
 
-      // 3. Calculate Stats include movements and system snapshot
-      const hojeStats = calculateStatsFromData(combinedData, historicoRaw, "hoje", skuLookup);
-      const semanaStats = calculateStatsFromData(combinedData, historicoRaw, "semana", skuLookup);
-      const mensalStats = calculateStatsFromData(combinedData, historicoRaw, "mensal", skuLookup);
-
-      setStatsCache({
-        hoje: hojeStats,
-        semana: semanaStats,
-        mensal: mensalStats
-      });
-      // Start with whichever period is selected right now, defaulting to 'hoje'
-      setStats(hojeStats);
-      // Set the global (unfiltered) reference stats for the top cards
-      setGlobalStats(hojeStats);
 
     } catch (err: any) {
       setError("Falha na conexão com o Supabase: " + err.message);
@@ -1437,13 +1621,7 @@ function DashboardPage() {
   }, []) // Apenas no mount
 
 
-  // Sync current stats view from cache when period changes (Instant switch)
-  useEffect(() => {
-    if (statsCache[movementPeriod]) {
-      setStats(statsCache[movementPeriod])
-    }
-  }, [movementPeriod, statsCache])
-
+  // Sync current stats can be removed or simplified since stats is a useMemo now
   useEffect(() => {
     setConfrontoCurrentPage(1);
   }, [confrontoSearch, confrontoFilter, confrontoType, confrontoSortDir]);
@@ -1524,7 +1702,7 @@ function DashboardPage() {
       });
 
       // Also get descriptions from current mapping if available
-      data.forEach(item => {
+      effectiveData.forEach(item => {
         const sku = String(item.produto || "").trim().toUpperCase()
           .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         if (sku && item.descricao && item.descricao !== "-") {
@@ -1641,7 +1819,7 @@ function DashboardPage() {
     const streets: Record<string, { even: any[], odd: any[] }> = {}
 
     const posMap = new Map()
-    data.forEach(item => {
+    effectiveData.forEach(item => {
       // Otimização: Se houver busca, ignorar itens que não batem com o SKU ou com a Posição
       const matchesSearch = !search ||
         (item.produto || "").toLowerCase().includes(search.toLowerCase()) ||
@@ -1718,13 +1896,13 @@ function DashboardPage() {
     })
 
     return streets
-  }, [data, search])
+  }, [effectiveData, search])
 
   // Mixed Pallets Detection Logic
   const mixedPalletsData = useMemo(() => {
     const palletGroups = new Map<string, any[]>()
 
-    data.forEach(item => {
+    effectiveData.forEach(item => {
       const id = item.id_palete?.toString()?.trim()
       if (!id || id === "0" || id === "" || id.toLowerCase() === "nan") return
 
@@ -1766,7 +1944,7 @@ function DashboardPage() {
         default: return b.totalQty - a.totalQty
       }
     })
-  }, [data, mixedSort])
+  }, [effectiveData, mixedSort])
 
   // View Aggregation & Filtering Logic
   const processedData = useMemo(() => {
@@ -1774,7 +1952,7 @@ function DashboardPage() {
 
     if (activeView === "posicoes") {
       const posMap = new Map()
-      data.forEach(item => {
+      effectiveData.forEach(item => {
         const pos = item.posicao || "S/P"
         if (!posMap.has(pos)) {
           posMap.set(pos, {
@@ -1811,7 +1989,7 @@ function DashboardPage() {
         })
     } else if (activeView === "produtos") {
       const productMap = new Map()
-      data.forEach(item => {
+      effectiveData.forEach(item => {
         const prodRaw = getVal(item, ['produto', 'sku', 'product'])
         if (!prodRaw || String(prodRaw).trim() === "") return
         const prod = String(prodRaw)
@@ -1850,13 +2028,13 @@ function DashboardPage() {
     } else if (activeView === "molhados") {
       const productMap = new Map()
       const skusWithWet = new Set()
-      data.forEach(item => {
+      effectiveData.forEach(item => {
         if (item.qtd_molhado && item.qtd_molhado > 0 && item.produto && item.produto.trim() !== "") {
           skusWithWet.add(item.produto)
         }
       })
 
-      data.forEach(item => {
+      effectiveData.forEach(item => {
         if (!item.produto || item.produto.trim() === "") return
         const prod = item.produto
         if (!skusWithWet.has(prod)) return
@@ -1893,15 +2071,20 @@ function DashboardPage() {
         qtyRank: sortedByQty.findIndex(s => s.produto === item.produto) + 1
       }))
     } else if (activeView === "nao_alocados") {
-      baseData = data.filter(item => {
+      baseData = effectiveData.filter(item => {
         const pos = String(item.posicao || "").toUpperCase()
         return !pos || pos === "S/P" || pos === "NÃO INFORMADO" || pos === "-" || pos === "CHÃO" || pos === "CHÃO" || item.is_unallocated_source
       }).map(item => ({
         ...item,
         posicao: item.posicao || "S/P"
       }))
+    } else if (activeView === "quarentena") {
+      baseData = effectiveData.filter(item => {
+        const pos = String(item.posicao || "").toUpperCase()
+        return pos.includes("QUARENTENA")
+      })
     } else {
-      baseData = [...data]
+      baseData = [...effectiveData]
     }
 
     // Global Sort Mode (The Buttons)
@@ -1939,7 +2122,7 @@ function DashboardPage() {
       ...item,
       rank: idx + 1
     }))
-  }, [data, activeView, sortMode, tableSort])
+  }, [effectiveData, activeView, sortMode, tableSort])
 
   const handleSort = (key: string) => {
     setSortMode("none")
@@ -1976,7 +2159,7 @@ function DashboardPage() {
     const globalPosMap = new Map()
     const posOccupancy = new Map()
 
-    data.forEach(item => {
+    effectiveData.forEach(item => {
       let activePos = item.posicao
 
       // Ultra-robust fallback: if posicao is N/A, check if any key or value looks like G300
@@ -1992,7 +2175,7 @@ function DashboardPage() {
       }
 
       const posUpper = (activePos || "").toUpperCase()
-      const isRealDrive = posUpper && posUpper !== "S/P" && posUpper !== "NÃO INFORMADO" && posUpper !== "-" && posUpper !== "CHÃO" && posUpper !== "CHÃO" && !item.is_unallocated_source
+      const isRealDrive = posUpper && posUpper !== "S/P" && posUpper !== "NÃO INFORMADO" && posUpper !== "-" && posUpper !== "CHÃO" && !posUpper.includes("QUARENTENA") && !item.is_unallocated_source
       const isBlocked = item.is_blocked || item.status === "Fechado" || item.status === "Bloqueado"
 
       if (isRealDrive && !isBlocked) {
@@ -2052,7 +2235,7 @@ function DashboardPage() {
       }
     })
 
-    data.forEach(item => {
+    effectiveData.forEach(item => {
       const posUpper = String(item.posicao || "").toUpperCase()
       const isAllocated = posUpper && posUpper !== "S/P" && posUpper !== "NÃO INFORMADO" && posUpper !== "-" && posUpper !== "CHÃO" && posUpper !== "CHÃO" && !item.is_unallocated_source
       const isBlocked = item.is_blocked || item.status === "Fechado" || item.status === "Bloqueado"
@@ -2071,7 +2254,7 @@ function DashboardPage() {
     const totalPositions = posMap.size
 
     // FIX: occupied should ONLY count allocated pallets to match backend stats
-    const occupied = Math.round(data.filter(i => {
+    const occupied = Math.round(effectiveData.filter(i => {
       const p = String(i.posicao || "").toUpperCase();
       return p && p !== "S/P" && p !== "NÃO INFORMADO" && p !== "-" && p !== "CHÃO" && p !== "CHÃO" && !i.is_unallocated_source;
     }).reduce((s, i) => s + (i.paletes || 0), 0));
@@ -2107,7 +2290,7 @@ function DashboardPage() {
       overflowPositions,
       top10Skus: (() => {
         const skuMap = new Map()
-        data.forEach(item => {
+        effectiveData.forEach(item => {
           const skuRaw = getVal(item, ['produto', 'sku', 'product'])
           const sku = String(skuRaw || "S/I").trim()
           
@@ -2181,7 +2364,7 @@ function DashboardPage() {
           .slice(0, 3)
       })()
     }
-  }, [data, stats, topSkusFilter, topSkusSort])
+  }, [effectiveData, stats, topSkusFilter, topSkusSort])
 
   const topSkus = advancedStats.top10Skus; // Fix ReferenceError
 
@@ -2566,7 +2749,7 @@ function DashboardPage() {
   const positionDetail = useMemo(() => {
     if (!selectedPosition) return null
 
-    const matches = data.filter(item => item.posicao === selectedPosition)
+    const matches = effectiveData.filter(item => item.posicao === selectedPosition)
     if (matches.length === 0) return null
 
     // Determine the maximum level for the position
@@ -2609,12 +2792,12 @@ function DashboardPage() {
         id_palete: m.id_palete || ""
       }))
     }
-  }, [selectedPosition, data])
+  }, [selectedPosition, effectiveData])
 
   const productDetail = useMemo(() => {
     if (!selectedProduct) return null
 
-    const matches = data.filter(item => item.produto === selectedProduct)
+    const matches = effectiveData.filter(item => item.produto === selectedProduct)
     if (matches.length === 0) return null
 
     const filteredMatches = modalFilter
@@ -2638,11 +2821,11 @@ function DashboardPage() {
         qtd_molhado: m.qtd_molhado || 0
       })).sort((a, b) => a.posicao.localeCompare(b.posicao))
     }
-  }, [selectedProduct, data, modalFilter])
+  }, [selectedProduct, effectiveData, modalFilter])
 
   const palletDetail = useMemo(() => {
     if (!selectedPalletId) return null
-    const items = data.filter(item => item.id_palete?.toString()?.trim() === selectedPalletId)
+    const items = effectiveData.filter(item => item.id_palete?.toString()?.trim() === selectedPalletId)
     if (items.length === 0) return null
 
     const locations = Array.from(new Set(items.map(i => i.posicao || "S/P")))
@@ -2654,7 +2837,7 @@ function DashboardPage() {
       locations,
       items: items.sort((a, b) => (b.quantidade_total || 0) - (a.quantidade_total || 0))
     }
-  }, [selectedPalletId, data])
+  }, [selectedPalletId, effectiveData])
 
   const handleExportProducts = () => {
     // Agora o botão apenas abre o modal de configuração
@@ -2679,7 +2862,7 @@ function DashboardPage() {
       : exportOptions as any
 
     // 2. Filtrar os dados brutos com base nas opções
-    let filteredData = data.filter(item => {
+    let filteredData = effectiveData.filter(item => {
       const pos = String(item.posicao || "").toUpperCase()
       const isSP = !pos || pos === "S/P" || pos === "NÃO INFORMADO" || pos === "-"
 
@@ -2832,7 +3015,7 @@ function DashboardPage() {
   const [printData, setPrintData] = useState<any[]>([])
 
   const handleExportMap = (mode: "all" | "filtered") => {
-    const dataToPrint = mode === "all" ? data : filteredData
+    const dataToPrint = mode === "all" ? effectiveData : filteredData
     setPrintData(dataToPrint)
     // Small timeout to allow state to settle before printing
     setTimeout(() => {
@@ -2843,7 +3026,7 @@ function DashboardPage() {
 
   const handleExportSelection = () => {
     if (selectedPositions.size === 0) return
-    const dataToPrint = data.filter(item => selectedPositions.has(item.posicao))
+    const dataToPrint = effectiveData.filter(item => selectedPositions.has(item.posicao))
     setPrintData(dataToPrint)
     setTimeout(() => {
       window.print()
@@ -3612,14 +3795,14 @@ function DashboardPage() {
                         <div className="grid grid-cols-2 gap-x-10 gap-y-4 text-center w-full">
                           <div className="flex flex-col">
                             <span className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider">Alocadas</span>
-                            <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 transition-colors">{fmtNum(data.filter(i => {
+                            <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 transition-colors">{fmtNum(effectiveData.filter(i => {
                               const p = String(i.posicao || "").toUpperCase();
                               return p !== "CHÃO" && p !== "CHAO";
                             }).reduce((s, i) => s + (i.quantidade_total || 0), 0))}</span>
                           </div>
                           <div className="flex flex-col">
                             <span className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider">Não Alocadas</span>
-                            <span className="text-sm font-black text-orange-600 dark:text-orange-400 transition-colors">{fmtNum(data.filter(i => {
+                            <span className="text-sm font-black text-orange-600 dark:text-orange-400 transition-colors">{fmtNum(effectiveData.filter(i => {
                               const p = String(i.posicao || "").toUpperCase();
                               return p === "CHÃO" || p === "CHAO";
                             }).reduce((s, i) => s + (i.quantidade_total || 0), 0))}</span>
@@ -3663,11 +3846,11 @@ function DashboardPage() {
                     />
                   </div>
 
-                  {/* Analytics Section — Locked Height 330px */}
+                  {/* Analytics Section — Locked Height 310px */}
                   <div className="grid grid-cols-1 gap-4 md:gap-8 lg:grid-cols-3">
                     {/* Capacity Donut */}
-                    <motion.div className="group relative rounded-[2.5rem] bg-white dark:bg-[#0F172A] p-6 shadow-xl border border-slate-100 dark:border-slate-800 transition-colors h-[330px] flex flex-col">
-                      <div className="flex items-center justify-between mb-6">
+                    <motion.div className="group relative rounded-[2.5rem] bg-white dark:bg-[#0F172A] p-5 shadow-xl border border-slate-100 dark:border-slate-800 transition-colors h-[310px] flex flex-col">
+                      <div className="flex items-center justify-between mb-4">
                         <div>
                           <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-[0.2em]">CAPACIDADE FÍSICA</h3>
                           <p className="text-[8px] font-black text-slate-400 dark:text-slate-500 tracking-widest mt-1">VOL. GEOGRÁFICO G300</p>
@@ -3690,35 +3873,38 @@ function DashboardPage() {
                           </div>
 
                           <svg className="h-full w-full -rotate-90" viewBox="0 0 100 100">
-                            <circle className="text-slate-50 dark:text-slate-800" strokeWidth="8" stroke="currentColor" fill="transparent" r="42" cx="50" cy="50" />
-                            <motion.circle className="text-blue-600 dark:text-blue-500" strokeWidth="8" strokeDasharray={2 * Math.PI * 42} initial={{ strokeDashoffset: 2 * Math.PI * 42 }} animate={{ strokeDashoffset: (2 * Math.PI * 42) * (1 - advancedStats.occupiedPercent / 100) }} strokeLinecap="round" stroke="currentColor" fill="transparent" r="42" cx="50" cy="50" />
+                            <circle className="text-slate-50 dark:text-slate-800" strokeWidth="8" stroke="currentColor" strokeLinecap="butt" fill="transparent" r="42" cx="50" cy="50" />
+                            <motion.circle className="text-blue-600 dark:text-blue-500" strokeWidth="8" strokeDasharray={2 * Math.PI * 42} strokeLinecap="butt" initial={{ strokeDashoffset: 2 * Math.PI * 42 }} animate={{ strokeDashoffset: (2 * Math.PI * 42) * (1 - advancedStats.occupiedPercent / 100) }} stroke="currentColor" fill="transparent" r="42" cx="50" cy="50" />
                           </svg>
                           <div className="absolute inset-0 flex flex-col items-center justify-center group-hover/donut:opacity-0 transition-opacity duration-200">
-                            <span className="text-4xl font-black text-slate-900 dark:text-slate-100 tracking-tighter">{Math.round(advancedStats.occupiedPercent)}%</span>
-                            <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mt-1">USO</span>
+                            <div className="flex items-baseline">
+                              <span className="text-3xl font-black text-slate-900 dark:text-slate-100 tracking-tighter">{Math.round(advancedStats.occupiedPercent)}</span>
+                              <span className="text-base font-black text-blue-500 dark:text-blue-400 ml-0.5">%</span>
+                            </div>
+                            <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-0.5">OCUPAÇÃO</span>
                           </div>
                         </div>
 
                         {/* Métricas Compactas no Rodapé */}
                         <div className="mt-auto w-full flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800/50">
                           <div className="flex flex-col">
-                            <span className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.15em] mb-0.5">TOTAL</span>
-                            <span className="text-[11px] font-black text-slate-900 dark:text-slate-100 tracking-tight">{advancedStats.totalCapacity.toLocaleString('pt-BR')}</span>
+                            <span className="text-[7px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-0.5">TOTAL</span>
+                            <span className="text-[12px] font-black text-slate-900 dark:text-slate-100 tracking-tight">{advancedStats.totalCapacity.toLocaleString('pt-BR')}</span>
                           </div>
                           <div className="flex flex-col items-center">
-                            <span className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.15em] mb-0.5">USADO</span>
-                            <span className="text-[11px] font-black text-slate-900 dark:text-slate-100 tracking-tight">{advancedStats.occupied.toLocaleString('pt-BR')}</span>
+                            <span className="text-[7px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-0.5">USADO</span>
+                            <span className="text-[12px] font-black text-slate-900 dark:text-slate-100 tracking-tight">{advancedStats.occupied.toLocaleString('pt-BR')}</span>
                           </div>
                           <div className="flex flex-col items-end">
-                            <span className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.15em] mb-0.5">LIVRE</span>
-                            <span className="text-[11px] font-black text-emerald-500 tracking-tight">{advancedStats.free.toLocaleString('pt-BR')}</span>
+                            <span className="text-[7px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-0.5">LIVRE</span>
+                            <span className="text-[12px] font-black text-emerald-500 dark:text-emerald-400 tracking-tight">{advancedStats.free.toLocaleString('pt-BR')}</span>
                           </div>
                         </div>
                       </div>
                     </motion.div>
 
                     {/* Histórico de Paletes Card */}
-                    <motion.div className="group relative rounded-[2.5rem] bg-white dark:bg-[#0F172A] p-6 shadow-xl border border-slate-100 dark:border-slate-800 transition-colors h-[330px] flex flex-col">
+                    <motion.div className="group relative rounded-[2.5rem] bg-white dark:bg-[#0F172A] p-5 shadow-xl border border-slate-100 dark:border-slate-800 transition-colors h-[310px] flex flex-col">
                       <div className="flex items-center justify-between mb-6">
                         <div>
                           <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-[0.2em]">HISTÓRICO</h3>
@@ -3948,7 +4134,7 @@ function DashboardPage() {
                     </motion.div>
 
                     {/* Top 3 SKUs Card */}
-                    <motion.div className="group relative rounded-[2.5rem] bg-white dark:bg-[#0F172A] p-6 shadow-xl border border-slate-100 dark:border-slate-800 transition-colors h-[330px] flex flex-col">
+                    <motion.div className="group relative rounded-[2.5rem] bg-white dark:bg-[#0F172A] p-5 shadow-xl border border-slate-100 dark:border-slate-800 transition-colors h-[310px] flex flex-col">
                       <div className="flex items-center justify-between mb-6">
                         <div>
                           <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-[0.2em]">TOP 3 SKUS</h3>
@@ -3978,11 +4164,11 @@ function DashboardPage() {
                         </div>
                       </div>
 
-                      <div className="flex-1 flex flex-col justify-center space-y-3 overflow-y-auto scrollbar-hide py-1">
+                      <div className="flex-1 flex flex-col justify-start space-y-2 overflow-y-auto custom-scrollbar py-1 pr-1">
                         {topSkus.length > 0 ? (
                           topSkus.slice(0, 3).map((item: any, index: number) => (
-                            <div key={item.sku} className="flex items-center justify-between group/sku p-2 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all border border-transparent hover:border-slate-100 dark:hover:border-slate-800">
-                              <div className="flex items-center gap-4 flex-1">
+                            <div key={item.sku} className="flex items-center justify-between group/sku p-1.5 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all border border-transparent hover:border-slate-100 dark:hover:border-slate-800">
+                              <div className="flex items-center gap-2.5 flex-1">
                                 <div className="h-8 w-8 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-black text-xs text-slate-400 group-hover/sku:bg-blue-500 group-hover/sku:text-white transition-colors">
                                   {index + 1}
                                 </div>
@@ -4071,7 +4257,7 @@ function DashboardPage() {
                                   initial={{ opacity: 0, scale: 0.95, y: -10 }}
                                   animate={{ opacity: 1, scale: 1, y: 0 }}
                                   exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                                  className="absolute right-0 top-full mt-2 w-36 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl shadow-2xl z-20 p-1.5"
+                                  className="absolute right-0 top-full mt-2 w-36 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl shadow-2xl z-[150] p-1.5"
                                 >
                                   {[
                                     { id: "hoje", label: "Hoje" },
@@ -4255,16 +4441,25 @@ function DashboardPage() {
                                       {group.map((item, iIdx) => {
                                         const hPct = (item.val / maxVal) * 100;
                                         return (
-                                          <div key={iIdx} className={cn("relative flex flex-col items-center justify-end group/bar", isIndividual ? "w-10" : "flex-1")} style={{ height: '100%' }}>
+                                          <div key={iIdx} className={cn("relative flex flex-col items-center justify-end", isIndividual ? "w-10" : "flex-1")} style={{ height: '100%' }}>
                                             {item.val > 0 && (
                                               <span className={cn("absolute text-[10px] font-black pointer-events-none transition-all drop-shadow-sm z-20", item.isEntrada ? "text-emerald-500" : "text-orange-500")} style={{ bottom: `calc(${hPct}% + 6px)` }}>
                                                 {item.isEntrada ? `+${item.val}` : item.val}
                                               </span>
                                             )}
-                                            <motion.div initial={{ height: 0 }} animate={{ height: `${hPct}%` }} className={cn("w-full rounded-t-xl rounded-b-md relative", item.val === 0 ? "h-0.5 bg-slate-100 dark:bg-slate-800" : item.isEntrada ? "bg-gradient-to-t from-emerald-600 to-emerald-400" : "bg-gradient-to-t from-orange-600 to-orange-400")}>
+                                            <motion.div 
+                                              initial={{ height: 0 }} 
+                                              animate={{ height: `${hPct}%` }} 
+                                              className={cn(
+                                                "w-full rounded-t-xl rounded-b-md relative", 
+                                                item.val === 0 ? "h-0.5 bg-slate-100 dark:bg-slate-800" : item.isEntrada ? "bg-gradient-to-t from-emerald-600 to-emerald-400" : "bg-gradient-to-t from-orange-600 to-orange-400"
+                                              )}
+                                              onMouseEnter={() => setHoveredBarId(`bar-${gIdx}-${iIdx}`)}
+                                              onMouseLeave={() => setHoveredBarId(null)}
+                                            >
                                               {item.val > 0 && <div className="absolute inset-x-0 top-0 h-1 bg-white/20 rounded-full mx-1 mt-1 blur-[1px]" />}
-                                              {item.val > 0 && (
-                                                <div className="absolute opacity-0 group-hover/bar:opacity-100 transition-opacity z-[100] bottom-full left-1/2 -translate-x-1/2 mb-4">
+                                              {item.val > 0 && hoveredBarId === `bar-${gIdx}-${iIdx}` && (
+                                                <div className="absolute z-[100] bottom-full left-1/2 -translate-x-1/2 mb-4">
                                                   <div className="bg-slate-900/95 backdrop-blur-md border border-slate-700/50 p-2.5 rounded-2xl shadow-2xl min-w-[140px]">
                                                     <div className="flex items-center justify-between mb-2">
                                                       <span className="text-[10px] font-black text-white uppercase">{item.label}</span>
@@ -4334,63 +4529,123 @@ function DashboardPage() {
                     </motion.div>
 
                     {/* RIGHT: LIST */}
-                    <motion.div className="group relative rounded-[2.5rem] bg-white dark:bg-[#0F172A] p-4 shadow-xl border border-slate-100 dark:border-slate-800 transition-colors overflow-hidden flex flex-col min-h-[320px]">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-1.5 h-6 bg-emerald-500 rounded-full" />
+                    <motion.div className="group relative rounded-[2.5rem] bg-white dark:bg-[#0F172A] p-5 shadow-xl border border-slate-100 dark:border-slate-800 transition-colors overflow-hidden flex flex-col h-[310px]">
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-1 h-5 bg-emerald-500 rounded-full" />
                           <div>
                             <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-[0.2em]">
-                              Últimas Movimentações
+                              Origem
                             </h3>
+                            <p className="text-[8px] font-black text-slate-400 dark:text-slate-500 tracking-widest mt-1">
+                              DISTRIBUIÇÃO ANALÍTICA
+                            </p>
                           </div>
                         </div>
-                        <Activity size={18} className="text-slate-400 dark:text-slate-600" />
+
+                        <div className="flex items-center gap-3">
+                          {/* SMALL TYPE FILTER */}
+                          <div className="flex items-center p-1 bg-slate-100/80 dark:bg-slate-800/50 backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/30 rounded-xl">
+                            {[
+                              { id: 'entrada', label: 'Entrada' },
+                              { id: 'saída', label: 'Saída' }
+                            ].map((t) => (
+                              <button
+                                key={t.id}
+                                onClick={() => setOriginTypeFilter(t.id as any)}
+                                className={cn(
+                                  "px-3 h-6 flex items-center justify-center text-[9px] font-black uppercase rounded-lg transition-all",
+                                  originTypeFilter === t.id 
+                                    ? cn("bg-white dark:bg-slate-600 shadow-sm", t.id === 'entrada' ? "text-emerald-500 dark:text-emerald-400" : "text-red-500 dark:text-red-400")
+                                    : "text-slate-400 hover:text-slate-500"
+                                )}
+                              >
+                                {t.label}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* 3 POTINHOS (PERIOD FILTER) */}
+                          <div className="relative">
+                            <button
+                              onClick={() => setShowOriginPeriodMenu(!showOriginPeriodMenu)}
+                              className={cn(
+                                "p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors",
+                                showOriginPeriodMenu ? "text-blue-500" : "text-slate-400"
+                              )}
+                            >
+                              <MoreHorizontal size={18} />
+                            </button>
+
+                            <AnimatePresence>
+                              {showOriginPeriodMenu && (
+                                <>
+                                  <div className="fixed inset-0 z-[140]" onClick={() => setShowOriginPeriodMenu(false)} />
+                                  <motion.div
+                                    initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                    exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                                    className="absolute right-0 top-full mt-2 w-40 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl shadow-2xl z-[150] p-1.5"
+                                  >
+                                    {[
+                                      { id: 'hoje', label: 'Hoje' },
+                                      { id: 'semana', label: 'Semanal' },
+                                      { id: 'mensal', label: 'Mensal' },
+                                      { id: 'tudo', label: 'Todo o Histórico' }
+                                    ].map((p) => (
+                                      <button
+                                        key={p.id}
+                                        onClick={() => {
+                                          setOriginPeriod(p.id as any);
+                                          setShowOriginPeriodMenu(false);
+                                        }}
+                                        className={cn(
+                                          "w-full text-left px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors",
+                                          originPeriod === p.id 
+                                            ? "bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400" 
+                                            : "text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800"
+                                        )}
+                                      >
+                                        {p.label}
+                                      </button>
+                                    ))}
+                                  </motion.div>
+                                </>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800">
-                        {stats?.latest_movements && stats.latest_movements.length > 0 ? (
-                          <div className="flex flex-col">
-                            {/* Header Row */}
-                            <div className="grid grid-cols-[60px_100px_1fr_60px_80px] gap-4 px-4 py-2 border-b border-slate-100 dark:border-slate-800 text-[9px] font-black uppercase text-slate-400 tracking-widest">
-                              <div>Data</div>
-                              <div>Código</div>
-                              <div>Descrição</div>
-                              <div className="text-right">Qtd</div>
-                              <div className="text-right">Origem</div>
-                            </div>
+                      <div className="flex-1 min-h-0">
+                        {(() => {
+                          const today = new Date();
+                          const todayStr = today.toISOString().split('T')[0];
+                          const day = today.getDay();
+                          const diff = (day === 0 ? -6 : 1) - day;
+                          const monday = new Date(today);
+                          monday.setDate(today.getDate() + diff);
+                          monday.setHours(0, 0, 0, 0);
 
-                            <div className="divide-y divide-slate-50 dark:divide-slate-800/50">
-                              {stats.latest_movements.slice(0, 5).map((mov: any, idx: number) => (
-                                <div key={idx} className="grid grid-cols-[60px_100px_1fr_60px_80px] gap-4 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors items-center">
-                                  <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
-                                    {mov.data || "-"}
-                                  </div>
-                                  <div className="text-[11px] font-black text-slate-700 dark:text-slate-200 truncate">
-                                    {mov.produto}
-                                  </div>
-                                  <div className="text-[10px] font-medium text-slate-500 dark:text-slate-400 truncate" title={mov.descricao}>
-                                    {mov.descricao && mov.descricao !== "-" ? mov.descricao : "Sem Descrição"}
-                                  </div>
-                                  <div className={cn(
-                                    "text-right text-[11px] font-black",
-                                    mov.entrada ? "text-emerald-600 dark:text-emerald-400" : "text-orange-600 dark:text-orange-400"
-                                  )}>
-                                    {mov.entrada ? "+" : "-"}{mov.movimentacao}
-                                  </div>
+                          const filteredData = (stats?.latest_movements || []).filter((m: any) => {
+                            if (originPeriod === 'tudo') return true;
+                            if (!m.timestamp) return false;
+                            
+                            if (originPeriod === 'hoje') {
+                              return m.data?.startsWith(todayStr);
+                            }
+                            if (originPeriod === 'semana') {
+                              return m.timestamp >= monday.getTime();
+                            }
+                            if (originPeriod === 'mensal') {
+                              const d = new Date(m.timestamp);
+                              return d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth();
+                            }
+                            return true;
+                          });
 
-                                  <div className="text-right text-[9px] font-black uppercase tracking-tight text-slate-400 dark:text-slate-500">
-                                    {mov.origem !== "-" ? mov.origem : "N/I"}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="h-full flex flex-col items-center justify-center opacity-20 dark:opacity-50 py-10">
-                            <History size={40} className="mb-2 text-slate-400 dark:text-slate-500" />
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Nenhuma movimentação</p>
-                          </div>
-                        )}
+                          return <OriginDonutChart data={filteredData} typeFilter={originTypeFilter} />;
+                        })()}
                       </div>
                     </motion.div>
                   </div>
@@ -4697,15 +4952,6 @@ function DashboardPage() {
                         <MapPin size={14} /> MAPA
                       </button>
                       <button
-                        onClick={() => { setDisplayMode("tabela"); setActiveView("posicoes"); setTableSort({ key: "posicao", direction: "asc" }); setSortMode("none"); }}
-                        className={cn(
-                          "flex items-center gap-2 rounded-xl px-4 py-2 text-[10px] font-black transition-all",
-                          displayMode === "tabela" ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                        )}
-                      >
-                        <LayoutGrid size={14} /> TABELA
-                      </button>
-                      <button
                         onClick={() => { setDisplayMode("misto"); setActiveView("geral"); }}
                         className={cn(
                           "flex items-center gap-2 rounded-xl px-4 py-2 text-[10px] font-black transition-all",
@@ -4722,6 +4968,15 @@ function DashboardPage() {
                         )}
                       >
                         <AlertCircle size={14} /> Não alocados
+                      </button>
+                      <button
+                        onClick={() => { setDisplayMode("quarentena"); setActiveView("quarentena"); setSortMode("none"); setTableSort({ key: "produto", direction: "asc" }); }}
+                        className={cn(
+                          "flex items-center gap-2 rounded-xl px-4 py-2 text-[10px] uppercase font-black transition-all",
+                          displayMode === "quarentena" ? "bg-white dark:bg-slate-800 text-rose-600 dark:text-rose-400 shadow-sm" : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                        )}
+                      >
+                        <AlertTriangle size={14} /> Quarentena
                       </button>
                     </div>
 
@@ -5328,7 +5583,7 @@ function DashboardPage() {
                     </>
                   )}
                   {
-                    displayMode === "nao_alocados" && (() => {
+                    (displayMode === "nao_alocados" || displayMode === "quarentena") && (() => {
                       // --- Group items by pallet id ---
                       const INVALID = (v: any) => !v || v === "" || String(v).toUpperCase() === "NAN" || v === "-" || v === "S/ID" || v === "N/A";
                       const grouped: { key: string; label: string; isSimple: boolean; items: any[] }[] = [];
@@ -5668,7 +5923,7 @@ function DashboardPage() {
 
                   {/* Pagination for table within mapeamento */}
                   {
-                    (displayMode === "tabela" || displayMode === "nao_alocados") && totalPages >= 1 && (
+                    (displayMode === "tabela" || displayMode === "nao_alocados" || displayMode === "quarentena") && totalPages >= 1 && (
                       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-4 pb-12 transition-colors">
                         <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest order-2 sm:order-1">
                           {rowsPerPage === 'ALL' ? `Exibindo todos os ${filteredData.length} itens` : `Página ${currentPage} de ${totalPages}`}
@@ -6926,7 +7181,7 @@ function DashboardPage() {
                     </div>
 
                     {(() => {
-                      const productPositions = data.filter((item: any) => item.produto === selectedConfrontoItem.produto);
+                      const productPositions = effectiveData.filter((item: any) => item.produto === selectedConfrontoItem.produto);
                       if (productPositions.length === 0) return null;
 
                       // Agrupando posições
@@ -7310,8 +7565,10 @@ function DashboardPage() {
                       onEditSuccess={() => {
                         fetchData()
                       }}
-                      availableStocks={stats?.divergences || []}
-                      mapeamentoData={data}
+                      availableStocks={effectiveDivergences}
+                      mapeamentoData={effectiveData}
+                      pendingChanges={pendingChanges}
+                      setPendingChanges={setPendingChanges}
                     />
                   </div>
 
@@ -8313,6 +8570,58 @@ function DashboardPage() {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+      {/* Floating Save Changes Indicator */}
+      <AnimatePresence>
+        {pendingChanges.length > 0 && (
+          <motion.div
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[300] w-full max-w-xl px-4"
+          >
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl rounded-2xl p-4 flex items-center justify-between gap-6 backdrop-blur-xl bg-white/90 dark:bg-slate-900/90">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-xl bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center flex-shrink-0">
+                  <RefreshCw className={cn("w-6 h-6", isCommitting && "animate-spin")} />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-slate-900 dark:text-white uppercase leading-none mb-1">Alterações Pendentes</p>
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    {pendingChanges.length} {pendingChanges.length === 1 ? 'modificação a ser salva' : 'modificações a serem salvas'}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    if (window.confirm("Deseja descartar todas as alterações não salvas?")) {
+                      setPendingChanges([])
+                    }
+                  }}
+                  className="px-4 py-3 rounded-xl text-[10px] font-black uppercase text-slate-400 hover:text-rose-500 transition-colors"
+                  disabled={isCommitting}
+                >
+                  Descartar
+                </button>
+                <button
+                  onClick={commitChanges}
+                  disabled={isCommitting}
+                  className="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black uppercase shadow-lg shadow-blue-500/20 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isCommitting ? (
+                    <>Salvando...</>
+                  ) : (
+                    <>
+                      <Check size={16} /> Salvar Alterações
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

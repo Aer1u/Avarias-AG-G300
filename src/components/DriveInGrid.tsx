@@ -24,6 +24,8 @@ interface Product {
 
 type LocalProduct = Product & { _original_nivel: string | number; _original_profundidade: string | number }
 
+let nextGridTempId = 1;
+
 interface DriveInGridProps {
   products: Product[]
   capacity: number
@@ -34,6 +36,8 @@ interface DriveInGridProps {
   onEditSuccess?: () => void
   availableStocks?: { produto: string; available: number }[]
   mapeamentoData?: any[]
+  pendingChanges: any[]
+  setPendingChanges: React.Dispatch<React.SetStateAction<any[]>>
 }
 
 export function DriveInGrid({ 
@@ -45,7 +49,9 @@ export function DriveInGrid({
   positionId, 
   onEditSuccess,
   availableStocks = [],
-  mapeamentoData = []
+  mapeamentoData = [],
+  pendingChanges,
+  setPendingChanges
 }: DriveInGridProps) {
   const [selectedCoords, setSelectedCoords] = React.useState<{ lvl: number; d: number } | null>(null)
   const [draggingCoords, setDraggingCoords] = React.useState<{ lvl: number; d: number } | null>(null)
@@ -53,8 +59,17 @@ export function DriveInGrid({
   
   // LocalProduct extends Product to track original coordinates for the swap/save logic
   const [localProducts, setLocalProducts] = React.useState<LocalProduct[]>(products.map(p => ({ ...p, _original_nivel: p.nivel, _original_profundidade: p.profundidade })))
+  // Ref to block re-sync from parent when the update was triggered by an internal swap
+  const isInternalSwap = React.useRef(false)
+  // Ref to block the spurious onClick that fires after a drag-and-drop gesture ends
+  const justDragged = React.useRef(false)
 
   React.useEffect(() => {
+    // Skip sync if this render was caused by our own setPendingChanges (internal swap)
+    if (isInternalSwap.current) {
+      isInternalSwap.current = false
+      return
+    }
     setLocalProducts(products.map(p => ({ ...p, _original_nivel: p.nivel, _original_profundidade: p.profundidade })))
   }, [products])
 
@@ -116,10 +131,12 @@ export function DriveInGrid({
   const getNextPalletIdFromDB = async (): Promise<string> => {
     const { data, error } = await supabase
       .from('mapeamento')
-      .select('*');
+      .select('Id Palete')
+      .not('Id Palete', 'is', null)
+      .order('Id Palete', { ascending: false })
+      .limit(10); // Check last 10 just in case of formatting variations
     
-    if (error || !data) {
-       console.error("ID Fetch Error", error);
+    if (error || !data || data.length === 0) {
        return 'P.001';
     }
     
@@ -151,100 +168,70 @@ export function DriveInGrid({
       const batchMixId = targetKeys.length > 1 ? await getNextPalletIdFromDB() : null;
       let mixIdCounter = 0;
 
+      const newPendingChanges: any[] = [];
+      let index = 0;
+
       for (const key of targetKeys) {
         const [targetLvl, targetD] = key.split('-').map(Number);
         
-        // Check if the current slot already has items
-        let slotExistingMixId = null;
-        let slotHasItems = false;
+        // ... (slotExistingMixId logic kept if we want to guess the ID locally, 
+        // but for simplicity let's just use what's passed or generate one)
+        
+        let finalId: string | null = generatedId; // Use the one from the modal
 
-        if (grid[targetLvl] && grid[targetLvl][targetD]) {
-           const existingItems = grid[targetLvl][targetD];
-           if (existingItems.length > 0) {
-              slotHasItems = true;
-              const mixIdObj = existingItems.find(i => i.id_palete && i.id_palete.startsWith('P.'));
-              if (mixIdObj) {
-                 slotExistingMixId = mixIdObj.id_palete;
-              }
-           }
-        }
+        items.forEach(item => {
+          const tempId = `temp_${nextGridTempId++}`;
+          const changePayload = {
+            id: tempId,
+            'Posição': positionId,
+            'Código': item.sku,
+            'Quantidade': typeof item.qty === 'number' ? item.qty : 0,
+            'Nível': targetLvl,
+            'Profundidade': targetD,
+            'Parte Tombada': typeof item.qtyTilted === 'number' ? item.qtyTilted : 0,
+            'Parte Molhada': typeof item.qtyWet === 'number' ? item.qtyWet : 0,
+            'Id Palete': finalId,
+            // Sync with page.tsx reactive keys
+            posicao: positionId,
+            produto: item.sku,
+            descricao: item.descricao || "Produto Adicionado",
+            quantidade_total: typeof item.qty === 'number' ? item.qty : 0,
+            nivel: targetLvl,
+            profundidade: targetD,
+            qtd_tombada: typeof item.qtyTilted === 'number' ? item.qtyTilted : 0,
+            qtd_molhado: typeof item.qtyWet === 'number' ? item.qtyWet : 0,
+            paletes: 1, // Default for new entry in Drive-In
+            // Aliases
+            cod: item.sku,
+            qtd: typeof item.qty === 'number' ? item.qty : 0,
+            nv: targetLvl,
+            pr: targetD
+          };
 
-        let finalId: string | null = null;
-        if (slotExistingMixId) {
-          finalId = slotExistingMixId;
-        } else if (slotHasItems || items.length > 1) {
-          // If we're doing a batch add of multiple items, they might need unique IDs OR we can use the batch one
-          // For now, if it's a batch add, we use the same batchMixId for all if it's a mix
-          finalId = batchMixId || await getNextPalletIdFromDB();
-          
-          if (slotHasItems && finalId) {
-             await supabase
-               .from('mapeamento')
-               .update({ 'Id Palete': finalId })
-               .match({ 
-                 'Posição': positionId,
-                 'Nível': targetLvl,
-                 'Profundidade': targetD
-               })
-               .is('Id Palete', null);
-          }
-        }
-
-        const rowsToInsert = items.map(item => ({
-          'Posição': positionId,
-          'Código': item.sku,
-          'Quantidade': typeof item.qty === 'number' ? item.qty : 0,
-          'Nível': targetLvl,
-          'Profundidade': targetD,
-          'Parte Tombada': typeof item.qtyTilted === 'number' ? item.qtyTilted : 0,
-          'Parte Molhada': typeof item.qtyWet === 'number' ? item.qtyWet : 0,
-          'Id Palete': finalId
-        }));
-
-        const { error } = await supabase
-          .from('mapeamento')
-          .insert(rowsToInsert);
-
-        if (error) throw error;
+          newPendingChanges.push({
+            id: tempId,
+            type: 'ADD',
+            payload: changePayload,
+            audit: {
+              acao: 'ADICIONAR',
+              sku: item.sku,
+              posicao: positionId,
+              nivel: targetLvl,
+              profundidade: targetD,
+              quantidade: item.qty,
+              id_palete: finalId
+            }
+          });
+        });
       }
 
-      // Decrement from "Chão" only once per SKU total
-      const skuTotals = new Map<string, number>();
-      items.forEach(it => {
-        const qty = typeof it.qty === 'number' ? it.qty : 0;
-        skuTotals.set(it.sku, (skuTotals.get(it.sku) || 0) + (qty * targetKeys.length));
-      });
-
-      for (const [sku, totalToConsume] of skuTotals.entries()) {
-        if (totalToConsume <= 0) continue;
-        const { data: floorData, error: floorFetchError } = await supabase
-          .from('mapeamento')
-          .select('id, Quantidade')
-          .eq('Código', sku)
-          .eq('Posição', 'Chão')
-          .limit(1);
-
-        if (floorFetchError) throw floorFetchError;
-
-        if (floorData && floorData.length > 0) {
-          const floorRecord = floorData[0];
-          const floorNewQty = floorRecord.Quantidade - totalToConsume;
-          if (floorNewQty <= 0) {
-            await supabase.from('mapeamento').delete().eq('id', floorRecord.id);
-          } else {
-            await supabase.from('mapeamento').update({ 'Quantidade': floorNewQty }).eq('id', floorRecord.id);
-          }
-        }
-      }
-
-      setAddingCoords(null)
-      setSelectedGaps(new Set())
-      if (onEditSuccess) onEditSuccess()
+      setPendingChanges(prev => [...prev, ...newPendingChanges]);
     } catch (err) {
-      console.error("Save error:", err)
-      alert("Erro ao salvar: " + ((err as any)?.message || JSON.stringify(err)))
+      console.error("Error adding to pending changes:", err);
     } finally {
       setIsSubmitting(false)
+      setAddingCoords(null)
+      setSelectedGaps(new Set())
     }
   }
 
@@ -268,31 +255,32 @@ export function DriveInGrid({
 
     setIsSubmitting(true);
     try {
-      const ids = itemsToMove.map(p => p.id).filter(Boolean);
-      const newRows = itemsToMove.map(p => ({
-        'Posição': 'Chão',
-        'Nível': 0,
-        'Profundidade': 1,
-        'Código': p.sku,
-        'Quantidade': p.quantidade,
-        'Parte Tombada': p.qtd_tombada || 0,
-        'Parte Molhada': p.qtd_molhado || 0,
-        'Id Palete': null // Clear IDs when moving to floor in bulk
+      const newDeleteChanges = itemsToMove.map(p => ({
+        id: p.id,
+        type: 'DELETE',
+        payload: {
+          id: p.id,
+          'Código': p.sku,
+          'Quantidade': p.quantidade,
+          'Parte Tombada': p.qtd_tombada || 0,
+          'Parte Molhada': p.qtd_molhado || 0,
+          sku: p.sku,
+          quantidade_total: p.quantidade
+        },
+        audit: {
+          acao: 'REMOVER',
+          sku: p.sku,
+          posicao: positionId,
+          nivel: p.nivel,
+          profundidade: p.profundidade,
+          quantidade: p.quantidade
+        }
       }));
 
-      // Insert all into floor
-      const { error: insErr } = await supabase.from('mapeamento').insert(newRows);
-      if (insErr) throw insErr;
-
-      // Delete all from Drive-in
-      const { error: delErr } = await supabase.from('mapeamento').delete().in('id', ids);
-      if (delErr) throw delErr;
-
+      setPendingChanges(prev => [...prev, ...newDeleteChanges]);
       setSelectedGaps(new Set());
-      if (onEditSuccess) onEditSuccess();
     } catch (err) {
       console.error("Batch Move Error:", err);
-      alert("Erro na operação em lote");
     } finally {
       setIsSubmitting(false);
     }
@@ -301,88 +289,88 @@ export function DriveInGrid({
 
   // 1. Generate range of levels based on total height
   // If levelCount=4, we want [3, 2, 1, 0] to include floor and 3 shelves (labeled 4, 3, 2, 1)
-  const levels = Array.from({ length: levelCount }, (_, i) => i).sort((a, b) => b - a)
+  const levels = React.useMemo(() => Array.from({ length: levelCount }, (_, i) => i).sort((a, b) => b - a), [levelCount]);
 
-  // Calculate max depth
-  const dataDepths = Array.from(new Set(localProducts.map(p => {
-    const d = parseInt(String(p.profundidade).replace(/\D/g, ""))
-    return isNaN(d) ? 0 : d
-  }))).filter(d => d > 0)
-  
-  const calculatedMaxDepth = levelCount > 0 ? Math.ceil(capacity / levelCount) : 0
-  const maxDepth = Math.max(calculatedMaxDepth, ...dataDepths, 1)
-  const depths = Array.from({ length: maxDepth }, (_, i) => i + 1)
-
-  // 2. Intelligent Distribution Logic
-  const grid: Record<number, Record<number, LocalProduct[]>> = {}
-  levels.forEach(lvl => {
-    grid[lvl] = {}
-    depths.forEach(d => { grid[lvl][d] = [] })
-  })
-
-  // Group products by level
-  levels.forEach(lvl => {
-    const levelProducts = localProducts.filter(p => p.nivel === lvl)
-    
-    // First, place products with explicit (and valid) depth
-    const remainingProducts: LocalProduct[] = []
-    levelProducts.forEach(p => {
+  const { depths, maxDepth, grid } = React.useMemo(() => {
+    // Calculate max depth
+    const dataDepths = Array.from(new Set(localProducts.map(p => {
       const d = parseInt(String(p.profundidade).replace(/\D/g, ""))
-      if (!isNaN(d) && d > 0 && d <= maxDepth) {
-        grid[lvl][d].push(p)
-      } else if (p.sku !== "Posição Vazia") {
-        remainingProducts.push(p)
-      }
-    })
-
-    // Group fractional or shared-id products together before distributing
-    const groupedById = new Map<string, LocalProduct[]>()
-    const fractionals: LocalProduct[] = []
-    const wholePallets: LocalProduct[] = []
-
-    remainingProducts.forEach(p => {
-      if (p.id_palete) {
-        if (!groupedById.has(p.id_palete)) groupedById.set(p.id_palete, [])
-        groupedById.get(p.id_palete)!.push(p)
-      } else if (p.paletes > 0 && p.paletes < 0.99) {
-        fractionals.push(p)
-      } else {
-        wholePallets.push(p)
-      }
-    })
-
-    const finalGroups: LocalProduct[][] = Array.from(groupedById.values())
+      return isNaN(d) ? 0 : d
+    }))).filter(d => d > 0)
     
-    // Group fractionals by summing to ~1
-    let currentGroup: LocalProduct[] = []
-    let currentSum = 0
-    fractionals.forEach(p => {
-      currentGroup.push(p)
-      currentSum += p.paletes
-      if (currentSum >= 0.95) {
-        finalGroups.push(currentGroup)
-        currentGroup = []
-        currentSum = 0
-      }
-    })
-    if (currentGroup.length > 0) finalGroups.push(currentGroup)
-    wholePallets.forEach(p => finalGroups.push([p]))
+    const calculatedMaxDepth = levelCount > 0 ? Math.ceil(capacity / levelCount) : 0
+    const mDepth = Math.max(calculatedMaxDepth, ...dataDepths, 1)
+    const dps = Array.from({ length: mDepth }, (_, i) => i + 1)
 
-    // Distribute grouped products into available slots
-    let currentDepth = 1
-    finalGroups.forEach(group => {
-      const totalPallets = group.reduce((sum, p) => sum + p.paletes, 0)
-      let cellsNeeded = Math.max(1, Math.round(totalPallets))
-      
-      while (cellsNeeded > 0 && currentDepth <= maxDepth) {
-        if (grid[lvl][currentDepth].length === 0) {
-          grid[lvl][currentDepth].push(...group)
-          cellsNeeded--
-        }
-        currentDepth++
-      }
+    // Distribution Logic
+    const g: Record<number, Record<number, LocalProduct[]>> = {}
+    levels.forEach(lvl => {
+      g[lvl] = {}
+      dps.forEach(d => { g[lvl][d] = [] })
     })
-  })
+
+    // Group products by level
+    levels.forEach(lvl => {
+      const levelProducts = localProducts.filter(p => p.nivel === lvl)
+      
+      const remainingProducts: LocalProduct[] = []
+      levelProducts.forEach(p => {
+        const d = parseInt(String(p.profundidade).replace(/\D/g, ""))
+        if (!isNaN(d) && d > 0 && d <= mDepth) {
+          g[lvl][d].push(p)
+        } else if (p.sku !== "Posição Vazia") {
+          remainingProducts.push(p)
+        }
+      })
+
+      const groupedById = new Map<string, LocalProduct[]>()
+      const fractionals: LocalProduct[] = []
+      const wholePallets: LocalProduct[] = []
+
+      remainingProducts.forEach(p => {
+        if (p.id_palete) {
+          if (!groupedById.has(p.id_palete)) groupedById.set(p.id_palete, [])
+          groupedById.get(p.id_palete)!.push(p)
+        } else if (p.paletes > 0 && p.paletes < 0.99) {
+          fractionals.push(p)
+        } else {
+          wholePallets.push(p)
+        }
+      })
+
+      const finalGroups: LocalProduct[][] = Array.from(groupedById.values())
+      
+      let currentGroup: LocalProduct[] = []
+      let currentSum = 0
+      fractionals.forEach(p => {
+        currentGroup.push(p)
+        currentSum += p.paletes
+        if (currentSum >= 0.95) {
+          finalGroups.push(currentGroup)
+          currentGroup = []
+          currentSum = 0
+        }
+      })
+      if (currentGroup.length > 0) finalGroups.push(currentGroup)
+      wholePallets.forEach(p => finalGroups.push([p]))
+
+      let currentDepth = 1
+      finalGroups.forEach(group => {
+        const totalPallets = group.reduce((sum, p) => sum + p.paletes, 0)
+        let cellsNeeded = Math.max(1, Math.round(totalPallets))
+        
+        while (cellsNeeded > 0 && currentDepth <= mDepth) {
+          if (g[lvl][currentDepth].length === 0) {
+            g[lvl][currentDepth].push(...group)
+            cellsNeeded--
+          }
+          currentDepth++
+        }
+      })
+    })
+
+    return { depths: dps, maxDepth: mDepth, grid: g }
+  }, [localProducts, levels, capacity, levelCount]);
 
   const handleEditClick = (p: Product) => {
     setEditingProduct({ ...p, _original_nivel: p.nivel, _original_profundidade: p.profundidade })
@@ -413,103 +401,49 @@ export function DriveInGrid({
     setIsSubmitting(true)
     try {
       const rowIdToUpdate = editingProduct.id;
-      
-      if (!rowIdToUpdate) {
-        alert("Erro: ID do produto não encontrado para atualização.");
-        setIsSubmitting(false);
-        return;
-      }
+      if (!rowIdToUpdate) return;
 
       const newQty = Number(editingProduct.quantidade) || 0;
-
-      if (newQty < 0) {
-        alert("A quantidade não pode ser negativa.");
-        setIsSubmitting(false);
-        return;
-      }
-
-      // Find original product to detect quantity changes
       const originalProduct = products.find(p => String(p.id) === String(editingProduct.id));
       const originalQty = originalProduct ? (Number(originalProduct.quantidade) || 0) : newQty;
 
-      // Handle floor stock adjustments when quantity changes
-      if (newQty !== originalQty) {
-        if (newQty > originalQty) {
-          // INCREASING: Consume stock from the floor
-          const diff = newQty - originalQty;
-
-          // First, validate against available stock (pre-check)
-          const stockInfo = availableStocks.find(s => s.produto === editingProduct.sku);
-          const availableInChao = stockInfo ? stockInfo.available : 0;
-          if (diff > availableInChao) {
-            alert(`Saldo Insuficiente no Chão!\nTentativa de adicionar: ${diff}\nDisponível no Chão: ${availableInChao}\n\nGaranta que haja saldo físico no chão antes de aumentar no Drive-In.`);
-            setIsSubmitting(false);
-            return;
-          }
-
-          // Find the actual floor record and consume it
-          const { data: floorData, error: floorFetchError } = await supabase
-            .from('mapeamento')
-            .select('id, Quantidade')
-            .eq('Código', editingProduct.sku)
-            .eq('Posição', 'Chão')
-            .limit(1);
-
-          if (floorFetchError) throw floorFetchError;
-
-          if (!floorData || floorData.length === 0) {
-            alert(`Erro: Não há registro no CHÃO para este produto (SKU: ${editingProduct.sku}).`);
-            setIsSubmitting(false);
-            return;
-          }
-
-          const floorRecord = floorData[0];
-          const floorNewQty = floorRecord.Quantidade - diff;
-          if (floorNewQty <= 0) {
-            const { error: delErr } = await supabase.from('mapeamento').delete().eq('id', floorRecord.id);
-            if (delErr) throw delErr;
-          } else {
-            const { error: updErr } = await supabase.from('mapeamento').update({ 'Quantidade': floorNewQty }).eq('id', floorRecord.id);
-            if (updErr) throw updErr;
-          }
-        } else {
-          // DECREASING: Return stock back to the floor
-          const diff = originalQty - newQty;
-          const { error: insErr } = await supabase.from('mapeamento').insert([{
-            'Posição': 'Chão',
-            'Código': editingProduct.sku,
-            'Quantidade': diff,
-            'Nível': 0,
-            'Profundidade': 1,
-            'Parte Tombada': 0,
-            'Parte Molhada': 0,
-            'Id Palete': editingProduct.id_palete || null
-          }]);
-          if (insErr) throw insErr;
-        }
-      }
-
-      // Update the main Drive-In record
-      const { error } = await supabase
-        .from('mapeamento')
-        .update({
-          'Quantidade': parseFloat(String(editingProduct.quantidade)),
+      setPendingChanges(prev => [...prev, {
+        id: rowIdToUpdate,
+        type: 'UPDATE',
+        payload: {
+          id: rowIdToUpdate,
+          'Quantidade': newQty,
           'Nível': parseFloat(String(editingProduct.nivel)),
           'Profundidade': editingProduct.profundidade,
           'Parte Tombada': parseFloat(String(editingProduct.qtd_tombada)),
-          'Parte Molhada': parseFloat(String(editingProduct.qtd_molhado))
-        })
-        .eq('id', rowIdToUpdate);
+          'Parte Molhada': parseFloat(String(editingProduct.qtd_molhado)),
+          'Id Palete': editingProduct.id_palete,
+          // Sync with page.tsx reactive keys
+          sku: editingProduct.sku,
+          quantidade_total: newQty,
+          nivel: parseFloat(String(editingProduct.nivel)),
+          profundidade: editingProduct.profundidade,
+          qtd_tombada: parseFloat(String(editingProduct.qtd_tombada)),
+          qtd_molhado: parseFloat(String(editingProduct.qtd_molhado)),
+          nv: editingProduct.nivel,
+          pr: editingProduct.profundidade
+        },
+        audit: {
+          acao: 'EDITAR',
+          sku: editingProduct.sku,
+          posicao: positionId,
+          nivel: editingProduct.nivel,
+          profundidade: editingProduct.profundidade,
+          quantidade: newQty,
+          quantidade_anterior: originalQty
+        }
+      }]);
 
-      if (error) throw error;
-
-      setEditingProduct(null)
-      if (onEditSuccess) onEditSuccess()
+      setEditingProduct(null);
     } catch (err) {
-      console.error('Erro em handleSaveEdit:', err)
-      alert("Erro ao salvar alterações. Detalhes no console.")
+      console.error("Error saving edit:", err);
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
   }
 
@@ -525,52 +459,29 @@ export function DriveInGrid({
 
     setIsSubmitting(true);
     try {
-      console.log('[Lixeira] Iniciando para id=', product.id, 'sku=', product.sku);
-
-      // Step 1: INSERT no Chão
-      const insertPayload = {
-        'Posição': 'Chão',
-        'Nível': 0,
-        'Profundidade': 1,
-        'Código': product.sku,
-        'Quantidade': product.quantidade,
-        'Parte Tombada': product.qtd_tombada || 0,
-        'Parte Molhada': product.qtd_molhado || 0,
-        'Id Palete': null
-      };
-      console.log('[Lixeira] INSERT payload:', insertPayload);
-
-      const { data: insData, error: insertError } = await supabase
-        .from('mapeamento')
-        .insert([insertPayload])
-        .select();
-
-      if (insertError) {
-        console.error('[Lixeira] ERRO INSERT:', insertError);
-        alert(`Erro ao criar registro no Chão:\n${insertError.message}\n\nCódigo: ${insertError.code}`);
-        return;
-      }
-      console.log('[Lixeira] INSERT OK, resultado:', insData);
-
-      // Step 2: DELETE do original
-      console.log('[Lixeira] DELETE id=', product.id);
-      const { error: deleteError, count } = await supabase
-        .from('mapeamento')
-        .delete({ count: 'exact' })
-        .eq('id', product.id);
-
-      if (deleteError) {
-        console.error('[Lixeira] ERRO DELETE:', deleteError);
-        alert(`Erro ao remover original:\n${deleteError.message}\n\nO produto foi criado no Chão mas o original não foi removido. Verifique manualmente.`);
-        return;
-      }
-      console.log('[Lixeira] DELETE OK, linhas afetadas:', count);
-
-      if (onEditSuccess) onEditSuccess();
-      alert(`✅ ${product.sku} movido para o Chão com sucesso!`);
+      setPendingChanges(prev => [...prev, {
+        id: product.id,
+        type: 'DELETE',
+        payload: {
+          id: product.id,
+          'Código': product.sku,
+          'Quantidade': product.quantidade,
+          'Parte Tombada': product.qtd_tombada || 0,
+          'Parte Molhada': product.qtd_molhado || 0,
+          sku: product.sku,
+          quantidade_total: product.quantidade
+        },
+        audit: {
+          acao: 'REMOVER',
+          sku: product.sku,
+          posicao: positionId,
+          nivel: product.nivel,
+          profundidade: product.profundidade,
+          quantidade: product.quantidade
+        }
+      }]);
     } catch (err: any) {
       console.error('[Lixeira] Erro inesperado:', err);
-      alert(`Erro inesperado:\n${err?.message || JSON.stringify(err)}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -587,51 +498,31 @@ export function DriveInGrid({
 
     setIsSubmitting(true);
     try {
-      const ids = validProds.map(p => p.id);
-      console.log('[Esvaziar] ids a processar:', ids);
-
-      const newRows = validProds.map(p => ({
-        'Posição': 'Chão',
-        'Nível': 0,
-        'Profundidade': 1,
-        'Código': p.sku,
-        'Quantidade': p.quantidade,
-        'Parte Tombada': p.qtd_tombada || 0,
-        'Parte Molhada': p.qtd_molhado || 0,
-        'Id Palete': validProds.length > 1 ? (p.id_palete || null) : null
+      const newDeleteChanges = validProds.map(p => ({
+        id: p.id,
+        type: 'DELETE',
+        payload: {
+          id: p.id,
+          'Código': p.sku,
+          'Quantidade': p.quantidade,
+          'Parte Tombada': p.qtd_tombada || 0,
+          'Parte Molhada': p.qtd_molhado || 0,
+          sku: p.sku,
+          quantidade_total: p.quantidade
+        },
+        audit: {
+          acao: 'REMOVER',
+          sku: p.sku,
+          posicao: positionId,
+          nivel: p.nivel,
+          profundidade: p.profundidade,
+          quantidade: p.quantidade
+        }
       }));
 
-      // Step 1: Bulk INSERT
-      const { error: insErr } = await supabase
-        .from('mapeamento')
-        .insert(newRows)
-        .select();
-
-      if (insErr) {
-        console.error('[Esvaziar] ERRO INSERT:', insErr);
-        alert(`Erro ao criar registros no Chão:\n${insErr.message}`);
-        return;
-      }
-      console.log('[Esvaziar] INSERT OK');
-
-      // Step 2: Bulk DELETE
-      const { error: delErr, count } = await supabase
-        .from('mapeamento')
-        .delete({ count: 'exact' })
-        .in('id', ids);
-
-      if (delErr) {
-        console.error('[Esvaziar] ERRO DELETE:', delErr);
-        alert(`Erro ao remover originais:\n${delErr.message}\n\nOs produtos foram criados no Chão mas os originais não foram removidos.`);
-        return;
-      }
-      console.log('[Esvaziar] DELETE OK, linhas afetadas:', count);
-
-      if (onEditSuccess) onEditSuccess();
-      alert(`✅ ${validProds.length} itens movidos para o Chão com sucesso!`);
-    } catch (err: any) {
-      console.error('[Esvaziar] Erro inesperado:', err);
-      alert(`Erro inesperado:\n${err?.message || JSON.stringify(err)}`);
+      setPendingChanges(prev => [...prev, ...newDeleteChanges]);
+    } catch (err) {
+      console.error("Move Cell Error:", err);
     } finally {
       setIsSubmitting(false);
     }
@@ -641,7 +532,12 @@ export function DriveInGrid({
   const handleSwap = (source: { lvl: number; d: number }, target: { lvl: number; d: number }) => {
     if (source.lvl === target.lvl && source.d === target.d) return
     
-    // Purely Optimistic/Visual Update
+    const sourceProducts = localProducts.filter(p => p.nivel === source.lvl && p.profundidade === source.d);
+    const targetProducts = localProducts.filter(p => p.nivel === target.lvl && p.profundidade === target.d);
+
+    if (sourceProducts.length === 0 && targetProducts.length === 0) return;
+
+    // Visual Update
     const newProducts = [...localProducts].map(p => {
       if (p.nivel === source.lvl && p.profundidade === source.d) {
         return { ...p, nivel: target.lvl, profundidade: target.d }
@@ -652,56 +548,92 @@ export function DriveInGrid({
       return p
     })
     setLocalProducts(newProducts)
-  }
 
-  const hasPendingSwaps = localProducts.some(p => p.nivel !== p._original_nivel || p.profundidade !== p._original_profundidade)
+    // Stage Changes
+    const newChanges: any[] = [];
+    
+    // Items moving to TARGET
+    sourceProducts.forEach(p => {
+      newChanges.push({
+        id: p.id,
+        type: 'UPDATE',
+        payload: { 
+          id: p.id, 
+          'Nível': target.lvl, 
+          'Profundidade': target.d, 
+          nivel: target.lvl, 
+          profundidade: target.d,
+          nv: target.lvl, 
+          pr: target.d 
+        },
+        audit: { acao: 'MOVER', sku: p.sku, posicao: positionId, nivel: target.lvl, profundidade: target.d, nivel_anterior: p.nivel, prof_anterior: p.profundidade, quantidade: p.quantidade }
+      });
+    });
 
-  const handleSaveGrid = async () => {
-    setIsSubmitting(true)
-    try {
-      const updates: any[] = []
-      const changedPallets = localProducts.filter(p => p.nivel !== p._original_nivel || p.profundidade !== p._original_profundidade)
-      
-      const seenPallets = new Set<string>()
+    // Items moving back to SOURCE (if any)
+    targetProducts.forEach(p => {
+      newChanges.push({
+        id: p.id,
+        type: 'UPDATE',
+        payload: { 
+          id: p.id, 
+          'Nível': source.lvl, 
+          'Profundidade': source.d, 
+          nivel: source.lvl, 
+          profundidade: source.d,
+          nv: source.lvl, 
+          pr: source.d 
+        },
+        audit: { acao: 'MOVER', sku: p.sku, posicao: positionId, nivel: source.lvl, profundidade: source.d, nivel_anterior: p.nivel, prof_anterior: p.profundidade, quantidade: p.quantidade }
+      });
+    });
 
-      changedPallets.forEach(p => {
-        const palletId = p.id_palete
-        if (palletId && !seenPallets.has(palletId)) {
-          seenPallets.add(palletId)
-          updates.push(
-            supabase.from('mapeamento')
-              .update({ 'Nível': p.nivel, 'Profundidade': p.profundidade })
-              .match({ 'Posição': positionId, 'Id Palete': palletId })
-              .then(r => r)
-          )
-        } else if (!palletId) {
-          // Fallback if no ID: match using original coords
-          updates.push(
-            supabase.from('mapeamento')
-              .update({ 'Nível': p.nivel, 'Profundidade': p.profundidade })
-              .match({ 'Posição': positionId, 'Nível': p._original_nivel, 'Profundidade': p._original_profundidade, 'Código': p.sku })
-              .then(r => r)
-          )
+    // Mark as internal so the useEffect doesn't overwrite localProducts on the next render
+    isInternalSwap.current = true
+
+    // Use startTransition so the visual swap (setLocalProducts above) renders first
+    // and the expensive parent re-render (effectiveData + stats) happens at lower priority
+    React.startTransition(() => {
+      // Smart consolidation: instead of stacking, merge into existing pending changes.
+      // If the item returns to its DB-original position, the pending change is cancelled (removed).
+      setPendingChanges(prev => {
+        let next = [...prev];
+
+        for (const change of newChanges) {
+          const itemId = String(change.id);
+          const existingIdx = next.findIndex(c => String(c.id) === itemId && c.type === 'UPDATE');
+
+          const localItem = localProducts.find(p => String(p.id) === itemId);
+          const origNivel = localItem?._original_nivel;
+          const origProf = localItem?._original_profundidade;
+
+          const newNivel = change.payload.nivel;
+          const newProf = change.payload.profundidade;
+
+          const isReturnToOrigin = (
+            origNivel !== undefined &&
+            origProf !== undefined &&
+            String(newNivel) === String(origNivel) &&
+            String(newProf) === String(origProf)
+          );
+
+          if (existingIdx !== -1) {
+            if (isReturnToOrigin) {
+              next.splice(existingIdx, 1);
+            } else {
+              next[existingIdx] = change;
+            }
+          } else {
+            if (!isReturnToOrigin) {
+              next.push(change);
+            }
+          }
         }
-      })
 
-      const results = await Promise.all(updates)
-      console.log("Supabase Updates Results:", results)
-      const failed = results.find(r => r && r.error)
-      if (failed) {
-        alert("Supabase Error Data: " + JSON.stringify(failed.error))
-        throw failed.error
-      }
-
-      if (onEditSuccess) onEditSuccess()
-    } catch (err) {
-      console.error(err)
-      alert("Erro ao salvar alterações na grade")
-    } finally {
-      setIsSubmitting(false)
-    }
+        return next;
+      });
+    });
   }
-
 
   if (isBlocked) {
     return (
@@ -718,11 +650,29 @@ export function DriveInGrid({
   const selectedCellProducts = selectedCoords ? grid[selectedCoords.lvl][selectedCoords.d] : []
   const selectedProduct = selectedCellProducts[0] || null
 
-  // Aggregated Position Stats
-  const totalQty = products.reduce((sum, p) => sum + p.quantidade, 0)
-  const totalPallets = products.reduce((sum, p) => sum + p.paletes, 0)
-  const uniqueSkus = new Set(products.map(p => p.sku)).size
-  const isMixed = uniqueSkus > 1
+  // Aggregated Position Stats - Use localProducts for reactivity
+  const { totalQty, totalPallets, uniqueSkus, isMixed } = React.useMemo(() => {
+    const tQty = localProducts.reduce((sum, p) => sum + p.quantidade, 0)
+    const tPallets = localProducts.reduce((sum, p) => sum + p.paletes, 0)
+    const uSkus = new Set(localProducts.map(p => p.sku)).size
+    return {
+      totalQty: tQty,
+      totalPallets: tPallets,
+      uniqueSkus: uSkus,
+      isMixed: uSkus > 1
+    }
+  }, [localProducts])
+
+  // Cell Specific Stats
+  const { cellUniqueSkus, isCellMixed, cellTotalQty } = React.useMemo(() => {
+    const u = new Set(selectedCellProducts.map(p => p.sku)).size
+    const q = selectedCellProducts.reduce((sum, p) => sum + p.quantidade, 0)
+    return {
+      cellUniqueSkus: u,
+      isCellMixed: u > 1,
+      cellTotalQty: q
+    }
+  }, [selectedCellProducts])
 
   return (
     <div className="w-full flex flex-col gap-4 relative">
@@ -757,53 +707,7 @@ export function DriveInGrid({
           </motion.div>
         )}
       </AnimatePresence>
-      {isEditModeActive && (
-        <div className="w-full bg-slate-800/90 dark:bg-slate-900/90 text-white rounded-xl p-3 flex justify-between items-center shadow-lg backdrop-blur-sm z-10 sticky top-0 border border-slate-700">
-          <div className="flex items-center gap-3">
-            <span className="flex h-3 w-3 relative">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
-            </span>
-            <span className="text-sm font-black uppercase tracking-widest text-slate-100 flex gap-2 items-center">
-              Modo de Edição
-              {hasPendingSwaps && <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/30">PENDENTE</span>}
-            </span>
-          </div>
-          
-          <div className="flex gap-2">
-            {hasPendingSwaps ? (
-              <>
-                <button 
-                  onClick={() => setLocalProducts(products.map(p => ({ ...p, _original_nivel: p.nivel, _original_profundidade: p.profundidade })))}
-                  disabled={isSubmitting}
-                  className="text-[10px] font-black uppercase bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg transition-colors border border-transparent disabled:opacity-50"
-                  >
-                  Cancelar
-                </button>
-                <button 
-                  onClick={handleSaveGrid} 
-                  disabled={isSubmitting}
-                  className="text-[10px] font-black uppercase bg-blue-600 text-white hover:bg-blue-500 px-3 py-1.5 rounded-lg transition-colors border border-transparent disabled:opacity-50 flex items-center gap-1"
-                >
-                  {isSubmitting && <RefreshCw size={10} className="animate-spin" />}
-                  {isSubmitting ? "Salvando..." : "Salvar Grade"}
-                </button>
-              </>
-            ) : (
-              <button 
-                onClick={() => {
-                  setIsEditModeActive(false)
-                  setEditingProduct(null)
-                  setAddingCoords(null)
-                }}
-                className="text-[10px] font-black uppercase bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition-colors border border-white/10 text-slate-200"
-              >
-                Sair da Edição
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Unified Edit Bar intentionally removed to simplify workflow */}
       <div className="w-full flex flex-col lg:flex-row gap-8 pb-4 relative">
       {/* Grid Section */}
       <div className="flex-1 overflow-x-auto custom-scrollbar pt-2">
@@ -843,7 +747,7 @@ export function DriveInGrid({
                           const isSelected = selectedCoords?.lvl === lvl && selectedCoords?.d === d
                           const hasWet = cellProducts.some(p => p.qtd_molhado > 0)
                           const hasTilted = cellProducts.some(p => p.qtd_tombada > 0)
-                          const isMixedCell = cellProducts.length > 1
+                          const isMixedCell = new Set(cellProducts.map(p => p.sku)).size > 1
                           const sku = !isEmpty ? (isMixedCell ? `${cellProducts.length} Prods` : cellProducts[0].sku) : ""
                           const description = !isEmpty ? (isMixedCell ? "Múltiplos produtos neste palete" : cellProducts[0].descricao) : ""
                           const qty = !isEmpty ? Math.round(cellProducts.reduce((sum, p) => sum + p.quantidade, 0)) : 0
@@ -856,6 +760,8 @@ export function DriveInGrid({
                               data-lvl={lvl}
                               data-d={d}
                               onClick={() => {
+                                // Block the spurious click that fires immediately after a drag gesture
+                                if (justDragged.current) return
                                 if (isEditModeActive) {
                                   toggleGapSelection(lvl, d)
                                 } else if (!isEmpty) {
@@ -863,7 +769,7 @@ export function DriveInGrid({
                                 }
                               }}
                               className={cn(
-                                "w-28 h-28 rounded-xl border relative group flex items-center justify-center p-2 text-center transition-all duration-200 cursor-pointer overflow-hidden",
+                                "w-28 h-28 rounded-xl border relative group flex items-center justify-center p-2 text-center transition-all duration-200 cursor-pointer",
                                 isEmpty 
                                   ? "bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800"
                                   : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700",
@@ -889,11 +795,17 @@ export function DriveInGrid({
                               )}
                               {!isEmpty ? (
                                 <motion.div 
+                                  key={cellProducts.map(p => p.id).join('-')}
                                   drag={isEditModeActive}
-                                  dragSnapToOrigin
                                   dragMomentum={false}
                                   dragElastic={0}
+                                  onClick={(e) => {
+                                    // In edit mode, prevent the drag-release click from bubbling
+                                    // to the cell container and triggering toggleGapSelection
+                                    if (isEditModeActive) e.stopPropagation()
+                                  }}
                                   onDragStart={() => {
+                                    justDragged.current = false
                                     document.body.classList.add('grid-is-dragging')
                                     setDraggingCoords({ lvl, d })
                                   }}
@@ -922,6 +834,10 @@ export function DriveInGrid({
                                     }
                                   }}
                                   onDragEnd={(e, info) => {
+                                    // Block the next click event on ANY cell (fires within ~200ms after drag)
+                                    justDragged.current = true
+                                    setTimeout(() => { justDragged.current = false }, 300)
+
                                     document.body.classList.remove('grid-is-dragging')
                                     setDraggingCoords(null)
                                     
