@@ -141,7 +141,7 @@ export function DriveInGrid({
     }
     
     const maxNum = data
-      .map(row => {
+      .map((row: any) => {
         const rawVal = row['Id Palete'];
         if (!rawVal || typeof rawVal !== 'string') return 0;
         const val = rawVal.trim().toUpperCase();
