@@ -114,7 +114,7 @@ export function DriveInGrid({
   // Local display hint only (may not reflect global state perfectly if not refreshed, but page.tsx syncs it)
   const maxPId = React.useMemo(() => {
     return mapeamentoData
-      .map(row => {
+      .map((row: any) => {
         const rawVal = row.id_palete || row['Id Palete']; // Fallback in case format varies
         if (!rawVal || typeof rawVal !== 'string') return 0;
         const val = rawVal.trim().toUpperCase();

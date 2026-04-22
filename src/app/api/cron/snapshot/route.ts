@@ -23,7 +23,7 @@ export async function GET() {
     const usedPalletIds = new Set()
     let totalPallets = 0
 
-    mapeamento?.forEach(row => {
+    mapeamento?.forEach((row: any) => {
       const rawPalletId = row['Id Palete']
       const palletId = (rawPalletId && typeof rawPalletId === 'string')
         ? rawPalletId.trim().toUpperCase()

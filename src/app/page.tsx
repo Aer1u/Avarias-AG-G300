@@ -1408,7 +1408,7 @@ function DashboardPage() {
 
       // Join items in mapping with their position info
       const usedPalletIds = new Set();
-      const combinedData: any[] = mapeamentoRaw.map(m => {
+      const combinedData: any[] = mapeamentoRaw.map((m: any) => {
         const posId = String(m['Posição'] || "").trim();
         const posInfo = posLookup.get(posId) || {
           posicao: posId || 'S/P',
@@ -1527,7 +1527,7 @@ function DashboardPage() {
         .not('"Id Palete"', 'is', null);
 
       const usedNumbers = new Set<number>();
-      latestRows?.forEach(row => {
+      latestRows?.forEach((row: any) => {
         const id = String(row['Id Palete'] || "").trim();
         if (id.toUpperCase().startsWith("P.")) {
           const num = parseInt(id.substring(2).trim(), 10);
