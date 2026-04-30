@@ -131,10 +131,17 @@ const processHistoryMovements = (historicoRaw: any[] = [], period: "hoje" | "sem
     let absolute_yesterday_net = 0;
 
     const todayDate = new Date();
-    const todayStr = todayDate.toISOString().split('T')[0];
+    // Usa data LOCAL para evitar bug de UTC (Brasil = UTC-3)
+    const toLocalDateStr = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day2 = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day2}`;
+    };
+    const todayStr = toLocalDateStr(todayDate);
     const yesterdayDate = new Date(todayDate);
     yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
+    const yesterdayStr = toLocalDateStr(yesterdayDate);
 
     const day = todayDate.getDay();
     const diff = (day === 0 ? -6 : 1) - day;
@@ -165,7 +172,7 @@ const processHistoryMovements = (historicoRaw: any[] = [], period: "hoje" | "sem
         const d = new Date(dataStr);
         timestamp = d.getTime();
         if (!isNaN(timestamp)) {
-          isoDate = d.toISOString().split('T')[0];
+          isoDate = toLocalDateStr(d);
           if (isoDate === todayStr) absolute_today_net += (ent - sai);
           else if (isoDate === yesterdayStr) absolute_yesterday_net += (ent - sai);
         }
