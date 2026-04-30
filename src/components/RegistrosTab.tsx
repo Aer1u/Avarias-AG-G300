@@ -30,6 +30,7 @@ interface Registro {
   Origem: string;
   Observação: string;
   'Movimentação Sistema'?: boolean | null;
+  Molhado?: boolean;
   isNew?: boolean;
   isDirty?: boolean;
 }
@@ -184,6 +185,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
       Origem: '',
       Observação: '',
       'Movimentação Sistema': false,
+      Molhado: false,
       isNew: true,
       isDirty: true
     };
@@ -248,6 +250,13 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
     const rowsToSave = registros.filter(r => r.isDirty);
     if (rowsToSave.length === 0) return;
 
+    // Validação obrigatória da origem
+    const invalids = rowsToSave.filter(r => r.isNew && (!r.Origem || r.Origem.trim() === ''));
+    if (invalids.length > 0) {
+      setToast({ show: true, message: 'Atenção: A coluna ORIGEM é obrigatória para salvar novos registros!', type: 'error' });
+      return;
+    }
+
     setSaving(true);
     try {
       for (const row of rowsToSave) {
@@ -257,7 +266,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
           Entrada: row.Entrada,
           Saída: row.Saída,
           Origem: row.Origem,
-          Observação: row.Observação,
+          Observação: row.Molhado && !row.Observação?.includes('[MOLHADO]') ? `[MOLHADO] ${row.Observação || ''}`.trim() : row.Observação,
           'Movimentação Sistema': row['Movimentação Sistema']
         };
         
@@ -312,7 +321,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                 'Nível': 0,
                 'Profundidade': 1,
                 'Parte Tombada': 0,
-                'Parte Molhada': 0
+                'Parte Molhada': row.Molhado ? row.Entrada : 0
               }
             ]);
             if (floorErr) throw floorErr;
@@ -441,7 +450,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                 )}
               >
                 {saving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
-                Salvar
+                Salvar Registros
               </button>
             </>
           )}
@@ -455,13 +464,14 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
             <thead className="sticky top-0 z-20">
               <tr className="bg-[#0f172a] border-b border-slate-800">
                 <th className="px-2 py-3.5 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[45px] text-center border-r border-slate-800/50">#</th>
-                <th className="px-4 py-3.5 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[140px] border-r border-slate-800/50">Data</th>
-                <th className="px-4 py-3.5 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[140px] border-r border-slate-800/50">Produto</th>
-                <th className="px-4 py-3.5 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[100px] text-center border-r border-slate-800/50">Entrada</th>
-                <th className="px-4 py-3.5 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[100px] text-center border-r border-slate-800/50">Saída</th>
-                <th className="px-4 py-3.5 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[180px] border-r border-slate-800/50">Origem</th>
-                <th className="px-4 py-3.5 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[100px] text-center border-r border-slate-800/50">Sistema</th>
-                <th className="px-4 py-3.5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Observação</th>
+                <th className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[140px] border-r border-slate-800/50">Data</th>
+                <th className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[140px] border-r border-slate-800/50">Produto</th>
+                <th className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[100px] text-center border-r border-slate-800/50">Entrada</th>
+                <th className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[100px] text-center border-r border-slate-800/50">Saída</th>
+                <th className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[180px] border-r border-slate-800/50">Origem</th>
+                <th className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[100px] text-center border-r border-slate-800/50">Status</th>
+                <th className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[100px] text-center border-r border-slate-800/50">Sistema</th>
+                <th className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Observação</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/40">
@@ -518,7 +528,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                         disabled={!row.isNew}
                         onChange={(e) => updateRow(idx, 'Produto', e.target.value)}
                         placeholder="0000-00"
-                        className="w-full bg-transparent border-none px-4 py-2.5 text-sm focus:bg-slate-800/80 focus:ring-1 focus:ring-blue-500/30 focus:outline-none transition-all font-black tracking-tight uppercase text-blue-400/90 group-hover:text-blue-400 disabled:cursor-default"
+                        className="w-full bg-transparent border-none px-4 py-3 text-sm focus:bg-slate-800/80 focus:ring-1 focus:ring-slate-500/30 focus:outline-none transition-all font-semibold tracking-wide text-slate-200 group-hover:text-white disabled:cursor-default"
                       />
                     </td>
                     <td className="p-0 border-r border-slate-800/30">
@@ -546,7 +556,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                         value={row.Origem ?? ''}
                         disabled={!row.isNew}
                         onChange={(e) => updateRow(idx, 'Origem', e.target.value)}
-                        className="w-full bg-transparent border-none px-4 py-2.5 text-sm focus:bg-slate-800/80 focus:ring-1 focus:ring-blue-500/30 focus:outline-none transition-all text-slate-400 group-hover:text-slate-200 disabled:cursor-default appearance-none"
+                        className="w-full bg-transparent border-none px-4 py-3 text-sm focus:bg-slate-800/80 focus:ring-1 focus:ring-blue-500/30 focus:outline-none transition-all text-slate-400 group-hover:text-slate-200 disabled:cursor-default appearance-none"
                       >
                         <option value="" disabled className="bg-[#0f172a]">Selecione...</option>
                         {ORIGEM_OPTIONS.map(opt => (
@@ -555,22 +565,44 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                       </select>
                     </td>
                     <td className="p-0 border-r border-slate-800/30">
-                      <div className="flex justify-center items-center h-full py-1">
+                      <div className="flex justify-center items-center h-full py-2">
+                        <button
+                          onClick={() => updateRow(idx, 'Molhado', !row.Molhado)}
+                          disabled={!row.isNew}
+                          className={cn(
+                            "flex items-center justify-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider transition-all border",
+                            row.Molhado 
+                              ? "bg-blue-900/40 text-blue-400 border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.2)]" 
+                              : "bg-slate-800/50 text-slate-500 border-slate-700/50 hover:bg-slate-800",
+                            !row.isNew && "cursor-not-allowed opacity-80"
+                          )}
+                          title="Marcar como molhado"
+                        >
+                          <span className="relative flex h-2 w-2">
+                            {row.Molhado && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>}
+                            <span className={cn("relative inline-flex rounded-full h-2 w-2", row.Molhado ? "bg-blue-500" : "bg-slate-600")}></span>
+                          </span>
+                          {row.Molhado ? 'Molhado' : 'Seco'}
+                        </button>
+                      </div>
+                    </td>
+                    <td className="p-0 border-r border-slate-800/30">
+                      <div className="flex justify-center items-center h-full py-2">
                         <button
                           onClick={() => updateRow(idx, 'Movimentação Sistema', !row['Movimentação Sistema'])}
                           disabled={row['Movimentação Sistema'] === true && !row.isDirty && !row.isNew}
                           className={cn(
                             "w-10 h-5 rounded-full transition-all relative p-1",
-                            row['Movimentação Sistema'] ? "bg-emerald-600" : "bg-slate-700",
+                            row['Movimentação Sistema'] ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]" : "bg-slate-800 border border-slate-700",
                             (row['Movimentação Sistema'] === true && !row.isDirty && !row.isNew) ? "opacity-100" : "hover:scale-105 active:scale-95",
                             (row['Movimentação Sistema'] === true && !row.isDirty && !row.isNew) && "cursor-not-allowed"
                           )}
                         >
                           <div className={cn(
-                            "w-3 h-3 bg-white rounded-full transition-all flex items-center justify-center",
+                            "w-3 h-3 bg-white rounded-full transition-all flex items-center justify-center shadow-sm",
                             row['Movimentação Sistema'] ? "translate-x-5" : "translate-x-0"
                           )}>
-                            {row['Movimentação Sistema'] && <Check size={8} className="text-emerald-700" />}
+                            {row['Movimentação Sistema'] && <Check size={8} className="text-emerald-600" />}
                           </div>
                         </button>
                       </div>
@@ -582,7 +614,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                         disabled={!row.isNew}
                         onChange={(e) => updateRow(idx, 'Observação', e.target.value)}
                         placeholder="Detalhes do movimento..."
-                        className="w-full bg-transparent border-none px-4 py-2.5 text-sm focus:bg-slate-800/80 focus:ring-1 focus:ring-blue-500/30 focus:outline-none transition-all text-slate-400 group-hover:text-slate-200 disabled:cursor-default"
+                        className="w-full bg-transparent border-none px-4 py-3 text-sm focus:bg-slate-800/80 focus:ring-1 focus:ring-blue-500/30 focus:outline-none transition-all text-slate-400 group-hover:text-slate-200 disabled:cursor-default"
                       />
                     </td>
                   </tr>

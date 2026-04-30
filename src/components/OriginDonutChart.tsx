@@ -61,10 +61,11 @@ export const OriginDonutChart: React.FC<OriginDonutChartProps> = ({ data, typeFi
       if (m.tipo !== typeFilter) return;
 
       const origin = String(m.origem || 'N/I').trim();
+      const upperOrigin = origin.toUpperCase();
       const lowerOrigin = origin.toLowerCase();
       if (lowerOrigin.includes('ajuste') || lowerOrigin.includes('mapeamento')) return;
       
-      rawCounts[origin] = (rawCounts[origin] || 0) + (m.movimentacao || 0);
+      rawCounts[upperOrigin] = (rawCounts[upperOrigin] || 0) + (m.movimentacao || 0);
     });
 
     const sortedEntries = Object.entries(rawCounts)

@@ -169,13 +169,19 @@ const processHistoryMovements = (historicoRaw: any[] = [], period: "hoje" | "sem
       let timestamp = 0;
       let isoDate = "";
       if (dataStr) {
-        const d = new Date(dataStr);
-        timestamp = d.getTime();
-        if (!isNaN(timestamp)) {
-          isoDate = toLocalDateStr(d);
-          if (isoDate === todayStr) absolute_today_net += (ent - sai);
-          else if (isoDate === yesterdayStr) absolute_yesterday_net += (ent - sai);
+        if (typeof dataStr === 'string' && dataStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          isoDate = dataStr;
+          timestamp = new Date(dataStr + "T12:00:00Z").getTime();
+        } else {
+          const d = new Date(dataStr);
+          timestamp = d.getTime();
+          if (!isNaN(timestamp)) {
+            isoDate = toLocalDateStr(d);
+          }
         }
+        
+        if (isoDate === todayStr) absolute_today_net += (ent - sai);
+        else if (isoDate === yesterdayStr) absolute_yesterday_net += (ent - sai);
       }
 
       if (!orig.includes('mapeamento') && !orig.includes('ajuste')) {
@@ -4211,7 +4217,7 @@ function DashboardPage() {
                                 </div>
                               </div>
                               <div className="px-3 py-1.5 rounded-xl font-black text-[11px] tracking-tight min-w-[70px] text-center bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-                                {topSkusSort === "incidencia"
+                                {topSkusSort === "incidencia" || topSkusFilter === "incidencia"
                                   ? `${item.incidencia} REG`
                                   : fmtNum(topSkusFilter === "molhado" ? item.molhados : item.quantidade)}
                               </div>
