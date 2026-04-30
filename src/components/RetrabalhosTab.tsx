@@ -54,6 +54,10 @@ interface RetrabalhoRecord {
   quantidade_rejeitada: number
   status: string
   embalagens_avariadas: number
+  codigo?: string
+  desc_produto?: string
+  cliente?: string
+  unidade?: string
 }
 
 interface LoteConfig {
@@ -72,6 +76,7 @@ interface BaseCodigo {
 
 interface GroupedLote {
   lote: number
+  displayId?: string
   codigo: string
   descricao: string
   grade: number
@@ -153,15 +158,15 @@ export default function RetrabalhosTab() {
         return (itemStatus === 'EM FILA' || itemStatus === 'FILA') && matchesSearch
       }).map(item => {
         const config = lotesConfig.find(c => String(c.lote).trim() === String(item.lote).trim())
-        const cleanCodigo = (item.codigo || config?.codigo || config?.Codigo || '---').trim();
-        const base = baseCodigos.find(b => String(b["Código"] || b["codigo"]).trim() === cleanCodigo);
+        const cleanCodigo = (item.codigo || config?.codigo || '---').trim();
+        const base = baseCodigos.find(b => String(b["Código"]).trim() === cleanCodigo);
         
         return {
           lote: item.lote,
           displayId: `FILA-${item.id}`,
           status: item.status || 'EM FILA',
           codigo: cleanCodigo,
-          descricao: item.desc_produto || base?.["Descrição"] || base?.["descricao"] || (config ? `Produto ${cleanCodigo}` : "Produto não identificado"),
+          descricao: item.desc_produto || base?.["Descrição"] || (config ? `Produto ${cleanCodigo}` : "Produto não identificado"),
           grade: base?.["Grade"] ? Number(base["Grade"]) : 0,
           totalEmbalagens: item.quantidade_enviada || 0,
           totalEnviado: item.quantidade_enviada || 0,

@@ -927,7 +927,7 @@ function DashboardPage() {
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'TOKEN_REFRESH_FAILED') {
+      if ((event as string) === 'TOKEN_REFRESH_FAILED') {
         supabase.auth.signOut();
       }
       setSession(session)
