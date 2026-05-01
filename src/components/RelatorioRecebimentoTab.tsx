@@ -92,7 +92,7 @@ export default React.forwardRef(function RelatorioRecebimentoTab(props, ref) {
           .order("Data", { ascending: false }),
         supabase
           .from("base_codigos")
-          .select("Código, Descrição")
+          .select('"Código", "Descrição"')
       ]);
 
       if (registrosRes.error) throw registrosRes.error;

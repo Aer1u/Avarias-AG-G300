@@ -864,8 +864,8 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">Status da Produção</label>
                   <div className="grid grid-cols-1 gap-2">
                     {[
-                      { id: 'EM ANDAMENTO', label: 'Em Andamento', color: 'text-blue-400', bg: 'bg-blue-500-white border-emerald-400 shadow-lg shadow-emerald-500/20', icon: CheckCircle2 },
-                      { id: 'PAUSADO', label: 'Pausado', color: 'text-rose-400', bg: 'bg-rose-500-white border-purple-400 shadow-lg shadow-purple-500/20', icon: ListMusic },
+                      { id: 'EM ANDAMENTO', label: 'Em Andamento', color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20', active: 'bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-500/20', icon: CheckCircle2 },
+                      { id: 'PAUSADO', label: 'Pausado', color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20', active: 'bg-rose-600 text-white border-rose-500 shadow-lg shadow-rose-500/20', icon: ListMusic },
                     ].map((status) => (
                       <button
                         key={status.id}
