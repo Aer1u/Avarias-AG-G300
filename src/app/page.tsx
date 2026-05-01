@@ -59,7 +59,8 @@ import {
   PlusSquare,
   AlertTriangle,
   GitMerge,
-  Presentation
+  Presentation,
+  Scissors
 } from "lucide-react"
 import { MetricCard } from "@/components/MetricCard"
 import { WarehouseTable } from "@/components/WarehouseTable"
