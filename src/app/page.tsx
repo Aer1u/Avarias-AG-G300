@@ -58,8 +58,8 @@ import {
   Plus,
   PlusSquare,
   AlertTriangle,
-  Scissors,
-  GitMerge
+  GitMerge,
+  Presentation
 } from "lucide-react"
 import { MetricCard } from "@/components/MetricCard"
 import { WarehouseTable } from "@/components/WarehouseTable"
@@ -69,6 +69,7 @@ import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
 import RegistrosTab from "@/components/RegistrosTab"
 import RetrabalhosTab from "@/components/RetrabalhosTab"
+import RelatorioRecebimentoTab from "@/components/RelatorioRecebimentoTab"
 import { OriginDonutChart } from "@/components/OriginDonutChart"
 
 type ViewType = "geral" | "posicoes" | "nao_alocados" | "produtos" | "molhados" | "quarentena"
@@ -419,7 +420,8 @@ function DashboardPage() {
   const [mapMenuOpen, setMapMenuOpen] = useState(false)
   const [selectionModeActive, setSelectionModeActive] = useState(false)
   const [selectedPositions, setSelectedPositions] = useState<Set<string>>(new Set())
-  const [topTab, setTopTab] = useState<"geral" | "mapeamento" | "produtos" | "confrontos" | "registros" | "retrabalhos">("geral")
+  const [topTab, setTopTab] = useState<"geral" | "mapeamento" | "produtos" | "confrontos" | "registros" | "retrabalhos" | "relatorio_recebimento">("geral")
+  const relatorioRef = React.useRef<any>(null);
   const [showDivergences, setShowDivergences] = useState(false)
   const [confrontosData, setConfrontosData] = useState<any>(null)
   const [loadingConfrontos, setLoadingConfrontos] = useState(false)
@@ -3256,7 +3258,7 @@ function DashboardPage() {
 
       <div className="flex min-h-screen bg-[#f8fafc] dark:bg-[#020617] transition-colors duration-500 no-print relative">
         {/* Minimalist SideMenu */}
-        <aside className="group/sidebar fixed left-0 top-0 z-50 flex h-full w-24 flex-col items-center border-r border-slate-200 bg-white/80 py-8 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/80 transition-all duration-300 hover:w-64 overflow-hidden">
+        <aside className="group/sidebar fixed left-0 top-0 z-50 flex h-full w-24 flex-col items-center border-none bg-white/80 py-8 backdrop-blur-xl dark:bg-slate-900/80 transition-all duration-300 hover:w-64 overflow-hidden">
           {/* Sidebar Branding (Combined) */}
           <div className="mb-12 flex flex-col items-center gap-4 px-4 w-full text-center">
             <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[1.5rem] bg-blue-600 shadow-xl shadow-blue-500/30">
@@ -3276,6 +3278,7 @@ function DashboardPage() {
               { id: 'confrontos', label: 'Confrontos', icon: GitCompare },
               ...(user ? [{ id: 'registros', label: 'Monitoramento', icon: History }] : []),
               { id: 'retrabalhos', label: 'Retrabalhos', icon: RefreshCw },
+              ...(user ? [{ id: 'relatorio_recebimento', label: 'Rec. Mensal', icon: Droplet }] : []),
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -3349,8 +3352,8 @@ function DashboardPage() {
           </div>
         </aside>
 
-        <main className="ml-24 flex-1 p-4 md:p-8 lg:p-12 overflow-x-hidden">
-          <div className="mx-auto max-w-7xl space-y-6 md:space-y-10">
+        <main className={cn("ml-24 flex-1 overflow-x-hidden", (topTab === 'registros' || topTab === 'relatorio_recebimento') ? "flex flex-col h-screen p-2 md:p-4 lg:p-6" : "p-4 md:p-8 lg:p-12")}>
+          <div className={cn("mx-auto space-y-6 md:space-y-10", (topTab === 'registros' || topTab === 'relatorio_recebimento') ? "max-w-[1920px] w-full flex-1 flex flex-col px-4" : "max-w-7xl")}>
 
             {/* Header - Simple & Clean */}
             <header className={cn(
@@ -3673,7 +3676,7 @@ function DashboardPage() {
                             )}
 
                             {/* Relatório Geral - only on other tabs */}
-                            {topTab !== 'confrontos' && (
+                            {topTab !== 'confrontos' && topTab !== 'relatorio_recebimento' && (
                               <button
                                 onClick={() => { handleExportProducts(); setShowAjustesMenu(false); }}
                                 className="w-full flex items-center justify-between px-4 py-3 rounded-2xl hover:bg-white dark:hover:bg-slate-800 transition-colors group text-left"
@@ -3685,6 +3688,24 @@ function DashboardPage() {
                                   <div>
                                     <p className="text-xs font-bold text-slate-700 dark:text-slate-200 leading-none mb-1">Relatório Geral</p>
                                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Planilha Consolidada</p>
+                                  </div>
+                                </div>
+                              </button>
+                            )}
+
+                            {/* Exportar Apresentação - only on Relatorio Recebimento */}
+                            {topTab === 'relatorio_recebimento' && (
+                              <button
+                                onClick={() => { relatorioRef.current?.exportPresentation(); setShowAjustesMenu(false); }}
+                                className="w-full flex items-center justify-between px-4 py-3 rounded-2xl hover:bg-white dark:hover:bg-slate-800 transition-colors group text-left"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform">
+                                    <Presentation size={14} />
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-bold text-slate-700 dark:text-slate-200 leading-none mb-1">Exportar Apresentação</p>
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Gerar print com OBS</p>
                                   </div>
                                 </div>
                               </button>
@@ -5344,17 +5365,17 @@ function DashboardPage() {
                           const globalOccupancy = globalCap > 0 ? (globalUso / globalCap) * 100 : 0;
 
                           return (
-                            <div className="p-5 rounded-[1.5rem] bg-slate-900 border border-slate-800 shadow-2xl relative overflow-hidden group/global">
-                              <div className="absolute -right-20 -top-20 w-64 h-64 bg-blue-500/10 rounded-full blur-[100px] pointer-events-none" />
+                            <div className="p-5 rounded-[1.5rem] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm dark:shadow-2xl relative overflow-hidden group/global">
+                              <div className="absolute -right-20 -top-20 w-64 h-64 bg-blue-500/5 dark:bg-blue-500/10 rounded-full blur-[100px] pointer-events-none" />
                               <div className="absolute -left-20 -bottom-20 w-64 h-64 bg-emerald-500/5 rounded-full blur-[100px] pointer-events-none" />
 
                               <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                                 <div className="flex items-center gap-4">
-                                  <div className="h-12 w-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+                                  <div className="h-12 w-12 rounded-xl bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400">
                                     <Warehouse size={24} />
                                   </div>
                                   <div>
-                                    <h3 className="text-lg font-black text-white tracking-tight uppercase">Resumo Geral do Armazém</h3>
+                                    <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tight uppercase">Resumo Geral do Armazém</h3>
                                     <div className="flex items-center gap-2 mt-0.5">
                                       <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Monitoramento em Tempo Real</p>
@@ -5366,31 +5387,31 @@ function DashboardPage() {
                                   <div className="flex flex-col">
                                     <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Capacidade Total</span>
                                     <div className="flex items-baseline gap-1.5">
-                                      <span className="text-2xl font-black text-white tabular-nums tracking-tighter">{fmtNum(globalCap)}</span>
+                                      <span className="text-2xl font-black text-slate-900 dark:text-white tabular-nums tracking-tighter">{fmtNum(globalCap)}</span>
                                       <span className="text-[10px] font-bold text-slate-500 uppercase">PTs</span>
                                     </div>
                                   </div>
-                                  <div className="h-8 w-px bg-slate-800" />
+                                  <div className="h-8 w-px bg-slate-100 dark:bg-slate-800" />
                                   <div className="flex flex-col">
                                     <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Total em Uso</span>
                                     <div className="flex items-baseline gap-1.5">
-                                      <span className="text-2xl font-black text-emerald-400 tabular-nums tracking-tighter">{fmtNum(globalUso)}</span>
-                                      <span className="text-[10px] font-bold text-emerald-900 uppercase">PTs</span>
+                                      <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums tracking-tighter">{fmtNum(globalUso)}</span>
+                                      <span className="text-[10px] font-bold text-emerald-600/40 dark:text-emerald-900 uppercase">PTs</span>
                                     </div>
                                   </div>
-                                  <div className="h-8 w-px bg-slate-800" />
+                                  <div className="h-8 w-px bg-slate-100 dark:bg-slate-800" />
                                   <div className="flex flex-col">
                                     <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Vagas Livres</span>
                                     <div className="flex items-baseline gap-1.5">
-                                      <span className="text-2xl font-black text-blue-400 tabular-nums tracking-tighter">{fmtNum(globalLivre)}</span>
-                                      <span className="text-[10px] font-bold text-blue-900 uppercase">Vagas</span>
+                                      <span className="text-2xl font-black text-blue-600 dark:text-blue-400 tabular-nums tracking-tighter">{fmtNum(globalLivre)}</span>
+                                      <span className="text-[10px] font-bold text-blue-600/40 dark:text-blue-900 uppercase">Vagas</span>
                                     </div>
                                   </div>
-                                  <div className="h-8 w-px bg-slate-800" />
+                                  <div className="h-8 w-px bg-slate-100 dark:bg-slate-800" />
                                   <div className="flex flex-col items-end">
                                     <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Ocupação</span>
                                     <div className="flex items-baseline gap-1.5">
-                                      <span className="text-2xl font-black text-white tabular-nums tracking-tighter">{Math.round(globalOccupancy)}%</span>
+                                      <span className="text-2xl font-black text-slate-900 dark:text-white tabular-nums tracking-tighter">{Math.round(globalOccupancy)}%</span>
                                       <div className={cn(
                                         "h-1.5 w-10 rounded-full",
                                         globalOccupancy >= 95 ? "bg-red-500" : globalOccupancy >= 80 ? "bg-amber-500" : "bg-emerald-500"
@@ -6048,7 +6069,7 @@ function DashboardPage() {
                 </motion.div>
               )}
 
-              {topTab === "retrabalhos" && (
+              { topTab === "retrabalhos" && (
                 <motion.div
                   key="retrabalhos-content"
                   initial={{ opacity: 0, y: 10 }}
@@ -6056,7 +6077,19 @@ function DashboardPage() {
                   exit={{ opacity: 0, y: -10 }}
                   className="flex-1 overflow-hidden"
                 >
-                  <RetrabalhosTab />
+                  <RetrabalhosTab refreshTrigger={isRefreshing} />
+                </motion.div>
+              )}
+
+              { topTab === "relatorio_recebimento" && (
+                <motion.div
+                  key="relatorio-recebimento-content"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="flex-1 overflow-hidden"
+                >
+                  <RelatorioRecebimentoTab ref={relatorioRef} />
                 </motion.div>
               )}
 

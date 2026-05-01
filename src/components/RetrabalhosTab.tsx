@@ -99,7 +99,7 @@ const STATUS_OPTIONS = [
   { id: 'EM FILA', label: 'Em Fila', icon: ListMusic, color: 'text-purple-400' },
 ]
 
-export default function RetrabalhosTab() {
+export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: boolean } = {}) {
   const [records, setRecords] = useState<RetrabalhoRecord[]>([])
   const [lotesConfig, setLotesConfig] = useState<LoteConfig[]>([])
   const [baseCodigos, setBaseCodigos] = useState<BaseCodigo[]>([])
@@ -145,6 +145,12 @@ export default function RetrabalhosTab() {
 
     return () => subscription.unsubscribe()
   }, [])
+
+  useEffect(() => {
+    if (refreshTrigger) {
+      fetchData()
+    }
+  }, [refreshTrigger])
 
   const groupedData = useMemo(() => {
     // Se o status for "Em Fila", mostramos reservas individuais
@@ -265,7 +271,13 @@ export default function RetrabalhosTab() {
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '-'
     const date = new Date(dateStr)
-    return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(date)
+    return new Intl.DateTimeFormat('pt-BR', { 
+      day: '2-digit', 
+      month: '2-digit',
+      year: '2-digit',
+      hour: '2-digit', 
+      minute: '2-digit' 
+    }).format(date).replace(',', '')
   }
 
   return (
@@ -278,12 +290,12 @@ export default function RetrabalhosTab() {
           { label: "Eficiência", value: `${Math.round(groupedData.reduce((s, i) => s + i.progresso, 0) / (groupedData.length || 1))}%`, icon: Sparkles, color: "text-blue-400" },
           { label: "Embalagens Avariadas", value: records.reduce((s, i) => s + (i.embalagens_avariadas || 0), 0), icon: AlertCircle, color: "text-rose-400" },
         ].map((stat, i) => (
-          <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="group relative p-4 bg-[#0F172A] border border-white/5 rounded-3xl overflow-hidden shadow-xl">
+          <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="group relative p-4 bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-white/5 rounded-3xl overflow-hidden shadow-xl">
             <div className="relative z-10 flex items-center gap-4">
-              <div className={cn("p-2 rounded-xl bg-white/5 border border-white/10", stat.color)}><stat.icon size={16} /></div>
+              <div className={cn("p-2 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10", stat.color)}><stat.icon size={16} /></div>
               <div>
                 <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">{stat.label}</span>
-                <span className="text-xl font-black text-white font-mono">{stat.value}</span>
+                <span className="text-xl font-black text-slate-900 dark:text-white font-mono">{stat.value}</span>
               </div>
             </div>
           </motion.div>
@@ -292,9 +304,9 @@ export default function RetrabalhosTab() {
 
       {/* Row 2: Filtros + Pesquisa (Mesma Linha) */}
       <div className="flex flex-col lg:flex-row items-center gap-3">
-        <div className="flex-1 flex flex-wrap items-center gap-2 bg-[#0F172A]/50 p-1.5 rounded-2xl border border-white/5 backdrop-blur-sm">
+        <div className="flex-1 flex flex-wrap items-center gap-2 bg-slate-50/50 dark:bg-[#0F172A]/50 p-1.5 rounded-2xl border border-slate-200 dark:border-white/5 backdrop-blur-sm">
           {STATUS_OPTIONS.map((status) => (
-            <button key={status.id} onClick={() => setActiveStatus(status.id)} className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all duration-200", activeStatus === status.id ? "bg-blue-600 text-white shadow-md scale-105" : "text-slate-500 hover:bg-white/5")}>
+            <button key={status.id} onClick={() => setActiveStatus(status.id)} className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all duration-200", activeStatus === status.id ? "bg-blue-600 text-white shadow-md scale-105" : "text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5")}>
               <status.icon size={12} className={cn(activeStatus === status.id ? "text-white" : status.color)} />
               {status.label}
             </button>
@@ -304,7 +316,7 @@ export default function RetrabalhosTab() {
         <div className="flex items-center gap-3 w-full lg:w-auto">
           <div className="relative flex-1 lg:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
-            <input type="text" placeholder="Filtrar por lote ou SKU..." className="w-full bg-[#0F172A] border border-white/10 rounded-2xl py-2.5 pl-9 pr-3 text-[11px] text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all placeholder:text-slate-700 shadow-xl" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <input type="text" placeholder="Filtrar por lote ou SKU..." className="w-full bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-white/10 rounded-2xl py-2.5 pl-9 pr-3 text-[11px] text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all placeholder:text-slate-400 shadow-xl" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           
           {user && (
@@ -323,7 +335,7 @@ export default function RetrabalhosTab() {
       <div className="space-y-3 pt-2">
         <AnimatePresence mode="popLayout">
           {loading ? (
-            Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-24 bg-white/5 rounded-3xl border border-white/5 animate-pulse" />)
+            Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-24 bg-slate-50 dark:bg-white/5 rounded-3xl border border-slate-200 dark:border-white/5 animate-pulse" />)
           ) : groupedData.length > 0 ? (
             <>
               {/* Cabeçalho Informativo quando há dados */}
@@ -335,7 +347,7 @@ export default function RetrabalhosTab() {
                 <div className="flex items-center gap-4">
                   <div className="flex -space-x-2">
                     {groupedData.slice(0, 3).map((lote, i) => (
-                      <div key={i} className="w-8 h-8 rounded-full border-2 border-[#0B0F1A] bg-[#0F172A] flex items-center justify-center overflow-hidden">
+                      <div key={i} className="w-8 h-8 rounded-full border-2 border-white dark:border-[#0B0F1A] bg-white dark:bg-[#0F172A] flex items-center justify-center overflow-hidden">
                         <img 
                           src={`https://bvgwlkdqmkuuhqiwzfti.supabase.co/storage/v1/object/public/Store/Codigos%20icon/${lote.codigo?.trim() || '---'}.png`}
                           className="w-full h-full object-cover opacity-80"
@@ -345,7 +357,7 @@ export default function RetrabalhosTab() {
                     ))}
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[10px] font-black text-white uppercase tracking-widest flex items-center gap-2">
+                    <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest flex items-center gap-2">
                       {groupedData.length} {groupedData.length === 1 ? 'Lote Encontrado' : 'Lotes Encontrados'}
                       <div className="w-1 h-1 rounded-full bg-blue-500 animate-pulse" />
                     </span>
@@ -370,32 +382,46 @@ export default function RetrabalhosTab() {
               </motion.div>
 
               {groupedData.map((lote) => (
-            <motion.div layout initial={{ opacity: 0, scale: 0.99 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} key={lote.displayId || lote.lote} className={cn("group relative bg-[#0F172A] border rounded-[1.8rem] transition-all duration-300 overflow-hidden shadow-xl", expandedLotes.has(lote.lote) ? "border-blue-500/30" : "border-white/5 hover:border-white/10")}>
+            <motion.div layout initial={{ opacity: 0, scale: 0.99 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} key={lote.displayId || lote.lote} className={cn("group relative bg-white dark:bg-[#0F172A] border rounded-[1.8rem] transition-all duration-300 overflow-hidden shadow-xl", expandedLotes.has(lote.lote) ? "border-blue-500/30" : "border-slate-200 dark:border-white/5 hover:border-slate-200 dark:border-white/10")}>
               <div className="absolute top-0 left-0 w-1 h-full transition-colors bg-blue-600/20 group-hover:bg-blue-600/40" />
               
-              <div className="p-5 cursor-pointer select-none" onClick={() => toggleLote(lote.lote)}>
+              <div className="p-7 cursor-pointer select-none" onClick={() => toggleLote(lote.lote)}>
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                   <div className="flex items-center gap-5 flex-1 min-w-0">
                     <div className="relative shrink-0">
-                      <div className="w-14 h-14 rounded-2xl bg-black/40 border border-white/10 flex items-center justify-center overflow-hidden relative group/img shadow-inner">
+                      <div className="w-14 h-14 rounded-2xl bg-white dark:bg-black/40 border border-slate-100 dark:border-white/5 flex items-center justify-center overflow-hidden relative group/img transition-all">
+                        {/* Box symbol behind the image */}
+                        <div className="absolute inset-0 flex items-center justify-center bg-slate-50 dark:bg-slate-900/50">
+                          <Package size={24} className="text-slate-200 dark:text-slate-700/50" />
+                        </div>
+
                         {lote.codigo && lote.codigo !== "---" ? (
                           <img 
                             src={`https://bvgwlkdqmkuuhqiwzfti.supabase.co/storage/v1/object/public/Store/Codigos%20icon/${lote.codigo?.trim() || '---'}.png`}
                             alt={lote.codigo}
-                            className="w-full h-full object-cover transition-transform duration-700 group-hover/img:scale-110 opacity-90 group-hover/img:opacity-100 relative z-20"
-                            loading="lazy"
+                            className="w-full h-full object-contain relative z-20 transition-all duration-500 group-hover/img:scale-110 group-hover/img:opacity-40"
+                            onLoad={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              const parent = target.parentElement;
+                              if (parent) {
+                                const fallback = parent.querySelector('.fallback-placeholder') as HTMLElement;
+                                if (fallback) fallback.style.opacity = '0';
+                              }
+                            }}
                             onError={(e) => {
-                              (e.target as HTMLImageElement).src = ""; 
-                              (e.target as HTMLImageElement).className = "hidden";
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = 'none';
+                              const parent = target.parentElement;
+                              if (parent) {
+                                const fallback = parent.querySelector('.fallback-placeholder') as HTMLElement;
+                                if (fallback) {
+                                  fallback.style.opacity = '1';
+                                  fallback.style.display = 'flex';
+                                }
+                              }
                             }}
                           />
                         ) : null}
-                        <div className="absolute inset-0 flex items-center justify-center bg-white/5 pointer-events-none z-10">
-                          <Package size={20} className="text-slate-700" />
-                        </div>
-                      </div>
-                      <div className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-lg bg-blue-600 flex items-center justify-center shadow-lg border-2 border-[#0F172A] z-10">
-                        <Package size={10} className="text-white" />
                       </div>
                     </div>
 
@@ -412,21 +438,21 @@ export default function RetrabalhosTab() {
                                 e.stopPropagation();
                                 setEditingLote(lote);
                               }}
-                              className="p-1 rounded bg-white/5 hover:bg-white/10 text-slate-500 hover:text-blue-400 transition-colors border border-white/5"
+                              className="p-1 rounded bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-500 hover:text-blue-400 transition-colors border border-slate-200 dark:border-white/5"
                             >
                               <RefreshCw size={8} />
                             </button>
                           )}
                         </div>
-                        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white/5 border border-white/10">
+                        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10">
                           <span className="text-[7px] font-black text-slate-500 uppercase tracking-tighter">Lote</span>
-                          <span className="text-[10px] font-black text-white font-mono leading-none">{lote.lote}</span>
+                          <span className="text-[10px] font-black text-slate-900 dark:text-white font-mono leading-none">{lote.lote}</span>
                         </div>
                         <span className="text-[10px] font-black text-blue-400 font-mono tracking-widest bg-blue-500/5 px-2 rounded border border-blue-500/10">
                           {lote.codigo}
                         </span>
                       </div>
-                      <h3 className="text-base font-bold text-white tracking-tight leading-snug group-hover:text-blue-50 transition-colors truncate max-w-lg">{lote.descricao}</h3>
+                      <h3 className="text-base font-bold text-slate-900 dark:text-white tracking-tight leading-snug group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate max-w-lg">{lote.descricao}</h3>
                       <div className="flex items-center gap-4 mt-2">
                         <div className="flex items-center gap-1.5 text-slate-500"><Clock size={10} className="text-slate-600" /><span className="text-[8px] font-bold uppercase tracking-widest">{formatDate(lote.items[0]?.data_inicio)}</span></div>
                         <div className="flex items-center gap-1.5 text-slate-500"><Hash size={10} className="text-slate-600" /><span className="text-[8px] font-bold uppercase tracking-widest">{lote.items.length} Reservas</span></div>
@@ -438,21 +464,21 @@ export default function RetrabalhosTab() {
                     <div className="flex flex-col items-center shrink-0">
                       <div className="relative w-14 h-14 flex items-center justify-center">
                         <svg className="w-full h-full -rotate-90">
-                           <circle cx="28" cy="28" r="22" className="stroke-white/5 fill-none" strokeWidth="4" />
+                           <circle cx="28" cy="28" r="22" className="stroke-slate-200 dark:stroke-white/5 fill-none" strokeWidth="4" />
                            <motion.circle cx="28" cy="28" r="22" className={cn("fill-none transition-all duration-500", lote.progresso === 100 ? "stroke-emerald-500" : "stroke-blue-500")} strokeWidth="4" strokeDasharray={138} initial={{ strokeDashoffset: 138 }} animate={{ strokeDashoffset: 138 - (138 * lote.progresso) / 100 }} strokeLinecap="round" />
                         </svg>
-                        <span className="absolute text-[10px] font-black text-white font-mono tracking-tighter">{Math.floor(lote.progresso)}%</span>
+                        <span className="absolute text-[10px] font-black text-slate-900 dark:text-white font-mono tracking-tighter">{Math.floor(lote.progresso)}%</span>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-5 gap-x-4 lg:gap-x-6 py-3 px-6 bg-black/40 rounded-2xl border border-white/5 flex-1 max-w-[600px]">
+                    <div className="grid grid-cols-5 gap-x-4 lg:gap-x-6 py-3 px-6 bg-slate-50 dark:bg-black/40 rounded-2xl border border-slate-200 dark:border-white/5 flex-1 max-w-[600px]">
                        <div className="flex flex-col min-w-0">
-                          <span className="text-[8px] font-black text-blue-500 uppercase tracking-widest mb-1 truncate">Embalagens</span>
+                          <span className="text-[8px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-widest mb-1 truncate">Embalagens</span>
                           <span className="text-base font-black text-blue-400 font-mono leading-none">{lote.totalEmbalagens}</span>
                        </div>
                        <div className="flex flex-col min-w-0">
                           <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1 truncate">Enviado</span>
-                          <span className="text-base font-black text-white font-mono leading-none">{lote.totalEnviado}</span>
+                          <span className="text-base font-black text-slate-900 dark:text-white font-mono leading-none">{lote.totalEnviado}</span>
                           <span className="text-[7px] font-medium text-slate-500/60 mt-1 whitespace-nowrap">{formatPallets(lote.totalEnviado, lote.grade, true)}</span>
                        </div>
                        <div className="flex flex-col min-w-0">
@@ -465,7 +491,7 @@ export default function RetrabalhosTab() {
                           <span className="text-base font-black text-rose-400 font-mono leading-none">{lote.totalRejeitado || 0}</span>
                        </div>
                        <div className="flex flex-col min-w-0">
-                          <span className="text-[8px] font-black text-amber-500 uppercase tracking-widest mb-1 truncate">Avariada</span>
+                          <span className="text-[8px] font-black text-amber-500 uppercase tracking-widest mb-1 truncate">Emb. Avariada</span>
                           <span className="text-base font-black text-amber-400 font-mono leading-none">{lote.totalAvarias || 0}</span>
                        </div>
                     </div>
@@ -477,38 +503,38 @@ export default function RetrabalhosTab() {
                           setSelectedLoteForReserva(lote.lote);
                           setIsNewReservaModalOpen(true);
                         }}
-                        className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-black text-white uppercase tracking-wider transition-all shrink-0 group/add"
+                        className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 text-[9px] font-black text-slate-900 dark:text-white uppercase tracking-wider transition-all shrink-0 group/add"
                       >
-                        <Plus size={12} className="text-blue-500 group-hover/add:scale-125 transition-transform" />
+                        <Plus size={12} className="text-blue-600 dark:text-blue-500 group-hover/add:scale-125 transition-transform" />
                         Add Reserva
                       </button>
                     )}
 
-                    <motion.div animate={{ rotate: expandedLotes.has(lote.lote) ? 180 : 0 }} className="p-2 bg-white/5 rounded-xl text-slate-500 group-hover:text-white transition-all shrink-0"><ChevronDown size={16} /></motion.div>
+                    <motion.div animate={{ rotate: expandedLotes.has(lote.lote) ? 180 : 0 }} className="p-2 bg-slate-50 dark:bg-white/5 rounded-xl text-slate-500 group-hover:bg-blue-600 group-hover:text-white transition-all duration-300 shrink-0 shadow-sm"><ChevronDown size={16} /></motion.div>
                   </div>
                 </div>
               </div>
 
-              <div className="h-0.5 w-full bg-white/5">
+              <div className="h-0.5 w-full bg-slate-50 dark:bg-white/5">
                 <motion.div initial={{ width: 0 }} animate={{ width: `${lote.progresso}%` }} className={cn("h-full", lote.progresso === 100 ? "bg-emerald-500" : "bg-blue-600")} />
               </div>
 
               <AnimatePresence>
                 {expandedLotes.has(lote.lote) && (
-                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden bg-black/40">
+                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden bg-slate-50 dark:bg-black/40">
                     <div className="p-8 space-y-4">
                       <div className="flex items-center gap-4 mb-2">
-                           <div className="h-px flex-1 bg-white/5" /><span className="text-[10px] font-black text-slate-600 uppercase tracking-[0.4em]">Detalhamento de Reservas</span><div className="h-px flex-1 bg-white/5" />
+                           <div className="h-px flex-1 bg-slate-50 dark:bg-white/5" /><span className="text-[10px] font-black text-slate-600 uppercase tracking-[0.4em]">Detalhamento de Reservas</span><div className="h-px flex-1 bg-slate-50 dark:bg-white/5" />
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {lote.items.map((item, idx) => (
-                          <motion.div initial={{ x: -10, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: idx * 0.05 }} key={item.id} className="group/item relative p-6 bg-white/[0.03] rounded-[2rem] border border-white/5 hover:border-blue-500/20 transition-all shadow-inner">
+                          <motion.div initial={{ x: -10, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: idx * 0.05 }} key={item.id} className="group/item relative p-6 bg-white/[0.03] rounded-[2rem] border border-slate-200 dark:border-white/5 hover:border-blue-500/20 transition-all shadow-inner">
                             <div className="flex items-center justify-between mb-6">
                               <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center text-[11px] font-black text-blue-500">{idx + 1}</div>
+                                <div className="w-8 h-8 rounded-xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center text-[11px] font-black text-blue-600 dark:text-blue-500">{idx + 1}</div>
                                 <div className="flex flex-col gap-1 items-start min-w-0">
-                                  <span className="text-[10px] font-black text-white uppercase tracking-tighter">Reserva Individual</span>
+                                  <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-tighter">Reserva Individual</span>
                                   <div className="flex items-center gap-2 text-slate-500">
                                     <Clock size={10} className="text-slate-600" />
                                     <span className="text-[8px] font-bold uppercase tracking-widest">
@@ -540,36 +566,36 @@ export default function RetrabalhosTab() {
 
                             <div className="grid grid-cols-2 gap-4">
                                <div className="space-y-3">
-                                  <div className="flex items-center gap-2 mb-1 px-1"><Hash size={10} className="text-blue-500" /><span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">SISTEMA</span></div>
-                                  <div className="p-3 bg-black/40 rounded-2xl border border-white/5 flex flex-col gap-2">
-                                     <div className="flex justify-between items-center"><span className="text-[9px] font-bold text-blue-400/80 uppercase">A501</span><span className="text-xs font-mono font-black text-blue-100">{item.reserva_a501 || "---"}</span></div>
-                                     <div className="h-px bg-white/5" />
-                                     <div className="flex justify-between items-center"><span className="text-[9px] font-bold text-emerald-400/80 uppercase">G501</span><span className="text-xs font-mono font-black text-emerald-100">{item.reserva_g501 || "---"}</span></div>
+                                  <div className="flex items-center gap-2 mb-1 px-1"><Hash size={10} className="text-blue-600 dark:text-blue-500" /><span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">SISTEMA</span></div>
+                                  <div className="p-3 bg-slate-50 dark:bg-black/40 rounded-2xl border border-slate-200 dark:border-white/5 flex flex-col gap-2">
+                                     <div className="flex justify-between items-center"><span className="text-[9px] font-bold text-blue-500 uppercase">A501</span><span className="text-xs font-mono font-black text-slate-900 dark:text-blue-100">{item.reserva_a501 || "---"}</span></div>
+                                     <div className="h-px bg-slate-200 dark:bg-white/5" />
+                                     <div className="flex justify-between items-center"><span className="text-[9px] font-bold text-emerald-500 uppercase">G501</span><span className="text-xs font-mono font-black text-slate-900 dark:text-emerald-100">{item.reserva_g501 || "---"}</span></div>
                                   </div>
                                </div>
                                <div className="space-y-3">
                                   <div className="flex items-center gap-2 mb-1 px-1"><RefreshCw size={10} className="text-amber-500" /><span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">ESTORNOS</span></div>
-                                  <div className="p-3 bg-black/40 rounded-2xl border border-white/5 flex flex-col gap-2">
-                                     <div className="flex justify-between items-center"><span className="text-[9px] font-bold text-amber-400/80 uppercase">A501</span><span className="text-xs font-mono font-black text-amber-100">{item.estorno_a501 || "---"}</span></div>
-                                     <div className="h-px bg-white/5" />
-                                     <div className="flex justify-between items-center"><span className="text-[9px] font-bold text-amber-400/80 uppercase">G501</span><span className="text-xs font-mono font-black text-amber-100">{item.estorno_g501 || "---"}</span></div>
+                                  <div className="p-3 bg-slate-50 dark:bg-black/40 rounded-2xl border border-slate-200 dark:border-white/5 flex flex-col gap-2">
+                                     <div className="flex justify-between items-center"><span className="text-[9px] font-bold text-amber-500 uppercase">A501</span><span className="text-xs font-mono font-black text-slate-900 dark:text-amber-100">{item.estorno_a501 || "---"}</span></div>
+                                     <div className="h-px bg-slate-200 dark:bg-white/5" />
+                                     <div className="flex justify-between items-center"><span className="text-[9px] font-bold text-amber-500 uppercase">G501</span><span className="text-xs font-mono font-black text-slate-900 dark:text-amber-100">{item.estorno_g501 || "---"}</span></div>
                                   </div>
                                </div>
                             </div>
 
-                            <div className="mt-6 flex items-center justify-between p-5 bg-black/60 rounded-[1.5rem] border border-white/5 relative overflow-hidden">
+                            <div className="mt-6 flex items-center justify-between p-5 bg-slate-100/50 dark:bg-black/60 rounded-[1.5rem] border border-slate-200 dark:border-white/5 relative overflow-hidden">
                                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-transparent to-emerald-500/5 opacity-50" />
                                
                                <div className="flex flex-col items-center relative z-10">
                                  <span className="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-1">Enviado</span>
-                                 <span className="text-lg font-black text-white font-mono">{item.quantidade_enviada}</span>
+                                 <span className="text-lg font-black text-slate-900 dark:text-white font-mono">{item.quantidade_enviada}</span>
                                  <span className="text-[7px] font-bold text-slate-500 mt-1">{formatPallets(item.quantidade_enviada, lote.grade, true)}</span>
                                </div>
 
                                <div className="flex items-center px-4 relative z-10">
-                                 <div className="w-12 h-[1px] bg-white/10 relative">
+                                 <div className="w-12 h-[1px] bg-slate-100 dark:bg-white/10 relative">
                                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-blue-500/20 to-transparent" />
-                                   <div className="absolute left-1/2 -translate-x-1/2 -top-1.5 w-3 h-3 rounded-full border border-blue-500/30 flex items-center justify-center bg-[#0F172A]">
+                                   <div className="absolute left-1/2 -translate-x-1/2 -top-1.5 w-3 h-3 rounded-full border border-blue-500/30 flex items-center justify-center bg-white dark:bg-[#0F172A]">
                                      <ArrowRight size={8} className="text-blue-400" />
                                    </div>
                                  </div>
@@ -577,23 +603,29 @@ export default function RetrabalhosTab() {
 
                                <div className="flex flex-col items-center relative z-10">
                                  <span className="text-[7px] font-black text-emerald-500 uppercase tracking-widest mb-1">Retrabalhado</span>
-                                 <span className="text-lg font-black text-emerald-400 font-mono">{item.quantidade_retornada}</span>
+                                 <span className="text-lg font-black text-emerald-600 dark:text-emerald-400 font-mono">{item.quantidade_retornada}</span>
                                  <span className="text-[7px] font-bold text-emerald-500/50 mt-1">{formatPallets(item.quantidade_retornada, lote.grade, true)}</span>
                                </div>
 
                                <div className="flex items-center px-4 relative z-10">
-                                 <div className="w-12 h-[1px] bg-white/10 relative">
+                                 <div className="w-12 h-[1px] bg-slate-100 dark:bg-white/10 relative">
                                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-emerald-500/20 to-transparent" />
-                                   <div className="absolute left-1/2 -translate-x-1/2 -top-1.5 w-3 h-3 rounded-full border border-emerald-500/30 flex items-center justify-center bg-[#0F172A]">
+                                   <div className="absolute left-1/2 -translate-x-1/2 -top-1.5 w-3 h-3 rounded-full border border-emerald-500/30 flex items-center justify-center bg-white dark:bg-[#0F172A]">
                                      <ArrowRight size={8} className="text-emerald-400" />
                                    </div>
                                  </div>
                                </div>
 
                                <div className="flex flex-col items-end relative z-10 gap-2">
-                                 <div className="flex flex-col items-end">
-                                   <span className="text-[7px] font-black text-rose-500 uppercase tracking-widest mb-1">Rejeitado</span>
-                                   <span className="text-lg font-black text-rose-400 font-mono leading-none">{item.quantidade_rejeitada || 0}</span>
+                                 <div className="flex items-center gap-4">
+                                   <div className="flex flex-col items-end">
+                                     <span className="text-[7px] font-black text-amber-500 uppercase tracking-widest mb-1">Emb. Avariada</span>
+                                     <span className="text-lg font-black text-amber-600 dark:text-amber-400 font-mono leading-none">{item.embalagens_avariadas || 0}</span>
+                                   </div>
+                                   <div className="flex flex-col items-end">
+                                     <span className="text-[7px] font-black text-rose-500 uppercase tracking-widest mb-1">Rejeitado</span>
+                                     <span className="text-lg font-black text-rose-600 dark:text-rose-400 font-mono leading-none">{item.quantidade_rejeitada || 0}</span>
+                                   </div>
                                  </div>
                                  {user && (
                                    <button 
@@ -602,7 +634,7 @@ export default function RetrabalhosTab() {
                                        setEditingReserva(item);
                                        setTempStatus(item.status);
                                      }}
-                                     className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-500 hover:text-blue-400 transition-all border border-white/5"
+                                     className="p-1.5 rounded-lg bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-500 hover:text-blue-400 transition-all border border-slate-200 dark:border-white/5"
                                    >
                                      <RefreshCw size={10} />
                                    </button>
@@ -623,13 +655,13 @@ export default function RetrabalhosTab() {
             <motion.div 
               initial={{ opacity: 0, y: 20 }} 
               animate={{ opacity: 1, y: 0 }} 
-              className="flex flex-col items-center justify-center py-24 bg-[#0F172A]/30 border border-dashed border-white/10 rounded-[3rem] shadow-2xl backdrop-blur-sm"
+              className="flex flex-col items-center justify-center py-24 bg-white dark:bg-[#0F172A]/30 border border-dashed border-slate-200 dark:border-white/10 rounded-[3rem] shadow-2xl backdrop-blur-sm"
             >
               <div className="w-24 h-24 rounded-full bg-blue-500/5 border border-blue-500/10 flex items-center justify-center mb-8 relative">
                 <div className="absolute inset-0 bg-blue-500/10 rounded-full animate-ping opacity-20" />
-                <Package size={40} className="text-blue-500/30" />
+                <Package size={40} className="text-blue-600 dark:text-blue-500/30" />
               </div>
-              <h3 className="text-lg font-black text-white uppercase tracking-widest mb-3">
+              <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-widest mb-3">
                 Nenhum lote aqui
               </h3>
               <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.3em] text-center max-w-sm px-10 leading-relaxed">
@@ -640,7 +672,7 @@ export default function RetrabalhosTab() {
               {(search || activeStatus !== 'all') && (
                 <button 
                   onClick={() => { setSearch(""); setActiveStatus("all"); }}
-                  className="mt-8 px-8 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] transition-all flex items-center gap-3"
+                  className="mt-8 px-8 py-3 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 rounded-2xl text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] transition-all flex items-center gap-3"
                 >
                   <RefreshCw size={12} />
                   Limpar Filtros
@@ -655,10 +687,10 @@ export default function RetrabalhosTab() {
         {isNewLoteModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsNewLoteModalOpen(false)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-            <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="relative w-full max-w-md bg-[#0F172A] border border-white/10 rounded-[2.5rem] p-8 shadow-2xl overflow-hidden">
+            <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="relative w-full max-w-md bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-white/10 rounded-[2.5rem] p-8 shadow-2xl overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-600 to-indigo-600" />
-              <h2 className="text-xl font-black text-white mb-6 flex items-center gap-3">
-                <Plus className="text-blue-500" /> Novo Lote de Retrabalho
+              <h2 className="text-xl font-black text-slate-900 dark:text-white mb-6 flex items-center gap-3">
+                <Plus className="text-blue-600 dark:text-blue-500" /> Novo Lote de Retrabalho
               </h2>
               <form onSubmit={async (e) => {
                 e.preventDefault();
@@ -685,22 +717,22 @@ export default function RetrabalhosTab() {
                     required 
                     type="number" 
                     defaultValue={Math.max(...lotesConfig.map(l => Number(l.lote) || 0), 0) + 1}
-                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white font-mono focus:outline-none focus:border-blue-500/50 transition-all" 
+                    className="w-full bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-blue-500/50 transition-all" 
                     placeholder="Ex: 4" 
                   />
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Código do Produto (SKU)</label>
-                  <input name="codigo" required type="text" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white font-mono focus:outline-none focus:border-blue-500/50 transition-all" placeholder="Ex: 0685-04" />
+                  <input name="codigo" required type="text" className="w-full bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-blue-500/50 transition-all" placeholder="Ex: 0685-04" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Embalagens</label>
-                    <input name="embalagens" required type="number" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white font-mono focus:outline-none focus:border-blue-500/50 transition-all" placeholder="Qtd" />
+                    <input name="embalagens" required type="number" className="w-full bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-blue-500/50 transition-all" placeholder="Qtd" />
                   </div>
                   <div>
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Status Inicial</label>
-                    <select name="status" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-xs focus:outline-none focus:border-blue-500/50 transition-all appearance-none">
+                    <select name="status" className="w-full bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white text-xs focus:outline-none focus:border-blue-500/50 transition-all appearance-none">
                       <option value="Em fila">Em fila</option>
                       <option value="Aguardando">Aguardando</option>
                       <option value="Em andamento">Em andamento</option>
@@ -708,8 +740,8 @@ export default function RetrabalhosTab() {
                   </div>
                 </div>
                 <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setIsNewLoteModalOpen(false)} className="flex-1 px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white text-[11px] font-black uppercase transition-all">Cancelar</button>
-                  <button type="submit" className="flex-2 px-8 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-black uppercase shadow-lg shadow-blue-500/20 transition-all">Criar Lote</button>
+                  <button type="button" onClick={() => setIsNewLoteModalOpen(false)} className="flex-1 px-4 py-3 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-900 dark:text-white text-[11px] font-black uppercase transition-all">Cancelar</button>
+                  <button type="submit" className="flex-2 px-8 py-3 rounded-xl bg-blue-600-white text-[11px] font-black uppercase shadow-lg shadow-blue-500/20 transition-all">Criar Lote</button>
                 </div>
               </form>
             </motion.div>
@@ -722,9 +754,9 @@ export default function RetrabalhosTab() {
         {isNewReservaModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsNewReservaModalOpen(false)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-            <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="relative w-full max-w-md bg-[#0F172A] border border-white/10 rounded-[2.5rem] p-8 shadow-2xl overflow-hidden">
+            <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="relative w-full max-w-md bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-white/10 rounded-[2.5rem] p-8 shadow-2xl overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-600 to-teal-600" />
-              <h2 className="text-xl font-black text-white mb-2 flex items-center gap-3">
+              <h2 className="text-xl font-black text-slate-900 dark:text-white mb-2 flex items-center gap-3">
                 <Plus className="text-emerald-500" /> Nova Reserva
               </h2>
               <p className="text-[10px] text-slate-500 uppercase tracking-widest font-black mb-6">Lote: {selectedLoteForReserva}</p>
@@ -751,21 +783,21 @@ export default function RetrabalhosTab() {
               }} className="space-y-4">
                 <div>
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Quantidade Enviada</label>
-                  <input name="quantidade_enviada" required type="number" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white font-mono focus:outline-none focus:border-emerald-500/50 transition-all" placeholder="Ex: 500" />
+                  <input name="quantidade_enviada" required type="number" className="w-full bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-emerald-500/50 transition-all" placeholder="Ex: 500" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Reserva A501</label>
-                    <input name="reserva_a501" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white font-mono focus:outline-none focus:border-emerald-500/50 transition-all" placeholder="OP" />
+                    <input name="reserva_a501" className="w-full bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-emerald-500/50 transition-all" placeholder="OP" />
                   </div>
                   <div>
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Reserva G501</label>
-                    <input name="reserva_g501" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white font-mono focus:outline-none focus:border-emerald-500/50 transition-all" placeholder="OP" />
+                    <input name="reserva_g501" className="w-full bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-emerald-500/50 transition-all" placeholder="OP" />
                   </div>
                 </div>
                 <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setIsNewReservaModalOpen(false)} className="flex-1 px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white text-[11px] font-black uppercase transition-all">Cancelar</button>
-                  <button type="submit" className="flex-2 px-8 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-black uppercase shadow-lg shadow-emerald-500/20 transition-all">Adicionar</button>
+                  <button type="button" onClick={() => setIsNewReservaModalOpen(false)} className="flex-1 px-4 py-3 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-900 dark:text-white text-[11px] font-black uppercase transition-all">Cancelar</button>
+                  <button type="submit" className="flex-2 px-8 py-3 rounded-xl bg-emerald-600-white text-[11px] font-black uppercase shadow-lg shadow-emerald-500/20 transition-all">Adicionar</button>
                 </div>
               </form>
             </motion.div>
@@ -777,9 +809,9 @@ export default function RetrabalhosTab() {
         {editingReserva && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setEditingReserva(null)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-            <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="relative w-full max-w-md bg-[#0F172A] border border-white/10 rounded-[2.5rem] p-8 shadow-2xl overflow-hidden">
+            <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="relative w-full max-w-md bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-white/10 rounded-[2.5rem] p-8 shadow-2xl overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-600 to-orange-600" />
-              <h2 className="text-xl font-black text-white mb-2 flex items-center gap-3">
+              <h2 className="text-xl font-black text-slate-900 dark:text-white mb-2 flex items-center gap-3">
                 <RefreshCw className="text-amber-500" /> Atualizar Produção
               </h2>
               <p className="text-[10px] text-slate-500 uppercase tracking-widest font-black mb-6">Reserva: {editingReserva.reserva_a501 || editingReserva.reserva_g501}</p>
@@ -807,35 +839,33 @@ export default function RetrabalhosTab() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1.5 block text-center">Retrabalhado</label>
-                    <input name="quantidade_retornada" defaultValue={editingReserva.quantidade_retornada} required type="number" className="no-spinner w-full bg-black/40 border border-emerald-500/20 rounded-xl px-4 py-3 text-emerald-400 font-mono text-center text-lg focus:outline-none focus:border-emerald-500/50 transition-all" />
+                    <input name="quantidade_retornada" defaultValue={editingReserva.quantidade_retornada} required type="number" className="no-spinner w-full bg-slate-50 dark:bg-black/40 border border-emerald-500/20 rounded-xl px-4 py-3 text-emerald-400 font-mono text-center text-lg focus:outline-none focus:border-emerald-500/50 transition-all" />
                   </div>
                   <div>
                     <label className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-1.5 block text-center">Rejeitado</label>
-                    <input name="quantidade_rejeitada" defaultValue={editingReserva.quantidade_rejeitada} required type="number" className="no-spinner w-full bg-black/40 border border-rose-500/20 rounded-xl px-4 py-3 text-rose-400 font-mono text-center text-lg focus:outline-none focus:border-rose-500/50 transition-all" />
+                    <input name="quantidade_rejeitada" defaultValue={editingReserva.quantidade_rejeitada} required type="number" className="no-spinner w-full bg-slate-50 dark:bg-black/40 border border-rose-500/20 rounded-xl px-4 py-3 text-rose-400 font-mono text-center text-lg focus:outline-none focus:border-rose-500/50 transition-all" />
                   </div>
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1.5 block text-center">Embalagens Avariadas</label>
-                  <input name="embalagens_avariadas" defaultValue={editingReserva.embalagens_avariadas} required type="number" className="no-spinner w-full bg-black/40 border border-amber-500/20 rounded-xl px-4 py-3 text-amber-400 font-mono text-center text-lg focus:outline-none focus:border-amber-500/50 transition-all" />
+                  <input name="embalagens_avariadas" defaultValue={editingReserva.embalagens_avariadas} required type="number" className="no-spinner w-full bg-slate-50 dark:bg-black/40 border border-amber-500/20 rounded-xl px-4 py-3 text-amber-400 font-mono text-center text-lg focus:outline-none focus:border-amber-500/50 transition-all" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Estorno A501</label>
-                    <input name="estorno_a501" defaultValue={editingReserva.estorno_a501} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white font-mono focus:outline-none focus:border-blue-500/50 transition-all" placeholder="OP Estorno" />
+                    <input name="estorno_a501" defaultValue={editingReserva.estorno_a501} className="w-full bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-blue-500/50 transition-all" placeholder="OP Estorno" />
                   </div>
                   <div>
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Estorno G501</label>
-                    <input name="estorno_g501" defaultValue={editingReserva.estorno_g501} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white font-mono focus:outline-none focus:border-blue-500/50 transition-all" placeholder="OP Estorno" />
+                    <input name="estorno_g501" defaultValue={editingReserva.estorno_g501} className="w-full bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-blue-500/50 transition-all" placeholder="OP Estorno" />
                   </div>
                 </div>
                 <div className="space-y-3">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">Status da Produção</label>
                   <div className="grid grid-cols-1 gap-2">
                     {[
-                      { id: 'EM ANDAMENTO', label: 'Em Andamento', color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20', active: 'bg-blue-600 text-white border-blue-400 shadow-lg shadow-blue-500/20', icon: PlayCircle },
-                      { id: 'FINALIZADO', label: 'Finalizado', color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', active: 'bg-emerald-600 text-white border-emerald-400 shadow-lg shadow-emerald-500/20', icon: CheckCircle2 },
-                      { id: 'PAUSADO', label: 'Pausado', color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20', active: 'bg-rose-600 text-white border-rose-400 shadow-lg shadow-rose-500/20', icon: PauseCircle },
-                      { id: 'EM FILA', label: 'Em Fila', color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20', active: 'bg-purple-600 text-white border-purple-400 shadow-lg shadow-purple-500/20', icon: ListMusic },
+                      { id: 'EM ANDAMENTO', label: 'Em Andamento', color: 'text-blue-400', bg: 'bg-blue-500-white border-emerald-400 shadow-lg shadow-emerald-500/20', icon: CheckCircle2 },
+                      { id: 'PAUSADO', label: 'Pausado', color: 'text-rose-400', bg: 'bg-rose-500-white border-purple-400 shadow-lg shadow-purple-500/20', icon: ListMusic },
                     ].map((status) => (
                       <button
                         key={status.id}
@@ -843,7 +873,7 @@ export default function RetrabalhosTab() {
                         onClick={() => setTempStatus(status.id)}
                         className={cn(
                           "flex items-center gap-3 px-4 py-3 rounded-xl border text-[11px] font-black uppercase tracking-widest transition-all duration-300",
-                          tempStatus === status.id ? status.active : cn(status.bg, status.border, status.color, "hover:bg-white/5")
+                          tempStatus === status.id ? status.active : cn(status.bg, status.border, status.color, "hover:bg-slate-50 dark:hover:bg-white/5")
                         )}
                       >
                         <status.icon size={14} />
@@ -854,8 +884,8 @@ export default function RetrabalhosTab() {
                   </div>
                 </div>
                 <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setEditingReserva(null)} className="flex-1 px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white text-[11px] font-black uppercase transition-all">Cancelar</button>
-                  <button type="submit" className="flex-2 px-8 py-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-black uppercase shadow-lg shadow-amber-500/20 transition-all">Salvar Alterações</button>
+                  <button type="button" onClick={() => setEditingReserva(null)} className="flex-1 px-4 py-3 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-900 dark:text-white text-[11px] font-black uppercase transition-all">Cancelar</button>
+                  <button type="submit" className="flex-2 px-8 py-3 rounded-xl bg-amber-600-white text-[11px] font-black uppercase shadow-lg shadow-amber-500/20 transition-all">Salvar Alterações</button>
                 </div>
               </form>
             </motion.div>
@@ -867,10 +897,10 @@ export default function RetrabalhosTab() {
         {editingLote && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setEditingLote(null)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-            <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="relative w-full max-w-md bg-[#0F172A] border border-white/10 rounded-[2.5rem] p-8 shadow-2xl overflow-hidden">
+            <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="relative w-full max-w-md bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-white/10 rounded-[2.5rem] p-8 shadow-2xl overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-600 to-indigo-600" />
-              <h2 className="text-xl font-black text-white mb-2 flex items-center gap-3">
-                <RefreshCw className="text-blue-500" /> Editar Status do Lote
+              <h2 className="text-xl font-black text-slate-900 dark:text-white mb-2 flex items-center gap-3">
+                <RefreshCw className="text-blue-600 dark:text-blue-500" /> Editar Status do Lote
               </h2>
               <p className="text-[10px] text-slate-500 uppercase tracking-widest font-black mb-6">Lote: {editingLote.lote} - {editingLote.codigo}</p>
               
@@ -900,10 +930,9 @@ export default function RetrabalhosTab() {
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">Novo Status do Lote</label>
                   <div className="grid grid-cols-2 gap-2">
                     {[
-                      { id: 'Aguardando', label: 'Aguardando', color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20', active: 'bg-amber-600 text-white border-amber-400 shadow-lg shadow-amber-500/20', icon: Hourglass },
-                      { id: 'Em andamento', label: 'Em andamento', color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20', active: 'bg-blue-600 text-white border-blue-400 shadow-lg shadow-blue-500/20', icon: PlayCircle },
-                      { id: 'Finalizado', label: 'Finalizado', color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', active: 'bg-emerald-600 text-white border-emerald-400 shadow-lg shadow-emerald-500/20', icon: CheckCircle2 },
-                      { id: 'Pausado', label: 'Pausado', color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20', active: 'bg-rose-600 text-white border-rose-400 shadow-lg shadow-rose-500/20', icon: PauseCircle },
+                      { id: 'Aguardando', label: 'Aguardando', color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20', active: 'bg-amber-600-white border-amber-400 shadow-lg shadow-amber-500/20', icon: Hourglass },
+                      { id: 'Em andamento', label: 'Em andamento', color: 'text-blue-400', bg: 'bg-blue-500-white border-emerald-400 shadow-lg shadow-emerald-500/20', icon: CheckCircle2 },
+                      { id: 'Pausado', label: 'Pausado', color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20', active: 'bg-rose-600-white border-rose-400 shadow-lg shadow-rose-500/20', icon: PauseCircle },
                     ].map((status) => (
                       <button
                         key={status.id}
@@ -911,7 +940,7 @@ export default function RetrabalhosTab() {
                         onClick={() => setTempStatus(status.id)}
                         className={cn(
                           "flex items-center gap-3 px-4 py-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all duration-300",
-                          tempStatus === status.id ? status.active : cn(status.bg, status.border, status.color, "hover:bg-white/5")
+                          tempStatus === status.id ? status.active : cn(status.bg, status.border, status.color, "hover:bg-slate-50 dark:hover:bg-white/5")
                         )}
                       >
                         <status.icon size={12} />
@@ -922,8 +951,8 @@ export default function RetrabalhosTab() {
                   </div>
                 </div>
                 <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setEditingLote(null)} className="flex-1 px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white text-[11px] font-black uppercase transition-all">Cancelar</button>
-                  <button type="submit" className="flex-2 px-8 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-black uppercase shadow-lg shadow-blue-500/20 transition-all">Salvar Status</button>
+                  <button type="button" onClick={() => setEditingLote(null)} className="flex-1 px-4 py-3 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-900 dark:text-white text-[11px] font-black uppercase transition-all">Cancelar</button>
+                  <button type="submit" className="flex-2 px-8 py-3 rounded-xl bg-blue-600-white text-[11px] font-black uppercase shadow-lg shadow-blue-500/20 transition-all">Salvar Status</button>
                 </div>
               </form>
             </motion.div>

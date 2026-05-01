@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Plus, 
   Save, 
@@ -12,7 +12,9 @@ import {
   X,
   Loader2,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ChevronDown,
+  MessageSquare
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
@@ -29,8 +31,14 @@ interface Registro {
   Saída: number | null;
   Origem: string;
   Observação: string;
+  transportadora?: string | null;
+  nota_fiscal?: number | null;
+  placa?: string | null;
+  container?: string | null;
+  lacre?: string | null;
   'Movimentação Sistema'?: boolean | null;
   Molhado?: boolean;
+  qtd_molhada?: number | null;
   isNew?: boolean;
   isDirty?: boolean;
 }
@@ -67,6 +75,69 @@ interface ToastState {
   message: string;
   type: 'success' | 'error' | 'info';
 }
+
+const CustomSelect = ({ value, options, onChange, disabled, placeholder = "Selecione..." }: { value: string, options: string[], onChange: (v: string) => void, disabled: boolean, placeholder?: string }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative w-full" ref={dropdownRef}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setIsOpen(!isOpen)}
+        className={cn(
+          "w-full text-left bg-transparent border-none px-5 py-3.5 text-sm transition-colors focus:outline-none flex items-center justify-between",
+          disabled ? "cursor-default text-slate-400 dark:text-slate-600" : "cursor-pointer text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/20"
+        )}
+      >
+        <span className={!value ? "text-slate-400 dark:text-slate-600 truncate" : "truncate"}>{value || placeholder}</span>
+        {!disabled && <ChevronDown className={cn("w-4 h-4 ml-2 flex-shrink-0 transition-transform text-slate-400", isOpen && "rotate-180")} />}
+      </button>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -5 }}
+            transition={{ duration: 0.15 }}
+            className="absolute z-[60] w-[180px] top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden py-1"
+          >
+            {options.map(opt => (
+              <button
+                key={opt}
+                type="button"
+                className={cn(
+                  "w-full text-left px-4 py-2.5 text-sm transition-colors",
+                  value === opt 
+                    ? "text-blue-600 dark:text-blue-400 font-medium bg-blue-50 dark:bg-blue-900/30" 
+                    : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white"
+                )}
+                onClick={() => {
+                  onChange(opt);
+                  setIsOpen(false);
+                }}
+              >
+                {opt}
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
 
 const Toast: React.FC<ToastState & { onClose: () => void }> = ({ show, message, type, onClose }) => {
   useEffect(() => {
@@ -111,6 +182,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
   const [viewMode, setViewMode] = useState<'geral' | 'drivein'>('geral');
   const [searchTerm, setSearchTerm] = useState('');
   const [toast, setToast] = useState<ToastState>({ show: false, message: '', type: 'info' });
+  const [obsModalTarget, setObsModalTarget] = useState<{ index: number, isNew: boolean, value: string } | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToast({ show: true, message, type });
@@ -266,6 +338,12 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
           Entrada: row.Entrada,
           Saída: row.Saída,
           Origem: row.Origem,
+          'Quantidade Molhada': row.qtd_molhada,
+          transportadora: row.transportadora,
+          nota_fiscal: row.nota_fiscal,
+          placa: row.placa,
+          container: row.container,
+          lacre: row.lacre,
           Observação: row.Molhado && !row.Observação?.includes('[MOLHADO]') ? `[MOLHADO] ${row.Observação || ''}`.trim() : row.Observação,
           'Movimentação Sistema': row['Movimentação Sistema']
         };
@@ -343,8 +421,8 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
       
       showToast('Registros salvos e estoque atualizado!', 'success');
     } catch (err: any) {
-      console.error('Erro ao salvar registros:', err);
-      const errorMsg = err.message || 'Erro desconhecido ao salvar';
+      console.error('Erro ao salvar registros:', JSON.stringify(err, null, 2), err);
+      const errorMsg = err?.message || err?.details || 'Erro desconhecido ao salvar';
       showToast(errorMsg, 'error');
     } finally {
       setSaving(false);
@@ -364,25 +442,25 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
   );
 
   return (
-    <div className="flex flex-col h-full bg-[#0a0f18] text-slate-200 font-sans p-4">
+    <div className="flex flex-col h-full text-slate-900 dark:text-slate-200 font-sans">
       {/* Header / Actions */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
-          <div className="bg-blue-600/20 p-2 rounded-lg">
-            <Calendar className="text-blue-400" size={20} />
+          <div className="bg-blue-600/10 dark:bg-blue-600/20 p-2 rounded-xl border border-blue-500/10 dark:border-blue-500/20">
+            <Calendar className="text-blue-600 dark:text-blue-400" size={20} />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white leading-tight">Registros e Histórico</h2>
+            <h2 className="text-lg font-black text-slate-900 dark:text-white leading-tight uppercase tracking-tight">Registros e Histórico</h2>
             <div className="flex items-center gap-2 mt-1">
               <button 
                 onClick={() => setViewMode('geral')}
-                className={cn("text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded transition-all", viewMode === 'geral' ? "bg-blue-600 text-white" : "text-slate-500 hover:text-slate-300 hover:bg-slate-800")}
+                className={cn("text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded transition-all", viewMode === 'geral' ? "bg-blue-600 text-white" : "text-slate-500 hover:text-slate-900 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800")}
               >
                 Entradas e Saídas
               </button>
               <button 
                 onClick={() => setViewMode('drivein')}
-                className={cn("text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded transition-all", viewMode === 'drivein' ? "bg-emerald-600 text-white" : "text-slate-500 hover:text-slate-300 hover:bg-slate-800")}
+                className={cn("text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded transition-all", viewMode === 'drivein' ? "bg-emerald-600 text-white" : "text-slate-500 hover:text-slate-900 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800")}
               >
                 Drive-In Mapeamento
               </button>
@@ -390,21 +468,21 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 bg-slate-900/50 p-1 rounded-xl border border-slate-800">
+        <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900/50 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
           <button 
             onClick={() => setCurrentWeekStart(subWeeks(currentWeekStart, 1))}
-            className="p-1.5 hover:bg-slate-800 rounded-lg transition-colors text-slate-400 hover:text-white"
+            className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
           >
             <ChevronLeft size={18} />
           </button>
           
-          <div className="px-3 py-1 text-sm font-bold text-slate-300 min-w-[200px] text-center">
+          <div className="px-3 py-1 text-sm font-bold text-slate-900 dark:text-slate-300 min-w-[200px] text-center">
             {format(currentWeekStart, "dd 'de' MMM", { locale: ptBR })} - {format(weekEnd, "dd 'de' MMM", { locale: ptBR })}
           </div>
 
           <button 
             onClick={() => setCurrentWeekStart(addWeeks(currentWeekStart, 1))}
-            className="p-1.5 hover:bg-slate-800 rounded-lg transition-colors text-slate-400 hover:text-white"
+            className="p-1.5 hover:bg-slate-100 dark:bg-slate-800 rounded-lg transition-colors text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white"
           >
             <ChevronRight size={18} />
           </button>
@@ -425,7 +503,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
               placeholder="Buscar por produto ou observação..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 bg-slate-900/50 border border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 w-64 transition-all"
+              className="pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-900/50 border border-transparent rounded-xl text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 w-64 transition-all"
             />
           </div>
 
@@ -433,7 +511,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
             <>
               <button 
                 onClick={handleAddRow}
-                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-lg shadow-emerald-900/20 active:scale-95"
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all active:scale-95"
               >
                 <Plus size={18} />
                 Novo Registro
@@ -443,10 +521,10 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                 onClick={handleSaveRows}
                 disabled={saving || !registros.some(r => r.isDirty)}
                 className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all active:scale-95 shadow-lg",
+                  "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all active:scale-95",
                   registros.some(r => r.isDirty)
-                    ? "bg-blue-600 hover:bg-blue-500 text-white shadow-blue-900/20"
-                    : "bg-slate-800 text-slate-500 cursor-not-allowed"
+                    ? "bg-blue-600 hover:bg-blue-500 text-white"
+                    : "bg-slate-100 dark:bg-slate-800/50 text-slate-400 dark:text-slate-600 cursor-not-allowed"
                 )}
               >
                 {saving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
@@ -457,24 +535,27 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
         </div>
       </div>
 
-      {/* Table Content */}
-      <div className="flex-1 overflow-auto border border-slate-800 rounded-2xl bg-[#0d131f] backdrop-blur-sm custom-scrollbar relative">
+      <div className="flex-1 overflow-auto border-none bg-white/50 dark:bg-slate-900/30 backdrop-blur-sm rounded-2xl overflow-hidden shadow-none custom-scrollbar relative">
         {viewMode === 'geral' ? (
-          <table className="w-full border-collapse text-left table-fixed">
-            <thead className="sticky top-0 z-20">
-              <tr className="bg-[#0f172a] border-b border-slate-800">
-                <th className="px-2 py-3.5 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[45px] text-center border-r border-slate-800/50">#</th>
-                <th className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[140px] border-r border-slate-800/50">Data</th>
-                <th className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[140px] border-r border-slate-800/50">Produto</th>
-                <th className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[100px] text-center border-r border-slate-800/50">Entrada</th>
-                <th className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[100px] text-center border-r border-slate-800/50">Saída</th>
-                <th className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[180px] border-r border-slate-800/50">Origem</th>
-                <th className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[100px] text-center border-r border-slate-800/50">Status</th>
-                <th className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[100px] text-center border-r border-slate-800/50">Sistema</th>
-                <th className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Observação</th>
+          <table className="w-full text-left min-w-[1400px] border-none">
+            <thead className="sticky top-0 z-20 bg-slate-100/80 dark:bg-slate-900/80 border-none">
+              <tr>
+                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[110px]">Data</th>
+                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[110px]">Produto</th>
+                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[80px]">Entrada</th>
+                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[80px]">Saída</th>
+                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[90px]">Qtd Molh.</th>
+                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[130px]">Origem</th>
+                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[130px]">Transportadora</th>
+                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[100px]">NF</th>
+                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[110px]">Placa</th>
+                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[130px]">Container</th>
+                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[110px]">Lacre</th>
+                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[80px] text-center">Sistema</th>
+                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[80px] text-center">Obsv.</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/40">
+            <tbody className="border-none">
               {loading ? (
                 <tr>
                   <td colSpan={8} className="py-20 text-center">
@@ -495,105 +576,185 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                   <tr 
                     key={row.id || `new-${idx}`} 
                     className={cn(
-                      "group transition-all hover:bg-slate-800/40",
-                      row.isDirty ? "bg-blue-600/5" : "even:bg-slate-900/20",
-                      !row.isNew && "opacity-80"
+                      "hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all group relative z-0 hover:z-10 border-none",
+                      row.isDirty && "bg-blue-50/30 dark:bg-blue-500/5",
+                      row.isNew && "bg-emerald-50/30 dark:bg-emerald-500/5"
                     )}
                   >
-                    <td className="p-0 border-r border-slate-800/30 text-center">
-                      {row.isNew && (
-                        <button 
-                          onClick={() => removeRow(idx)}
-                          className="p-1.5 text-slate-600 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-all"
-                          title="Remover linha"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                    <td className="p-0">
+                      {row.isNew ? (
+                        <input 
+                          type="date"
+                          value={row.Data ?? ''}
+                          onChange={(e) => updateRow(idx, 'Data', e.target.value)}
+                          className="w-full bg-transparent border-none px-5 py-3.5 text-sm focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/30 focus:outline-none transition-all font-mono text-slate-600 dark:text-slate-300 [color-scheme:light] dark:[color-scheme:dark]"
+                        />
+                      ) : (
+                        <div className="px-5 py-3.5 text-sm font-mono text-slate-600 dark:text-slate-300 group-hover:text-slate-800 dark:group-hover:text-slate-100 transition-colors">
+                          {row.Data ? (() => {
+                             const p = row.Data.split('-');
+                             return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : row.Data;
+                          })() : '—'}
+                        </div>
                       )}
                     </td>
-                    <td className="p-0 border-r border-slate-800/30">
-                      <input 
-                        type="text"
-                        value={row.Data ?? ''}
-                        disabled={!row.isNew}
-                        onChange={(e) => updateRow(idx, 'Data', e.target.value)}
-                        placeholder="YYYY-MM-DD"
-                        className="w-full bg-transparent border-none px-4 py-2.5 text-sm focus:bg-slate-800/80 focus:ring-1 focus:ring-blue-500/30 focus:outline-none transition-all font-mono text-slate-400 group-hover:text-slate-200 disabled:cursor-default"
-                      />
-                    </td>
-                    <td className="p-0 border-r border-slate-800/30">
+                    <td className="p-0">
                       <input 
                         type="text"
                         value={row.Produto ?? ''}
                         disabled={!row.isNew}
                         onChange={(e) => updateRow(idx, 'Produto', e.target.value)}
                         placeholder="0000-00"
-                        className="w-full bg-transparent border-none px-4 py-3 text-sm focus:bg-slate-800/80 focus:ring-1 focus:ring-slate-500/30 focus:outline-none transition-all font-semibold tracking-wide text-slate-200 group-hover:text-white disabled:cursor-default"
+                        className="w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight text-slate-800 dark:text-slate-200 group-hover:text-slate-900 dark:group-hover:text-white disabled:cursor-default placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/20 focus:outline-none transition-colors"
                       />
                     </td>
-                    <td className="p-0 border-r border-slate-800/30">
+                    <td className="p-0">
                       <input 
                         type="text"
                         value={row.Entrada ?? ''}
                         disabled={!row.isNew}
                         onChange={(e) => updateRow(idx, 'Entrada', e.target.value)}
                         placeholder="0"
-                        className="w-full bg-transparent border-none px-4 py-2.5 text-sm text-center focus:bg-emerald-600/10 focus:ring-1 focus:ring-emerald-500/30 focus:outline-none transition-all font-black text-emerald-500/80 group-hover:text-emerald-400 disabled:cursor-default"
+                        className={cn(
+                          "w-full bg-transparent border-none px-5 py-3.5 text-sm tabular-nums focus:ring-1 focus:outline-none transition-colors font-normal disabled:cursor-default",
+                          (Number(row.Entrada) > 0) 
+                            ? "text-emerald-600 dark:text-emerald-400 focus:ring-emerald-500/30" 
+                            : "text-slate-400 dark:text-slate-600 placeholder:text-slate-300 dark:placeholder:text-slate-700 focus:ring-blue-500/20"
+                        )}
                       />
                     </td>
-                    <td className="p-0 border-r border-slate-800/30">
+                    <td className="p-0">
                       <input 
                         type="text"
                         value={row.Saída ?? ''}
                         disabled={!row.isNew}
                         onChange={(e) => updateRow(idx, 'Saída', e.target.value)}
                         placeholder="0"
-                        className="w-full bg-transparent border-none px-4 py-2.5 text-sm text-center focus:bg-rose-600/10 focus:ring-1 focus:ring-rose-500/30 focus:outline-none transition-all font-black text-rose-500/80 group-hover:text-rose-400 disabled:cursor-default"
+                        className={cn(
+                          "w-full bg-transparent border-none px-5 py-3.5 text-sm tabular-nums focus:ring-1 focus:outline-none transition-colors font-normal disabled:cursor-default",
+                          (Number(row.Saída) > 0) 
+                            ? "text-rose-600 dark:text-rose-400 focus:ring-rose-500/30" 
+                            : "text-slate-400 dark:text-slate-600 placeholder:text-slate-300 dark:placeholder:text-slate-700 focus:ring-blue-500/20"
+                        )}
                       />
                     </td>
-                    <td className="p-0 border-r border-slate-800/30">
-                      <select
+                    <td className="p-0">
+                      <input 
+                        type="text"
+                        value={row.qtd_molhada ?? ''}
+                        disabled={!row.isNew}
+                        onChange={(e) => updateRow(idx, 'qtd_molhada', e.target.value ? Number(e.target.value) : null)}
+                        placeholder="0"
+                        className={cn(
+                          "w-full bg-transparent border-none px-5 py-3.5 text-sm tabular-nums focus:ring-1 focus:outline-none transition-colors font-normal disabled:cursor-default [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
+                          (Number(row.qtd_molhada) > 0) 
+                            ? "text-blue-600 dark:text-blue-400 focus:ring-blue-500/30" 
+                            : "text-slate-400 dark:text-slate-600 placeholder:text-slate-300 dark:placeholder:text-slate-700 focus:ring-blue-500/20"
+                        )}
+                      />
+                    </td>
+                    <td className="p-0">
+                      <CustomSelect
                         value={row.Origem ?? ''}
                         disabled={!row.isNew}
-                        onChange={(e) => updateRow(idx, 'Origem', e.target.value)}
-                        className="w-full bg-transparent border-none px-4 py-3 text-sm focus:bg-slate-800/80 focus:ring-1 focus:ring-blue-500/30 focus:outline-none transition-all text-slate-400 group-hover:text-slate-200 disabled:cursor-default appearance-none"
-                      >
-                        <option value="" disabled className="bg-[#0f172a]">Selecione...</option>
-                        {ORIGEM_OPTIONS.map(opt => (
-                          <option key={opt} value={opt} className="bg-[#0f172a]">{opt}</option>
-                        ))}
-                      </select>
+                        onChange={(v) => updateRow(idx, 'Origem', v)}
+                        options={ORIGEM_OPTIONS}
+                      />
                     </td>
-                    <td className="p-0 border-r border-slate-800/30">
-                      <div className="flex justify-center items-center h-full py-2">
-                        <button
-                          onClick={() => updateRow(idx, 'Molhado', !row.Molhado)}
-                          disabled={!row.isNew}
-                          className={cn(
-                            "flex items-center justify-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider transition-all border",
-                            row.Molhado 
-                              ? "bg-blue-900/40 text-blue-400 border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.2)]" 
-                              : "bg-slate-800/50 text-slate-500 border-slate-700/50 hover:bg-slate-800",
-                            !row.isNew && "cursor-not-allowed opacity-80"
-                          )}
-                          title="Marcar como molhado"
-                        >
-                          <span className="relative flex h-2 w-2">
-                            {row.Molhado && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>}
-                            <span className={cn("relative inline-flex rounded-full h-2 w-2", row.Molhado ? "bg-blue-500" : "bg-slate-600")}></span>
-                          </span>
-                          {row.Molhado ? 'Molhado' : 'Seco'}
-                        </button>
-                      </div>
+                    <td className="p-0">
+                      <input 
+                        type="text"
+                        value={row.transportadora ?? ''}
+                        disabled={!row.isNew || row.Origem !== 'Recebimento'}
+                        onChange={(e) => updateRow(idx, 'transportadora', e.target.value)}
+                        placeholder="---"
+                        className={cn(
+                          "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors",
+                          !row.isNew 
+                            ? "text-slate-800 dark:text-slate-200 cursor-default" 
+                            : row.Origem !== 'Recebimento'
+                              ? "cursor-not-allowed opacity-50 bg-slate-200/50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                              : "text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/20 group-hover:text-slate-900 dark:group-hover:text-white cursor-text"
+                        )}
+                      />
                     </td>
-                    <td className="p-0 border-r border-slate-800/30">
-                      <div className="flex justify-center items-center h-full py-2">
+                    <td className="p-0">
+                      <input 
+                        type="text"
+                        value={row.nota_fiscal ?? ''}
+                        disabled={!row.isNew || row.Origem !== 'Recebimento'}
+                        onChange={(e) => updateRow(idx, 'nota_fiscal', e.target.value ? Number(e.target.value) : null)}
+                        placeholder="---"
+                        className={cn(
+                          "w-full bg-transparent border-none px-5 py-3.5 text-sm tabular-nums focus:outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
+                          !row.isNew 
+                            ? "text-slate-800 dark:text-slate-200 cursor-default" 
+                            : row.Origem !== 'Recebimento'
+                              ? "cursor-not-allowed opacity-50 bg-slate-200/50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                              : "text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/20 cursor-text"
+                        )}
+                      />
+                    </td>
+                    <td className="p-0">
+                      <input 
+                        type="text"
+                        value={row.placa ?? ''}
+                        disabled={!row.isNew || row.Origem !== 'Recebimento'}
+                        onChange={(e) => updateRow(idx, 'placa', e.target.value)}
+                        placeholder="---"
+                        className={cn(
+                          "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors",
+                          !row.isNew 
+                            ? "text-slate-800 dark:text-slate-200 cursor-default" 
+                            : row.Origem !== 'Recebimento'
+                              ? "cursor-not-allowed opacity-50 bg-slate-200/50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                              : "text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/20 group-hover:text-slate-900 dark:group-hover:text-white cursor-text"
+                        )}
+                      />
+                    </td>
+                    <td className="p-0">
+                      <input 
+                        type="text"
+                        value={row.container ?? ''}
+                        disabled={!row.isNew || row.Origem !== 'Recebimento'}
+                        onChange={(e) => updateRow(idx, 'container', e.target.value)}
+                        placeholder="---"
+                        className={cn(
+                          "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors",
+                          !row.isNew 
+                            ? "text-slate-800 dark:text-slate-200 cursor-default" 
+                            : row.Origem !== 'Recebimento'
+                              ? "cursor-not-allowed opacity-50 bg-slate-200/50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                              : "text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/20 group-hover:text-slate-900 dark:group-hover:text-white cursor-text"
+                        )}
+                      />
+                    </td>
+                    <td className="p-0">
+                      <input 
+                        type="text"
+                        value={row.lacre ?? ''}
+                        disabled={!row.isNew || row.Origem !== 'Recebimento'}
+                        onChange={(e) => updateRow(idx, 'lacre', e.target.value)}
+                        placeholder="---"
+                        className={cn(
+                          "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors",
+                          !row.isNew 
+                            ? "text-slate-800 dark:text-slate-200 cursor-default" 
+                            : row.Origem !== 'Recebimento'
+                              ? "cursor-not-allowed opacity-50 bg-slate-200/50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                              : "text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/20 group-hover:text-slate-900 dark:group-hover:text-white cursor-text"
+                        )}
+                      />
+                    </td>
+
+                    <td className="p-0">
+                      <div className="flex justify-center items-center h-full py-3.5">
                         <button
                           onClick={() => updateRow(idx, 'Movimentação Sistema', !row['Movimentação Sistema'])}
                           disabled={row['Movimentação Sistema'] === true && !row.isDirty && !row.isNew}
                           className={cn(
                             "w-10 h-5 rounded-full transition-all relative p-1",
-                            row['Movimentação Sistema'] ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]" : "bg-slate-800 border border-slate-700",
+                            row['Movimentação Sistema'] ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]" : "bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700",
                             (row['Movimentação Sistema'] === true && !row.isDirty && !row.isNew) ? "opacity-100" : "hover:scale-105 active:scale-95",
                             (row['Movimentação Sistema'] === true && !row.isDirty && !row.isNew) && "cursor-not-allowed"
                           )}
@@ -607,15 +768,38 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                         </button>
                       </div>
                     </td>
-                    <td className="p-0">
-                      <input 
-                        type="text"
-                        value={row.Observação ?? ''}
-                        disabled={!row.isNew}
-                        onChange={(e) => updateRow(idx, 'Observação', e.target.value)}
-                        placeholder="Detalhes do movimento..."
-                        className="w-full bg-transparent border-none px-4 py-3 text-sm focus:bg-slate-800/80 focus:ring-1 focus:ring-blue-500/30 focus:outline-none transition-all text-slate-400 group-hover:text-slate-200 disabled:cursor-default"
-                      />
+                    <td className="p-0 relative">
+                      <div className="flex items-center justify-center h-full py-3.5 gap-2 px-2">
+                        <button
+                          onClick={() => {
+                            setObsModalTarget({
+                              index: idx,
+                              isNew: !!row.isNew,
+                              value: row.Observação || ''
+                            });
+                          }}
+                          disabled={!row.isNew && !row.Observação}
+                          className={cn(
+                            "p-1.5 rounded-lg transition-all border",
+                            row.Observação 
+                              ? "text-blue-500 bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/20" 
+                              : "text-slate-400 dark:text-slate-500 border-transparent hover:bg-slate-100 dark:hover:bg-slate-800",
+                            !row.isNew && !row.Observação && "opacity-50 cursor-not-allowed"
+                          )}
+                          title={row.Observação || "Adicionar observação"}
+                        >
+                          <MessageSquare size={14} />
+                        </button>
+                        {row.isNew && (
+                          <button 
+                            onClick={() => removeRow(idx)}
+                            className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-all border border-transparent hover:border-rose-500/20"
+                            title="Remover linha"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -623,67 +807,74 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
             </tbody>
           </table>
         ) : (
-          <table className="w-full border-collapse text-left table-fixed">
-            <thead className="sticky top-0 z-20">
-              <tr className="bg-[#0f172a] border-b border-slate-800">
-                <th className="px-4 py-3.5 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[160px] border-r border-slate-800/50">Data/Hora</th>
-                <th className="px-4 py-3.5 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[100px] border-r border-slate-800/50">Ação</th>
-                <th className="px-4 py-3.5 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[120px] border-r border-slate-800/50">SKU</th>
-                <th className="px-4 py-3.5 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[120px] border-r border-slate-800/50">Posição</th>
-                <th className="px-4 py-3.5 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[100px] text-center border-r border-slate-800/50">Origem (N-P)</th>
-                <th className="px-4 py-3.5 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[100px] text-center border-r border-slate-800/50">Destino (N-P)</th>
-                <th className="px-4 py-3.5 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[80px] text-center">Qtd</th>
+          <table className="w-full text-left min-w-[700px]">
+            <thead className="sticky top-0 z-20 bg-slate-100/80 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800">
+              <tr>
+                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[200px]">Data/Hora</th>
+                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest">SKU</th>
+                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest">Posição</th>
+                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[130px] text-right">Origem</th>
+                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[130px] text-right">Destino</th>
+                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[90px] text-right">Qtd</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/40">
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-800/50">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-20 text-center">
+                  <td colSpan={6} className="py-20 text-center">
                     <div className="flex flex-col items-center gap-3">
-                      <Loader2 className="animate-spin text-emerald-500" size={32} />
-                      <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Carregando histórico do drive-in...</p>
+                      <Loader2 className="animate-spin text-blue-500" size={28} />
+                      <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">Carregando...</p>
                     </div>
                   </td>
                 </tr>
               ) : filteredHistorico.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-20 text-center">
-                    <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Nenhuma movimentação no Drive-In nesta semana</p>
+                  <td colSpan={6} className="py-20 text-center">
+                    <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">Nenhuma movimentação nesta semana</p>
                   </td>
                 </tr>
               ) : (
-                filteredHistorico.map((row, idx) => (
-                  <tr key={row.id} className="group transition-all hover:bg-slate-800/40 even:bg-slate-900/20 opacity-90">
-                    <td className="px-4 py-2.5 border-r border-slate-800/30 text-slate-400 font-mono text-xs">
-                      {format(new Date(row.created_at), 'dd/MM/yyyy HH:mm')}
-                    </td>
-                    <td className="px-4 py-2.5 border-r border-slate-800/30 text-slate-300 text-sm font-bold">
-                      <span className={cn("px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider", 
-                        row.tipo_acao === 'MOVER' ? "bg-blue-500/20 text-blue-400" :
-                        row.tipo_acao === 'ATUALIZAR' ? "bg-amber-500/20 text-amber-400" :
-                        row.tipo_acao === 'REMOVER' ? "bg-rose-500/20 text-rose-400" :
-                        "bg-slate-500/20 text-slate-400"
-                      )}>
-                        {row.tipo_acao}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 border-r border-slate-800/30 font-black tracking-tight uppercase text-emerald-400/90 text-sm">
-                      {row.sku}
-                    </td>
-                    <td className="px-4 py-2.5 border-r border-slate-800/30 text-slate-300 text-sm font-mono">
-                      {row.posicao}
-                    </td>
-                    <td className="px-4 py-2.5 border-r border-slate-800/30 text-slate-400 text-sm text-center">
-                      {row.nivel_origem !== null ? `${row.nivel_origem}-${row.prof_origem}` : '-'}
-                    </td>
-                    <td className="px-4 py-2.5 border-r border-slate-800/30 text-slate-400 text-sm text-center">
-                      {row.nivel_destino !== null ? `${row.nivel_destino}-${row.prof_destino}` : '-'}
-                    </td>
-                    <td className="px-4 py-2.5 text-slate-300 text-sm text-center font-bold">
-                      {row.quantidade}
-                    </td>
-                  </tr>
-                ))
+                filteredHistorico.map((row) => {
+                  const badgeCn =
+                    row.tipo_acao === 'EDITAR'    ? 'text-indigo-400 border-indigo-800 bg-indigo-950/60' :
+                    row.tipo_acao === 'MOVER'     ? 'text-blue-400 border-blue-800 bg-blue-950/60' :
+                    row.tipo_acao === 'REMOVER'   ? 'text-rose-400 border-rose-800 bg-rose-950/60' :
+                    row.tipo_acao === 'ATUALIZAR' ? 'text-amber-400 border-amber-800 bg-amber-950/60' :
+                    'text-slate-400 border-slate-700 bg-slate-800/40';
+
+                  return (
+                    <tr key={row.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all hover:scale-[1.01] hover:shadow-lg group cursor-pointer relative z-0 hover:z-10">
+                      <td className="px-5 py-3.5">
+                        <span className="text-sm font-normal text-slate-800 dark:text-slate-200 group-hover:text-slate-900 dark:group-hover:text-white transition-colors font-mono">
+                          {format(new Date(row.created_at), 'dd/MM/yyyy HH:mm')}
+                        </span>
+                        <span className={cn("ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider border align-middle", badgeCn)}>
+                          {row.tipo_acao}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <span className="text-sm font-normal text-slate-800 dark:text-slate-200 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">{row.sku}</span>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <p className="text-xs font-normal text-slate-500 dark:text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors font-mono">{row.posicao}</p>
+                      </td>
+                      <td className="px-5 py-3.5 text-right">
+                        <span className="text-sm font-normal text-slate-600 dark:text-slate-300 tabular-nums">
+                          {row.nivel_origem !== null ? `${row.nivel_origem}-${row.prof_origem}` : <span className="text-slate-400 dark:text-slate-600">—</span>}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 text-right">
+                        <span className="text-sm font-normal text-slate-600 dark:text-slate-300 tabular-nums">
+                          {row.nivel_destino !== null ? `${row.nivel_destino}-${row.prof_destino}` : <span className="text-slate-400 dark:text-slate-600">—</span>}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 text-right">
+                        <span className="text-sm font-normal text-slate-800 dark:text-slate-200 tabular-nums">{row.quantidade}</span>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -718,6 +909,68 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
           </>
         )}
       </div>
+
+      <AnimatePresence>
+        {obsModalTarget && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl rounded-2xl w-full max-w-md overflow-hidden flex flex-col"
+            >
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-800/30">
+                <h3 className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                  <MessageSquare size={16} className="text-blue-500" />
+                  Observação
+                </h3>
+                <button 
+                  onClick={() => setObsModalTarget(null)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              
+              <div className="p-5 flex-1">
+                {obsModalTarget.isNew ? (
+                  <textarea
+                    autoFocus
+                    value={obsModalTarget.value}
+                    onChange={(e) => setObsModalTarget(prev => prev ? { ...prev, value: e.target.value } : null)}
+                    placeholder="Digite os detalhes sobre este registro..."
+                    className="w-full h-32 p-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none resize-none transition-all text-sm text-slate-700 dark:text-slate-300 placeholder:text-slate-400"
+                  />
+                ) : (
+                  <div className="w-full min-h-24 p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-xl text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
+                    {obsModalTarget.value || <span className="text-slate-400 italic">Sem observação.</span>}
+                  </div>
+                )}
+              </div>
+
+              <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-800/30 flex justify-end gap-2">
+                <button
+                  onClick={() => setObsModalTarget(null)}
+                  className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+                >
+                  {obsModalTarget.isNew ? 'Cancelar' : 'Fechar'}
+                </button>
+                {obsModalTarget.isNew && (
+                  <button
+                    onClick={() => {
+                      updateRow(obsModalTarget.index, 'Observação', obsModalTarget.value);
+                      setObsModalTarget(null);
+                    }}
+                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors shadow-sm shadow-blue-500/20"
+                  >
+                    Salvar
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <Toast 
         {...toast} 

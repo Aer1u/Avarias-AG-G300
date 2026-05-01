@@ -138,16 +138,16 @@ export function AddPalletModal({
           initial={{ opacity: 0, scale: 0.97, y: 16 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.97, y: 16 }}
-          className="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col relative z-10 border border-slate-200 dark:border-slate-800"
+          className="bg-white dark:bg-[#0d131f] w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col relative z-10 border border-slate-200 dark:border-slate-800/80"
         >
           {/* ── Header ── */}
-          <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/20 rounded-t-2xl">
             <div className="flex items-center gap-3">
               <div className="h-8 w-8 rounded-lg bg-blue-100 dark:bg-blue-500/20 text-blue-600 flex items-center justify-center">
                 <Box size={16} strokeWidth={2.5} />
               </div>
               <div>
-                <h2 className="text-sm font-black text-slate-800 dark:text-white tracking-tight">Adicionar Palete</h2>
+                <h2 className="text-sm font-black text-slate-900 dark:text-white tracking-tight">Adicionar Palete</h2>
                 <span className="text-[10px] font-bold text-slate-400">
                   Nível {destinationLevel} · Prof. {destinationDepth}
                   {isMix && <span className="ml-2 text-blue-500 font-black">· MIX {nextId}</span>}
@@ -166,7 +166,7 @@ export function AddPalletModal({
           <div className="w-full">
             <table className="w-full text-sm border-collapse">
               <thead>
-                <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700">
+                <tr className="bg-slate-50 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-700/50">
                   <th className="text-left px-4 py-2.5 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[40%]">Código</th>
                   <th className="text-center px-2 py-2.5 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[10%]">Disp.</th>
                   <th className="text-center px-2 py-2.5 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[16%]">Total</th>
@@ -214,12 +214,12 @@ export function AddPalletModal({
                             }}
                             placeholder="Buscar código..."
                             className={cn(
-                              "w-full h-9 px-3 pr-8 rounded-lg outline-none text-xs font-black font-mono transition-all",
-                              "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700",
-                              "text-slate-900 dark:text-blue-50 placeholder:text-slate-400 dark:placeholder:text-slate-400/70",
-                              "focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10",
-                              item.sku && !stockInfo ? "border-red-400 bg-red-50/50 dark:bg-red-900/10 text-red-600 dark:text-red-400" :
-                              item.sku && stockInfo ? "border-blue-300 dark:border-blue-500/50" : ""
+                             "w-full h-9 px-3 pr-8 rounded-lg outline-none text-xs font-black font-mono transition-all border",
+                              "bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700",
+                              "text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500",
+                              "focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15",
+                              item.sku && !stockInfo ? "border-rose-400 bg-rose-50 dark:bg-rose-900/10 text-rose-600 dark:text-rose-400" :
+                              item.sku && stockInfo ? "border-blue-400/60 dark:border-blue-500/50" : ""
                             )}
                           />
                           {/* Dropdown */}
@@ -278,9 +278,10 @@ export function AddPalletModal({
                           onChange={(e) => handleChangeQtyRaw(item.id, 'qty', e.target.value)}
                           min={0} placeholder="0"
                           className={cn(
-                            "w-full h-9 px-1 rounded-lg border outline-none text-sm font-black text-center transition-all bg-slate-50 dark:bg-slate-800",
-                            !item.sku ? "opacity-30 cursor-not-allowed border-slate-200" :
-                            isMaxedOut ? "border-amber-400 text-amber-600" : "border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
+                            "w-full h-9 px-1 rounded-lg border outline-none text-sm font-black text-center transition-all",
+                            "bg-white dark:bg-slate-800/80",
+                            !item.sku ? "opacity-30 cursor-not-allowed border-slate-200 dark:border-slate-700" :
+                            isMaxedOut ? "border-amber-400 text-amber-600 bg-amber-50/30" : "border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
                           )}
                         />
                       </td>
@@ -291,8 +292,8 @@ export function AddPalletModal({
                           onChange={(e) => handleChangeQtyRaw(item.id, 'qtyWet', e.target.value)}
                           min={0} placeholder="0"
                           className={cn(
-                            "w-full h-9 px-1 rounded-lg border outline-none text-sm font-black text-center transition-all bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-600",
-                            (!item.sku || !item.qty) ? "opacity-30 cursor-not-allowed" : "text-blue-600"
+                            "w-full h-9 px-1 rounded-lg border outline-none text-sm font-black text-center transition-all bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-600",
+                            (!item.sku || !item.qty) ? "opacity-30 cursor-not-allowed" : "text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/40"
                           )}
                         />
                       </td>
@@ -303,8 +304,8 @@ export function AddPalletModal({
                           onChange={(e) => handleChangeQtyRaw(item.id, 'qtyTilted', e.target.value)}
                           min={0} placeholder="0"
                           className={cn(
-                            "w-full h-9 px-1 rounded-lg border outline-none text-sm font-black text-center transition-all bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-600",
-                            (!item.sku || !item.qty) ? "opacity-30 cursor-not-allowed" : "text-rose-600"
+                            "w-full h-9 px-1 rounded-lg border outline-none text-sm font-black text-center transition-all bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-600",
+                            (!item.sku || !item.qty) ? "opacity-30 cursor-not-allowed" : "text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-500/40"
                           )}
                         />
                       </td>
@@ -336,7 +337,7 @@ export function AddPalletModal({
           {/* ── Footer ── */}
           <div className="px-5 py-3.5 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
             <button onClick={onClose}
-              className="px-5 py-2 rounded-xl text-sm font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              className="px-5 py-2 rounded-xl text-sm font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition-all"
             >
               Cancelar
             </button>

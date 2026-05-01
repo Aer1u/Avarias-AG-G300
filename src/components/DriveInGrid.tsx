@@ -637,8 +637,8 @@ export function DriveInGrid({
 
   if (isBlocked) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 bg-slate-50/50 dark:bg-slate-800/10 rounded-[2.5rem] border border-dashed border-slate-200 dark:border-slate-800">
-        <div className="h-16 w-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-4">
+      <div className="flex flex-col items-center justify-center py-20 bg-slate-50/50 dark:bg-slate-800/10 rounded-[2.5rem] border border-dashed border-slate-200 dark:border-slate-700 dark:border-slate-800">
+        <div className="h-16 w-16 rounded-full bg-slate-100 dark:bg-slate-800/80 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-4">
           <Lock size={32} />
         </div>
         <h3 className="text-lg font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">Drive Bloqueado</h3>
@@ -700,9 +700,9 @@ export function DriveInGrid({
             exit={{ opacity: 0 }}
             className="absolute inset-0 z-[100] bg-white/20 dark:bg-black/20 backdrop-blur-sm flex items-center justify-center rounded-[2.5rem]"
           >
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-2xl flex flex-col items-center gap-4">
+            <div className="bg-white dark:bg-slate-900 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 dark:border-slate-800 rounded-2xl p-6 shadow-2xl flex flex-col items-center gap-4">
               <RefreshCw className="animate-spin text-blue-600" size={32} />
-              <p className="text-xs font-black uppercase tracking-widest text-slate-900 dark:text-white">Efetuando Troca...</p>
+              <p className="text-xs font-black uppercase tracking-widest text-slate-900 dark:text-white dark:text-white">Efetuando Troca...</p>
             </div>
           </motion.div>
         )}
@@ -734,7 +734,7 @@ export function DriveInGrid({
                     <div key={`row-${lvl}`} className="flex items-center">
                       {/* Level Label (Y-Axis) */}
                       <div className="w-14 shrink-0 pr-4 text-right">
-                        <span className="text-[13px] font-black text-slate-900 dark:text-white uppercase tracking-tighter">
+                        <span className="text-[13px] font-black text-slate-900 dark:text-white dark:text-white uppercase tracking-tighter">
                           {displayLvl}
                         </span>
                       </div>
@@ -771,8 +771,8 @@ export function DriveInGrid({
                               className={cn(
                                 "w-28 h-28 rounded-xl border relative group flex items-center justify-center p-2 text-center transition-all duration-200 cursor-pointer",
                                 isEmpty 
-                                  ? "bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-                                  : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700",
+                                  ? "bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:border-slate-800"
+                                  : "bg-white dark:bg-slate-900 dark:bg-slate-800 border-slate-200 dark:border-slate-700 dark:border-slate-700",
                                 !draggingCoords && "hover:scale-[1.04]",
                                 isSelected && "border-[3px] border-blue-600 dark:border-blue-500 z-20 scale-[1.02]",
                                 isGridSelected && "border-orange-500 ring-4 ring-orange-500/10 bg-orange-50/5 dark:bg-orange-950/10 z-20",
@@ -874,7 +874,7 @@ export function DriveInGrid({
                                   className={cn(
                                     "w-[94%] h-[94%] rounded-xl flex flex-col items-center justify-between overflow-hidden relative transition-colors touch-none shadow-md",
                                     isEditModeActive ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
-                                    "bg-[#1e293b]",
+                                    "bg-[#1e293b] dark:bg-slate-800",
                                     hasWet 
                                       ? "shadow-[inset_0_0_20px_rgba(37,99,235,0.25)] border-[1.5px] border-blue-500/40" 
                                       : hasTilted
@@ -952,8 +952,8 @@ export function DriveInGrid({
               {/* Front indicator on the right (Minimalist) */}
               <div className="self-stretch flex flex-col items-center justify-center pl-4 mb-8">
                  <div className="flex flex-col items-center gap-1 opacity-40 hover:opacity-100 transition-opacity">
-                    <ArrowLeft size={16} className="text-slate-900 dark:text-white" />
-                    <span className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-900 dark:text-white">FRENTE</span>
+                    <ArrowLeft size={16} className="text-slate-900 dark:text-white dark:text-white" />
+                    <span className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-900 dark:text-white dark:text-white">FRENTE</span>
                  </div>
               </div>
             </div>
@@ -962,7 +962,7 @@ export function DriveInGrid({
             <div className="flex gap-4 ml-14 mb-4">
               {depths.map(d => (
                 <div key={`head-${d}`} className="w-28 shrink-0 text-center">
-                  <span className="text-[11px] font-black text-slate-900 dark:text-white uppercase tracking-tighter">
+                  <span className="text-[11px] font-black text-slate-900 dark:text-white dark:text-white uppercase tracking-tighter">
                     {d}
                   </span>
                 </div>
@@ -987,7 +987,7 @@ export function DriveInGrid({
         animate={{ opacity: 1, x: 0 }}
         className="w-full lg:w-72 shrink-0 transition-all duration-500"
       >
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/60 rounded-[2rem] p-5 shadow-xl shadow-slate-200/40 dark:shadow-none sticky top-4">
+        <div className="bg-white dark:bg-slate-900 dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/60 rounded-[2rem] p-5 shadow-xl shadow-slate-200/40 dark:shadow-none sticky top-4">
           {selectedProduct ? (
             <div className="space-y-5">
               <div className="flex justify-between items-start">
@@ -995,7 +995,7 @@ export function DriveInGrid({
                   <span className="text-[10px] font-bold text-blue-500/80 uppercase tracking-widest mb-0.5 block">
                     Célula
                   </span>
-                  <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tighter">
+                  <h3 className="text-xl font-black text-slate-900 dark:text-white dark:text-white uppercase tracking-tighter">
                     N{selectedCoords ? selectedCoords.lvl : ""} • P{selectedCoords ? selectedCoords.d : ""}
                   </h3>
                 </div>
@@ -1011,9 +1011,9 @@ export function DriveInGrid({
                   )}
                   <button 
                     onClick={() => setSelectedCoords(null)}
-                    className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors group"
+                    className="p-1.5 hover:bg-slate-100 dark:bg-slate-800/80 dark:hover:bg-slate-800 rounded-lg transition-colors group"
                   >
-                    <Lock size={14} className="text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white" />
+                    <Lock size={14} className="text-slate-400 group-hover:text-slate-900 dark:text-white dark:group-hover:text-white" />
                   </button>
                 </div>
               </div>
@@ -1021,7 +1021,7 @@ export function DriveInGrid({
               <div className="max-h-[60vh] overflow-y-auto pr-1 custom-scrollbar">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-200 dark:border-slate-700/50">
+                    <tr className="border-b border-slate-200 dark:border-slate-700 dark:border-slate-700/50">
                       <th className="py-2 text-[9px] font-black text-slate-400 uppercase tracking-widest w-[45%]">Produto</th>
                       <th className="py-2 text-center text-[9px] font-black text-slate-400 uppercase tracking-widest">Qtd / Palete</th>
                       <th className="py-2 text-right"></th>
@@ -1029,10 +1029,10 @@ export function DriveInGrid({
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
                     {selectedCellProducts.map((p, idx) => (
-                      <tr key={idx} className="group hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                      <tr key={idx} className="group hover:bg-slate-50 dark:bg-slate-900/50 dark:hover:bg-slate-800/30 transition-colors">
                         <td className="py-3 pr-2">
                           <div className="flex flex-col">
-                            <span className="text-xs font-black text-slate-900 dark:text-white leading-none mb-1">{p.sku}</span>
+                            <span className="text-xs font-black text-slate-900 dark:text-white dark:text-white leading-none mb-1">{p.sku}</span>
                             <span className="text-[9px] text-slate-500 font-medium line-clamp-1 italic">{p.descricao}</span>
                           </div>
                         </td>
@@ -1075,7 +1075,7 @@ export function DriveInGrid({
               </div>
                 <button 
                   onClick={() => setSelectedCoords(null)}
-                  className="w-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-200 dark:hover:bg-slate-700 transition-all active:scale-95 mt-4"
+                  className="w-full bg-slate-100 dark:bg-slate-800/80 dark:bg-slate-800 text-slate-600 dark:text-slate-400 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-200 dark:hover:bg-slate-700 transition-all active:scale-95 mt-4"
                 >
                   Fechar Detalhes
                 </button>
@@ -1086,7 +1086,7 @@ export function DriveInGrid({
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5 block">
                   Dashboard de Posição
                 </span>
-                <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tighter">
+                <h3 className="text-xl font-black text-slate-900 dark:text-white dark:text-white uppercase tracking-tighter">
                   {positionId || "Drive-In"}
                 </h3>
               </div>
@@ -1097,11 +1097,11 @@ export function DriveInGrid({
                 <div>
                   <div className="flex justify-between items-end mb-2">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ocupação</span>
-                    <span className="text-lg font-black text-slate-900 dark:text-white">
+                    <span className="text-lg font-black text-slate-900 dark:text-white dark:text-white">
                       {totalPallets} <span className="text-[11px] text-slate-400 font-bold">/ {capacity} PTs</span>
                     </span>
                   </div>
-                  <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                  <div className="h-2 w-full bg-slate-100 dark:bg-slate-800/80 dark:bg-slate-800 rounded-full overflow-hidden">
                     <motion.div 
                       initial={{ width: 0 }}
                       animate={{ width: `${Math.min((totalPallets / capacity) * 100, 100)}%` }}
@@ -1124,12 +1124,12 @@ export function DriveInGrid({
                         {isMixed ? "Misturado" : "Mono"}
                       </span>
                     </div>
-                    <p className="text-2xl font-black text-slate-900 dark:text-white">{uniqueSkus}</p>
+                    <p className="text-2xl font-black text-slate-900 dark:text-white dark:text-white">{uniqueSkus}</p>
                   </div>
 
                   <div className="bg-slate-50/50 dark:bg-slate-800/30 rounded-2xl p-4 border border-slate-100 dark:border-slate-800/50">
                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Unidades Físicas</span>
-                    <p className="text-2xl font-black text-slate-900 dark:text-white">{totalQty.toLocaleString('pt-BR')}</p>
+                    <p className="text-2xl font-black text-slate-900 dark:text-white dark:text-white">{totalQty.toLocaleString('pt-BR')}</p>
                   </div>
                 </div>
 
@@ -1195,19 +1195,19 @@ export function DriveInGrid({
       {/* MODAL DE SENHA E EDIÇÃO/ADIÇÃO */}
       {(isSelectingProductToEdit || editingProduct) && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm rounded-none">
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl max-w-sm w-full shadow-2xl border border-slate-200 dark:border-slate-700">
+          <div className="bg-white dark:bg-slate-900 dark:bg-slate-900 p-6 rounded-2xl max-w-sm w-full shadow-2xl border border-slate-200 dark:border-slate-700 dark:border-slate-700">
             {isSelectingProductToEdit && !editingProduct ? (
               <div className="space-y-4">
                 <div className="flex justify-between items-center mb-2">
-                  <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase leading-none">Qual Item Editar?</h3>
-                  <button type="button" onClick={() => setIsSelectingProductToEdit(false)} className="text-slate-400 hover:text-slate-900 dark:hover:text-white font-black text-[10px] uppercase">X Fechar</button>
+                  <h3 className="text-lg font-black text-slate-900 dark:text-white dark:text-white uppercase leading-none">Qual Item Editar?</h3>
+                  <button type="button" onClick={() => setIsSelectingProductToEdit(false)} className="text-slate-400 hover:text-slate-900 dark:text-white dark:hover:text-white font-black text-[10px] uppercase">X Fechar</button>
                 </div>
                 <div className="max-h-[60vh] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
                   {products.map((p, idx) => (
                     <button
                       key={`${p.sku}-${idx}`}
                       onClick={() => setEditingProduct({ ...p, _original_nivel: p.nivel, _original_profundidade: p.profundidade })}
-                      className="w-full text-left p-3 rounded-xl border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex justify-between items-center"
+                      className="w-full text-left p-3 rounded-xl border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:bg-slate-900/50 dark:hover:bg-slate-800/50 transition-colors flex justify-between items-center"
                     >
                       <span className="font-bold text-slate-700 dark:text-slate-200">{p.sku}</span>
                       <span className="text-xs text-slate-500 font-medium">{p.quantidade} un</span>
@@ -1218,22 +1218,22 @@ export function DriveInGrid({
             ) : editingProduct ? (
               <form onSubmit={handleSaveEdit} className="space-y-4">
                 <div className="flex justify-between items-center mb-2">
-                  <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase leading-none">Editar Item</h3>
-                  <button type="button" onClick={() => setEditingProduct(null)} className="text-slate-400 hover:text-slate-900 dark:hover:text-white font-black text-[10px] uppercase">X Fechar</button>
+                  <h3 className="text-lg font-black text-slate-900 dark:text-white dark:text-white uppercase leading-none">Editar Item</h3>
+                  <button type="button" onClick={() => setEditingProduct(null)} className="text-slate-400 hover:text-slate-900 dark:text-white dark:hover:text-white font-black text-[10px] uppercase">X Fechar</button>
                 </div>
-                <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800 mb-4">
+                <div className="bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800 mb-4">
                   <p className="text-xs font-black text-slate-500 uppercase">Item atual</p>
-                  <p className="font-bold text-slate-900 dark:text-white">{editingProduct.sku}</p>
+                  <p className="font-bold text-slate-900 dark:text-white dark:text-white">{editingProduct.sku}</p>
                 </div>
                 <div className="space-y-3">
                    <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
                         <label className="text-[9px] font-black text-slate-400 uppercase">Nível Anterior</label>
-                        <input type="text" value={editingProduct._original_nivel} disabled className="w-full text-sm bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-slate-500" />
+                        <input type="text" value={editingProduct._original_nivel} disabled className="w-full text-sm bg-slate-100 dark:bg-slate-800/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 dark:border-slate-700 p-2 rounded-lg text-slate-500" />
                       </div>
                       <div className="space-y-1">
                         <label className="text-[9px] font-black text-slate-400 uppercase">Profundidade Anter.</label>
-                        <input type="text" value={editingProduct._original_profundidade} disabled className="w-full text-sm bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-slate-500" />
+                        <input type="text" value={editingProduct._original_profundidade} disabled className="w-full text-sm bg-slate-100 dark:bg-slate-800/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 dark:border-slate-700 p-2 rounded-lg text-slate-500" />
                       </div>
                     </div>
 
@@ -1245,7 +1245,7 @@ export function DriveInGrid({
                             "text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded",
                             (availableStocks.find(s => s.produto === editingProduct.sku)?.available || 0) > 0 
                               ? "bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400" 
-                              : "bg-slate-100 text-slate-500 dark:bg-slate-800"
+                              : "bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:bg-slate-800"
                           )}>
                             Chão: {availableStocks.find(s => s.produto === editingProduct.sku)?.available || 0}
                           </span>
@@ -1255,7 +1255,7 @@ export function DriveInGrid({
                         type="number" 
                         value={editingProduct.quantidade || ""} 
                         onChange={e => setEditingProduct({...editingProduct, quantidade: Math.floor(Number(e.target.value))})} 
-                        className="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-slate-900 dark:text-white font-bold" 
+                        className="w-full text-sm bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 dark:border-slate-700 p-2 rounded-lg text-slate-900 dark:text-white dark:text-white font-bold" 
                         required 
                       />
                     </div>
@@ -1263,22 +1263,22 @@ export function DriveInGrid({
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
                         <label className="text-[9px] font-black text-slate-400 uppercase">Qtd Tombada</label>
-                        <input type="number" value={editingProduct.qtd_tombada || ""} onChange={e => setEditingProduct({...editingProduct, qtd_tombada: Math.floor(Number(e.target.value))})} className="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-slate-900 dark:text-white" />
+                        <input type="number" value={editingProduct.qtd_tombada || ""} onChange={e => setEditingProduct({...editingProduct, qtd_tombada: Math.floor(Number(e.target.value))})} className="w-full text-sm bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 dark:border-slate-700 p-2 rounded-lg text-slate-900 dark:text-white dark:text-white" />
                       </div>
                       <div className="space-y-1">
                         <label className="text-[9px] font-black text-slate-400 uppercase">Qtd Molhado</label>
-                        <input type="number" value={editingProduct.qtd_molhado || ""} onChange={e => setEditingProduct({...editingProduct, qtd_molhado: Math.floor(Number(e.target.value))})} className="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-slate-900 dark:text-white" />
+                        <input type="number" value={editingProduct.qtd_molhado || ""} onChange={e => setEditingProduct({...editingProduct, qtd_molhado: Math.floor(Number(e.target.value))})} className="w-full text-sm bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 dark:border-slate-700 p-2 rounded-lg text-slate-900 dark:text-white dark:text-white" />
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
                         <label className="text-[9px] font-black text-slate-400 uppercase">Novo Nível *</label>
-                        <input type="number" value={editingProduct.nivel ?? ""} onChange={e => setEditingProduct({...editingProduct, nivel: Number(e.target.value)})} className="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-blue-500 p-2 rounded-lg text-slate-900 dark:text-white font-bold" required />
+                        <input type="number" value={editingProduct.nivel ?? ""} onChange={e => setEditingProduct({...editingProduct, nivel: Number(e.target.value)})} className="w-full text-sm bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-800 border border-blue-500 p-2 rounded-lg text-slate-900 dark:text-white dark:text-white font-bold" required />
                       </div>
                       <div className="space-y-1">
                         <label className="text-[9px] font-black text-slate-400 uppercase">Nova Profundidade *</label>
-                        <input type="number" value={editingProduct.profundidade ?? ""} onChange={e => setEditingProduct({...editingProduct, profundidade: Number(e.target.value)})} className="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-blue-500 p-2 rounded-lg text-slate-900 dark:text-white font-bold" required />
+                        <input type="number" value={editingProduct.profundidade ?? ""} onChange={e => setEditingProduct({...editingProduct, profundidade: Number(e.target.value)})} className="w-full text-sm bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-800 border border-blue-500 p-2 rounded-lg text-slate-900 dark:text-white dark:text-white font-bold" required />
                       </div>
                     </div>
                 </div>

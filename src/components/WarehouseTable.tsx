@@ -73,7 +73,7 @@ export function WarehouseTable({
         >
             <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm text-slate-600 dark:text-slate-400">
-                    <thead className="bg-slate-50 dark:bg-slate-800/50 text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-500">
+                    <thead className="bg-slate-50/80 dark:bg-slate-800/40 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
                         <tr>
                             {selectable && (
                                 <th className="px-6 py-4 w-12 text-center">
@@ -106,7 +106,7 @@ export function WarehouseTable({
                             ))}
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
                         {data.map((row, i) => (
                             <tr
                                 key={i}
@@ -148,8 +148,8 @@ export function WarehouseTable({
             </div>
 
             {data.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-                    <p>Nenhum registro encontrado</p>
+                <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                    <p className="text-sm font-bold uppercase tracking-widest">Nenhum registro encontrado</p>
                 </div>
             )}
         </motion.div>
