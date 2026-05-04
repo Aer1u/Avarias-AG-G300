@@ -287,7 +287,7 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
           { label: "Qtd Retrabalhada", value: records.reduce((s, i) => s + (i.quantidade_retornada || 0), 0), icon: TrendingUp, color: "text-emerald-400" },
-          { label: "Eficiência", value: `${Math.round(groupedData.reduce((s, i) => s + i.progresso, 0) / (groupedData.length || 1))}%`, icon: Sparkles, color: "text-blue-400" },
+          { label: "% Retrabalhado", value: `${Math.round((records.reduce((s, i) => s + (i.quantidade_retornada || 0), 0) / (records.reduce((s, i) => s + (i.quantidade_enviada || 0), 0) || 1)) * 100)}%`, icon: Sparkles, color: "text-blue-400" },
           { label: "Embalagens Avariadas", value: records.reduce((s, i) => s + (i.embalagens_avariadas || 0), 0), icon: AlertCircle, color: "text-rose-400" },
         ].map((stat, i) => (
           <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="group relative p-4 bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-white/5 rounded-3xl overflow-hidden shadow-xl">
@@ -471,28 +471,28 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-5 gap-x-4 lg:gap-x-6 py-3 px-6 bg-slate-50 dark:bg-black/40 rounded-2xl border border-slate-200 dark:border-white/5 flex-1 max-w-[600px]">
-                       <div className="flex flex-col min-w-0">
-                          <span className="text-[8px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-widest mb-1 truncate">Embalagens</span>
-                          <span className="text-base font-black text-blue-400 font-mono leading-none">{lote.totalEmbalagens}</span>
+                    <div className="grid grid-cols-5 gap-1 lg:gap-4 py-3 px-3 lg:px-6 bg-slate-50 dark:bg-black/40 rounded-2xl border border-slate-200 dark:border-white/5 flex-1 min-w-[280px]">
+                       <div className="flex flex-col min-w-0 justify-between">
+                          <span className="text-[7px] md:text-[8px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-wider mb-1 truncate">Embalag.</span>
+                          <span className="text-sm md:text-base font-black text-blue-400 font-mono leading-none truncate">{lote.totalEmbalagens}</span>
                        </div>
-                       <div className="flex flex-col min-w-0">
-                          <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1 truncate">Enviado</span>
-                          <span className="text-base font-black text-slate-900 dark:text-white font-mono leading-none">{lote.totalEnviado}</span>
-                          <span className="text-[7px] font-medium text-slate-500/60 mt-1 whitespace-nowrap">{formatPallets(lote.totalEnviado, lote.grade, true)}</span>
+                       <div className="flex flex-col min-w-0 justify-between">
+                          <span className="text-[7px] md:text-[8px] font-black text-slate-500 uppercase tracking-wider mb-1 truncate">Enviado</span>
+                          <span className="text-sm md:text-base font-black text-slate-900 dark:text-white font-mono leading-none truncate">{lote.totalEnviado}</span>
+                          <span className="text-[6px] md:text-[7px] font-medium text-slate-500/60 mt-1 truncate">{formatPallets(lote.totalEnviado, lote.grade, true)}</span>
                        </div>
-                       <div className="flex flex-col min-w-0">
-                          <span className="text-[8px] font-black text-emerald-500 uppercase tracking-widest mb-1 truncate">Retrabalhado</span>
-                          <span className="text-base font-black text-emerald-400 font-mono leading-none">{lote.totalRetornado}</span>
-                          <span className="text-[7px] font-medium text-emerald-500/60 mt-1 whitespace-nowrap">{formatPallets(lote.totalRetornado, lote.grade, true)}</span>
+                       <div className="flex flex-col min-w-0 justify-between">
+                          <span className="text-[7px] md:text-[8px] font-black text-emerald-500 uppercase tracking-wider mb-1 truncate">Retrab.</span>
+                          <span className="text-sm md:text-base font-black text-emerald-400 font-mono leading-none truncate">{lote.totalRetornado}</span>
+                          <span className="text-[6px] md:text-[7px] font-medium text-emerald-500/60 mt-1 truncate">{formatPallets(lote.totalRetornado, lote.grade, true)}</span>
                        </div>
-                       <div className="flex flex-col min-w-0">
-                          <span className="text-[8px] font-black text-rose-500 uppercase tracking-widest mb-1 truncate">Rejeitado</span>
-                          <span className="text-base font-black text-rose-400 font-mono leading-none">{lote.totalRejeitado || 0}</span>
+                       <div className="flex flex-col min-w-0 justify-between">
+                          <span className="text-[7px] md:text-[8px] font-black text-rose-500 uppercase tracking-wider mb-1 truncate">Rejeit.</span>
+                          <span className="text-sm md:text-base font-black text-rose-400 font-mono leading-none truncate">{lote.totalRejeitado || 0}</span>
                        </div>
-                       <div className="flex flex-col min-w-0">
-                          <span className="text-[8px] font-black text-amber-500 uppercase tracking-widest mb-1 truncate">Emb. Avariada</span>
-                          <span className="text-base font-black text-amber-400 font-mono leading-none">{lote.totalAvarias || 0}</span>
+                       <div className="flex flex-col min-w-0 justify-between">
+                          <span className="text-[7px] md:text-[8px] font-black text-amber-500 uppercase tracking-wider mb-1 truncate">Avarias</span>
+                          <span className="text-sm md:text-base font-black text-amber-400 font-mono leading-none truncate">{lote.totalAvarias || 0}</span>
                        </div>
                     </div>
 
@@ -741,7 +741,7 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
                 </div>
                 <div className="pt-4 flex gap-3">
                   <button type="button" onClick={() => setIsNewLoteModalOpen(false)} className="flex-1 px-4 py-3 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-900 dark:text-white text-[11px] font-black uppercase transition-all">Cancelar</button>
-                  <button type="submit" className="flex-2 px-8 py-3 rounded-xl bg-blue-600-white text-[11px] font-black uppercase shadow-lg shadow-blue-500/20 transition-all">Criar Lote</button>
+                  <button type="submit" className="flex-2 px-8 py-3 rounded-xl bg-blue-600 text-white text-[11px] font-black uppercase shadow-lg shadow-blue-500/20 transition-all">Criar Lote</button>
                 </div>
               </form>
             </motion.div>
@@ -797,7 +797,7 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
                 </div>
                 <div className="pt-4 flex gap-3">
                   <button type="button" onClick={() => setIsNewReservaModalOpen(false)} className="flex-1 px-4 py-3 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-900 dark:text-white text-[11px] font-black uppercase transition-all">Cancelar</button>
-                  <button type="submit" className="flex-2 px-8 py-3 rounded-xl bg-emerald-600-white text-[11px] font-black uppercase shadow-lg shadow-emerald-500/20 transition-all">Adicionar</button>
+                  <button type="submit" className="flex-2 px-8 py-3 rounded-xl bg-emerald-600 text-white text-[11px] font-black uppercase shadow-lg shadow-emerald-500/20 transition-all">Adicionar</button>
                 </div>
               </form>
             </motion.div>
@@ -864,8 +864,9 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">Status da Produção</label>
                   <div className="grid grid-cols-1 gap-2">
                     {[
-                      { id: 'EM ANDAMENTO', label: 'Em Andamento', color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20', active: 'bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-500/20', icon: CheckCircle2 },
-                      { id: 'PAUSADO', label: 'Pausado', color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20', active: 'bg-rose-600 text-white border-rose-500 shadow-lg shadow-rose-500/20', icon: ListMusic },
+                      { id: 'EM ANDAMENTO', label: 'Em Andamento', color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20', active: 'bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-500/20', icon: PlayCircle },
+                      { id: 'PAUSADO', label: 'Pausado', color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20', active: 'bg-rose-600 text-white border-rose-500 shadow-lg shadow-rose-500/20', icon: PauseCircle },
+                      { id: 'FINALIZADO', label: 'Finalizado', color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', active: 'bg-emerald-600 text-white border-emerald-500 shadow-lg shadow-emerald-500/20', icon: CheckCircle2 },
                     ].map((status) => (
                       <button
                         key={status.id}
@@ -885,7 +886,7 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
                 </div>
                 <div className="pt-4 flex gap-3">
                   <button type="button" onClick={() => setEditingReserva(null)} className="flex-1 px-4 py-3 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-900 dark:text-white text-[11px] font-black uppercase transition-all">Cancelar</button>
-                  <button type="submit" className="flex-2 px-8 py-3 rounded-xl bg-amber-600-white text-[11px] font-black uppercase shadow-lg shadow-amber-500/20 transition-all">Salvar Alterações</button>
+                  <button type="submit" className="flex-2 px-8 py-3 rounded-xl bg-amber-600 text-white text-[11px] font-black uppercase shadow-lg shadow-amber-500/20 transition-all">Salvar Alterações</button>
                 </div>
               </form>
             </motion.div>
@@ -930,9 +931,9 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">Novo Status do Lote</label>
                   <div className="grid grid-cols-2 gap-2">
                     {[
-                      { id: 'Aguardando', label: 'Aguardando', color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20', active: 'bg-amber-600-white border-amber-400 shadow-lg shadow-amber-500/20', icon: Hourglass },
-                      { id: 'Em andamento', label: 'Em andamento', color: 'text-blue-400', bg: 'bg-blue-500-white border-emerald-400 shadow-lg shadow-emerald-500/20', icon: CheckCircle2 },
-                      { id: 'Pausado', label: 'Pausado', color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20', active: 'bg-rose-600-white border-rose-400 shadow-lg shadow-rose-500/20', icon: PauseCircle },
+                      { id: 'Aguardando', label: 'Aguardando', color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20', active: 'bg-amber-600 text-white border-amber-400 shadow-lg shadow-amber-500/20', icon: Hourglass },
+                      { id: 'Em andamento', label: 'Em andamento', color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20', active: 'bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-500/20', icon: PlayCircle },
+                      { id: 'Pausado', label: 'Pausado', color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20', active: 'bg-rose-600 text-white border-rose-400 shadow-lg shadow-rose-500/20', icon: PauseCircle },
                     ].map((status) => (
                       <button
                         key={status.id}
@@ -952,7 +953,7 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
                 </div>
                 <div className="pt-4 flex gap-3">
                   <button type="button" onClick={() => setEditingLote(null)} className="flex-1 px-4 py-3 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-900 dark:text-white text-[11px] font-black uppercase transition-all">Cancelar</button>
-                  <button type="submit" className="flex-2 px-8 py-3 rounded-xl bg-blue-600-white text-[11px] font-black uppercase shadow-lg shadow-blue-500/20 transition-all">Salvar Status</button>
+                  <button type="submit" className="flex-2 px-8 py-3 rounded-xl bg-blue-600 text-white text-[11px] font-black uppercase shadow-lg shadow-blue-500/20 transition-all">Salvar Status</button>
                 </div>
               </form>
             </motion.div>

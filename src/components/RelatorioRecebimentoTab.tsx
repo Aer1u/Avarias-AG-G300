@@ -645,8 +645,8 @@ export default React.forwardRef(function RelatorioRecebimentoTab(props, ref) {
       <div className="flex-1 flex flex-col min-w-0">
 
         {/* TABLE SECTION */}
-        <div className="flex-1 overflow-auto border-none bg-white/50 dark:bg-slate-900/30 backdrop-blur-sm rounded-2xl overflow-hidden shadow-none custom-scrollbar relative mx-6 print:mx-0 print:overflow-visible">
-        <table className="w-full text-left border-none border-collapse text-sm whitespace-nowrap min-w-[1400px]">
+        <div className="flex-1 overflow-x-auto overflow-y-auto border-none bg-white/50 dark:bg-slate-900/30 backdrop-blur-sm rounded-2xl shadow-none custom-scrollbar relative mx-6 print:mx-0 print:overflow-visible">
+        <table className="w-full text-left border-none border-collapse text-sm whitespace-nowrap min-w-[1000px]">
           <thead className="sticky top-0 z-20 bg-slate-100/80 dark:bg-slate-900/80 border-none backdrop-blur-md">
             <tr>
               <th className="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 w-[150px]">Data</th>
