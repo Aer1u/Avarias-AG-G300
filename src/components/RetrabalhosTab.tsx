@@ -103,6 +103,7 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
   const [records, setRecords] = useState<RetrabalhoRecord[]>([])
   const [lotesConfig, setLotesConfig] = useState<LoteConfig[]>([])
   const [baseCodigos, setBaseCodigos] = useState<BaseCodigo[]>([])
+  const [registrosData, setRegistrosData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [activeStatus, setActiveStatus] = useState("all")
@@ -121,14 +122,16 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
       const { data: { session } } = await supabase.auth.getSession()
       setUser(session?.user || null)
 
-      const [retrabalhosRes, lotesRes, baseRes] = await Promise.all([
+      const [retrabalhosRes, lotesRes, baseRes, registrosRes] = await Promise.all([
         supabase.from('retrabalhos').select('*'),
         supabase.from('lotes_config').select('*'),
-        supabase.from('base_codigos').select('*')
+        supabase.from('base_codigos').select('*'),
+        supabase.from('Registros').select('Entrada, Saída')
       ])
       setRecords(retrabalhosRes.data || [])
       setLotesConfig(lotesRes.data || [])
       setBaseCodigos(baseRes.data || [])
+      setRegistrosData(registrosRes.data || [])
     } catch (err) {
       console.error("Erro na busca:", err)
     } finally {
@@ -280,14 +283,18 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
     }).format(date).replace(',', '')
   }
 
+  const totalRetrabalhado = records.reduce((s, i) => s + (i.quantidade_retornada || 0), 0)
+  const totalRegistros = registrosData.reduce((acc, curr) => acc + (Number(curr.Entrada) || 0) - (Number(curr.Saída) || 0), 0)
+  const percentualRetrabalhado = Math.round((totalRetrabalhado / ((totalRegistros + totalRetrabalhado) || 1)) * 100)
+
   return (
     <div className="space-y-4 pb-12">
       <GlobalStyles />
       {/* Row 1: Estatísticas */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
-          { label: "Qtd Retrabalhada", value: records.reduce((s, i) => s + (i.quantidade_retornada || 0), 0), icon: TrendingUp, color: "text-emerald-400" },
-          { label: "% Retrabalhado", value: `${Math.round((records.reduce((s, i) => s + (i.quantidade_retornada || 0), 0) / ((records.reduce((s, i) => s + (i.quantidade_enviada || 0), 0) + records.reduce((s, i) => s + (i.quantidade_retornada || 0), 0)) || 1)) * 100)}%`, icon: Sparkles, color: "text-blue-400" },
+          { label: "Qtd Retrabalhada", value: totalRetrabalhado, icon: TrendingUp, color: "text-emerald-400" },
+          { label: "% Retrabalhado", value: `${percentualRetrabalhado}%`, icon: Sparkles, color: "text-blue-400" },
           { label: "Embalagens Avariadas", value: records.reduce((s, i) => s + (i.embalagens_avariadas || 0), 0), icon: AlertCircle, color: "text-rose-400" },
         ].map((stat, i) => (
           <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="group relative p-4 bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-white/5 rounded-3xl overflow-hidden shadow-xl">
