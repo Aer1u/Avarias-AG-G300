@@ -471,28 +471,28 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-5 gap-1 lg:gap-4 py-3 px-3 lg:px-6 bg-slate-50 dark:bg-black/40 rounded-2xl border border-slate-200 dark:border-white/5 flex-1 min-w-[280px]">
-                       <div className="flex flex-col min-w-0 justify-between">
-                          <span className="text-[7px] md:text-[8px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-wider mb-1 truncate">Embalag.</span>
-                          <span className="text-sm md:text-base font-black text-blue-400 font-mono leading-none truncate">{lote.totalEmbalagens}</span>
+                    <div className="flex items-start gap-4 sm:gap-6 lg:gap-8 py-3 px-4 sm:px-6 bg-slate-50 dark:bg-black/40 rounded-2xl border border-slate-200 dark:border-white/5 flex-1 overflow-x-auto no-scrollbar min-w-0">
+                       <div className="flex flex-col min-w-max">
+                          <span className="text-[8px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-widest mb-1">Embalagens</span>
+                          <span className="text-sm md:text-base font-black text-blue-400 font-mono leading-none">{lote.totalEmbalagens}</span>
                        </div>
-                       <div className="flex flex-col min-w-0 justify-between">
-                          <span className="text-[7px] md:text-[8px] font-black text-slate-500 uppercase tracking-wider mb-1 truncate">Enviado</span>
-                          <span className="text-sm md:text-base font-black text-slate-900 dark:text-white font-mono leading-none truncate">{lote.totalEnviado}</span>
-                          <span className="text-[6px] md:text-[7px] font-medium text-slate-500/60 mt-1 truncate">{formatPallets(lote.totalEnviado, lote.grade, true)}</span>
+                       <div className="flex flex-col min-w-max">
+                          <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Enviado</span>
+                          <span className="text-sm md:text-base font-black text-slate-900 dark:text-white font-mono leading-none">{lote.totalEnviado}</span>
+                          <span className="text-[7px] font-medium text-slate-500/60 mt-1 whitespace-nowrap">{formatPallets(lote.totalEnviado, lote.grade, true)}</span>
                        </div>
-                       <div className="flex flex-col min-w-0 justify-between">
-                          <span className="text-[7px] md:text-[8px] font-black text-emerald-500 uppercase tracking-wider mb-1 truncate">Retrab.</span>
-                          <span className="text-sm md:text-base font-black text-emerald-400 font-mono leading-none truncate">{lote.totalRetornado}</span>
-                          <span className="text-[6px] md:text-[7px] font-medium text-emerald-500/60 mt-1 truncate">{formatPallets(lote.totalRetornado, lote.grade, true)}</span>
+                       <div className="flex flex-col min-w-max">
+                          <span className="text-[8px] font-black text-emerald-500 uppercase tracking-widest mb-1">Retrabalhado</span>
+                          <span className="text-sm md:text-base font-black text-emerald-400 font-mono leading-none">{lote.totalRetornado}</span>
+                          <span className="text-[7px] font-medium text-emerald-500/60 mt-1 whitespace-nowrap">{formatPallets(lote.totalRetornado, lote.grade, true)}</span>
                        </div>
-                       <div className="flex flex-col min-w-0 justify-between">
-                          <span className="text-[7px] md:text-[8px] font-black text-rose-500 uppercase tracking-wider mb-1 truncate">Rejeit.</span>
-                          <span className="text-sm md:text-base font-black text-rose-400 font-mono leading-none truncate">{lote.totalRejeitado || 0}</span>
+                       <div className="flex flex-col min-w-max">
+                          <span className="text-[8px] font-black text-rose-500 uppercase tracking-widest mb-1">Rejeitado</span>
+                          <span className="text-sm md:text-base font-black text-rose-400 font-mono leading-none">{lote.totalRejeitado || 0}</span>
                        </div>
-                       <div className="flex flex-col min-w-0 justify-between">
-                          <span className="text-[7px] md:text-[8px] font-black text-amber-500 uppercase tracking-wider mb-1 truncate">Avarias</span>
-                          <span className="text-sm md:text-base font-black text-amber-400 font-mono leading-none truncate">{lote.totalAvarias || 0}</span>
+                       <div className="flex flex-col min-w-max">
+                          <span className="text-[8px] font-black text-amber-500 uppercase tracking-widest mb-1">Avariadas</span>
+                          <span className="text-sm md:text-base font-black text-amber-400 font-mono leading-none">{lote.totalAvarias || 0}</span>
                        </div>
                     </div>
 
