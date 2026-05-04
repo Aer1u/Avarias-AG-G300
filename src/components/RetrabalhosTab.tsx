@@ -287,7 +287,7 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
           { label: "Qtd Retrabalhada", value: records.reduce((s, i) => s + (i.quantidade_retornada || 0), 0), icon: TrendingUp, color: "text-emerald-400" },
-          { label: "% Retrabalhado", value: `${Math.round((records.reduce((s, i) => s + (i.quantidade_retornada || 0), 0) / (records.reduce((s, i) => s + (i.quantidade_enviada || 0), 0) || 1)) * 100)}%`, icon: Sparkles, color: "text-blue-400" },
+          { label: "% Retrabalhado", value: `${Math.round((records.reduce((s, i) => s + (i.quantidade_retornada || 0), 0) / ((records.reduce((s, i) => s + (i.quantidade_enviada || 0), 0) + records.reduce((s, i) => s + (i.quantidade_retornada || 0), 0)) || 1)) * 100)}%`, icon: Sparkles, color: "text-blue-400" },
           { label: "Embalagens Avariadas", value: records.reduce((s, i) => s + (i.embalagens_avariadas || 0), 0), icon: AlertCircle, color: "text-rose-400" },
         ].map((stat, i) => (
           <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="group relative p-4 bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-white/5 rounded-3xl overflow-hidden shadow-xl">
