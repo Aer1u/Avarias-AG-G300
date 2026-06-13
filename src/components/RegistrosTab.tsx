@@ -407,6 +407,25 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
             }
           }
 
+          if (row.Entrada && row.Entrada > 0) {
+            const { error: mapErr } = await supabase.from('mapeamento').insert([{
+              'Posição': 'Chão',
+              'Código': row.Produto,
+              'Quantidade': row.Entrada,
+              'Nível': 0,
+              'Profundidade': 0
+            }]);
+            if (mapErr) throw mapErr;
+
+            await supabase.from('historico_mapeamento').insert([{
+              usuario: row.responsavel || 'Sistema',
+              tipo_acao: 'ENTRADA',
+              sku: row.Produto,
+              posicao: 'Chão',
+              quantidade: row.Entrada
+            }]);
+          }
+
           const { error } = await supabase.from('Registros').insert([cleanRow]);
           if (error) throw error;
         } else {
