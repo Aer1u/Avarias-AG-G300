@@ -15,6 +15,7 @@ import {
   RefreshCw,
   Pencil,
   Printer,
+  QrCode,
   X,
   Trash2
 } from "lucide-react"
@@ -435,76 +436,14 @@ export default function PaletesFormadosTab({
                           <span className="text-xs font-semibold text-slate-500">{c.criacao ? c.criacao.split('-').reverse().join('/') : '—'}</span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="relative inline-block text-left" onClick={e => e.stopPropagation()}>
-                            <button
-                              onClick={() => user && setActiveStatusDropdownId(activeStatusDropdownId === c.id ? null : c.id)}
-                              className={cn(
-                                "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all",
-                                (c.status === 'Entregue' ? 'Entregue' : (c.status || 'Pendente')) === 'Entregue'
-                                  ? "bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-200"
-                                  : "bg-amber-100 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-200",
-                                !user && "cursor-default"
-                              )}
-                            >
-                              {c.status === 'Entregue' ? 'Entregue' : (c.status || 'Pendente')}
-                              {user && <ChevronDown size={10} className="opacity-50" />}
-                            </button>
-
-                            <AnimatePresence>
-                              {activeStatusDropdownId === c.id && (
-                                <>
-                                  <div 
-                                    className="fixed inset-0 z-40" 
-                                    onClick={() => setActiveStatusDropdownId(null)} 
-                                  />
-                                  <motion.div
-                                    initial={{ opacity: 0, y: -5, scale: 0.95 }}
-                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                    exit={{ opacity: 0, y: -5, scale: 0.95 }}
-                                    transition={{ duration: 0.15 }}
-                                    className="absolute left-0 mt-2 w-[130px] rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl z-50 p-1.5"
-                                  >
-                                    {[
-                                      { value: "Pendente", label: "Pendente", color: "text-amber-500", bg: "hover:bg-amber-50 dark:hover:bg-amber-500/10", icon: Clock },
-                                      { value: "Entregue", label: "Entregue", color: "text-emerald-500", bg: "hover:bg-emerald-50 dark:hover:bg-emerald-500/10", icon: CheckCircle2 }
-                                    ].map(opt => (
-                                      <button
-                                        key={opt.value}
-                                        type="button"
-                                        onClick={async () => {
-                                          setActiveStatusDropdownId(null)
-                                          try {
-                                            const { error } = await supabase
-                                              .from('controle_avarias')
-                                              .update({ status: opt.value })
-                                              .eq('id', c.id)
-                                            if (error) throw error
-                                            setControleRaw(prev => prev.map(item => item.id === c.id ? { ...item, status: opt.value } : item))
-                                          } catch (err: any) {
-                                            console.error("Erro ao alterar status:", err.message)
-                                            alert("Erro ao alterar status: " + err.message)
-                                          }
-                                        }}
-                                        className={cn(
-                                          "w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-between cursor-pointer",
-                                          opt.bg,
-                                          (c.status === 'Entregue' ? 'Entregue' : (c.status || 'Pendente')) === opt.value
-                                            ? "bg-slate-50 dark:bg-slate-700 text-slate-900 dark:text-white"
-                                            : "text-slate-600 dark:text-slate-300"
-                                        )}
-                                      >
-                                        <div className="flex items-center gap-2">
-                                          <opt.icon size={14} className={opt.color} />
-                                          {opt.label}
-                                        </div>
-                                        {(c.status === 'Entregue' ? 'Entregue' : (c.status || 'Pendente')) === opt.value && <Check size={14} className="text-slate-400" />}
-                                      </button>
-                                    ))}
-                                  </motion.div>
-                                </>
-                              )}
-                            </AnimatePresence>
-                          </div>
+                          <span className={cn(
+                            "px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider",
+                            c.status === 'Entregue' 
+                              ? "bg-blue-100 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400" 
+                              : "bg-amber-100 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                          )}>
+                            {c.status || 'Pendente'}
+                          </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-center" onClick={e => e.stopPropagation()}>
                           <div className="inline-flex items-center gap-1.5">
@@ -525,7 +464,10 @@ export default function PaletesFormadosTab({
                               className="h-8 w-8 rounded-lg flex items-center justify-center bg-slate-50 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-500/20 text-slate-400 hover:text-emerald-500 border-transparent border transition-colors cursor-pointer"
                               title="Imprimir Palete com QR Code"
                             >
-                              <Printer size={13} />
+                              <div className="relative">
+                                <Printer size={13} />
+                                <QrCode size={8} className="absolute -bottom-1 -right-1 bg-white dark:bg-slate-800 rounded-sm" />
+                              </div>
                             </button>
                           </div>
                         </td>
