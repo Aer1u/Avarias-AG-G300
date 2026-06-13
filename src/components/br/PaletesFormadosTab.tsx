@@ -378,127 +378,83 @@ export default function PaletesFormadosTab({
       {loadingControle ? (
         <div className="flex flex-col items-center justify-center py-20 space-y-4">
           <RefreshCw className="animate-spin text-emerald-500" size={32} />
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest animate-pulse">Carregando Histórico...</p>
+          <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Carregando Histórico...</p>
         </div>
       ) : (
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm">
-          <div className="min-h-[280px]">
+        <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-800">
-                  {["Data", "Posição", "Qtd Total", "Reserva", "Remessa", "Documento", "Status", "Ações"].map(col => (
-                    <th 
-                      key={col} 
-                      className={cn(
-                        "px-6 py-4 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap",
-                        col === "Posição" && "pl-8",
-                        col === "Qtd Total" && "text-right",
-                        col === "Ações" && "text-center pl-8"
-                      )}
-                    >
-                      {col}
-                    </th>
-                  ))}
+                <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
+                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Posição</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Documento SAP</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Remessa</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Peças</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Data</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Ações</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50 dark:divide-slate-800/60">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {filteredControle.map((c) => {
                   const isExpanded = expandedControleId === c.id
-                  let itens: any[] | null = null
-                  try { if (c.itens_json) itens = JSON.parse(c.itens_json) } catch (_) {}
-                  const hasDetail = itens && itens.length > 0
+                  const hasDetail = c.detalhes && Array.isArray(c.detalhes)
+                  const itens = hasDetail ? c.detalhes : []
 
                   return (
                     <React.Fragment key={c.id}>
-                      <tr
+                      <tr 
                         onClick={() => setExpandedControleId(isExpanded ? null : c.id)}
                         className={cn(
-                          "transition-colors cursor-pointer select-none",
-                          isExpanded
-                            ? "bg-slate-50 dark:bg-slate-800/60"
-                            : "hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                          "hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer",
+                          isExpanded && "bg-slate-50/80 dark:bg-slate-800/30"
                         )}
                       >
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                            {c.criacao ? c.criacao.split('-').reverse().join('/') : "—"}
+                          <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center">
+                              <Box size={14} className="text-emerald-500" />
+                            </div>
+                            <div className="text-sm font-bold text-slate-900 dark:text-white">
+                              {renderPosicaoHighlight(c.posicao)}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-400">{c.documento || '—'}</span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-400">{c.remessa || '—'}</span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <span className="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                            {c.quantidade || 0}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap pl-8 relative">
-                          <ChevronDown
-                            size={13}
-                            className={cn(
-                              "absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600 shrink-0 transition-transform duration-200",
-                              isExpanded && "rotate-180"
-                            )}
-                          />
-                          {renderPosicaoHighlight(c.posicao)}
-                        </td>
-
-                        <td className="px-6 py-4 whitespace-nowrap text-right">
-                          <span className="text-xs font-bold text-slate-900 dark:text-white">{c.quantidade}</span>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="text-xs font-semibold text-slate-500">{c.criacao ? c.criacao.split('-').reverse().join('/') : '—'}</span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          {c.reserva ? (
-                            <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-400">
-                              {c.reserva}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 dark:text-slate-600 font-bold">-</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          {c.remessa ? (
-                            <span className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
-                              {c.remessa}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 dark:text-slate-600 font-bold">-</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          {c.documento ? (
-                            <span className="text-xs font-mono font-black text-emerald-600 dark:text-emerald-400">
-                              {c.documento}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 dark:text-slate-600 font-bold">-</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap pl-4" onClick={e => e.stopPropagation()}>
-                          <div className="relative inline-block text-left">
+                          <div className="relative inline-block text-left" onClick={e => e.stopPropagation()}>
                             <button
-                              type="button"
-                              disabled={!user}
-                              onClick={() => setActiveStatusDropdownId(activeStatusDropdownId === c.id ? null : c.id)}
+                              onClick={() => user && setActiveStatusDropdownId(activeStatusDropdownId === c.id ? null : c.id)}
                               className={cn(
-                                "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold border cursor-pointer transition-all",
-                                (c.status === 'Entregue')
-                                  ? "text-emerald-600 bg-emerald-50 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20 hover:border-emerald-300 dark:hover:border-emerald-400"
-                                  : "text-amber-600 bg-amber-50 border-amber-100 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20 hover:border-amber-300 dark:hover:border-amber-400",
-                                !user && "opacity-60 cursor-not-allowed"
+                                "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all",
+                                (c.status === 'Entregue' ? 'Entregue' : (c.status || 'Pendente')) === 'Entregue'
+                                  ? "bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-200"
+                                  : "bg-amber-100 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-200",
+                                !user && "cursor-default"
                               )}
-                              title={user ? "Alterar Status" : "Necessário Login para alterar"}
                             >
-                              {c.status === 'Entregue' ? (
-                                <>
-                                  <CheckCircle2 size={12} className="shrink-0" />
-                                  Entregue
-                                </>
-                              ) : (
-                                <>
-                                  <Clock size={12} className="shrink-0" />
-                                  Pendente
-                                </>
-                              )}
-                              <ChevronDown size={10} className={cn("ml-0.5 opacity-60 transition-transform duration-200", activeStatusDropdownId === c.id && "rotate-180")} />
+                              {c.status === 'Entregue' ? 'Entregue' : (c.status || 'Pendente')}
+                              {user && <ChevronDown size={10} className="opacity-50" />}
                             </button>
 
                             <AnimatePresence>
                               {activeStatusDropdownId === c.id && (
                                 <>
                                   <div 
-                                    className="fixed inset-0 z-30" 
+                                    className="fixed inset-0 z-40" 
                                     onClick={() => setActiveStatusDropdownId(null)} 
                                   />
                                   <motion.div
@@ -565,9 +521,9 @@ export default function PaletesFormadosTab({
                               <Pencil size={13} />
                             </button>
                             <button
-                              onClick={() => handlePrintControle(c)}
+                              onClick={() => handlePrintWithQRCode(c)}
                               className="h-8 w-8 rounded-lg flex items-center justify-center bg-slate-50 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-500/20 text-slate-400 hover:text-emerald-500 border-transparent border transition-colors cursor-pointer"
-                              title="Imprimir Palete"
+                              title="Imprimir Palete com QR Code"
                             >
                               <Printer size={13} />
                             </button>
