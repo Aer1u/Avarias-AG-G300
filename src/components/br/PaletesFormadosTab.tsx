@@ -1,5 +1,6 @@
 "use client"
 
+import QRCode from "qrcode";
 import React, { useState, useMemo } from "react"
 import {
   CheckCircle2,
@@ -190,6 +191,56 @@ export default function PaletesFormadosTab({
       setIsSavingEdit(false)
     }
   }
+
+  const handlePrintWithQRCode = async (row: any) => {
+    try {
+      const qrCodeDataUrl = await QRCode.toDataURL(String(row.documento || row.id), {
+        margin: 1,
+        width: 100
+      });
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) return;
+
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Palete - ${row.posicao}</title>
+            <style>
+              body { font-family: sans-serif; margin: 40px; color: #1e293b; }
+              .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px; }
+              .posicao { font-size: 48px; font-weight: 900; color: #10b981; }
+              .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+              .info-item { border: 1px solid #e2e8f0; padding: 15px; border-radius: 10px; }
+              .label { font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; }
+              .value { font-size: 18px; font-weight: 700; }
+              .qr-code { width: 120px; height: 120px; }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <div>
+                <div class="label">Posição</div>
+                <div class="posicao">${row.posicao}</div>
+              </div>
+              <img src="${qrCodeDataUrl}" class="qr-code" />
+            </div>
+            <div class="info-grid">
+              <div class="info-item"><div class="label">Documento SAP</div><div class="value">${row.documento || '—'}</div></div>
+              <div class="info-item"><div class="label">Remessa</div><div class="value">${row.remessa || '—'}</div></div>
+              <div class="info-item"><div class="label">Quantidade</div><div class="value">${row.quantidade || 0}</div></div>
+              <div class="info-item"><div class="label">SKUs</div><div class="value" style="font-size:12px">${row.codigos || '—'}</div></div>
+            </div>
+            <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 500); }</script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    } catch (err) {
+      console.error("Erro QR Code:", err);
+      handlePrintControle(row);
+    }
+  };
 
   return (
     <>
