@@ -1,6 +1,5 @@
 "use client"
 
-import QRCode from "qrcode";
 import React, { useState, useMemo } from "react"
 import {
   CheckCircle2,
@@ -15,7 +14,6 @@ import {
   RefreshCw,
   Pencil,
   Printer,
-  QrCode,
   X,
   Trash2
 } from "lucide-react"
@@ -193,56 +191,6 @@ export default function PaletesFormadosTab({
     }
   }
 
-  const handlePrintWithQRCode = async (row: any) => {
-    try {
-      const qrCodeDataUrl = await QRCode.toDataURL(String(row.documento || row.id), {
-        margin: 1,
-        width: 100
-      });
-
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) return;
-
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>Palete - ${row.posicao}</title>
-            <style>
-              body { font-family: sans-serif; margin: 40px; color: #1e293b; }
-              .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px; }
-              .posicao { font-size: 48px; font-weight: 900; color: #10b981; }
-              .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-              .info-item { border: 1px solid #e2e8f0; padding: 15px; border-radius: 10px; }
-              .label { font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; }
-              .value { font-size: 18px; font-weight: 700; }
-              .qr-code { width: 120px; height: 120px; }
-            </style>
-          </head>
-          <body>
-            <div class="header">
-              <div>
-                <div class="label">Posição</div>
-                <div class="posicao">${row.posicao}</div>
-              </div>
-              <img src="${qrCodeDataUrl}" class="qr-code" />
-            </div>
-            <div class="info-grid">
-              <div class="info-item"><div class="label">Documento SAP</div><div class="value">${row.documento || '—'}</div></div>
-              <div class="info-item"><div class="label">Remessa</div><div class="value">${row.remessa || '—'}</div></div>
-              <div class="info-item"><div class="label">Quantidade</div><div class="value">${row.quantidade || 0}</div></div>
-              <div class="info-item"><div class="label">SKUs</div><div class="value" style="font-size:12px">${row.codigos || '—'}</div></div>
-            </div>
-            <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 500); }</script>
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
-    } catch (err) {
-      console.error("Erro QR Code:", err);
-      handlePrintControle(row);
-    }
-  };
-
   return (
     <>
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -379,71 +327,177 @@ export default function PaletesFormadosTab({
       {loadingControle ? (
         <div className="flex flex-col items-center justify-center py-20 space-y-4">
           <RefreshCw className="animate-spin text-emerald-500" size={32} />
-          <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Carregando Histórico...</p>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest animate-pulse">Carregando Histórico...</p>
         </div>
       ) : (
-        <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
+        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm">
+          <div className="min-h-[280px]">
             <table className="w-full text-left">
               <thead>
-                <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
-                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Posição</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Documento SAP</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Remessa</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Peças</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Data</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Ações</th>
+                <tr className="border-b border-slate-100 dark:border-slate-800">
+                  {["Data", "Posição", "Qtd Total", "Reserva", "Remessa", "Documento", "Status", "Ações"].map(col => (
+                    <th 
+                      key={col} 
+                      className={cn(
+                        "px-6 py-4 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap",
+                        col === "Posição" && "pl-8",
+                        col === "Qtd Total" && "text-right",
+                        col === "Ações" && "text-center pl-8"
+                      )}
+                    >
+                      {col}
+                    </th>
+                  ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              <tbody className="divide-y divide-slate-50 dark:divide-slate-800/60">
                 {filteredControle.map((c) => {
                   const isExpanded = expandedControleId === c.id
-                  const hasDetail = c.detalhes && Array.isArray(c.detalhes)
-                  const itens = hasDetail ? c.detalhes : []
+                  let itens: any[] | null = null
+                  try { if (c.itens_json) itens = JSON.parse(c.itens_json) } catch (_) {}
+                  const hasDetail = itens && itens.length > 0
 
                   return (
                     <React.Fragment key={c.id}>
-                      <tr 
+                      <tr
                         onClick={() => setExpandedControleId(isExpanded ? null : c.id)}
                         className={cn(
-                          "hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer",
-                          isExpanded && "bg-slate-50/80 dark:bg-slate-800/30"
+                          "transition-colors cursor-pointer select-none",
+                          isExpanded
+                            ? "bg-slate-50 dark:bg-slate-800/60"
+                            : "hover:bg-slate-50 dark:hover:bg-slate-800/50"
                         )}
                       >
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center gap-3">
-                            <div className="h-8 w-8 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center">
-                              <Box size={14} className="text-emerald-500" />
-                            </div>
-                            <div className="text-sm font-bold text-slate-900 dark:text-white">
-                              {renderPosicaoHighlight(c.posicao)}
-                            </div>
+                          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                            {c.criacao ? c.criacao.split('-').reverse().join('/') : "—"}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap pl-8 relative">
+                          <ChevronDown
+                            size={13}
+                            className={cn(
+                              "absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600 shrink-0 transition-transform duration-200",
+                              isExpanded && "rotate-180"
+                            )}
+                          />
+                          {renderPosicaoHighlight(c.posicao)}
+                        </td>
+
+                        <td className="px-6 py-4 whitespace-nowrap text-right">
+                          <span className="text-xs font-bold text-slate-900 dark:text-white">{c.quantidade}</span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {c.reserva ? (
+                            <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-400">
+                              {c.reserva}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 dark:text-slate-600 font-bold">-</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {c.remessa ? (
+                            <span className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
+                              {c.remessa}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 dark:text-slate-600 font-bold">-</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {c.documento ? (
+                            <span className="text-xs font-mono font-black text-emerald-600 dark:text-emerald-400">
+                              {c.documento}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 dark:text-slate-600 font-bold">-</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap pl-4" onClick={e => e.stopPropagation()}>
+                          <div className="relative inline-block text-left">
+                            <button
+                              type="button"
+                              disabled={!user}
+                              onClick={() => setActiveStatusDropdownId(activeStatusDropdownId === c.id ? null : c.id)}
+                              className={cn(
+                                "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold border cursor-pointer transition-all",
+                                (c.status === 'Entregue')
+                                  ? "text-emerald-600 bg-emerald-50 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20 hover:border-emerald-300 dark:hover:border-emerald-400"
+                                  : "text-amber-600 bg-amber-50 border-amber-100 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20 hover:border-amber-300 dark:hover:border-amber-400",
+                                !user && "opacity-60 cursor-not-allowed"
+                              )}
+                              title={user ? "Alterar Status" : "Necessário Login para alterar"}
+                            >
+                              {c.status === 'Entregue' ? (
+                                <>
+                                  <CheckCircle2 size={12} className="shrink-0" />
+                                  Entregue
+                                </>
+                              ) : (
+                                <>
+                                  <Clock size={12} className="shrink-0" />
+                                  Pendente
+                                </>
+                              )}
+                              <ChevronDown size={10} className={cn("ml-0.5 opacity-60 transition-transform duration-200", activeStatusDropdownId === c.id && "rotate-180")} />
+                            </button>
+
+                            <AnimatePresence>
+                              {activeStatusDropdownId === c.id && (
+                                <>
+                                  <div 
+                                    className="fixed inset-0 z-30" 
+                                    onClick={() => setActiveStatusDropdownId(null)} 
+                                  />
+                                  <motion.div
+                                    initial={{ opacity: 0, y: -5, scale: 0.95 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: -5, scale: 0.95 }}
+                                    transition={{ duration: 0.15 }}
+                                    className="absolute left-0 mt-2 w-[130px] rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl z-50 p-1.5"
+                                  >
+                                    {[
+                                      { value: "Pendente", label: "Pendente", color: "text-amber-500", bg: "hover:bg-amber-50 dark:hover:bg-amber-500/10", icon: Clock },
+                                      { value: "Entregue", label: "Entregue", color: "text-emerald-500", bg: "hover:bg-emerald-50 dark:hover:bg-emerald-500/10", icon: CheckCircle2 }
+                                    ].map(opt => (
+                                      <button
+                                        key={opt.value}
+                                        type="button"
+                                        onClick={async () => {
+                                          setActiveStatusDropdownId(null)
+                                          try {
+                                            const { error } = await supabase
+                                              .from('controle_avarias')
+                                              .update({ status: opt.value })
+                                              .eq('id', c.id)
+                                            if (error) throw error
+                                            setControleRaw(prev => prev.map(item => item.id === c.id ? { ...item, status: opt.value } : item))
+                                          } catch (err: any) {
+                                            console.error("Erro ao alterar status:", err.message)
+                                            alert("Erro ao alterar status: " + err.message)
+                                          }
+                                        }}
+                                        className={cn(
+                                          "w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-between cursor-pointer",
+                                          opt.bg,
+                                          (c.status === 'Entregue' ? 'Entregue' : (c.status || 'Pendente')) === opt.value
+                                            ? "bg-slate-50 dark:bg-slate-700 text-slate-900 dark:text-white"
+                                            : "text-slate-600 dark:text-slate-300"
+                                        )}
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <opt.icon size={14} className={opt.color} />
+                                          {opt.label}
+                                        </div>
+                                        {(c.status === 'Entregue' ? 'Entregue' : (c.status || 'Pendente')) === opt.value && <Check size={14} className="text-slate-400" />}
+                                      </button>
+                                    ))}
+                                  </motion.div>
+                                </>
+                              )}
+                            </AnimatePresence>
                           </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-400">{c.documento || '—'}</span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-400">{c.remessa || '—'}</span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center">
-                          <span className="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-[11px] font-bold text-slate-600 dark:text-slate-400">
-                            {c.quantidade || 0}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-xs font-semibold text-slate-500">{c.criacao ? c.criacao.split('-').reverse().join('/') : '—'}</span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={cn(
-                            "px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider",
-                            c.status === 'Entregue' 
-                              ? "bg-blue-100 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400" 
-                              : "bg-amber-100 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                          )}>
-                            {c.status || 'Pendente'}
-                          </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-center" onClick={e => e.stopPropagation()}>
                           <div className="inline-flex items-center gap-1.5">
@@ -460,14 +514,11 @@ export default function PaletesFormadosTab({
                               <Pencil size={13} />
                             </button>
                             <button
-                              onClick={() => handlePrintWithQRCode(c)}
+                              onClick={() => handlePrintControle(c)}
                               className="h-8 w-8 rounded-lg flex items-center justify-center bg-slate-50 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-500/20 text-slate-400 hover:text-emerald-500 border-transparent border transition-colors cursor-pointer"
-                              title="Imprimir Palete com QR Code"
+                              title="Imprimir Palete"
                             >
-                              <div className="relative">
-                                <Printer size={13} />
-                                <QrCode size={8} className="absolute -bottom-1 -right-1 bg-white dark:bg-slate-800 rounded-sm" />
-                              </div>
+                              <Printer size={13} />
                             </button>
                           </div>
                         </td>
