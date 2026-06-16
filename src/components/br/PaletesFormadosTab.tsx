@@ -742,7 +742,7 @@ export default function PaletesFormadosTab({
           const entreguePieces = dateFilteredControle.filter(c => c.status === 'Entregue').reduce((acc, c) => acc + (c.quantidade || 0), 0)
 
           // "Pendentes para Formar" — positions/SKUs still waiting to be palletized
-          const pendentesFormar = posicoesRaw.length
+          const pendentesFormar = posicoesAgrupadas.length
           const pendentesFormarPieces = posicoesRaw.reduce((acc, p) => acc + (p.quantidade || 0), 0)
 
           return (
