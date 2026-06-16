@@ -1101,7 +1101,6 @@ items.forEach(c => {
                   <div className="border-t border-slate-800 pt-4 space-y-2.5">
                     <div className="flex justify-between items-center mb-1">
                       <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.15em]">Detalhes por Tipo — Hoje</span>
-                      <span className="text-[10px] font-black text-slate-400">{todayData.total} pal · {todayData.totalPieces.toLocaleString('pt-BR')} pcs</span>
                     </div>
 
                     {todayTypes.length === 0 ? (
@@ -1400,13 +1399,13 @@ items.forEach(c => {
               })()}
 
               {/* Bar Chart */}
-              <div className="flex-1 flex items-stretch gap-1" style={{ minHeight: 130 }}>
+              <div className="flex-1 overflow-x-auto overflow-y-hidden flex items-stretch gap-1.5 pb-2 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-slate-950/20" style={{ minHeight: 130 }}>
                 {chartItems.map((day, i) => {
                   const pct = day.total > 0 ? (day.total / maxBar) * 100 : 0
                   const goalPct = Math.min((DAILY_GOAL / maxBar) * 100, 100)
                   const typeEntries = Object.entries(day.byType).sort(([,a],[,b]) => b - a)
                   return (
-                    <div key={day.key} className="flex-1 flex flex-col items-center group/bar relative">
+                    <div key={day.key} className="flex-1 min-w-[42px] flex flex-col items-center group/bar relative">
 
                       {/* Hover Tooltip */}
                       <div className={cn(
