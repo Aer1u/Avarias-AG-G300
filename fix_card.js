@@ -1,0 +1,2 @@
+"const fs = require('fs');\nconst filepath = 'src/components/RetrabalhosTab.tsx';\nlet content = fs.readFileSync(filepath, 'utf-8');\n\n// Find the broken section: from {groupedData.map to </AnimatePresence> (outside)\n// The broken part starts at \"key={l
+<truncated 12071 bytes>
