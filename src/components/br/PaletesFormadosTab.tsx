@@ -839,20 +839,42 @@ export default function PaletesFormadosTab({
           'PPT':            { label: 'PPT',           bar: 'bg-cyan-400',       dot: 'bg-cyan-400',       text: 'text-cyan-400',       bg: 'bg-cyan-500/10' },
           'Interna':        { label: 'Internas',      bar: 'bg-teal-400',       dot: 'bg-teal-400',       text: 'text-teal-400',       bg: 'bg-teal-500/10' },
           'São Bartolomeu': { label: 'S. Bartolomeu', bar: 'bg-amber-400',      dot: 'bg-amber-400',      text: 'text-amber-400',      bg: 'bg-amber-500/10' },
-          'Outro':          { label: '',              bar: 'bg-slate-400',      dot: 'bg-slate-400',      text: 'text-slate-400',      bg: 'bg-slate-500/10' },
+          'Outro':          { label: 'Outro',         bar: 'bg-slate-400',      dot: 'bg-slate-400',      text: 'text-slate-400',      bg: 'bg-slate-500/10' },
         }
-        const typeKey = (c: any) =>
-          !c.type ? 'Outro'
-          : c.type === 'AG' ? 'AG'
-          : c.type === 'PPT' ? 'PPT'
-          : c.type === 'Interna' ? 'Interna'
-          : c.type?.toLowerCase().includes('bartolomeu') ? 'São Bartolomeu'
-          : 'Outro'
+        const typeKey = (c: any) => {
+          if (!c.type) return 'Outro'
+          const upper = String(c.type).trim().toUpperCase()
+          if (upper === 'AG') return 'AG'
+          if (upper === 'PPT') return 'PPT'
+          if (upper === 'INTERNA') return 'Interna'
+          if (upper.includes('BARTOLOMEU')) return 'São Bartolomeu'
+          return c.type.trim()
+        }
+
+        const getCfg = (t: string) => {
+          if (TYPE_CFG[t]) return TYPE_CFG[t]
+          const colors = [
+            { bar: 'bg-purple-400',     dot: 'bg-purple-400',     text: 'text-purple-405',     bg: 'bg-purple-500/10' },
+            { bar: 'bg-pink-400',       dot: 'bg-pink-400',       text: 'text-pink-405',       bg: 'bg-pink-500/10' },
+            { bar: 'bg-indigo-400',     dot: 'bg-indigo-400',     text: 'text-indigo-405',     bg: 'bg-indigo-500/10' },
+            { bar: 'bg-rose-450',       dot: 'bg-rose-450',       text: 'text-rose-450',       bg: 'bg-rose-500/10' },
+            { bar: 'bg-sky-400',        dot: 'bg-sky-400',        text: 'text-sky-450',        bg: 'bg-sky-500/10' },
+          ]
+          let hash = 0
+          for (let i = 0; i < t.length; i++) {
+            hash = t.charCodeAt(i) + ((hash << 5) - hash)
+          }
+          const index = Math.abs(hash) % colors.length
+          return {
+            label: t,
+            ...colors[index]
+          }
+        }
 
         // Compute Today's Data for Left Panel
         const now = new Date()
         const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
-const todayItems = controleRaw.filter(c => c.status === 'Entregue' && (c.entrega || c.criacao) === todayStr)
+        const todayItems = controleRaw.filter(c => c.status === 'Entregue' && (c.entrega || c.criacao) === todayStr)
        
         const todayData = {
           ds: todayStr,
@@ -870,13 +892,16 @@ const todayItems = controleRaw.filter(c => c.status === 'Entregue' && (c.entrega
         const todayTypes = Object.entries(todayData.byType).sort(([,a],[,b]) => b - a)
 
         // Compute period-wide data by type (for when filterPeriod !== 'hoje')
-const periodItems = dateFilteredControle.filter(c => c.status === 'Entregue')
+        const periodItems = dateFilteredControle.filter(c => c.status === 'Entregue')
         const periodTotal = periodItems.length
         const periodTotalPieces = periodItems.reduce((acc, c) => acc + (c.quantidade || 0), 0)
         
-        const periodTypesList = ['AG', 'PPT', 'Interna', 'São Bartolomeu', 'Outro']
+        const periodTypesSet = new Set<string>()
+        periodItems.forEach(c => periodTypesSet.add(typeKey(c)))
+        const periodTypesList = Array.from(periodTypesSet)
+
         const periodTypeData = periodTypesList.map(t => {
-          const cfg = TYPE_CFG[t] || TYPE_CFG['Outro']
+          const cfg = getCfg(t)
           const itemsOfType = periodItems.filter(c => typeKey(c) === t)
           const totalPieces = itemsOfType.reduce((acc, c) => acc + (c.quantidade || 0), 0)
           return {
@@ -886,7 +911,7 @@ const periodItems = dateFilteredControle.filter(c => c.status === 'Entregue')
             totalPieces,
             cfg
           }
-        })
+        }).sort((a, b) => b.total - a.total)
         const maxPeriodTypeVal = Math.max(...periodTypeData.map(d => d.total), 1)
 
         // Build Chart Items according to top filterPeriod
@@ -909,9 +934,12 @@ const periodItems = dateFilteredControle.filter(c => c.status === 'Entregue')
           chartTitle = 'Entregas por Tipo'
           chartSubtitle = 'Hoje'
           
-          const typesList = ['AG', 'PPT', 'Interna', 'São Bartolomeu', 'Outro']
+          const todayTypesSet = new Set<string>()
+          todayItems.forEach(c => todayTypesSet.add(typeKey(c)))
+          const typesList = Array.from(todayTypesSet)
+
           chartItems = typesList.map(t => {
-            const cfg = TYPE_CFG[t] || TYPE_CFG['Outro']
+            const cfg = getCfg(t)
             const itemsOfType = todayItems.filter(c => typeKey(c) === t)
             const totalPieces = itemsOfType.reduce((acc, c) => acc + (c.quantidade || 0), 0)
             return {
@@ -1038,7 +1066,7 @@ items.forEach(c => {
                       ) : (
                         <div className="flex h-full">
                           {todayTypes.map(([type, cnt], idx) => {
-                            const cfg = TYPE_CFG[type] || TYPE_CFG['Outro']
+                            const cfg = getCfg(type)
                             const segPct = (cnt / DAILY_GOAL) * 100
                             return (
                               <motion.div
@@ -1081,7 +1109,7 @@ items.forEach(c => {
                     ) : (
                       <div className="space-y-2">
                         {todayTypes.map(([type, cnt]) => {
-                          const cfg = TYPE_CFG[type] || TYPE_CFG['Outro']
+                          const cfg = getCfg(type)
                           const pct = todayData.total > 0 ? (cnt / todayData.total) * 100 : 0
                       const pieces = controleRaw
   .filter(c => (c.entrega || c.criacao) === todayData.ds && c.status === 'Entregue' && typeKey(c) === type)
@@ -1167,16 +1195,27 @@ items.forEach(c => {
                           </div>
 
                           {/* Number label — flex child, never overflows */}
-                          <div className="h-5 flex items-center justify-center w-full pointer-events-none shrink-0">
+                          <div className="flex flex-col items-center shrink-0">
                             {d.total > 0 && (
                               <motion.span
-                                key={`${d.type}-label`}
+                                key={`${d.type}-pal-label`}
                                 initial={{ opacity: 0, y: 4 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.35, ease: 'easeOut', delay: i * 0.03 + 0.25 }}
-                                className="text-[8px] font-extrabold text-slate-300 bg-slate-950/80 px-1 py-0.5 rounded border border-slate-800/40"
+                                className="text-[8px] font-extrabold text-slate-300 bg-slate-950/80 px-1 py-0.5 rounded border border-slate-800/40 leading-none whitespace-nowrap"
                               >
-                                {d.total}
+                                {d.total}<span className="text-[6px] text-slate-500 ml-0.5">PAL</span>
+                              </motion.span>
+                            )}
+                            {d.totalPieces > 0 && (
+                              <motion.span
+                                key={`${d.type}-pcs-label`}
+                                initial={{ opacity: 0, y: 4 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.35, ease: 'easeOut', delay: i * 0.03 + 0.3 }}
+                                className="text-[8px] font-black text-emerald-400 bg-slate-950/80 px-1 py-0.5 rounded border border-slate-800/40 leading-none mt-0.5 whitespace-nowrap"
+                              >
+                                {d.totalPieces}<span className="text-[6px] text-emerald-600/70 ml-0.5">PCS</span>
                               </motion.span>
                             )}
                           </div>
@@ -1385,7 +1424,7 @@ items.forEach(c => {
                         {typeEntries.length > 0 && (
                           <div className="border-t border-slate-700 pt-1.5 space-y-1 mt-1">
                             {typeEntries.map(([type, cnt]) => {
-                              const cfg = TYPE_CFG[type] || TYPE_CFG['Outro']
+                              const cfg = getCfg(type)
                               return (
                                 <div key={type} className="flex items-center justify-between gap-3">
                                   <div className="flex items-center gap-1.5">
@@ -1404,16 +1443,27 @@ items.forEach(c => {
                       </div>
 
                       {/* Number label — flex child above bar, never overflows card */}
-                      <div className="h-5 flex items-center justify-center w-full pointer-events-none shrink-0">
+                      <div className="flex flex-col items-center justify-end w-full pointer-events-none shrink-0 mb-1" style={{ minHeight: '34px' }}>
                         {day.total > 0 && (
                           <motion.span
-                            key={`${day.key}-label`}
+                            key={`${day.key}-pal-label`}
                             initial={{ opacity: 0, y: 4 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.35, ease: 'easeOut', delay: i * 0.03 + 0.25 }}
-                            className="text-[8px] font-extrabold text-slate-300 bg-slate-950/80 px-1 py-0.5 rounded border border-slate-800/40"
+                            className="text-[8px] font-extrabold text-slate-300 bg-slate-950/80 px-1 py-0.5 rounded border border-slate-800/40 leading-none whitespace-nowrap"
                           >
-                            {day.total}
+                            {day.total}<span className="text-[6px] text-slate-500 ml-0.5">PAL</span>
+                          </motion.span>
+                        )}
+                        {day.totalPieces > 0 && (
+                          <motion.span
+                            key={`${day.key}-pcs-label`}
+                            initial={{ opacity: 0, y: 4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.35, ease: 'easeOut', delay: i * 0.03 + 0.3 }}
+                            className="text-[8px] font-black text-emerald-400 bg-slate-950/80 px-1 py-0.5 rounded border border-slate-800/40 leading-none mt-0.5 whitespace-nowrap"
+                          >
+                            {day.totalPieces}<span className="text-[6px] text-emerald-600/70 ml-0.5">PCS</span>
                           </motion.span>
                         )}
                       </div>
@@ -1434,7 +1484,7 @@ items.forEach(c => {
                             className="w-full flex flex-col-reverse rounded-t-sm overflow-hidden"
                           >
                             {typeEntries.map(([type, cnt], idx) => {
-                              const cfg = TYPE_CFG[type] || TYPE_CFG['Outro']
+                              const cfg = getCfg(type)
                               const segH = day.total > 0 ? (cnt / day.total) * 100 : 0
                               return (
                                 <div
