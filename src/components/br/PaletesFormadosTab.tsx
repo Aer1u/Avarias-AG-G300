@@ -1194,7 +1194,7 @@ items.forEach(c => {
                           </div>
 
                           {/* Number label — flex child, never overflows */}
-                          <div className="flex flex-col items-center shrink-0">
+                          <div className="h-5 flex items-center justify-center w-full pointer-events-none shrink-0">
                             {d.total > 0 && (
                               <motion.span
                                 key={`${d.type}-pal-label`}
@@ -1204,17 +1204,6 @@ items.forEach(c => {
                                 className="text-[8px] font-extrabold text-slate-300 bg-slate-950/80 px-1 py-0.5 rounded border border-slate-800/40 leading-none whitespace-nowrap"
                               >
                                 {d.total}<span className="text-[6px] text-slate-500 ml-0.5">PAL</span>
-                              </motion.span>
-                            )}
-                            {d.totalPieces > 0 && (
-                              <motion.span
-                                key={`${d.type}-pcs-label`}
-                                initial={{ opacity: 0, y: 4 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ duration: 0.35, ease: 'easeOut', delay: i * 0.03 + 0.3 }}
-                                className="text-[8px] font-black text-emerald-400 bg-slate-950/80 px-1 py-0.5 rounded border border-slate-800/40 leading-none mt-0.5 whitespace-nowrap"
-                              >
-                                {d.totalPieces}<span className="text-[6px] text-emerald-600/70 ml-0.5">PCS</span>
                               </motion.span>
                             )}
                           </div>
@@ -1442,7 +1431,7 @@ items.forEach(c => {
                       </div>
 
                       {/* Number label — flex child above bar, never overflows card */}
-                      <div className="flex flex-col items-center justify-end w-full pointer-events-none shrink-0 mb-1" style={{ minHeight: '34px' }}>
+                      <div className="h-5 flex items-center justify-center w-full pointer-events-none shrink-0 mb-1">
                         {day.total > 0 && (
                           <motion.span
                             key={`${day.key}-pal-label`}
@@ -1452,17 +1441,6 @@ items.forEach(c => {
                             className="text-[8px] font-extrabold text-slate-300 bg-slate-950/80 px-1 py-0.5 rounded border border-slate-800/40 leading-none whitespace-nowrap"
                           >
                             {day.total}<span className="text-[6px] text-slate-500 ml-0.5">PAL</span>
-                          </motion.span>
-                        )}
-                        {day.totalPieces > 0 && (
-                          <motion.span
-                            key={`${day.key}-pcs-label`}
-                            initial={{ opacity: 0, y: 4 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.35, ease: 'easeOut', delay: i * 0.03 + 0.3 }}
-                            className="text-[8px] font-black text-emerald-400 bg-slate-950/80 px-1 py-0.5 rounded border border-slate-800/40 leading-none mt-0.5 whitespace-nowrap"
-                          >
-                            {day.totalPieces}<span className="text-[6px] text-emerald-600/70 ml-0.5">PCS</span>
                           </motion.span>
                         )}
                       </div>
