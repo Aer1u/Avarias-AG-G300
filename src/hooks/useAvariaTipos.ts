@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { supabase } from "@/lib/supabase"
 
 export interface AvariaTipo {
@@ -56,19 +56,21 @@ export function useAvariaTipos() {
       return result
     }
 
-    fetchPromise = supabase
-      .from("app_configs")
-      .select("valor")
-      .eq("chave", CONFIG_KEY)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (error) throw error
-        const arr: AvariaTipo[] = (data?.valor ?? []) as AvariaTipo[]
-        const active = arr.filter(t => t.ativo !== false).sort((a, b) => a.ordem - b.ordem)
-        cachedTipos = active
-        fetchPromise = null
-        return active
-      })
+    fetchPromise = Promise.resolve(
+      supabase
+        .from("app_configs")
+        .select("valor")
+        .eq("chave", CONFIG_KEY)
+        .maybeSingle()
+        .then(({ data, error }) => {
+          if (error) throw error
+          const arr: AvariaTipo[] = (data?.valor ?? []) as AvariaTipo[]
+          const active = arr.filter(t => t.ativo !== false).sort((a, b) => a.ordem - b.ordem)
+          cachedTipos = active
+          fetchPromise = null
+          return active
+        })
+    )
 
     try {
       const result = await fetchPromise
