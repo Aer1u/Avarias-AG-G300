@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useMemo, useRef } from "react"
+import { AvariaTipo, hexToStyle, hexToBarStyle } from "@/hooks/useAvariaTipos"
 import {
   CheckCircle2,
   Box,
@@ -22,7 +23,8 @@ import {
   AlertTriangle,
   ChevronUp,
   Paperclip,
-  Plus
+  Plus,
+  Settings2
 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { supabase } from "@/lib/supabase"
@@ -74,6 +76,8 @@ interface PaletesFormadosTabProps {
   handleMigrateData: () => Promise<void>
   isMigrating: boolean
   baseCodigos: any[]
+  avariaTipos: AvariaTipo[]
+  onOpenTiposManager: () => void
 }
 
 export default function PaletesFormadosTab({
@@ -89,11 +93,14 @@ export default function PaletesFormadosTab({
   legacyCount,
   handleMigrateData,
   isMigrating,
-  baseCodigos
+  baseCodigos,
+  avariaTipos,
+  onOpenTiposManager
 }: PaletesFormadosTabProps) {
   // Local Filter & Status States
   const [searchControle, setSearchControle]   = useState("")
-  const [filterPeriod, setFilterPeriod]       = useState<"todos" | "hoje" | "semanal" | "mensal">("hoje")
+  const [filterPeriod, setFilterPeriod]       = useState<"hoje" | "semanal" | "mensal">("hoje")
+  const [hoveredType, setHoveredType]         = useState<string | null>(null)
   const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false)
   const [activeStatusDropdownId, setActiveStatusDropdownId] = useState<number | null>(null)
   const [expandedControleId, setExpandedControleId] = useState<number | null>(null)
@@ -217,14 +224,27 @@ export default function PaletesFormadosTab({
         return s.replace(/[^\d]/g, '')
       }
 
-      // Build a map of remessa → controleRaw record
-      const remessaMap = new Map<string, any>()
+      // Build a map of remessa → list of controleRaw records
+      const remessaMap = new Map<string, any[]>()
       controleRaw.forEach(c => {
         const cleanRem = cleanNumStr(c.remessa)
-        if (cleanRem) remessaMap.set(cleanRem, c)
+        if (cleanRem) {
+          if (!remessaMap.has(cleanRem)) {
+            remessaMap.set(cleanRem, [])
+          }
+          remessaMap.get(cleanRem)!.push(c)
+        }
       })
 
-      const preview: any[] = []
+      // Group imported lines by cleanRem to get unique remessas from the file
+      const uniqueImportedRows = new Map<string, {
+        remessaRaw: string,
+        sapStatus: string,
+        dt313Raw: string,
+        dt315Raw: string,
+        migo313: string
+      }>()
+
       for (let i = 1; i < lines.length; i++) {
         const cols = lines[i].split(sep)
         const remessaRaw = (cols[idxDocumento] || '').trim()
@@ -236,34 +256,79 @@ export default function PaletesFormadosTab({
         const dt315Raw   = idxDt315   >= 0 ? (cols[idxDt315]   || '').trim() : ''
         const migo313    = idxMigo313 >= 0 ? (cols[idxMigo313] || '').trim() : ''
 
-        const matched = remessaMap.get(cleanRem)
-        const newStatus = sapStatus ? mapSapStatus(sapStatus) : null
+        if (!uniqueImportedRows.has(cleanRem)) {
+          uniqueImportedRows.set(cleanRem, {
+            remessaRaw,
+            sapStatus,
+            dt313Raw,
+            dt315Raw,
+            migo313
+          })
+        } else {
+          const existing = uniqueImportedRows.get(cleanRem)!
+          if (!existing.sapStatus && sapStatus) existing.sapStatus = sapStatus
+          if (!existing.dt313Raw && dt313Raw) existing.dt313Raw = dt313Raw
+          if (!existing.dt315Raw && dt315Raw) existing.dt315Raw = dt315Raw
+          if (!existing.migo313 && migo313) existing.migo313 = migo313
+        }
+      }
+
+      const preview: any[] = []
+
+      uniqueImportedRows.forEach((impRow, cleanRem) => {
+        const { remessaRaw, sapStatus, dt313Raw, dt315Raw, migo313 } = impRow
+        
         const newCriacao = parseSapDate(dt313Raw)
         const newDataEntrega = parseSapDate(dt315Raw)
+        let newStatus = sapStatus ? mapSapStatus(sapStatus) : null
+        if (newDataEntrega) {
+          newStatus = 'Entregue'
+        }
 
-        const willInsert = !matched && (newStatus === 'Entregue' || newStatus === 'Pendente')
-        const willChange = !!matched && (
-          (newStatus && newStatus !== matched.status) ||
-          (newCriacao && newCriacao !== matched.criacao) ||
-          (newDataEntrega && newDataEntrega !== matched.data) ||
-          (migo313 && cleanNumStr(migo313) !== cleanNumStr(matched.documento))
-        )
+        const matchedList = remessaMap.get(cleanRem) || []
+        
+        if (matchedList.length > 0) {
+          matchedList.forEach(matched => {
+            const willChange = (
+              (newStatus && newStatus !== matched.status) ||
+              (newCriacao && newCriacao !== matched.criacao) ||
+              (newDataEntrega && newDataEntrega !== matched.entrega) ||
+              (migo313 && cleanNumStr(migo313) !== cleanNumStr(matched.documento))
+            )
 
-        preview.push({
-          documento: remessaRaw,
-          sapStatus,
-          newStatus,
-          dt313Raw,
-          dt315Raw,
-          newCriacao,
-          newDataEntrega,
-          migo313,
-          matched: !!matched,
-          willInsert,
-          willChange,
-          paletId: matched?.id
-        })
-      }
+            preview.push({
+              documento: remessaRaw,
+              sapStatus,
+              newStatus,
+              dt313Raw,
+              dt315Raw,
+              newCriacao,
+              newDataEntrega,
+              migo313,
+              matched: true,
+              willInsert: false,
+              willChange,
+              paletId: matched.id
+            })
+          })
+        } else {
+          const willInsert = (newStatus === 'Entregue' || newStatus === 'Pendente')
+          preview.push({
+            documento: remessaRaw,
+            sapStatus,
+            newStatus,
+            dt313Raw,
+            dt315Raw,
+            newCriacao,
+            newDataEntrega,
+            migo313,
+            matched: false,
+            willInsert,
+            willChange: false,
+            paletId: null
+          })
+        }
+      })
 
       setImportPreview(preview)
     } catch (err: any) {
@@ -398,8 +463,6 @@ export default function PaletesFormadosTab({
 
   // Date filter
   const dateFilteredControle = useMemo(() => {
-    if (filterPeriod === "todos") return controleRaw
-    
     const now = new Date()
     const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
     
@@ -415,11 +478,22 @@ export default function PaletesFormadosTab({
       }
       
       if (filterPeriod === "semanal") {
-        const msInDay = 24 * 60 * 60 * 1000
-        const [y, m, d] = dataParaFiltrar.split('-').map(Number)
-        const targetDate = new Date(y, m - 1, d)
-        const diff = (now.getTime() - targetDate.getTime()) / msInDay
-        return diff >= 0 && diff <= 7
+        // Segunda a sábado desta semana
+        const dayOfWeek = now.getDay()
+        const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+        const monday = new Date(now)
+        monday.setDate(now.getDate() + diffToMonday)
+        
+        const saturday = new Date(monday)
+        saturday.setDate(monday.getDate() + 5)
+        
+        const formatDateStr = (d: Date) => {
+          return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+        }
+        const mondayStr = formatDateStr(monday)
+        const saturdayStr = formatDateStr(saturday)
+        
+        return dataParaFiltrar >= mondayStr && dataParaFiltrar <= saturdayStr
       }
       
       if (filterPeriod === "mensal") {
@@ -466,11 +540,12 @@ export default function PaletesFormadosTab({
     setEditCodigos(row.codigos || "")
     setEditStatus(row.status === "Formado" ? "Pendente" : (row.status || "Pendente"))
 
-    const standardTypes = ["INTERNA", "AG", "SÃO BARTOLOMEU", "PPT"]
+    const tipoNomes = avariaTipos.map(t => t.nome)
     if (row.type) {
       const uType = String(row.type).trim().toUpperCase()
-      if (standardTypes.includes(uType)) {
-        setEditType(uType)
+      const matched = avariaTipos.find(t => t.nome === uType)
+      if (matched) {
+        setEditType(matched.nome)
         setEditCustomType("")
       } else {
         setEditType("Outras")
@@ -498,7 +573,7 @@ export default function PaletesFormadosTab({
 
       const updatesDoc: any = {
         status: editStatus,
-        type: editType === "Outras" ? editCustomType.trim() : (editType || null),
+        type: editType || null,
         remessa: remessaVal,
         documento: documentoVal,
         reserva: reservaVal
@@ -550,7 +625,7 @@ export default function PaletesFormadosTab({
       const reservaClean = cleanNumStr(manualReserva)
       const reservaInt = reservaClean ? parseInt(reservaClean, 10) : null
 
-      const typeVal = manualType === "Outras" ? manualCustomType.trim() : (manualType || null)
+      const typeVal = manualType || null
       const localDate = new Date().toISOString().split('T')[0]
 
       // 1. Inserir no documento_palete
@@ -624,6 +699,20 @@ export default function PaletesFormadosTab({
 
         {/* ── 4 Action Buttons ── */}
         <div className="flex items-center gap-2">
+          {/* Gerenciar Tipos de Avaria */}
+          <div className="relative group/tip">
+            <button
+              onClick={onOpenTiposManager}
+              className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 transition-all duration-200 cursor-pointer active:scale-95"
+              title="Gerenciar Tipos de Avaria"
+            >
+              <Settings2 size={15} />
+            </button>
+            <div className="absolute right-0 top-full mt-2 whitespace-nowrap rounded-xl bg-slate-900 border border-slate-700 px-3 py-1.5 text-[10px] font-bold text-slate-300 opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-xl">
+              Configurar Tipos
+            </div>
+          </div>
+
           {/* Adicionar Palete Manual */}
           <div className="relative group/tip">
             <button
@@ -693,9 +782,8 @@ export default function PaletesFormadosTab({
           <div>
             <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.25em] leading-none">Monitoramento</p>
             <h2 className="text-sm font-extrabold text-white mt-1.5">
-              {filterPeriod === 'todos' ? 'Todo o Histórico'
-              : filterPeriod === 'hoje' ? 'Hoje'
-              : filterPeriod === 'semanal' ? 'Esta Semana (Últimos 7 dias)'
+              {filterPeriod === 'hoje' ? 'Hoje'
+              : filterPeriod === 'semanal' ? 'Esta Semana (Seg a Sáb)'
               : 'Este Mês'}
             </h2>
           </div>
@@ -706,8 +794,7 @@ export default function PaletesFormadosTab({
           {[
             { id: 'hoje', label: 'Hoje' },
             { id: 'semanal', label: 'Semanal' },
-            { id: 'mensal', label: 'Mensal' },
-            { id: 'todos', label: 'Histórico' }
+            { id: 'mensal', label: 'Mensal' }
           ].map(opt => {
             const active = filterPeriod === opt.id
             return (
@@ -834,47 +921,33 @@ export default function PaletesFormadosTab({
       {/* ── Mini Dashboard: Meta do Dia + Gráfico de Entregas ── */}
       {(() => {
         const DAILY_GOAL = 30
-        const TYPE_CFG: Record<string, { label: string; bar: string; dot: string; text: string; bg: string }> = {
-          'AG':             { label: 'AG',            bar: 'bg-emerald-400',    dot: 'bg-emerald-400',    text: 'text-emerald-400',    bg: 'bg-emerald-500/10' },
-          'PPT':            { label: 'PPT',           bar: 'bg-cyan-400',       dot: 'bg-cyan-400',       text: 'text-cyan-400',       bg: 'bg-cyan-500/10' },
-          'Interna':        { label: 'Internas',      bar: 'bg-teal-400',       dot: 'bg-teal-400',       text: 'text-teal-400',       bg: 'bg-teal-500/10' },
-          'São Bartolomeu': { label: 'S. Bartolomeu', bar: 'bg-amber-400',      dot: 'bg-amber-400',      text: 'text-amber-400',      bg: 'bg-amber-500/10' },
-          'Outro':          { label: 'Outro',         bar: 'bg-slate-400',      dot: 'bg-slate-400',      text: 'text-slate-400',      bg: 'bg-slate-500/10' },
-        }
-        const typeKey = (c: any) => {
-          if (!c.type) return 'Outro'
+
+        // Build type config dynamically from avariaTipos
+        const typeKey = (c: any): string => {
+          if (!c.type) return '__outro__'
           const upper = String(c.type).trim().toUpperCase()
-          if (upper === 'AG') return 'AG'
-          if (upper === 'PPT') return 'PPT'
-          if (upper === 'INTERNA') return 'Interna'
-          if (upper.includes('BARTOLOMEU')) return 'São Bartolomeu'
-          return c.type.trim()
+          const match = avariaTipos.find(t => t.nome === upper || t.nome === String(c.type).trim())
+          if (match) return match.nome
+          return String(c.type).trim() || '__outro__'
         }
 
         const getCfg = (t: string) => {
-          if (TYPE_CFG[t]) return TYPE_CFG[t]
-          const colors = [
-            { bar: 'bg-purple-400',     dot: 'bg-purple-400',     text: 'text-purple-405',     bg: 'bg-purple-500/10' },
-            { bar: 'bg-pink-400',       dot: 'bg-pink-400',       text: 'text-pink-405',       bg: 'bg-pink-500/10' },
-            { bar: 'bg-indigo-400',     dot: 'bg-indigo-400',     text: 'text-indigo-405',     bg: 'bg-indigo-500/10' },
-            { bar: 'bg-rose-450',       dot: 'bg-rose-450',       text: 'text-rose-450',       bg: 'bg-rose-500/10' },
-            { bar: 'bg-sky-400',        dot: 'bg-sky-400',        text: 'text-sky-450',        bg: 'bg-sky-500/10' },
-          ]
+          const tipo = avariaTipos.find(tp => tp.nome === t)
+          if (tipo) return { hex: tipo.cor_hex, label: tipo.label || tipo.nome }
+          // Fallback for unknown types: generate stable color from string hash
+          const palette = ['#a855f7','#ec4899','#6366f1','#f97316','#06b6d4','#84cc16','#f59e0b','#3b82f6']
           let hash = 0
-          for (let i = 0; i < t.length; i++) {
-            hash = t.charCodeAt(i) + ((hash << 5) - hash)
-          }
-          const index = Math.abs(hash) % colors.length
-          return {
-            label: t,
-            ...colors[index]
-          }
+          for (let i = 0; i < t.length; i++) hash = t.charCodeAt(i) + ((hash << 5) - hash)
+          return { hex: palette[Math.abs(hash) % palette.length], label: t || 'Outro' }
         }
+
+        // Filter helper to ensure we only count registered types
+        const isCadastrado = (c: any) => avariaTipos.some(tp => tp.nome === typeKey(c))
 
         // Compute Today's Data for Left Panel
         const now = new Date()
         const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
-        const todayItems = controleRaw.filter(c => c.status === 'Entregue' && (c.entrega || c.criacao) === todayStr)
+        const todayItems = controleRaw.filter(c => c.status === 'Entregue' && (c.entrega || c.criacao) === todayStr && isCadastrado(c))
        
         const todayData = {
           ds: todayStr,
@@ -887,12 +960,23 @@ export default function PaletesFormadosTab({
           todayData.byType[k] = (todayData.byType[k] || 0) + 1
         })
 
+        const pendingPalletsList = controleRaw.filter(c => c.status === 'Pendente' && isCadastrado(c))
+        const pendingByType: Record<string, { count: number; pieces: number }> = {}
+        pendingPalletsList.forEach(c => {
+          const k = typeKey(c)
+          if (!pendingByType[k]) {
+            pendingByType[k] = { count: 0, pieces: 0 }
+          }
+          pendingByType[k].count += 1
+          pendingByType[k].pieces += (c.quantidade || 0)
+        })
+
         const todayPct = Math.min((todayData.total / DAILY_GOAL) * 100, 100)
         const todayMet = todayData.total >= DAILY_GOAL
         const todayTypes = Object.entries(todayData.byType).sort(([,a],[,b]) => b - a)
 
         // Compute period-wide data by type (for when filterPeriod !== 'hoje')
-        const periodItems = dateFilteredControle.filter(c => c.status === 'Entregue')
+        const periodItems = dateFilteredControle.filter(c => c.status === 'Entregue' && isCadastrado(c))
         const periodTotal = periodItems.length
         const periodTotalPieces = periodItems.reduce((acc, c) => acc + (c.quantidade || 0), 0)
         
@@ -955,29 +1039,21 @@ export default function PaletesFormadosTab({
           })
         } else {
           let uniqueDates: string[] = []
-          if (filterPeriod === 'todos') {
-            chartSubtitle = 'Histórico Completo'
-            const datesSet = new Set<string>()
-          controleRaw.forEach(c => {
-  const dataRef = c.status === 'Entregue' ? (c.entrega || c.criacao) : c.criacao
-  if (dataRef && c.status === 'Entregue') {
-    datesSet.add(dataRef)
-  }
-})
-            uniqueDates = Array.from(datesSet).sort()
-            if (uniqueDates.length === 0) {
-              uniqueDates = Array.from({ length: 30 }, (_, i) => {
-                const d = new Date()
-                d.setDate(d.getDate() - (30 - 1 - i))
-                return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
-              })
-            }
+          if (filterPeriod === 'semanal') {
+            chartSubtitle = 'Esta Semana (Seg a Sáb)'
+            const dayOfWeek = now.getDay()
+            const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+            uniqueDates = Array.from({ length: 6 }, (_, i) => {
+              const d = new Date(now)
+              d.setDate(now.getDate() + diffToMonday + i)
+              return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+            })
           } else {
-            const numDays = filterPeriod === 'semanal' ? 7 : 30
-            chartSubtitle = filterPeriod === 'semanal' ? 'Últimos 7 Dias' : 'Últimos 30 Dias'
-            uniqueDates = Array.from({ length: numDays }, (_, i) => {
-              const d = new Date()
-              d.setDate(d.getDate() - (numDays - 1 - i))
+            chartSubtitle = 'Este Mês'
+            const todayDate = now.getDate()
+            uniqueDates = Array.from({ length: todayDate }, (_, i) => {
+              const d = new Date(now)
+              d.setDate(i + 1)
               return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
             })
           }
@@ -988,7 +1064,7 @@ export default function PaletesFormadosTab({
             const short = dateObj.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.','').toUpperCase().slice(0,3)
             const num = dateObj.getDate()
 const items = controleRaw.filter(c => {
-  return c.status === 'Entregue' && (c.entrega || c.criacao) === ds;
+  return c.status === 'Entregue' && (c.entrega || c.criacao) === ds && isCadastrado(c);
 });
 
 const byType: Record<string, number> = {}
@@ -1021,7 +1097,7 @@ items.forEach(c => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
             {/* LEFT PANEL */}
-            <div className="rounded-2xl bg-slate-900 border border-slate-800 p-6 flex flex-col justify-between shadow-lg min-h-[340px]">
+            <div className="rounded-2xl bg-slate-900 border border-slate-800 p-6 flex flex-col justify-between shadow-lg min-h-[460px]">
               {isTodayMode ? (
                 // LEFT: Meta do Dia (Today Mode)
                 <div className="flex flex-col justify-between h-full space-y-5">
@@ -1074,7 +1150,8 @@ items.forEach(c => {
                                 initial={{ width: 0 }}
                                 animate={{ width: `${Math.min(segPct, 100)}%` }}
                                 transition={{ duration: 0.7, ease: 'easeOut', delay: idx * 0.08 }}
-                                className={cn('h-full relative overflow-hidden', cfg.bar, idx > 0 && 'border-l border-slate-900/40')}
+                                className={cn('h-full relative overflow-hidden', idx > 0 && 'border-l border-slate-900/40')}
+                                style={{ backgroundColor: cfg.hex }}
                                 title={`${cfg.label || 'Sem Tipo'}: ${cnt} paletes`}
                               >
                                 <div className="absolute inset-0 bg-gradient-to-b from-white/15 to-transparent" />
@@ -1115,12 +1192,12 @@ items.forEach(c => {
   .reduce((acc, c) => acc + (c.quantidade || 0), 0)
                           return (
                             <div key={type} className="flex items-center gap-3">
-                              <div className={cn('h-2 w-2 rounded-full shrink-0', cfg.dot)} />
+                              <div className='h-2 w-2 rounded-full shrink-0' style={{ backgroundColor: cfg.hex }} />
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between text-[11px] font-bold mb-1">
                                   <span className="text-slate-300">{cfg.label || 'Sem Tipo'}</span>
                                   <span className="text-slate-400 text-[10px]">
-                                    {cnt} pal · <span className={cfg.text}>{pieces.toLocaleString('pt-BR')} pcs</span>
+                                    {cnt} pal · <span style={{ color: cfg.hex }}>{pieces.toLocaleString('pt-BR')} pcs</span>
                                   </span>
                                 </div>
                                 <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
@@ -1128,7 +1205,8 @@ items.forEach(c => {
                                     initial={{ width: 0 }}
                                     animate={{ width: `${pct}%` }}
                                     transition={{ duration: 0.6, ease: 'easeOut' }}
-                                    className={cn('h-full rounded-full', cfg.bar)}
+                                    className='h-full rounded-full'
+                                    style={{ backgroundColor: cfg.hex }}
                                   />
                                 </div>
                               </div>
@@ -1151,364 +1229,380 @@ items.forEach(c => {
                   </div>
 
                   {/* Summary metrics for Left Panel */}
-                  <div className="flex gap-2.5">
-                    <div className="flex-1 bg-slate-800/40 rounded-xl px-2.5 py-1.5 border border-slate-800/60">
-                      <p className="text-[8px] font-bold text-slate-500 uppercase tracking-wider">Líder</p>
-                      <p className="text-xs font-black text-white truncate mt-0.5">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-slate-800/40 rounded-xl px-3 py-2.5 border border-slate-800/60 shadow-inner flex flex-col justify-between min-h-[64px]">
+                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none">Líder</p>
+                      <p className="text-[13px] font-black text-white truncate mt-1">
                         {(() => {
                           const sorted = [...periodTypeData].sort((a,b) => b.total - a.total)
                           return sorted[0]?.total > 0 ? (sorted[0].label || 'Sem Tipo') : '—'
                         })()}
                       </p>
                     </div>
-                    <div className="flex-1 bg-slate-800/40 rounded-xl px-2.5 py-1.5 border border-slate-800/60">
-                      <p className="text-[8px] font-bold text-slate-500 uppercase tracking-wider">Paletes</p>
-                      <p className="text-xs font-black text-slate-300 mt-0.5">{periodTotal}</p>
+                    <div className="bg-slate-800/40 rounded-xl px-3 py-2.5 border border-slate-800/60 shadow-inner flex flex-col justify-between min-h-[64px]">
+                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none">Paletes</p>
+                      <p className="text-[14px] font-black text-slate-200 mt-1">{periodTotal}</p>
                     </div>
-                    <div className="flex-1 bg-slate-800/40 rounded-xl px-2.5 py-1.5 border border-slate-800/60">
-                      <p className="text-[8px] font-bold text-slate-500 uppercase tracking-wider">Peças</p>
-                      <p className="text-xs font-black text-emerald-400 mt-0.5">{periodTotalPieces.toLocaleString('pt-BR')}</p>
+                    <div className="bg-slate-800/40 rounded-xl px-3 py-2.5 border border-slate-800/60 shadow-inner flex flex-col justify-between min-h-[64px]">
+                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none">Peças</p>
+                      <p className="text-[14px] font-black text-emerald-400 mt-1">{periodTotalPieces.toLocaleString('pt-BR')}</p>
                     </div>
                   </div>
 
-                  {/* Vertical Bars representing type distribution */}
-                  <div className="flex items-stretch justify-between gap-1 pt-2 flex-1" style={{ minHeight: 130 }}>
-                    {periodTypeData.map((d, i) => {
-                      const pct = d.total > 0 ? (d.total / maxPeriodTypeVal) * 100 : 0
+                  {/* Circular distribution chart */}
+                  <div className="flex flex-col sm:flex-row items-center gap-10 py-6 flex-1 justify-center">
+                    {/* Donut Chart SVG */}
+                    <div className="relative shrink-0 w-48 h-48 flex items-center justify-center bg-slate-950/20 rounded-full p-2 border border-slate-800/40">
+                      <svg viewBox="0 0 200 200" className="w-full h-full transform -rotate-90">
+                        {/* Background track */}
+                        <circle cx="100" cy="100" r="70" fill="transparent" stroke="#1e293b" strokeWidth="22" />
+                        {(() => {
+                          const totalPalletsPeriod = periodTotal
+                          if (totalPalletsPeriod === 0) return null
+                          let accumulatedPercent = 0
+                          return periodTypeData.map((d, index) => {
+                            if (d.total === 0) return null
+                            const percent = (d.total / totalPalletsPeriod) * 100
+                            const strokeLength = (percent / 100) * 439.82
+                            // In SVG, clockwise stacking uses negative offsets
+                            const strokeOffset = -((accumulatedPercent / 100) * 439.82)
+                            accumulatedPercent += percent
+
+                            const isHovered = hoveredType === d.type
+                            const isAnyHovered = hoveredType !== null
+
+                            return (
+                              <motion.circle
+                                key={d.type}
+                                cx="100"
+                                cy="100"
+                                r="70"
+                                fill="transparent"
+                                stroke={d.cfg.hex}
+                                strokeWidth={isHovered ? 28 : 22}
+                                strokeDasharray={`${strokeLength} 439.82`}
+                                strokeDashoffset={strokeOffset}
+                                initial={{ strokeDashoffset: 0 }}
+                                animate={{ 
+                                  strokeDashoffset: strokeOffset,
+                                  strokeWidth: isHovered ? 28 : 22
+                                }}
+                                style={{
+                                  opacity: isAnyHovered && !isHovered ? 0.35 : 1,
+                                  transition: "stroke-width 0.25s ease, opacity 0.25s ease",
+                                  cursor: "pointer"
+                                }}
+                                onMouseEnter={() => setHoveredType(d.type)}
+                                onMouseLeave={() => setHoveredType(null)}
+                              />
+                            )
+                          })
+                        })()}
+                      </svg>
+                      {/* Central label */}
+                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                        <span className="text-4xl font-black text-white tracking-tight leading-none">
+                          {periodTotal}
+                        </span>
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1.5">
+                          TOTAL
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Breakdown List */}
+                    <div className="flex-1 w-full space-y-2.5 overflow-x-hidden py-1">
+                      {periodTotal === 0 ? (
+                        <p className="text-xs text-slate-400 italic text-center">Nenhum palete entregue neste período.</p>
+                      ) : (
+                        periodTypeData.map((d) => {
+                          if (d.total === 0) return null
+                          const pct = Math.round((d.total / periodTotal) * 100)
+                          const isHovered = hoveredType === d.type
+
+                          return (
+                            <div 
+                              key={d.type} 
+                              className={cn(
+                                "flex items-center justify-between py-2 border-b border-slate-800/45 last:border-0 hover:bg-slate-800/40 px-3 rounded-xl transition-all duration-200 cursor-pointer",
+                                isHovered ? "bg-slate-800/50 scale-[1.02] border-slate-700/50" : ""
+                              )}
+                              onMouseEnter={() => setHoveredType(d.type)}
+                              onMouseLeave={() => setHoveredType(null)}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="h-6.5 w-6.5 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${d.cfg.hex}22` }}>
+                                  <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: d.cfg.hex }} />
+                                </div>
+                                <span className="text-xs font-black text-slate-200 uppercase tracking-wider">{d.label || d.type}</span>
+                              </div>
+                              <div className="flex items-center gap-3 text-right">
+                                <span className="text-xs font-black text-white bg-slate-950/80 border border-slate-800/60 px-2.5 py-0.5 rounded-lg">{d.total}</span>
+                                <span className="text-xs font-black text-cyan-400 border-l border-slate-800/80 pl-3 min-w-[40px] text-right">{pct}%</span>
+                              </div>
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* RIGHT: Bar Chart / Pendentes por Tipo */}
+            <div className="rounded-2xl bg-slate-900 border border-slate-800 p-6 flex flex-col shadow-lg min-h-[460px]">
+              {isTodayMode ? (
+                // RIGHT: Pendentes por Tipo (Today Mode)
+                <div className="flex flex-col h-full justify-between flex-1 space-y-4">
+                  {/* Header */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em]">Pendentes por Tipo</p>
+                      <p className="text-sm font-black text-white mt-0.5">Fila de Aguardando Entrega</p>
+                    </div>
+                    {pendingPalletsList.length > 0 && (
+                      <div className="px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/25">
+                        {pendingPalletsList.length} paletes
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Body Content */}
+                  <div className="flex-1 flex flex-col justify-center">
+                    {pendingPalletsList.length === 0 ? (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="flex flex-col items-center justify-center text-center p-8 bg-slate-950/40 rounded-2xl border border-slate-800/80 space-y-3"
+                      >
+                        <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                          <CheckCircle2 className="text-emerald-500" size={20} />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-black text-slate-200">Nenhum palete pendente</p>
+                          <p className="text-[10px] text-slate-500 font-bold max-w-[240px] mx-auto leading-relaxed">
+                            Todos os paletes formados foram entregues. Bom trabalho!
+                          </p>
+                        </div>
+                      </motion.div>
+                    ) : (
+                      <div className="space-y-3.5 max-h-[300px] overflow-y-auto pr-1 scrollbar-thin">
+                        {Object.entries(pendingByType)
+                          .sort(([, a], [, b]) => b.count - a.count)
+                          .map(([type, data]) => {
+                            const cfg = getCfg(type)
+                            const pct = pendingPalletsList.length > 0 ? (data.count / pendingPalletsList.length) * 100 : 0
+                            return (
+                              <div 
+                                key={type} 
+                                className="p-3.5 rounded-xl bg-slate-950/30 border border-slate-800/40 hover:border-slate-700/60 transition-all duration-300 hover:bg-slate-900/30 group/item hover:translate-x-1 flex flex-col gap-2"
+                              >
+                                <div className="flex items-center justify-between text-xs font-bold">
+                                  <div className="flex items-center gap-2.5">
+                                    <div 
+                                      className="h-2.5 w-2.5 rounded-full animate-pulse" 
+                                      style={{ 
+                                        backgroundColor: cfg.hex,
+                                        boxShadow: `0 0 8px ${cfg.hex}`
+                                      }} 
+                                    />
+                                    <span className="text-slate-100 uppercase tracking-widest text-[11px] font-black">{cfg.label || type}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-slate-200 text-[11px] font-black bg-slate-900/80 px-2 py-0.5 rounded border border-slate-800/80">
+                                      {data.count} <span className="text-[8px] text-slate-500 font-bold ml-0.5">PAL</span>
+                                    </span>
+                                    <span 
+                                      className="text-[11px] font-black bg-slate-950/50 px-2 py-0.5 rounded border border-slate-800/40"
+                                      style={{ color: cfg.hex }}
+                                    >
+                                      {data.pieces.toLocaleString('pt-BR')} <span className="text-[8px] opacity-60 font-bold ml-0.5">PCS</span>
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="h-2.5 bg-slate-900 rounded-full overflow-hidden border border-slate-850 shadow-inner">
+                                  <motion.div
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${pct}%` }}
+                                    transition={{ duration: 0.65, ease: "easeOut" }}
+                                    className="h-full rounded-full relative"
+                                    style={{ 
+                                      backgroundColor: cfg.hex,
+                                      boxShadow: `0 0 10px ${cfg.hex}aa`
+                                    }}
+                                  >
+                                    <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent" />
+                                  </motion.div>
+                                </div>
+                              </div>
+                            )
+                          })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Footer */}
+                  <div className="pt-3 border-t border-slate-800/50 flex justify-between items-center text-[9px] text-slate-500 font-bold uppercase tracking-wider shrink-0">
+                    <span>Aguardando MIGO / SAP</span>
+                    <span>Total de peças: {pendingPalletsList.reduce((acc, c) => acc + (c.quantidade || 0), 0).toLocaleString('pt-BR')}</span>
+                  </div>
+                </div>
+              ) : (
+                // RIGHT: Bar Chart (Weekly/Monthly/History)
+                <div className="flex flex-col h-full justify-between flex-1">
+                  {/* Chart Header — title left, Média/Dia pill right */}
+                  {(() => {
+                    const totalP = chartItems.reduce((s, d) => s + d.total, 0)
+                    const activeDays = chartItems.filter(d => d.total > 0).length
+                    return (
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em]">{chartTitle}</p>
+                          <p className="text-sm font-black text-white mt-0.5">{chartSubtitle}</p>
+                        </div>
+
+                        <div className="flex flex-col items-end">
+                          <p className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Média/Dia</p>
+                          <p className="text-lg font-black text-cyan-400">
+                            {activeDays > 0 ? Math.round(totalP / activeDays) : 0}
+                          </p>
+                          <p className="text-[9px] text-slate-600 font-bold">pal/dia ativo</p>
+                        </div>
+                      </div>
+                    )
+                  })()}
+
+                  {/* Bar Chart */}
+                  <div className="flex-1 overflow-x-auto overflow-y-hidden flex items-stretch gap-1.5 pb-2 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-slate-950/20" style={{ minHeight: 130 }}>
+                    {chartItems.map((day, i) => {
+                      const pct = day.total > 0 ? (day.total / maxBar) * 100 : 0
+                      const typeEntries = Object.entries(day.byType).sort(([,a],[,b]) => b - a)
                       return (
-                        <div key={d.type} className="flex-1 flex flex-col items-center group/leftbar relative">
-                          
+                        <div key={day.key} className={cn("flex-1 flex flex-col items-center group/bar relative", filterPeriod === 'semanal' ? "w-full" : "min-w-[28px] max-w-[42px]")}>
+
                           {/* Hover Tooltip */}
                           <div className={cn(
                             "absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-30",
                             "bg-slate-800 border border-slate-700 rounded-xl shadow-2xl p-2.5 w-max max-w-[160px]",
-                            "opacity-0 group-hover/leftbar:opacity-100 pointer-events-none transition-opacity duration-150"
+                            "opacity-0 group-hover/bar:opacity-100 pointer-events-none transition-opacity duration-150"
                           )}>
                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1.5">
-                              {d.label || 'Sem Tipo'}
+                              {day.tooltipTitle}{day.isToday && !isTodayMode ? ' · HOJE' : ''}
                             </p>
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="text-[11px] font-black text-white">{d.total} paletes</span>
-                              <span className="text-[10px] font-bold text-emerald-400">{d.totalPieces.toLocaleString('pt-BR')} pcs</span>
+                            <div className="flex items-center justify-between gap-4 mb-1">
+                              <span className="text-[11px] font-black text-white">{day.total} paletes</span>
+                              <span className="text-[10px] font-bold text-emerald-400">{day.totalPieces.toLocaleString('pt-BR')} pcs</span>
                             </div>
+                            {typeEntries.length > 0 && (
+                              <div className="border-t border-slate-700 pt-1.5 space-y-1 mt-1">
+                                {typeEntries.map(([type, cnt]) => {
+                                  const cfg = getCfg(type)
+                                  return (
+                                    <div key={type} className="flex items-center justify-between gap-3">
+                                      <div className="flex items-center gap-1.5">
+                                        <div className='h-1.5 w-1.5 rounded-full shrink-0' style={{ backgroundColor: cfg.hex }} />
+                                        <span className="text-[9px] text-slate-300 font-bold">{cfg.label || 'Sem Tipo'}</span>
+                                      </div>
+                                      <span className='text-[9px] font-black' style={{ color: cfg.hex }}>{cnt}</span>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
+                            {day.total === 0 && (
+                              <p className="text-[9px] text-slate-500 italic">Sem entregas</p>
+                            )}
                           </div>
 
-                          {/* Number label — flex child, never overflows */}
-                          <div className="h-5 flex items-center justify-center w-full pointer-events-none shrink-0">
-                            {d.total > 0 && (
+                          {/* Number label — flex child above bar, never overflows card */}
+                          <div className="h-6 flex items-center justify-center w-full pointer-events-none shrink-0 mb-1">
+                            {day.total > 0 && (
                               <motion.span
-                                key={`${d.type}-pal-label`}
+                                key={`${day.key}-pal-label`}
                                 initial={{ opacity: 0, y: 4 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.35, ease: 'easeOut', delay: i * 0.03 + 0.25 }}
-                                className="text-[8px] font-extrabold text-slate-300 bg-slate-950/80 px-1 py-0.5 rounded border border-slate-800/40 leading-none whitespace-nowrap"
+                                className="text-[14px] font-black text-emerald-400 leading-none whitespace-nowrap"
                               >
-                                {d.total}<span className="text-[6px] text-slate-500 ml-0.5">PAL</span>
+                                +{day.total}
                               </motion.span>
                             )}
                           </div>
 
-                          {/* Bar */}
-                          <div className="w-full flex-1 flex flex-col justify-end rounded-t-sm overflow-hidden">
-                            {d.total === 0 ? (
-                              <div className="w-full rounded-t-sm bg-slate-800/30" style={{ height: '2%' }} />
+                          {/* Bar — overflow-hidden now safe because label is outside */}
+                          <div className={cn("flex-1 flex flex-col justify-end rounded-t-full overflow-hidden bg-slate-800/10", filterPeriod === 'semanal' ? "w-12 sm:w-16" : "w-full")}>
+                            {typeEntries.length === 0 ? (
+                              <div
+                                className={cn("rounded-t-full", filterPeriod === 'semanal' ? "w-12 sm:w-16" : "w-full", day.isToday ? 'bg-slate-600/30' : 'bg-slate-850/30')}
+                                style={{ height: '2%' }}
+                              />
                             ) : (
                               <motion.div
                                 initial={{ scaleY: 0 }}
                                 animate={{ scaleY: 1 }}
                                 transition={{ duration: 0.5, ease: 'easeOut', delay: i * 0.03 }}
                                 style={{ height: `${Math.max(pct, 3)}%`, transformOrigin: 'bottom' }}
-                                className={cn("w-full rounded-t-sm relative overflow-hidden", d.cfg.bar)}
+                                className="w-full flex flex-col-reverse rounded-t-full overflow-hidden"
                               >
-                                <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent" />
+                                {typeEntries.map(([type, cnt], idx) => {
+                                  const cfg = getCfg(type)
+                                  const segH = day.total > 0 ? (cnt / day.total) * 100 : 0
+                                  return (
+                                    <div
+                                      key={type}
+                                      style={{ height: `${segH}%`, backgroundColor: cfg.hex }}
+                                      className={cn(
+                                        'w-full',
+                                        idx > 0 && 'border-t border-slate-900/30',
+                                      )}
+                                    />
+                                  )
+                                })}
                               </motion.div>
                             )}
                           </div>
 
                           {/* X-axis label */}
-                          <div className="text-center leading-none mt-1 shrink-0">
-                            <p className="text-[8px] font-black uppercase text-slate-500 tracking-tighter truncate w-full max-w-[50px]">{d.label || 'Outro'}</p>
+                          <div className={cn("text-center leading-tight mt-2 shrink-0 flex flex-col gap-0.5", day.isToday && !isTodayMode ? "text-emerald-400" : "text-slate-400")}>
+                            {isTodayMode ? (
+                              <>
+                                <span className="text-[10px] font-black uppercase tracking-wider text-white">{day.label}</span>
+                                <span className="text-[8px] text-slate-500 font-bold">HOJE</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="text-[11px] font-black uppercase text-white tracking-wide">{day.label}</span>
+                                <span className="text-[9px] text-cyan-400 font-bold">{day.subLabel}</span>
+                                <span className="text-[7px] text-slate-500 font-black uppercase tracking-wider">DIAS</span>
+                              </>
+                            )}
                           </div>
-
                         </div>
                       )
                     })}
                   </div>
 
-                  {/* Legend */}
-                  <div className="pt-2 border-t border-slate-800/50 flex flex-wrap gap-x-2.5 gap-y-1 items-center justify-center">
-                    {periodTypeData.filter(d => d.label).map(d => (
-                      <div key={d.type} className="flex items-center gap-1">
-                        <div className={cn('h-1.5 w-1.5 rounded-full', d.cfg.dot)} />
-                        <span className="text-[8px] font-bold text-slate-500">{d.label}</span>
-                      </div>
-                    ))}
+                  {/* Legend — dynamic from avariaTipos (filtered by active types in chart) */}
+                  <div className="mt-3 pt-3 border-t border-slate-800 flex flex-wrap gap-x-3 gap-y-1.5 items-center">
+                    {(() => {
+                      const activeTypesInChart = new Set<string>()
+                      chartItems.forEach(item => {
+                        Object.keys(item.byType).forEach(k => {
+                          if (item.byType[k] > 0) activeTypesInChart.add(k)
+                        })
+                      })
+                      const chartActiveTipos = avariaTipos.filter(tipo => activeTypesInChart.has(tipo.nome))
+                      return chartActiveTipos.map((tipo) => (
+                        <div key={tipo.nome} className="flex items-center gap-1.5">
+                          <div className='h-2 w-2 rounded-full' style={{ backgroundColor: tipo.cor_hex }} />
+                          <span className="text-[9px] font-bold text-slate-500">{tipo.label || tipo.nome}</span>
+                        </div>
+                      ))
+                    })()}
                   </div>
                 </div>
               )}
-            </div>
-
-            {/* RIGHT: Bar Chart */}
-            <div className="rounded-2xl bg-slate-900 border border-slate-800 p-6 flex flex-col shadow-lg">
-
-              {/* Chart Header — title left, Média/Dia pill right */}
-              {(() => {
-                const totalP = chartItems.reduce((s, d) => s + d.total, 0)
-                const activeDays = chartItems.filter(d => d.total > 0).length
-                return (
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em]">{chartTitle}</p>
-                      <p className="text-sm font-black text-white mt-0.5">{chartSubtitle}</p>
-                    </div>
-
-                    {/* Animated truck (today mode) / Média/Dia pill (other modes) */}
-                    {isTodayMode ? (
-                      /* ── Animated Truck ── */
-                      <div className="relative group/truck cursor-default">
-
-                        {/* Tooltip on hover */}
-                        <div className={cn(
-                          "absolute -top-9 left-1/2 -translate-x-1/2 z-50 whitespace-nowrap",
-                          "bg-slate-800 border border-slate-600 rounded-xl px-3 py-1.5",
-                          "text-[10px] font-bold text-slate-200 shadow-xl",
-                          "opacity-0 group-hover/truck:opacity-100 transition-opacity duration-200 pointer-events-none"
-                        )}>
-                          🚚 Ei, estou levando seus paletes...
-                          {/* little arrow */}
-                          <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-600"/>
-                        </div>
-
-                        <svg viewBox="0 0 148 72" width="118" height="58" xmlns="http://www.w3.org/2000/svg" style={{ overflow: 'visible' }}>
-
-                          {/* ── Smoke puffs from exhaust ── */}
-                          <circle cx="16" cy="22" r="4.5" fill="#64748b" opacity="0">
-                            <animate attributeName="cy"      values="22;12;2"        dur="1.4s" begin="0s"    repeatCount="indefinite"/>
-                            <animate attributeName="r"       values="4.5;6.5;9"      dur="1.4s" begin="0s"    repeatCount="indefinite"/>
-                            <animate attributeName="opacity" values="0.5;0.22;0"     dur="1.4s" begin="0s"    repeatCount="indefinite"/>
-                          </circle>
-                          <circle cx="12" cy="24" r="3.5" fill="#475569" opacity="0">
-                            <animate attributeName="cy"      values="24;13;3"        dur="1.4s" begin="0.45s" repeatCount="indefinite"/>
-                            <animate attributeName="r"       values="3.5;5.5;8"      dur="1.4s" begin="0.45s" repeatCount="indefinite"/>
-                            <animate attributeName="opacity" values="0.35;0.14;0"    dur="1.4s" begin="0.45s" repeatCount="indefinite"/>
-                          </circle>
-                          <circle cx="20" cy="20" r="3" fill="#64748b" opacity="0">
-                            <animate attributeName="cy"      values="20;10;0"        dur="1.4s" begin="0.9s"  repeatCount="indefinite"/>
-                            <animate attributeName="r"       values="3;5;7.5"        dur="1.4s" begin="0.9s"  repeatCount="indefinite"/>
-                            <animate attributeName="opacity" values="0.25;0.1;0"     dur="1.4s" begin="0.9s"  repeatCount="indefinite"/>
-                          </circle>
-
-                          {/* ── Truck group (bounces up/down) ── */}
-                          <g>
-                            <animateTransform attributeName="transform" type="translate"
-                              values="0,0; 0,-1.5; 0,0; 0,-1; 0,0"
-                              dur="0.55s" repeatCount="indefinite"/>
-
-                            {/* Exhaust pipe */}
-                            <rect x="11" y="16" width="5" height="9" rx="1.5" fill="#475569" stroke="#64748b" strokeWidth="0.6"/>
-
-                            {/* Cargo box - neutral dark */}
-                            <rect x="5" y="22" width="82" height="30" rx="2" fill="#1e293b" stroke="#334155" strokeWidth="1.2"/>
-                            {/* cargo ribs */}
-                            <line x1="32" y1="22" x2="32" y2="52" stroke="#334155" strokeWidth="0.8"/>
-                            <line x1="58" y1="22" x2="58" y2="52" stroke="#334155" strokeWidth="0.8"/>
-                            {/* top stripe - emerald accent only */}
-                            <rect x="5" y="22" width="82" height="3.5" rx="1" fill="#10b981" opacity="0.9"/>
-
-                            {/* Cab body */}
-                            <path d="M87 24 L87 52 L138 52 L138 38 L124 24 Z" fill="#0f172a" stroke="#334155" strokeWidth="1.2"/>
-
-                            {/* Windshield */}
-                            <path d="M90 26 L90 37 L122 37 L122 26 Z" fill="#cbd5e1" opacity="0.12"/>
-                            <path d="M90 26 L90 37 L122 37 L122 26 Z" fill="none" stroke="#475569" strokeWidth="0.7" strokeLinejoin="round"/>
-
-                            {/* Cab door */}
-                            <rect x="90" y="39" width="22" height="13" rx="1.2" fill="none" stroke="#334155" strokeWidth="0.8"/>
-                            {/* door handle */}
-                            <rect x="108" y="44" width="5" height="2" rx="1" fill="#475569"/>
-
-                            {/* Side mirror */}
-                            <rect x="135" y="30" width="5" height="4" rx="1" fill="#1e293b" stroke="#475569" strokeWidth="0.6"/>
-
-                            {/* Headlight */}
-                            <rect x="134" y="40" width="5" height="7" rx="1.5" fill="#fbbf24" opacity="0.9"/>
-
-                            {/* Bumper */}
-                            <rect x="133" y="48" width="8" height="4" rx="1" fill="#1e293b" stroke="#475569" strokeWidth="0.7"/>
-
-                            {/* ── Rear wheel ── */}
-                            <circle cx="30" cy="53" r="11" fill="#1e293b" stroke="#10b981" strokeWidth="1.8"/>
-                            <circle cx="30" cy="53" r="6.5" fill="#0f172a" stroke="#34d399" strokeWidth="1"/>
-                            <g>
-                              <animateTransform attributeName="transform" type="rotate"
-                                from="0 30 53" to="360 30 53" dur="0.7s" repeatCount="indefinite"/>
-                              <line x1="30" y1="46.5" x2="30" y2="59.5" stroke="#34d399" strokeWidth="1.2"/>
-                              <line x1="23.5" y1="53"  x2="36.5" y2="53"  stroke="#34d399" strokeWidth="1.2"/>
-                              <line x1="25.4" y1="47.4" x2="34.6" y2="58.6" stroke="#10b981" strokeWidth="0.7"/>
-                              <line x1="25.4" y1="58.6" x2="34.6" y2="47.4" stroke="#10b981" strokeWidth="0.7"/>
-                            </g>
-                            <circle cx="30" cy="53" r="2.5" fill="#6ee7b7"/>
-
-                            {/* ── Front wheel ── */}
-                            <circle cx="108" cy="53" r="11" fill="#1e293b" stroke="#10b981" strokeWidth="1.8"/>
-                            <circle cx="108" cy="53" r="6.5" fill="#0f172a" stroke="#34d399" strokeWidth="1"/>
-                            <g>
-                              <animateTransform attributeName="transform" type="rotate"
-                                from="0 108 53" to="360 108 53" dur="0.7s" repeatCount="indefinite"/>
-                              <line x1="108" y1="46.5" x2="108" y2="59.5" stroke="#34d399" strokeWidth="1.2"/>
-                              <line x1="101.5" y1="53"  x2="114.5" y2="53"  stroke="#34d399" strokeWidth="1.2"/>
-                              <line x1="103.4" y1="47.4" x2="112.6" y2="58.6" stroke="#10b981" strokeWidth="0.7"/>
-                              <line x1="103.4" y1="58.6" x2="112.6" y2="47.4" stroke="#10b981" strokeWidth="0.7"/>
-                            </g>
-                            <circle cx="108" cy="53" r="2.5" fill="#6ee7b7"/>
-
-                            {/* Ground dust */}
-                            <circle cx="10" cy="64" r="2" fill="#475569" opacity="0">
-                              <animate attributeName="cx"      values="10;-8"   dur="0.6s" repeatCount="indefinite" begin="0s"/>
-                              <animate attributeName="opacity" values="0.55;0"  dur="0.6s" repeatCount="indefinite" begin="0s"/>
-                            </circle>
-                            <circle cx="6" cy="62" r="1.5" fill="#475569" opacity="0">
-                              <animate attributeName="cx"      values="6;-10"   dur="0.6s" repeatCount="indefinite" begin="0.2s"/>
-                              <animate attributeName="opacity" values="0.4;0"   dur="0.6s" repeatCount="indefinite" begin="0.2s"/>
-                            </circle>
-                          </g>
-                        </svg>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-end">
-                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Média/Dia</p>
-                        <p className="text-lg font-black text-cyan-400">
-                          {activeDays > 0 ? Math.round(totalP / activeDays) : 0}
-                        </p>
-                        <p className="text-[9px] text-slate-600 font-bold">pal/dia ativo</p>
-                      </div>
-                    )}
-                  </div>
-                )
-              })()}
-
-              {/* Bar Chart */}
-              <div className="flex-1 overflow-x-auto overflow-y-hidden flex items-stretch gap-1.5 pb-2 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-slate-950/20" style={{ minHeight: 130 }}>
-                {chartItems.map((day, i) => {
-                  const pct = day.total > 0 ? (day.total / maxBar) * 100 : 0
-                  const goalPct = Math.min((DAILY_GOAL / maxBar) * 100, 100)
-                  const typeEntries = Object.entries(day.byType).sort(([,a],[,b]) => b - a)
-                  return (
-                    <div key={day.key} className="flex-1 min-w-[42px] flex flex-col items-center group/bar relative">
-
-                      {/* Hover Tooltip */}
-                      <div className={cn(
-                        "absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-30",
-                        "bg-slate-800 border border-slate-700 rounded-xl shadow-2xl p-2.5 w-max max-w-[160px]",
-                        "opacity-0 group-hover/bar:opacity-100 pointer-events-none transition-opacity duration-150"
-                      )}>
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1.5">
-                          {day.tooltipTitle}{day.isToday && !isTodayMode ? ' · HOJE' : ''}
-                        </p>
-                        <div className="flex items-center justify-between gap-4 mb-1">
-                          <span className="text-[11px] font-black text-white">{day.total} paletes</span>
-                          <span className="text-[10px] font-bold text-emerald-400">{day.totalPieces.toLocaleString('pt-BR')} pcs</span>
-                        </div>
-                        {typeEntries.length > 0 && (
-                          <div className="border-t border-slate-700 pt-1.5 space-y-1 mt-1">
-                            {typeEntries.map(([type, cnt]) => {
-                              const cfg = getCfg(type)
-                              return (
-                                <div key={type} className="flex items-center justify-between gap-3">
-                                  <div className="flex items-center gap-1.5">
-                                    <div className={cn('h-1.5 w-1.5 rounded-full shrink-0', cfg.dot)} />
-                                    <span className="text-[9px] text-slate-300 font-bold">{cfg.label || 'Sem Tipo'}</span>
-                                  </div>
-                                  <span className={cn('text-[9px] font-black', cfg.text)}>{cnt}</span>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        )}
-                        {day.total === 0 && (
-                          <p className="text-[9px] text-slate-500 italic">Sem entregas</p>
-                        )}
-                      </div>
-
-                      {/* Number label — flex child above bar, never overflows card */}
-                      <div className="h-5 flex items-center justify-center w-full pointer-events-none shrink-0 mb-1">
-                        {day.total > 0 && (
-                          <motion.span
-                            key={`${day.key}-pal-label`}
-                            initial={{ opacity: 0, y: 4 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.35, ease: 'easeOut', delay: i * 0.03 + 0.25 }}
-                            className="text-[8px] font-extrabold text-slate-300 bg-slate-950/80 px-1 py-0.5 rounded border border-slate-800/40 leading-none whitespace-nowrap"
-                          >
-                            {day.total}<span className="text-[6px] text-slate-500 ml-0.5">PAL</span>
-                          </motion.span>
-                        )}
-                      </div>
-
-                      {/* Bar — overflow-hidden now safe because label is outside */}
-                      <div className="w-full flex-1 flex flex-col justify-end rounded-t-sm overflow-hidden">
-                        {typeEntries.length === 0 ? (
-                          <div
-                            className={cn("w-full rounded-t-sm", day.isToday ? 'bg-slate-600/30' : 'bg-slate-800/30')}
-                            style={{ height: '2%' }}
-                          />
-                        ) : (
-                          <motion.div
-                            initial={{ scaleY: 0 }}
-                            animate={{ scaleY: 1 }}
-                            transition={{ duration: 0.5, ease: 'easeOut', delay: i * 0.03 }}
-                            style={{ height: `${Math.max(pct, 3)}%`, transformOrigin: 'bottom' }}
-                            className="w-full flex flex-col-reverse rounded-t-sm overflow-hidden"
-                          >
-                            {typeEntries.map(([type, cnt], idx) => {
-                              const cfg = getCfg(type)
-                              const segH = day.total > 0 ? (cnt / day.total) * 100 : 0
-                              return (
-                                <div
-                                  key={type}
-                                  style={{ height: `${segH}%` }}
-                                  className={cn(
-                                    cfg.bar, 'w-full',
-                                    idx > 0 && 'border-t border-slate-900/30',
-                                  )}
-                                />
-                              )
-                            })}
-                          </motion.div>
-                        )}
-                      </div>
-
-                      {/* X-axis label */}
-                      <div className={cn("text-center leading-none mt-1 shrink-0", day.isToday && !isTodayMode ? "text-emerald-400" : "text-slate-600")}>
-                        {isTodayMode ? (
-                          <>
-                            <p className="text-[8px] font-black uppercase tracking-tighter">{day.label}</p>
-                            <p className="text-[7px] opacity-70">HOJE</p>
-                          </>
-                        ) : filterPeriod === 'mensal' || filterPeriod === 'todos' ? (
-                          <span className="text-[8px] font-black">{day.subLabel}</span>
-                        ) : (
-                          <>
-                            <p className="text-[8px] font-black uppercase">{day.label}</p>
-                            <p className="text-[8px] opacity-70">{day.subLabel}</p>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-
-              {/* Legend */}
-              <div className="mt-3 pt-3 border-t border-slate-800 flex flex-wrap gap-x-3 gap-y-1.5 items-center">
-                {Object.entries(TYPE_CFG).map(([key, cfg]) => (
-                  <div key={key} className="flex items-center gap-1.5">
-                    <div className={cn('h-2 w-2 rounded-full', cfg.dot)} />
-                    <span className="text-[9px] font-bold text-slate-500">{cfg.label}</span>
-                  </div>
-                ))}
-
-              </div>
             </div>
 
           </div>
@@ -1954,50 +2048,58 @@ items.forEach(c => {
                     placeholder="Códigos separados por vírgula..."
                     value={editCodigos}
                     onChange={(e) => setEditCodigos(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 resize-none"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
                   />
                 </div>
 
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Tipo de Avaria</label>
-                  <select
-                    value={editType}
-                    onChange={(e) => setEditType(e.target.value)}
-                    className="w-full h-11 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
-                  >
-                    <option value="">Selecione o tipo...</option>
-                    <option value="INTERNA">INTERNA</option>
-                    <option value="AG">AG</option>
-                    <option value="SÃO BARTOLOMEU">SÃO BARTOLOMEU</option>
-                    <option value="PPT">PPT</option>
-                    <option value="Outras">Outras (digitar...)</option>
-                  </select>
+                  <div className="flex flex-wrap gap-2">
+                    {avariaTipos.map(t => ({ value: t.nome, cor_hex: t.cor_hex })).map((t) => {
+                      const active = editType === t.value
+                      return (
+                        <button
+                          key={t.value}
+                          type="button"
+                          onClick={() => setEditType(t.value)}
+                          className={cn(
+                            "px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border",
+                            active
+                              ? "text-white shadow-lg"
+                              : "bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900"
+                          )}
+                          style={active ? { backgroundColor: t.cor_hex, borderColor: t.cor_hex } : {}}
+                        >
+                          {t.value}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
 
-                {editType === "Outras" && (
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Especificar Tipo</label>
-                    <input
-                      type="text"
-                      placeholder="Digite o tipo de avaria..."
-                      value={editCustomType}
-                      onChange={(e) => setEditCustomType(e.target.value)}
-                      className="w-full h-11 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                )}
 
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Status do Palete</label>
-                  <select
-                    value={editStatus}
-                    onChange={(e) => setEditStatus(e.target.value)}
-                    className="w-full h-11 bg-slate-50 dark:bg-slate-950 border border-slate-200 border-slate-800 rounded-xl px-3 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
-                  >
-                    <option value="Pendente">Pendente</option>
-                    <option value="Entregue">Entregue</option>
-                    <option value="Estornado">Estornado</option>
-                  </select>
+                  <div className="flex gap-2">
+                    {[
+                      { value: "Pendente", label: "Pendente", colorClass: "hover:text-amber-500 dark:hover:bg-amber-500/10", activeClass: "bg-amber-500 border-amber-500 text-slate-950 shadow-lg shadow-amber-500/20" },
+                      { value: "Entregue", label: "Entregue", colorClass: "hover:text-emerald-500 dark:hover:bg-emerald-500/10", activeClass: "bg-emerald-600 border-emerald-600 text-white shadow-lg shadow-emerald-600/20" }
+                    ].map((statusOpt) => (
+                      <button
+                        key={statusOpt.value}
+                        type="button"
+                        onClick={() => setEditStatus(statusOpt.value)}
+                        className={cn(
+                          "px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border flex-1",
+                          editStatus === statusOpt.value
+                            ? statusOpt.activeClass
+                            : `bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 ${statusOpt.colorClass}`
+                        )}
+                      >
+                        {statusOpt.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -2373,27 +2475,47 @@ items.forEach(c => {
 
               {/* Body */}
               <div className="flex-1 overflow-y-auto space-y-6 pr-2">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase">Reserva SAP (opcional — somente MB21)</label>
+                  <input type="text" value={manualReserva} onChange={(e) => setManualReserva(e.target.value)} className="w-full h-11 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 text-xs font-medium text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10" placeholder="Ex: 100028945" />
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase">Reserva</label>
-                    <div className="relative flex items-center">
-                      <input type="text" value={manualReserva} onChange={(e) => setManualReserva(e.target.value)} className="w-full h-11 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20" placeholder="Ex: 123456" />
-                    </div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase">Remessa MIGO</label>
+                    <input type="text" value={manualRemessa} onChange={(e) => setManualRemessa(e.target.value)} className="w-full h-11 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 text-xs font-medium text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10" placeholder="Ex: 83384647" />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-slate-400 uppercase">Doc. SAP</label>
-                    <input type="text" value={manualDocumento} onChange={(e) => setManualDocumento(e.target.value)} className="w-full h-11 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20" placeholder="Ex: 500000" />
+                    <input type="text" value={manualDocumento} onChange={(e) => setManualDocumento(e.target.value)} className="w-full h-11 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 text-xs font-medium text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10" placeholder="Ex: 4916837702" />
                   </div>
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase">Tipo de Avaria</label>
                   <div className="flex flex-wrap gap-2">
-                    {['INTERNA', 'AG', 'SÃO BARTOLOMEU', 'PPT'].map((type) => (
-                      <button key={type} onClick={() => setManualType(type)} className={cn("px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all", manualType === type ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20" : "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-400")}>{type}</button>
-                    ))}
+                    {avariaTipos.map(t => ({ value: t.nome, cor_hex: t.cor_hex })).map((t) => {
+                      const active = manualType === t.value
+                      return (
+                        <button
+                          key={t.value}
+                          type="button"
+                          onClick={() => setManualType(t.value)}
+                          className={cn(
+                            "px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer border",
+                            active
+                              ? "text-white shadow-lg"
+                              : "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-400 border-transparent"
+                          )}
+                          style={active ? { backgroundColor: t.cor_hex, borderColor: t.cor_hex } : {}}
+                        >
+                          {t.value}
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
+
 
                 {/* Items */}
                 <div className="space-y-3">
@@ -2404,8 +2526,8 @@ items.forEach(c => {
                   <div className="space-y-2">
                     {manualItems.map((item, idx) => (
                       <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} key={idx} className="flex gap-2">
-                        <input value={item.codigo} onChange={(e) => { const newI = [...manualItems]; newI[idx].codigo = e.target.value; setManualItems(newI) }} className="flex-1 h-10 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 text-xs" placeholder="Código..." />
-                        <input type="number" value={item.quantidade} onChange={(e) => { const newI = [...manualItems]; newI[idx].quantidade = parseInt(e.target.value); setManualItems(newI) }} className="w-20 h-10 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 text-xs text-center" />
+                        <input value={item.codigo} onChange={(e) => { const newI = [...manualItems]; newI[idx].codigo = e.target.value; setManualItems(newI) }} className="flex-1 h-10 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-emerald-500" placeholder="Código..." />
+                        <input type="text" inputMode="numeric" pattern="[0-9]*" value={item.quantidade} onChange={(e) => { const v = e.target.value.replace(/\D/g, ''); const newI = [...manualItems]; newI[idx].quantidade = v === '' ? 0 : parseInt(v); setManualItems(newI) }} className="w-20 h-10 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 text-xs text-center text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                         <button onClick={() => setManualItems(manualItems.filter((_, i) => i !== idx))} className="text-rose-400 hover:text-rose-600 px-2"><Trash2 size={16} /></button>
                       </motion.div>
                     ))}

@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useMemo, useEffect } from "react"
+import { AvariaTipo, hexToStyle } from "@/hooks/useAvariaTipos"
 import {
   Fan,
   Box,
@@ -126,6 +127,7 @@ interface FormacaoPaletesTabProps {
   handleImportRelacao: () => Promise<void>
   avariaType: string
   setAvariaType: (v: string) => void
+  avariaTipos: AvariaTipo[]
 }
 
 export default function FormacaoPaletesTab({
@@ -152,6 +154,7 @@ export default function FormacaoPaletesTab({
   isSavingPalete,
   avariaType,    // <--- Nova
   setAvariaType, // <--- Nova
+  avariaTipos,
   handleConfirmarFormarPalete,
   showImportModal,
   setShowImportModal,
@@ -175,21 +178,21 @@ export default function FormacaoPaletesTab({
   const [showSortMenu, setShowSortMenu] = useState(false)
   const [isAvariaTypeOpen, setIsAvariaTypeOpen] = useState(false)
 
-  const standardTypes = ["Interna", "AG", "São Bartolomeu", "PPT"]
   const [isOutras, setIsOutras] = useState(false)
   const [customTypeName, setCustomTypeName] = useState("")
 
   useEffect(() => {
+    const tipoNomes = avariaTipos.map(t => t.nome)
     if (!avariaType) {
       setIsOutras(false)
       setCustomTypeName("")
-    } else if (!standardTypes.includes(avariaType)) {
+    } else if (!tipoNomes.includes(avariaType)) {
       setIsOutras(true)
       setCustomTypeName(avariaType)
     } else {
       setIsOutras(false)
     }
-  }, [avariaType])
+  }, [avariaType, avariaTipos])
 
   // Filtered ungrouped items
   const filteredItems = useMemo(() => {
@@ -572,36 +575,36 @@ export default function FormacaoPaletesTab({
                     whileHover={{ scale: 1.03 }}
                     whileTap={{ scale: 0.97 }}
                     onClick={() => setSelectedPosGroup(g)}
-                    className="group cursor-pointer relative flex flex-col items-center justify-between aspect-square rounded-[24px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-emerald-500/50 dark:hover:border-emerald-500/50 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all duration-200 p-5 shadow-sm hover:shadow-md"
+                    className="group cursor-pointer relative flex flex-col items-center justify-between rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-emerald-500/50 dark:hover:border-emerald-500/50 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all duration-200 p-4 shadow-sm hover:shadow-md"
                   >
                     {/* MIX badge */}
                     {g.uniqueSkus > 1 && (
-                      <span className="absolute top-3 right-3 text-[8px] font-black tracking-widest uppercase bg-amber-400 text-slate-900 px-1.5 py-0.5 rounded-md leading-none shadow-sm z-10">
+                      <span className="absolute top-2.5 right-2.5 text-[8px] font-black tracking-widest uppercase bg-amber-400 text-slate-900 px-1.5 py-0.5 rounded-md leading-none shadow-sm z-10">
                         MIX
                       </span>
                     )}
 
                     {/* Posição name - TOP */}
-                    <div className="w-full text-center mt-1">
-                      <div className="inline-flex bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/60 px-3 py-1 rounded-xl shadow-sm">
+                    <div className="w-full text-center mt-0.5">
+                      <div className="inline-flex bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/60 px-2.5 py-0.5 rounded-lg shadow-sm">
                         {renderPosicaoHighlight(g.posicao)}
                       </div>
                     </div>
 
                     {/* Pallet icon — CENTER */}
-                    <div className="text-5xl sm:text-6xl my-3 group-hover:scale-110 transition-transform duration-200 select-none">
+                    <div className="text-4xl sm:text-5xl my-2 group-hover:scale-110 transition-transform duration-200 select-none">
                       📦
                     </div>
 
                     {/* Info — BOTTOM */}
-                    <div className="w-full text-center min-w-0 mb-1">
-                      <p className="text-[12px] font-black text-slate-700 dark:text-slate-200 leading-tight truncate px-1" title={g.uniqueSkus === 1 ? g.items[0]?.codigo : undefined}>
+                    <div className="w-full text-center min-w-0 mb-0.5">
+                      <p className="text-[11px] font-black text-slate-700 dark:text-slate-200 leading-tight truncate px-1" title={g.uniqueSkus === 1 ? g.items[0]?.codigo : undefined}>
                         {g.uniqueSkus === 1
                           ? g.items[0]?.codigo || "Sem Código"
                           : `${g.uniqueSkus} SKUs`
                         }
                       </p>
-                      <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mt-1">
+                      <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 mt-0.5">
                         {g.totalQtd} {g.totalQtd === 1 ? 'peça' : 'peças'}
                       </p>
                     </div>
@@ -621,26 +624,26 @@ export default function FormacaoPaletesTab({
                       totalQtd: item.quantidade,
                       uniqueSkus: 1
                     })}
-                    className="group cursor-pointer relative flex flex-col items-center justify-between aspect-square rounded-[24px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-emerald-500/50 dark:hover:border-emerald-500/50 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all duration-200 p-5 shadow-sm hover:shadow-md"
+                    className="group cursor-pointer relative flex flex-col items-center justify-between rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-emerald-500/50 dark:hover:border-emerald-500/50 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all duration-200 p-4 shadow-sm hover:shadow-md"
                   >
                     {/* Position name - TOP */}
-                    <div className="w-full text-center mt-1">
-                      <div className="inline-flex bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/60 px-3 py-1 rounded-xl shadow-sm">
+                    <div className="w-full text-center mt-0.5">
+                      <div className="inline-flex bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/60 px-2.5 py-0.5 rounded-lg shadow-sm">
                         {renderPosicaoHighlight(item.posicao)}
                       </div>
                     </div>
 
                     {/* Pallet icon — CENTER */}
-                    <div className="text-5xl sm:text-6xl my-3 group-hover:scale-110 transition-transform duration-200 select-none">
+                    <div className="text-4xl sm:text-5xl my-2 group-hover:scale-110 transition-transform duration-200 select-none">
                       📦
                     </div>
 
                     {/* Info — BOTTOM */}
-                    <div className="w-full text-center min-w-0 mb-1">
-                      <p className="text-[12px] font-black text-slate-700 dark:text-slate-200 leading-tight truncate px-1" title={item.codigo}>
+                    <div className="w-full text-center min-w-0 mb-0.5">
+                      <p className="text-[11px] font-black text-slate-700 dark:text-slate-200 leading-tight truncate px-1" title={item.codigo}>
                         {item.codigo || "Sem Código"}
                       </p>
-                      <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mt-1">
+                      <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 mt-0.5">
                         {item.quantidade} {item.quantidade === 1 ? 'peça' : 'peças'}
                       </p>
                     </div>
@@ -957,102 +960,30 @@ export default function FormacaoPaletesTab({
     Tipo de Avaria
     <span className="text-[9px] font-bold text-rose-400 uppercase tracking-wider">*</span>
   </label>
-  <div className="relative">
-    <button
-      type="button"
-      onClick={() => setIsAvariaTypeOpen(!isAvariaTypeOpen)}
-      className={cn(
-        "w-full h-11 bg-white dark:bg-slate-950 border rounded-xl px-3 pr-10 text-xs text-left text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all flex items-center justify-between cursor-pointer",
-        avariaType ? "border-slate-200 dark:border-slate-800" : "border-amber-300 dark:border-amber-600/40"
-      )}
-    >
-      {avariaType ? (
-        <span className="font-bold flex items-center gap-1.5">
-          <span className={cn(
-            "px-2 py-0.5 rounded text-[10px] font-black border uppercase tracking-wider",
-            avariaType === "Interna" && "text-blue-500 bg-blue-500/10 border-blue-500/20",
-            avariaType === "AG" && "text-emerald-500 bg-emerald-500/10 border-emerald-500/20",
-            avariaType === "São Bartolomeu" && "text-amber-500 bg-amber-500/10 border-amber-500/20",
-            avariaType === "PPT" && "text-purple-500 bg-purple-500/10 border-purple-500/20",
-            (!standardTypes.includes(avariaType)) && "text-slate-500 bg-slate-500/10 border-slate-500/20"
-          )}>
-            {avariaType}
-          </span>
-        </span>
-      ) : (
-        <span className="text-slate-400">Selecione o tipo de avaria...</span>
-      )}
-      <ChevronDown size={14} className={cn("text-slate-400 transition-transform duration-200", isAvariaTypeOpen && "rotate-180")} />
-    </button>
-
-    <AnimatePresence>
-      {isAvariaTypeOpen && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setIsAvariaTypeOpen(false)} />
-          <motion.div
-            initial={{ opacity: 0, y: -5, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -5, scale: 0.95 }}
-            transition={{ duration: 0.15 }}
-            className="absolute top-full left-0 right-0 mt-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl z-40 p-1.5 space-y-1"
-          >
-            {[
-              { value: "Interna", color: "text-blue-500 bg-blue-500/10 border-blue-500/20" },
-              { value: "AG", color: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20" },
-              { value: "São Bartolomeu", color: "text-amber-500 bg-amber-500/10 border-amber-500/20" },
-              { value: "PPT", color: "text-purple-500 bg-purple-500/10 border-purple-500/20" },
-              { value: "Outras", color: "text-slate-500 bg-slate-500/10 border-slate-500/20" }
-            ].map(opt => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => {
-                  if (opt.value === "Outras") {
-                    setIsOutras(true)
-                    setAvariaType(customTypeName || "Outros")
-                  } else {
-                    setIsOutras(false)
-                    setAvariaType(opt.value)
-                  }
-                  setIsAvariaTypeOpen(false)
-                }}
-                className={cn(
-                  "w-full text-left px-3 py-2 h-10 rounded-lg text-xs font-bold transition-colors flex items-center justify-between cursor-pointer",
-                  avariaType === opt.value || (opt.value === "Outras" && isOutras)
-                    ? "bg-slate-50 dark:bg-slate-800/80 text-emerald-600 dark:text-emerald-400"
-                    : "text-slate-700 dark:text-slate-350 hover:bg-slate-50 dark:hover:bg-slate-800"
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <span className={cn("px-2 py-0.5 rounded text-[10px] font-black border uppercase tracking-wider", opt.color)}>
-                    {opt.value === "Outras" && isOutras && customTypeName ? customTypeName : opt.value}
-                  </span>
-                </div>
-                {(avariaType === opt.value || (opt.value === "Outras" && isOutras)) && <Check size={14} className="text-emerald-500" />}
-              </button>
-            ))}
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+  <div className="flex flex-wrap gap-2">
+    {avariaTipos.map((tipo) => {
+      const active = avariaType === tipo.nome
+      return (
+        <button
+          key={tipo.nome}
+          type="button"
+          onClick={() => {
+            setAvariaType(tipo.nome)
+          }}
+          className={cn(
+            "px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer border",
+            active
+              ? "text-white shadow-lg"
+              : "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-400 border-transparent"
+          )}
+          style={active ? { backgroundColor: tipo.cor_hex, borderColor: tipo.cor_hex } : {}}
+        >
+          {tipo.label || tipo.nome}
+        </button>
+      )
+    })}
   </div>
 </div>
-
-{isOutras && (
-  <div className="space-y-1.5 mt-2">
-    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Especificar Tipo</label>
-    <input
-      type="text"
-      placeholder="Digite o tipo de avaria..."
-      value={customTypeName}
-      onChange={(e) => {
-        setCustomTypeName(e.target.value)
-        setAvariaType(e.target.value.trim() || "Outros")
-      }}
-      className="w-full h-11 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
-    />
-  </div>
-)}
 
 
                       <div className="grid grid-cols-2 gap-4">

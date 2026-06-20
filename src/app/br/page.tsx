@@ -14,13 +14,16 @@ import {
   CheckCircle2,
   BarChart3,
   AtSign,
-  Package
+  Package,
+  Settings2
 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { supabase } from "@/lib/supabase"
 import FormacaoPaletesTab from "@/components/br/FormacaoPaletesTab"
 import PaletesFormadosTab from "@/components/br/PaletesFormadosTab"
 import DashboardTab from "@/components/br/DashboardTab"
+import AvariaTiposManager from "@/components/br/AvariaTiposManager"
+import { useAvariaTipos } from "@/hooks/useAvariaTipos"
 
 function cn(...classes: (string | undefined | false | null)[]) {
   return classes.filter(Boolean).join(" ")
@@ -77,6 +80,10 @@ export default function BRModulePage() {
   const [documentoSM, setDocumentoSM]   = useState("")
   const [avariaType, setAvariaType]     = useState("")
   const [isSavingPalete, setIsSavingPalete] = useState(false)
+  const [showTiposManager, setShowTiposManager] = useState(false)
+
+  // Global avaria types from Supabase
+  const { tipos: avariaTipos, refresh: refreshTipos } = useAvariaTipos()
 
   // Auth state
   const [session, setSession]           = useState<any>(null)
@@ -91,6 +98,14 @@ export default function BRModulePage() {
   // Avoid hydration mismatch by waiting until client mount
   useEffect(() => {
     setMounted(true)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "a") {
+        e.preventDefault()
+        setShowTiposManager(true)
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
   }, [])
 
   // Apply theme class to <html>
@@ -201,10 +216,23 @@ export default function BRModulePage() {
         .order('criacao', { ascending: false })
       if (docsErr) throw docsErr
 
-      const { data: relItems, error: relItemsErr } = await supabase
-        .from('relacao_documento')
-        .select('*')
-      if (relItemsErr) throw relItemsErr
+      const remessas = Array.from(
+        new Set(
+          (docs || [])
+            .map((d: any) => d.remessa)
+            .filter((r: any) => r !== null && r !== undefined)
+        )
+      )
+
+      let relItems: any[] = []
+      if (remessas.length > 0) {
+        const { data: fetchedRelItems, error: relItemsErr } = await supabase
+          .from('relacao_documento')
+          .select('*')
+          .in('remessa', remessas)
+        if (relItemsErr) throw relItemsErr
+        relItems = fetchedRelItems || []
+      }
 
       const mapped = (docs || []).map((doc: any) => {
         const docItems = (relItems || []).filter((item: any) => Number(item.remessa) === Number(doc.remessa))
@@ -312,7 +340,6 @@ export default function BRModulePage() {
           documento: row.documento ? parseInt(String(row.documento).replace(/[^\d]/g, ''), 10) : null,
           reserva: row.reserva,
           type: row.type || null,
-          data: row.criacao,
           criacao: row.criacao,
           status: row.status || 'Pendente'
         }
@@ -628,7 +655,6 @@ export default function BRModulePage() {
         documento: docInt,
         reserva: reservaInt,
         type: avariaType.trim() || null,
-        data: localDate,
         criacao: localDate,
         status: 'Pendente'
       }
@@ -803,13 +829,9 @@ th:first-child,td:first-child{width:80px}th:nth-child(2),td:nth-child(2){width:a
     <div class="card"><div class="lbl">Remessa MIGO</div><div class="val">${row.remessa || '-'}</div></div>
     ${row.type ? `<div class="card"><div class="lbl">Tipo de Avaria</div><div class="val sm">${row.type}</div></div>` : ''}
   </div>
-  ${row.documento ? `
-  <div class="card" style="align-items:center;text-align:center;padding:12px;gap:6px;border:2px solid #cbd5e1;background:#fff">
-    <span style="font-size:9px;font-weight:bold;color:#475569;text-transform:uppercase;letter-spacing:1px">Documento SAP</span>
-    <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(row.documento)}&bgcolor=ffffff&color=1e293b&margin=4" style="width:115px;height:115px;border-radius:8px;border:1px solid #cbd5e1" alt="QR Doc SAP" />
-    <span style="font-size:11px;font-weight:bold;color:#1e293b">${row.documento}</span>
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div class="card"><div class="lbl">Documento SAP</div><div class="val">${row.documento || '-'}</div></div>
   </div>
-  ` : '<div class="card"><div class="lbl">Documento SAP</div><div class="val">-</div></div>'}
 </div>
 <div class="sec">Itens do Palete</div>
 ${itensHtml}
@@ -849,7 +871,10 @@ ${itensHtml}
       <aside className="group/sidebar fixed left-0 top-0 z-50 flex h-full w-24 flex-col items-center border-none bg-white/80 py-8 backdrop-blur-xl dark:bg-slate-900/80 transition-all duration-300 hover:w-64 overflow-hidden">
 
         {/* Branding */}
-        <div className="mb-12 flex flex-col items-center gap-4 px-4 w-full text-center">
+        <div 
+          onDoubleClick={() => setShowTiposManager(true)}
+          className="mb-12 flex flex-col items-center gap-4 px-4 w-full text-center cursor-pointer select-none"
+        >
           <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[1.5rem] bg-emerald-600 shadow-xl shadow-emerald-500/30">
             <Fan className="text-white animate-[spin_10s_linear_infinite]" size={32} />
           </div>
@@ -941,7 +966,7 @@ ${itensHtml}
 
       {/* ─── Main Content ────────────────────────────────────────────────── */}
       <main className="ml-24 flex-1 p-4 md:p-8 lg:p-12">
-        <div className="mx-auto max-w-7xl space-y-8">
+        <div className="mx-auto max-w-[1920px] w-full space-y-8">
 
           {activeTab === "formacao_paletes" && (
             <FormacaoPaletesTab
@@ -971,6 +996,7 @@ ${itensHtml}
 
               avariaType={avariaType}
               setAvariaType={setAvariaType}
+              avariaTipos={avariaTipos}
 
               showImportModal={showImportModal}
               setShowImportModal={setShowImportModal}
@@ -1002,6 +1028,8 @@ ${itensHtml}
               handleMigrateData={handleMigrateData}
               isMigrating={isMigrating}
               baseCodigos={baseCodigos}
+              avariaTipos={avariaTipos}
+              onOpenTiposManager={() => setShowTiposManager(true)}
             />
           )}
 
@@ -1189,6 +1217,9 @@ ${itensHtml}
           </div>
         )}
       </AnimatePresence>
+
+      {/* ─── Tipos de Avaria Manager ──────────────────────────────────────── */}
+      <AvariaTiposManager open={showTiposManager} onClose={() => { setShowTiposManager(false); refreshTipos() }} />
 
     </div>
   )
