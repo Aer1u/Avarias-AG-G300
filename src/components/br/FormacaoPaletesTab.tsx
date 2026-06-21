@@ -74,6 +74,7 @@ interface PosAvaria {
   descricao: string
   estoque: number
   quantidade: number
+  palete?: string | null
 }
 
 interface EditableItem {
@@ -94,7 +95,7 @@ interface FormacaoPaletesTabProps {
   setShowLoginModal: (show: boolean) => void
   handleClearAllData: () => Promise<void>
   handleDeleteRow: (id: number) => Promise<void>
-  handleClearPosition: (posName: string) => Promise<void>
+  handleClearPosition: (posName: string, paleteId?: string) => Promise<void>
   
   // States passed from parent for modal workflows
   selectedPosGroup: any
@@ -228,20 +229,21 @@ export default function FormacaoPaletesTab({
 
   // Group positions dynamically
   const posicoesAgrupadas = useMemo(() => {
-    const groups: Record<string, { posicao: string; items: PosAvaria[]; totalQtd: number; uniqueSkus: number }> = {}
+    const groups: Record<string, { palete?: string; posicao: string; items: PosAvaria[]; totalQtd: number; uniqueSkus: number }> = {}
     
     posicoesRaw.forEach(item => {
+      const groupKey = item.palete ? item.palete : (item.posicao || "SEM POSIÇÃO").trim().toUpperCase()
       const pos = (item.posicao || "SEM POSIÇÃO").trim().toUpperCase()
-      if (!groups[pos]) {
-        groups[pos] = { posicao: pos, items: [], totalQtd: 0, uniqueSkus: 0 }
+      if (!groups[groupKey]) {
+        groups[groupKey] = { palete: item.palete || undefined, posicao: pos, items: [], totalQtd: 0, uniqueSkus: 0 }
       }
-      groups[pos].items.push(item)
-      groups[pos].totalQtd += item.quantidade || 0
+      groups[groupKey].items.push(item)
+      groups[groupKey].totalQtd += item.quantidade || 0
     })
 
-    Object.keys(groups).forEach(pos => {
-      const uniqueSkusSet = new Set(groups[pos].items.map(i => i.codigo))
-      groups[pos].uniqueSkus = uniqueSkusSet.size
+    Object.keys(groups).forEach(key => {
+      const uniqueSkusSet = new Set(groups[key].items.map(i => i.codigo))
+      groups[key].uniqueSkus = uniqueSkusSet.size
     })
 
     return Object.values(groups)
@@ -568,111 +570,84 @@ export default function FormacaoPaletesTab({
                 </div>
               </div>
                         ) : groupedView ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4">
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(130px,1fr))] gap-4">
                 {filteredGroups.map((g) => (
                   <motion.div
-                    key={g.posicao}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
+                    key={g.palete || g.posicao}
+                    whileHover={{ scale: 1.04 }}
+                    whileTap={{ scale: 0.97 }}
                     onClick={() => setSelectedPosGroup(g)}
-                    className="group cursor-pointer relative aspect-square w-full rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-slate-50/50 dark:bg-[#0b101d]/60 p-2 flex flex-col items-center justify-center hover:border-emerald-500/50 dark:hover:border-emerald-500/50 transition-all duration-200 shadow-sm hover:shadow-md"
+                    className="group cursor-pointer relative aspect-square w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 flex flex-col items-center justify-between transition-all duration-200 hover:scale-[1.04]"
                   >
-                    {/* Inner frame */}
-                    <div className="w-full h-full border border-slate-100 dark:border-slate-800/30 bg-white/70 dark:bg-[#0e1526]/50 rounded-xl p-2 flex flex-col items-center justify-between relative overflow-hidden">
-                      
-                      {/* MIX badge / SKU count */}
-                      {g.uniqueSkus > 1 ? (
-                        <span className="absolute top-1.5 right-1.5 text-[7px] font-black tracking-wider uppercase bg-amber-400 text-slate-900 px-1 py-0.5 rounded-xs leading-none shadow-xs z-10">
-                          MIX
-                        </span>
-                      ) : (
-                        <span className="absolute top-1.5 right-1.5 text-[8px] font-mono font-bold text-slate-400 dark:text-slate-500 truncate max-w-[65px]" title={g.items[0]?.codigo}>
-                          {g.items[0]?.codigo}
-                        </span>
-                      )}
+                    {/* MIX badge if multi-SKU */}
+                    {g.uniqueSkus > 1 && (
+                      <span className="absolute top-1.5 right-1.5 text-[6px] font-black tracking-wider uppercase bg-amber-400 text-slate-900 px-1 py-0.5 rounded-xs leading-none shadow-xs z-10">
+                        MIX
+                      </span>
+                    )}
 
-                      {/* Conveyor Box & Pallet platform */}
-                      <div className="flex-1 flex flex-col items-center justify-center mt-2">
-                        {/* Box Emoji */}
-                        <span className="text-3xl sm:text-4xl group-hover:scale-110 transition-transform duration-200 select-none">
-                          📦
-                        </span>
-                        {/* Pallet wood platform */}
-                        <div className="w-12 h-1 bg-[#b56927] rounded-sm -mt-0.5 relative">
-                          {/* Left Support */}
-                          <div className="w-1.5 h-1 bg-[#804210] rounded-xs absolute -bottom-1 left-1" />
-                          {/* Center Support */}
-                          <div className="w-1.5 h-1 bg-[#804210] rounded-xs absolute -bottom-1 left-1/2 -translate-x-1/2" />
-                          {/* Right Support */}
-                          <div className="w-1.5 h-1 bg-[#804210] rounded-xs absolute -bottom-1 right-1" />
+                    {/* 3D Box & Pallet Graphic */}
+                    <div className="flex-1 flex flex-col items-center justify-center w-full mt-1">
+                      <div className="relative group-hover:-translate-y-0.5 transition-transform duration-300 flex flex-col items-center">
+                        {/* Box */}
+                        <span className="text-[44px] drop-shadow-md inline-block relative z-10 leading-none select-none">📦</span>
+                        {/* Subdued Pallet */}
+                        <div className="w-14 h-[6px] bg-[#8B5A2B] rounded-sm mx-auto flex justify-around items-end pt-[2px] relative z-0 -mt-[2px] shadow-sm">
+                          <div className="w-[6px] h-[4px] bg-[#4A2E12] rounded-t-[1px]"></div>
+                          <div className="w-[6px] h-[4px] bg-[#4A2E12] rounded-t-[1px]"></div>
+                          <div className="w-[6px] h-[4px] bg-[#4A2E12] rounded-t-[1px]"></div>
                         </div>
                       </div>
-
-                      {/* Dark Info Pill */}
-                      <div className="w-full bg-slate-950/90 dark:bg-black/90 rounded-lg py-1.5 px-1 text-center mt-1 border border-slate-800/40">
-                        <p className="text-[10px] sm:text-xs font-black text-white leading-tight tracking-wide">
-                          {g.posicao}
-                        </p>
-                        <p className="text-[8px] sm:text-[9px] font-bold text-cyan-400 mt-0.5 leading-none">
-                          {g.totalQtd} {g.totalQtd === 1 ? 'peça' : 'peças'}
-                        </p>
-                      </div>
-
                     </div>
+
+                    {/* The Dark Information Pill */}
+                    <div className="w-[88%] bg-[#0B1120] rounded-lg py-1.5 flex flex-col items-center justify-center mb-1 border border-white/5 shadow-inner">
+                      <span className="text-[11px] leading-tight font-bold text-white tracking-widest">{g.posicao}</span>
+                      <span className="text-[9px] leading-tight text-slate-400 font-medium">
+                        {g.totalQtd} {g.totalQtd === 1 ? 'peça' : 'peças'}
+                      </span>
+                    </div>
+
                   </motion.div>
                 ))}
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4">
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(130px,1fr))] gap-4">
                 {filteredItems.map((item) => (
                   <motion.div
                     key={item.id}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
+                    whileHover={{ scale: 1.04 }}
+                    whileTap={{ scale: 0.97 }}
                     onClick={() => setSelectedPosGroup({
                       posicao: item.posicao,
                       items: [item],
                       totalQtd: item.quantidade,
                       uniqueSkus: 1
                     })}
-                    className="group cursor-pointer relative aspect-square w-full rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-slate-50/50 dark:bg-[#0b101d]/60 p-2 flex flex-col items-center justify-center hover:border-emerald-500/50 dark:hover:border-emerald-500/50 transition-all duration-200 shadow-sm hover:shadow-md"
+                    className="group cursor-pointer relative aspect-square w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 flex flex-col items-center justify-between transition-all duration-200 hover:scale-[1.04]"
                   >
-                    {/* Inner frame */}
-                    <div className="w-full h-full border border-slate-100 dark:border-slate-800/30 bg-white/70 dark:bg-[#0e1526]/50 rounded-xl p-2 flex flex-col items-center justify-between relative overflow-hidden">
-                      
-                      {/* SKU code */}
-                      <span className="absolute top-1.5 right-1.5 text-[8px] font-mono font-bold text-slate-400 dark:text-slate-500 truncate max-w-[65px]" title={item.codigo}>
-                        {item.codigo}
-                      </span>
-
-                      {/* Conveyor Box & Pallet platform */}
-                      <div className="flex-1 flex flex-col items-center justify-center mt-2">
-                        {/* Box Emoji */}
-                        <span className="text-3xl sm:text-4xl group-hover:scale-110 transition-transform duration-200 select-none">
-                          📦
-                        </span>
-                        {/* Pallet wood platform */}
-                        <div className="w-12 h-1 bg-[#b56927] rounded-sm -mt-0.5 relative">
-                          {/* Left Support */}
-                          <div className="w-1.5 h-1 bg-[#804210] rounded-xs absolute -bottom-1 left-1" />
-                          {/* Center Support */}
-                          <div className="w-1.5 h-1 bg-[#804210] rounded-xs absolute -bottom-1 left-1/2 -translate-x-1/2" />
-                          {/* Right Support */}
-                          <div className="w-1.5 h-1 bg-[#804210] rounded-xs absolute -bottom-1 right-1" />
+                    {/* 3D Box & Pallet Graphic */}
+                    <div className="flex-1 flex flex-col items-center justify-center w-full mt-1">
+                      <div className="relative group-hover:-translate-y-0.5 transition-transform duration-300 flex flex-col items-center">
+                        {/* Box */}
+                        <span className="text-[44px] drop-shadow-md inline-block relative z-10 leading-none select-none">📦</span>
+                        {/* Subdued Pallet */}
+                        <div className="w-14 h-[6px] bg-[#8B5A2B] rounded-sm mx-auto flex justify-around items-end pt-[2px] relative z-0 -mt-[2px] shadow-sm">
+                          <div className="w-[6px] h-[4px] bg-[#4A2E12] rounded-t-[1px]"></div>
+                          <div className="w-[6px] h-[4px] bg-[#4A2E12] rounded-t-[1px]"></div>
+                          <div className="w-[6px] h-[4px] bg-[#4A2E12] rounded-t-[1px]"></div>
                         </div>
                       </div>
-
-                      {/* Dark Info Pill */}
-                      <div className="w-full bg-slate-950/90 dark:bg-black/90 rounded-lg py-1.5 px-1 text-center mt-1 border border-slate-800/40">
-                        <p className="text-[10px] sm:text-xs font-black text-white leading-tight tracking-wide">
-                          {item.posicao}
-                        </p>
-                        <p className="text-[8px] sm:text-[9px] font-bold text-cyan-400 mt-0.5 leading-none">
-                          {item.quantidade} {item.quantidade === 1 ? 'peça' : 'peças'}
-                        </p>
-                      </div>
-
                     </div>
+
+                    {/* The Dark Information Pill */}
+                    <div className="w-[88%] bg-[#0B1120] rounded-lg py-1.5 flex flex-col items-center justify-center mb-1 border border-white/5 shadow-inner">
+                      <span className="text-[11px] leading-tight font-bold text-white tracking-widest">{item.posicao}</span>
+                      <span className="text-[9px] leading-tight text-slate-400 font-medium">
+                        {item.quantidade} {item.quantidade === 1 ? 'peça' : 'peças'}
+                      </span>
+                    </div>
+
                   </motion.div>
                 ))}
               </div>
@@ -800,9 +775,9 @@ export default function FormacaoPaletesTab({
                       {user && (
                         <button
                           type="button"
-                          onClick={() => handleClearPosition(selectedPosGroup.posicao)}
+                          onClick={() => handleClearPosition(selectedPosGroup.posicao, selectedPosGroup.palete)}
                           className="flex items-center gap-2 px-5 py-3 rounded-2xl text-xs font-bold uppercase tracking-wider transition-all bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-450 hover:bg-rose-100 dark:hover:bg-rose-500/20 cursor-pointer"
-                          title="Descarregar Posição Inteira"
+                          title="Descarregar Posição / Palete"
                         >
                           <Trash2 size={15} />
                           Descarregar Posição

@@ -39,6 +39,7 @@ interface PosAvaria {
   descricao: string
   estoque: number
   quantidade: number
+  palete?: string | null
 }
 
 interface EditableItem {
@@ -486,6 +487,16 @@ export default function BRModulePage() {
     setIsImporting(true)
     try {
       const dataToInsert: any[] = []
+      const posPaleteMap: Record<string, string> = {}
+      const getPaleteIdForPos = (pos: string) => {
+        const normalizedPos = pos.trim().toUpperCase()
+        if (!posPaleteMap[normalizedPos]) {
+          posPaleteMap[normalizedPos] = typeof crypto !== 'undefined' && crypto.randomUUID 
+            ? crypto.randomUUID() 
+            : Math.random().toString(36).substring(2) + Date.now().toString(36)
+        }
+        return posPaleteMap[normalizedPos]
+      }
       
       for (const line of lines) {
         const cols = line.split('\t')
@@ -501,6 +512,10 @@ export default function BRModulePage() {
         const rawQty = String(cols[4] || '0').trim()
         const cleanQty = parseInt(rawQty.replace(/[^\d-]/g, ''), 10) || 0
 
+        const generateUUID = () => typeof crypto !== 'undefined' && crypto.randomUUID 
+          ? crypto.randomUUID() 
+          : Math.random().toString(36).substring(2) + Date.now().toString(36)
+
         if (splitByGrade && gradeSize > 0 && cleanQty > gradeSize) {
           const fullChunks = Math.floor(cleanQty / gradeSize)
           const remainder = cleanQty % gradeSize
@@ -511,7 +526,8 @@ export default function BRModulePage() {
               codigo,
               descricao,
               estoque: cleanEstoque,
-              quantidade: gradeSize
+              quantidade: gradeSize,
+              palete: generateUUID()
             })
           }
           if (remainder > 0) {
@@ -520,7 +536,8 @@ export default function BRModulePage() {
               codigo,
               descricao,
               estoque: cleanEstoque,
-              quantidade: remainder
+              quantidade: remainder,
+              palete: generateUUID()
             })
           }
         } else {
@@ -529,7 +546,8 @@ export default function BRModulePage() {
             codigo,
             descricao,
             estoque: cleanEstoque,
-            quantidade: cleanQty
+            quantidade: cleanQty,
+            palete: splitByGrade ? generateUUID() : getPaleteIdForPos(posicao)
           })
         }
       }
@@ -701,26 +719,38 @@ export default function BRModulePage() {
     }
   }
 
-  // Clear entire position
-  const handleClearPosition = async (posName: string) => {
+  // Clear entire position or specific palete
+  const handleClearPosition = async (posName: string, paleteId?: string) => {
     if (!user) {
       setShowLoginModal(true)
       return
     }
-    if (!confirm(`Deseja realmente descarregar/limpar todos os itens da posição ${posName}?`)) return
+    
+    const confirmMsg = paleteId 
+      ? `Deseja realmente descarregar/limpar todos os itens deste palete (Posição ${posName})?`
+      : `Deseja realmente descarregar/limpar todos os itens da posição ${posName}?`
+      
+    if (!confirm(confirmMsg)) return
 
     try {
-      const { error } = await supabase
-        .from('pos_avarias')
-        .delete()
-        .eq('posicao', posName)
+      let query = supabase.from('pos_avarias').delete()
+      if (paleteId) {
+        query = query.eq('palete', paleteId)
+      } else {
+        query = query.eq('posicao', posName)
+      }
       
+      const { error } = await query
       if (error) throw error
 
-      setPosicoesRaw(prev => prev.filter(item => item.posicao !== posName))
+      if (paleteId) {
+        setPosicoesRaw(prev => prev.filter(item => item.palete !== paleteId))
+      } else {
+        setPosicoesRaw(prev => prev.filter(item => item.posicao !== posName))
+      }
       setSelectedPosGroup(null)
     } catch (err: any) {
-      console.error("Erro ao descarregar posição:", err.message)
+      console.error("Erro ao descarregar:", err.message)
       alert("Erro ao descarregar: " + err.message)
     }
   }
