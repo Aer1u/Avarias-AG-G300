@@ -567,85 +567,111 @@ export default function FormacaoPaletesTab({
                   </p>
                 </div>
               </div>
-            ) : groupedView ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5">
+                        ) : groupedView ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4">
                 {filteredGroups.map((g) => (
                   <motion.div
                     key={g.posicao}
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.97 }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
                     onClick={() => setSelectedPosGroup(g)}
-                    className="group cursor-pointer relative flex flex-col items-center justify-between rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-emerald-500/50 dark:hover:border-emerald-500/50 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all duration-200 p-4 shadow-sm hover:shadow-md"
+                    className="group cursor-pointer relative aspect-square w-full rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-slate-50/50 dark:bg-[#0b101d]/60 p-2 flex flex-col items-center justify-center hover:border-emerald-500/50 dark:hover:border-emerald-500/50 transition-all duration-200 shadow-sm hover:shadow-md"
                   >
-                    {/* MIX badge */}
-                    {g.uniqueSkus > 1 && (
-                      <span className="absolute top-2.5 right-2.5 text-[8px] font-black tracking-widest uppercase bg-amber-400 text-slate-900 px-1.5 py-0.5 rounded-md leading-none shadow-sm z-10">
-                        MIX
-                      </span>
-                    )}
+                    {/* Inner frame */}
+                    <div className="w-full h-full border border-slate-100 dark:border-slate-800/30 bg-white/70 dark:bg-[#0e1526]/50 rounded-xl p-2 flex flex-col items-center justify-between relative overflow-hidden">
+                      
+                      {/* MIX badge / SKU count */}
+                      {g.uniqueSkus > 1 ? (
+                        <span className="absolute top-1.5 right-1.5 text-[7px] font-black tracking-wider uppercase bg-amber-400 text-slate-900 px-1 py-0.5 rounded-xs leading-none shadow-xs z-10">
+                          MIX
+                        </span>
+                      ) : (
+                        <span className="absolute top-1.5 right-1.5 text-[8px] font-mono font-bold text-slate-400 dark:text-slate-500 truncate max-w-[65px]" title={g.items[0]?.codigo}>
+                          {g.items[0]?.codigo}
+                        </span>
+                      )}
 
-                    {/* Posição name - TOP */}
-                    <div className="w-full text-center mt-0.5">
-                      <div className="inline-flex bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/60 px-2.5 py-0.5 rounded-lg shadow-sm">
-                        {renderPosicaoHighlight(g.posicao)}
+                      {/* Conveyor Box & Pallet platform */}
+                      <div className="flex-1 flex flex-col items-center justify-center mt-2">
+                        {/* Box Emoji */}
+                        <span className="text-3xl sm:text-4xl group-hover:scale-110 transition-transform duration-200 select-none">
+                          📦
+                        </span>
+                        {/* Pallet wood platform */}
+                        <div className="w-12 h-1 bg-[#b56927] rounded-sm -mt-0.5 relative">
+                          {/* Left Support */}
+                          <div className="w-1.5 h-1 bg-[#804210] rounded-xs absolute -bottom-1 left-1" />
+                          {/* Center Support */}
+                          <div className="w-1.5 h-1 bg-[#804210] rounded-xs absolute -bottom-1 left-1/2 -translate-x-1/2" />
+                          {/* Right Support */}
+                          <div className="w-1.5 h-1 bg-[#804210] rounded-xs absolute -bottom-1 right-1" />
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Pallet icon — CENTER */}
-                    <div className="text-4xl sm:text-5xl my-2 group-hover:scale-110 transition-transform duration-200 select-none">
-                      📦
-                    </div>
+                      {/* Dark Info Pill */}
+                      <div className="w-full bg-slate-950/90 dark:bg-black/90 rounded-lg py-1.5 px-1 text-center mt-1 border border-slate-800/40">
+                        <p className="text-[10px] sm:text-xs font-black text-white leading-tight tracking-wide">
+                          {g.posicao}
+                        </p>
+                        <p className="text-[8px] sm:text-[9px] font-bold text-cyan-400 mt-0.5 leading-none">
+                          {g.totalQtd} {g.totalQtd === 1 ? 'peça' : 'peças'}
+                        </p>
+                      </div>
 
-                    {/* Info — BOTTOM */}
-                    <div className="w-full text-center min-w-0 mb-0.5">
-                      <p className="text-[11px] font-black text-slate-700 dark:text-slate-200 leading-tight truncate px-1" title={g.uniqueSkus === 1 ? g.items[0]?.codigo : undefined}>
-                        {g.uniqueSkus === 1
-                          ? g.items[0]?.codigo || "Sem Código"
-                          : `${g.uniqueSkus} SKUs`
-                        }
-                      </p>
-                      <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 mt-0.5">
-                        {g.totalQtd} {g.totalQtd === 1 ? 'peça' : 'peças'}
-                      </p>
                     </div>
                   </motion.div>
                 ))}
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4">
                 {filteredItems.map((item) => (
                   <motion.div
                     key={item.id}
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.97 }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
                     onClick={() => setSelectedPosGroup({
                       posicao: item.posicao,
                       items: [item],
                       totalQtd: item.quantidade,
                       uniqueSkus: 1
                     })}
-                    className="group cursor-pointer relative flex flex-col items-center justify-between rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-emerald-500/50 dark:hover:border-emerald-500/50 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all duration-200 p-4 shadow-sm hover:shadow-md"
+                    className="group cursor-pointer relative aspect-square w-full rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-slate-50/50 dark:bg-[#0b101d]/60 p-2 flex flex-col items-center justify-center hover:border-emerald-500/50 dark:hover:border-emerald-500/50 transition-all duration-200 shadow-sm hover:shadow-md"
                   >
-                    {/* Position name - TOP */}
-                    <div className="w-full text-center mt-0.5">
-                      <div className="inline-flex bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/60 px-2.5 py-0.5 rounded-lg shadow-sm">
-                        {renderPosicaoHighlight(item.posicao)}
+                    {/* Inner frame */}
+                    <div className="w-full h-full border border-slate-100 dark:border-slate-800/30 bg-white/70 dark:bg-[#0e1526]/50 rounded-xl p-2 flex flex-col items-center justify-between relative overflow-hidden">
+                      
+                      {/* SKU code */}
+                      <span className="absolute top-1.5 right-1.5 text-[8px] font-mono font-bold text-slate-400 dark:text-slate-500 truncate max-w-[65px]" title={item.codigo}>
+                        {item.codigo}
+                      </span>
+
+                      {/* Conveyor Box & Pallet platform */}
+                      <div className="flex-1 flex flex-col items-center justify-center mt-2">
+                        {/* Box Emoji */}
+                        <span className="text-3xl sm:text-4xl group-hover:scale-110 transition-transform duration-200 select-none">
+                          📦
+                        </span>
+                        {/* Pallet wood platform */}
+                        <div className="w-12 h-1 bg-[#b56927] rounded-sm -mt-0.5 relative">
+                          {/* Left Support */}
+                          <div className="w-1.5 h-1 bg-[#804210] rounded-xs absolute -bottom-1 left-1" />
+                          {/* Center Support */}
+                          <div className="w-1.5 h-1 bg-[#804210] rounded-xs absolute -bottom-1 left-1/2 -translate-x-1/2" />
+                          {/* Right Support */}
+                          <div className="w-1.5 h-1 bg-[#804210] rounded-xs absolute -bottom-1 right-1" />
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Pallet icon — CENTER */}
-                    <div className="text-4xl sm:text-5xl my-2 group-hover:scale-110 transition-transform duration-200 select-none">
-                      📦
-                    </div>
+                      {/* Dark Info Pill */}
+                      <div className="w-full bg-slate-950/90 dark:bg-black/90 rounded-lg py-1.5 px-1 text-center mt-1 border border-slate-800/40">
+                        <p className="text-[10px] sm:text-xs font-black text-white leading-tight tracking-wide">
+                          {item.posicao}
+                        </p>
+                        <p className="text-[8px] sm:text-[9px] font-bold text-cyan-400 mt-0.5 leading-none">
+                          {item.quantidade} {item.quantidade === 1 ? 'peça' : 'peças'}
+                        </p>
+                      </div>
 
-                    {/* Info — BOTTOM */}
-                    <div className="w-full text-center min-w-0 mb-0.5">
-                      <p className="text-[11px] font-black text-slate-700 dark:text-slate-200 leading-tight truncate px-1" title={item.codigo}>
-                        {item.codigo || "Sem Código"}
-                      </p>
-                      <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 mt-0.5">
-                        {item.quantidade} {item.quantidade === 1 ? 'peça' : 'peças'}
-                      </p>
                     </div>
                   </motion.div>
                 ))}
