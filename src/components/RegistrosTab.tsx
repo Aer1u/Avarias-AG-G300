@@ -341,11 +341,11 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
     if (rowsToSave.length === 0) return;
 
     const checkValidation = rowsToSave.find(r => 
-      r.isNew && (!r.Origem || !r.responsavel || !r.tipo_avaria || r.tipo_avaria === '' || !r.turno || r.turno === 0)
+      r.isNew && (!r.Origem || !r.tipo_avaria || r.tipo_avaria === '')
     );
 
     if (checkValidation) {
-      showToast('Atenção: Origem, Responsável, Tipo de Avaria e Turno são obrigatórios!', 'error');
+      showToast('Atenção: Origem e Tipo de Avaria são obrigatórios!', 'error');
       return;
     }
 
@@ -600,14 +600,13 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                 <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[110px]">Placa</th>
                 <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[130px]">Container</th>
                 <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[110px]">Lacre</th>
-                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[80px] text-center">Sist.</th>
                 <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[80px] text-center">Obs.</th>
               </tr>
             </thead>
             <tbody className="border-none">
               {loading ? (
                 <tr>
-                  <td colSpan={16} className="py-20 text-center">
+                  <td colSpan={15} className="py-20 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <Loader2 className="animate-spin text-blue-500" size={32} />
                       <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Carregando registros...</p>
@@ -616,7 +615,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                 </tr>
               ) : filteredRegistros.length === 0 ? (
                 <tr>
-                  <td colSpan={16} className="py-20 text-center">
+                  <td colSpan={15} className="py-20 text-center">
                     <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Nenhum registro encontrado</p>
                   </td>
                 </tr>
@@ -829,20 +828,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                         )}
                       />
                     </td>
-                    <td className="p-0 text-center">
-                      <button 
-                        onClick={() => updateRow(idx, 'Movimentação Sistema', !row['Movimentação Sistema'])}
-                        disabled={!row.isNew}
-                        className={cn(
-                          "p-2 rounded-lg transition-all",
-                          row['Movimentação Sistema'] 
-                            ? "text-emerald-500 bg-emerald-500/10" 
-                            : "text-slate-300 dark:text-slate-700 hover:text-slate-400"
-                        )}
-                      >
-                        {row['Movimentação Sistema'] ? <CheckCircle2 size={18} /> : <XCircle size={18} />}
-                      </button>
-                    </td>
+
                     <td className="p-0 text-center">
                       <div className="flex items-center justify-center gap-1 px-2">
                         <button 
