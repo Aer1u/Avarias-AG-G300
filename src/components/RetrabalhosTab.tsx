@@ -1984,19 +1984,27 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
 
                     if (!selectedLoteDetail) return;
 
-for (const row of validRows) {
-  const existing = selectedLoteDetail.items.find(item =>
-    (row.a501 && item.reserva_a501 === row.a501) ||
-    (row.g501 && item.reserva_g501 === row.g501)
-  );
+                    for (const row of validRows) {
+                      const resA = row.a501?.trim();
+                      const resG = row.g501?.trim();
 
-                      if (existing) {
-                        await supabase.from('retrabalhos').update(updateData).eq('id', existing.id);
-                      } else {
+                      const existingInLote = selectedLoteDetail.items.find(item =>
+                        (resA && item.reserva_a501?.trim() === resA) ||
+                        (resG && item.reserva_g501?.trim() === resG)
+                      );
+
+                      const isDuplicateGlobal = records.some(r =>
+                        (resA && r.reserva_a501?.trim() === resA) ||
+                        (resG && r.reserva_g501?.trim() === resG)
+                      );
+
+                      if (existingInLote) {
+                        await supabase.from('retrabalhos').update(updateData).eq('id', existingInLote.id);
+                      } else if (!isDuplicateGlobal) {
                         await supabase.from('retrabalhos').insert([{
                           ...updateData,
-                          reserva_a501: row.a501,
-                          reserva_g501: row.g501,
+                          reserva_a501: resA || row.a501,
+                          reserva_g501: resG || row.g501,
                           quantidade_enviada: Number(row.qtd) || 0,
                           lote: selectedLoteDetail.lote,
                           status: 'EM ANDAMENTO',
