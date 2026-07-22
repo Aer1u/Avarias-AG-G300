@@ -67,7 +67,7 @@ interface PaletesFormadosTabProps {
   fetchControleAvarias: (period?: "hoje" | "semanal" | "mensal") => Promise<void>
   setShowLoginModal: (show: boolean) => void
   handleDeleteControle: (id: number) => Promise<void>
-  handlePrintControle: (row: any, autoPrint?: boolean) => void
+  handlePrintControle: (row: any, showQrCode?: boolean, autoPrint?: boolean) => void
   setControleRaw: React.Dispatch<React.SetStateAction<any[]>>
   
   // Need posicoesRaw to calculate "Pendentes para Formar"
