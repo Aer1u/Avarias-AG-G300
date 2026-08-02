@@ -620,7 +620,14 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                   </td>
                 </tr>
               ) : (
-                filteredRegistros.map((row, idx) => (
+                filteredRegistros.map((row, idx) => {
+                  const isReceb = row.Origem === 'Recebimento';
+                  const transpUpper = (row.transportadora || '').toUpperCase();
+                  const showTranspNF = isReceb;
+                  const showContainer = isReceb && transpUpper !== 'JTD';
+                  const showPlacaLacre = isReceb && transpUpper !== 'ALIANÇA' && transpUpper !== 'ALIANCA';
+                  
+                  return (
                   <tr 
                     key={row.id || `new-${idx}`} 
                     className={cn(
@@ -744,89 +751,99 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                       />
                     </td>
                     <td className="p-0">
-                      <input 
-                        type="text"
-                        value={row.transportadora ?? ''}
-                        disabled={!row.isNew || row.Origem !== 'Recebimento'}
-                        onChange={(e) => updateRow(idx, 'transportadora', e.target.value)}
-                        placeholder="---"
-                        className={cn(
-                          "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors",
-                          !row.isNew 
-                            ? "text-slate-800 dark:text-slate-200 cursor-default" 
-                            : row.Origem !== 'Recebimento'
-                              ? "cursor-not-allowed opacity-50 bg-slate-200/50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                      {!showTranspNF ? (
+                        <div className="px-5 py-3.5 text-slate-400 dark:text-slate-600 text-sm">---</div>
+                      ) : (
+                        <input 
+                          type="text"
+                          value={row.transportadora ?? ''}
+                          disabled={!row.isNew}
+                          onChange={(e) => updateRow(idx, 'transportadora', e.target.value)}
+                          placeholder="---"
+                          className={cn(
+                            "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors",
+                            !row.isNew 
+                              ? "text-slate-800 dark:text-slate-200 cursor-default" 
                               : "text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/20 group-hover:text-slate-900 dark:group-hover:text-white cursor-text"
-                        )}
-                      />
+                          )}
+                        />
+                      )}
                     </td>
                     <td className="p-0">
-                      <input 
-                        type="text"
-                        value={row.nota_fiscal ?? ''}
-                        disabled={!row.isNew || row.Origem !== 'Recebimento'}
-                        onChange={(e) => updateRow(idx, 'nota_fiscal', e.target.value ? Number(e.target.value) : null)}
-                        placeholder="---"
-                        className={cn(
-                          "w-full bg-transparent border-none px-5 py-3.5 text-sm tabular-nums focus:outline-none transition-colors",
-                          !row.isNew 
-                            ? "text-slate-800 dark:text-slate-200 cursor-default" 
-                            : row.Origem !== 'Recebimento'
-                              ? "cursor-not-allowed opacity-50 bg-slate-200/50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                      {!showTranspNF ? (
+                        <div className="px-5 py-3.5 text-slate-400 dark:text-slate-600 text-sm tabular-nums">---</div>
+                      ) : (
+                        <input 
+                          type="text"
+                          value={row.nota_fiscal ?? ''}
+                          disabled={!row.isNew}
+                          onChange={(e) => updateRow(idx, 'nota_fiscal', e.target.value ? Number(e.target.value) : null)}
+                          placeholder="---"
+                          className={cn(
+                            "w-full bg-transparent border-none px-5 py-3.5 text-sm tabular-nums focus:outline-none transition-colors",
+                            !row.isNew 
+                              ? "text-slate-800 dark:text-slate-200 cursor-default" 
                               : "text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/20 group-hover:text-slate-900 dark:group-hover:text-white cursor-text"
-                        )}
-                      />
+                          )}
+                        />
+                      )}
                     </td>
                     <td className="p-0">
-                      <input 
-                        type="text"
-                        value={row.placa ?? ''}
-                        disabled={!row.isNew || row.Origem !== 'Recebimento'}
-                        onChange={(e) => updateRow(idx, 'placa', e.target.value)}
-                        placeholder="---"
-                        className={cn(
-                          "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors",
-                          !row.isNew 
-                            ? "text-slate-800 dark:text-slate-200 cursor-default" 
-                            : row.Origem !== 'Recebimento'
-                              ? "cursor-not-allowed opacity-50 bg-slate-200/50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                      {!showPlacaLacre ? (
+                        <div className="px-5 py-3.5 text-slate-400 dark:text-slate-600 text-sm">---</div>
+                      ) : (
+                        <input 
+                          type="text"
+                          value={row.placa ?? ''}
+                          disabled={!row.isNew}
+                          onChange={(e) => updateRow(idx, 'placa', e.target.value)}
+                          placeholder="---"
+                          className={cn(
+                            "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors",
+                            !row.isNew 
+                              ? "text-slate-800 dark:text-slate-200 cursor-default" 
                               : "text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/20 group-hover:text-slate-900 dark:group-hover:text-white cursor-text"
-                        )}
-                      />
+                          )}
+                        />
+                      )}
                     </td>
                     <td className="p-0">
-                      <input 
-                        type="text"
-                        value={row.container ?? ''}
-                        disabled={!row.isNew || row.Origem !== 'Recebimento'}
-                        onChange={(e) => updateRow(idx, 'container', e.target.value)}
-                        placeholder="---"
-                        className={cn(
-                          "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors",
-                          !row.isNew 
-                            ? "text-slate-800 dark:text-slate-200 cursor-default" 
-                            : row.Origem !== 'Recebimento'
-                              ? "cursor-not-allowed opacity-50 bg-slate-200/50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                      {!showContainer ? (
+                        <div className="px-5 py-3.5 text-slate-400 dark:text-slate-600 text-sm">---</div>
+                      ) : (
+                        <input 
+                          type="text"
+                          value={row.container ?? ''}
+                          disabled={!row.isNew}
+                          onChange={(e) => updateRow(idx, 'container', e.target.value)}
+                          placeholder="---"
+                          className={cn(
+                            "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors",
+                            !row.isNew 
+                              ? "text-slate-800 dark:text-slate-200 cursor-default" 
                               : "text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/20 group-hover:text-slate-900 dark:group-hover:text-white cursor-text"
-                        )}
-                      />
+                          )}
+                        />
+                      )}
                     </td>
                     <td className="p-0">
-                      <input 
-                        type="text"
-                        value={row.lacre ?? ''}
-                        disabled={!row.isNew || row.Origem !== 'Recebimento'}
-                        onChange={(e) => updateRow(idx, 'lacre', e.target.value)}
-                        placeholder="---"
-                        className={cn(
-                          "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors",
-                          !row.isNew 
-                            ? "text-slate-800 dark:text-slate-200 cursor-default" 
-                            : row.Origem !== 'Recebimento'
-                              ? "cursor-not-allowed opacity-50 bg-slate-200/50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                      {!showPlacaLacre ? (
+                        <div className="px-5 py-3.5 text-slate-400 dark:text-slate-600 text-sm">---</div>
+                      ) : (
+                        <input 
+                          type="text"
+                          value={row.lacre ?? ''}
+                          disabled={!row.isNew}
+                          onChange={(e) => updateRow(idx, 'lacre', e.target.value)}
+                          placeholder="---"
+                          className={cn(
+                            "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors",
+                            !row.isNew 
+                              ? "text-slate-800 dark:text-slate-200 cursor-default" 
                               : "text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/20 group-hover:text-slate-900 dark:group-hover:text-white cursor-text"
-                        )}
-                      />
+                          )}
+                        />
+                      )}
                     </td>
 
                     <td className="p-0 text-center">
@@ -861,7 +878,8 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                       </div>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>
