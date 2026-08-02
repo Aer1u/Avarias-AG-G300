@@ -1261,7 +1261,7 @@ export default function FormacaoPaletesTab({
                       Digite os dados abaixo. A descrição será preenchida automaticamente conforme o produto:
                     </p>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       {/* Posição */}
                       <div>
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Posição</label>
@@ -1303,26 +1303,6 @@ export default function FormacaoPaletesTab({
                         )}
                       </div>
 
-                      {/* Depósito */}
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Depósito</label>
-                        <select
-                          value={manualDeposito}
-                          onChange={e => setManualDeposito(e.target.value)}
-                          className={cn(
-                            "w-full h-10 px-3 text-xs font-mono font-bold rounded-xl bg-white dark:bg-slate-900 border text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30",
-                            manualDeposito.toUpperCase().startsWith("F")
-                              ? "border-rose-500 text-rose-500 font-black"
-                              : "border-slate-200 dark:border-slate-800"
-                          )}
-                        >
-                          <option value="Z2">Z2 (Padrão)</option>
-                          <option value="F2">F2 (Destaque em Vermelho)</option>
-                          <option value="Z1">Z1</option>
-                          <option value="F1">F1</option>
-                        </select>
-                      </div>
-
                       {/* Quantidade */}
                       <div>
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Quantidade</label>
@@ -1335,18 +1315,6 @@ export default function FormacaoPaletesTab({
                           className="w-full h-10 px-3 text-xs font-bold rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                         />
                       </div>
-                    </div>
-
-                    {/* Descrição Auto-pulled */}
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Descrição (Puxada da Base)</label>
-                      <input
-                        type="text"
-                        value={manualDescricao}
-                        onChange={e => setManualDescricao(e.target.value)}
-                        placeholder="A descrição será preenchida automaticamente ao selecionar o produto..."
-                        className="w-full h-10 px-3 text-xs font-medium rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                      />
                     </div>
 
                     <button
@@ -1376,7 +1344,7 @@ export default function FormacaoPaletesTab({
 
                 {/* Preview Table of items ready to save */}
                 {importText.trim() && (
-                  <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-800/80 max-h-44 overflow-y-auto custom-scrollbar">
+                  <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-800/80">
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Itens Prontos para Gravar ({importText.trim().split('\n').filter(l => l.trim()).length})</span>
                       <button
@@ -1398,7 +1366,7 @@ export default function FormacaoPaletesTab({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40">
-                        {importText.trim().split('\n').filter(l => l.trim()).slice(0, 15).map((line, idx) => {
+                        {importText.trim().split('\n').filter(l => l.trim()).map((line, idx) => {
                           const cols = line.split('\t')
                           const pos = cols[0] || '-'
                           const cod = cols[1] || '-'
