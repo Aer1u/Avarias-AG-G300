@@ -465,6 +465,11 @@ function DashboardPage() {
   const [baseCodigosMap, setBaseCodigosMap] = useState<Map<string, any>>(new Map())
   const [mergeQuantities, setMergeQuantities] = useState<Record<string, number | string>>({})
 
+  // -- ESTADOS PARA CADASTRAR NOVO PRODUTO NA BASE_CODIGOS --
+  const [showAddBaseCodigoModal, setShowAddBaseCodigoModal] = useState(false)
+  const [newBaseCodigoData, setNewBaseCodigoData] = useState({ codigo: '', descricao: '', grade: '', tipo: '' })
+  const [isSavingBaseCodigo, setIsSavingBaseCodigo] = useState(false)
+
   // -- ESTADOS PARA ALTERAÇÕES PENDENTES (SALVAMENTO COM CONFIRMAÇÃO) --
   const [pendingChanges, setPendingChanges] = useState<any[]>([])
   const [isCommitting, setIsCommitting] = useState(false)
@@ -8788,6 +8793,143 @@ function DashboardPage() {
                   </button>
                 </div>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal de Cadastrar Produto na Tabela base_codigos */}
+      <AnimatePresence>
+        {showAddBaseCodigoModal && (
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowAddBaseCodigoModal(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl overflow-hidden z-10"
+            >
+              <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400">
+                    <Plus size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white leading-none">Cadastrar Produto</h3>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1">Adicionar SKU à tabela base_codigos</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowAddBaseCodigoModal(false)}
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!newBaseCodigoData.codigo.trim() || !newBaseCodigoData.descricao.trim()) {
+                    alert("Código e Descrição são obrigatórios!");
+                    return;
+                  }
+                  setIsSavingBaseCodigo(true);
+                  try {
+                    const payload = {
+                      "Código": newBaseCodigoData.codigo.trim().toUpperCase(),
+                      "Descrição": newBaseCodigoData.descricao.trim().toUpperCase(),
+                      "Grade": newBaseCodigoData.grade.trim() || null,
+                      "Tipo": newBaseCodigoData.tipo.trim() || null
+                    };
+                    const { error } = await supabase.from('base_codigos').insert([payload]);
+                    if (error) {
+                      alert("Erro ao cadastrar produto: " + error.message);
+                    } else {
+                      alert("Produto cadastrado com sucesso na tabela base_codigos!");
+                      setShowAddBaseCodigoModal(false);
+                      setNewBaseCodigoData({ codigo: '', descricao: '', grade: '', tipo: '' });
+                      fetchData();
+                    }
+                  } catch (err: any) {
+                    alert("Erro inesperado: " + err.message);
+                  } finally {
+                    setIsSavingBaseCodigo(false);
+                  }
+                }}
+                className="space-y-4 pt-4"
+              >
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Código (SKU) *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newBaseCodigoData.codigo}
+                    onChange={e => setNewBaseCodigoData(prev => ({ ...prev, codigo: e.target.value.toUpperCase() }))}
+                    placeholder="Ex: 0190-01"
+                    className="w-full h-10 px-3 text-xs font-mono font-bold rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Descrição *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newBaseCodigoData.descricao}
+                    onChange={e => setNewBaseCodigoData(prev => ({ ...prev, descricao: e.target.value.toUpperCase() }))}
+                    placeholder="Ex: ESPREMEDOR E-01 127V/60HZ TURBO"
+                    className="w-full h-10 px-3 text-xs font-bold rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Grade (Opcional)</label>
+                    <input
+                      type="text"
+                      value={newBaseCodigoData.grade}
+                      onChange={e => setNewBaseCodigoData(prev => ({ ...prev, grade: e.target.value }))}
+                      placeholder="Ex: 36"
+                      className="w-full h-10 px-3 text-xs font-bold rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Tipo (Opcional)</label>
+                    <input
+                      type="text"
+                      value={newBaseCodigoData.tipo}
+                      onChange={e => setNewBaseCodigoData(prev => ({ ...prev, tipo: e.target.value }))}
+                      placeholder="Ex: ELETRO"
+                      className="w-full h-10 px-3 text-xs font-bold rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    disabled={isSavingBaseCodigo}
+                    onClick={() => setShowAddBaseCodigoModal(false)}
+                    className="flex-1 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold uppercase transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingBaseCodigo}
+                    className="flex-2 py-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold uppercase shadow-sm transition flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {isSavingBaseCodigo ? "Salvando..." : "Cadastrar Produto"}
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </div>
         )}
