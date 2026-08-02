@@ -1301,6 +1301,87 @@ export function DriveInGrid({
          destinationLevel={addingCoords?.lvl ?? null}
          destinationDepth={addingCoords?.d ?? null}
       />
+
+      {/* Printable Sheet Element (only visible during print) */}
+      <div className="hidden print:block fixed inset-0 bg-white text-black p-8 z-[99999] overflow-visible">
+        <div className="flex justify-between items-center border-b-2 border-black pb-4 mb-4">
+          <div>
+            <h1 className="text-xl font-bold uppercase tracking-tight">Ficha de Inventário &amp; Mapeamento de Avarias</h1>
+            <p className="text-sm font-semibold">POSIÇÃO / RUA: <span className="font-mono text-base">{positionId || "GERAL"}</span></p>
+          </div>
+          <div className="text-right text-xs">
+            <p>Data: ____ / ____ / ________</p>
+            <p>Conferido por: ________________________</p>
+          </div>
+        </div>
+
+        <div className="mb-6">
+          <h2 className="font-bold mb-2 uppercase text-xs">Estrutura Atual dos Vãos (Nível x Profundidade)</h2>
+          <div className="grid gap-2 border border-slate-400 p-2">
+            {Array.from({ length: levelCount }).map((_, lvlIdx) => {
+              const currentLevel = levelCount - lvlIdx;
+              return (
+                <div key={lvlIdx} className="flex gap-2 items-center">
+                  <span className="w-16 font-bold text-center text-xs">Nível {currentLevel}</span>
+                  <div className="flex-1 grid grid-cols-4 gap-2">
+                    {Array.from({ length: capacity }).map((_, dIdx) => {
+                      const depth = dIdx + 1;
+                      const item = localProducts.find(p => Number(p.nivel) === currentLevel && Number(p.profundidade) === depth);
+                      return (
+                        <div key={dIdx} className="border-2 border-dashed border-slate-400 p-2 h-20 rounded flex flex-col justify-between text-xs">
+                          <div className="flex justify-between font-mono font-bold text-[10px]">
+                            <span>P{depth}</span>
+                            <span className="truncate max-w-[100px]">{item ? item.sku : '--- VAZIO ---'}</span>
+                          </div>
+                          {item ? (
+                            <div className="text-[10px] space-y-0.5">
+                              <div className="truncate font-medium">{item.descricao}</div>
+                              <div className="font-bold">Qtd Avaria: {item.quantidade} un</div>
+                            </div>
+                          ) : (
+                            <div className="text-[9px] text-slate-500">
+                              <span>Cod: ____________</span><br/>
+                              <span>Qtd Avaria: _______</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <h2 className="font-bold mb-2 uppercase text-xs">Apontamento Manual de Novos Itens Avariados / Divergências</h2>
+          <table className="w-full border-collapse border border-black text-left text-xs">
+            <thead>
+              <tr className="bg-slate-100 border-b border-black">
+                <th className="border border-black p-1.5 w-10 text-center">#</th>
+                <th className="border border-black p-1.5 w-28">Código / SKU</th>
+                <th className="border border-black p-1.5">Descrição do Produto Avariado</th>
+                <th className="border border-black p-1.5 w-20 text-center">Nível / Prof.</th>
+                <th className="border border-black p-1.5 w-20 text-center">Qtd Avaria</th>
+                <th className="border border-black p-1.5">Observação / Defeito</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <tr key={i} className="h-7">
+                  <td className="border border-black p-1 text-center font-mono">{i + 1}</td>
+                  <td className="border border-black p-1"></td>
+                  <td className="border border-black p-1"></td>
+                  <td className="border border-black p-1"></td>
+                  <td className="border border-black p-1"></td>
+                  <td className="border border-black p-1"></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   )
 }

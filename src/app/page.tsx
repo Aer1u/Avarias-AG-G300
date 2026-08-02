@@ -7730,6 +7730,17 @@ function DashboardPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          window.print();
+                        }}
+                        title="Imprimir Mapa de Mapeamento"
+                        className="h-10 px-4 md:h-12 md:px-5 rounded-xl md:rounded-2xl flex items-center justify-center gap-2 transition-all border bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
+                      >
+                        <Printer size={16} />
+                        <span className="text-[10px] md:text-xs font-black uppercase tracking-widest hidden sm:inline">Imprimir Mapa</span>
+                      </button>
+
                       {!!user && (
                         <button
                           onClick={() => {
@@ -7737,7 +7748,7 @@ function DashboardPage() {
                             window.dispatchEvent(event);
                           }}
                           title="Editar Posição"
-                          className="h-10 px-4 md:h-12 md:px-5 rounded-xl md:rounded-2xl flex items-center justify-center gap-2 transition-all border bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900/50 hover:bg-blue-200 dark:hover:bg-blue-800"
+                          className="h-10 px-4 md:h-12 md:px-5 rounded-xl md:rounded-2xl flex items-center justify-center gap-2 transition-all border bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900/50 hover:bg-blue-200 dark:hover:bg-blue-800 cursor-pointer"
                         >
                           <span className="text-[10px] md:text-xs font-black uppercase tracking-widest">Editar</span>
                         </button>
