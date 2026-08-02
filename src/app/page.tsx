@@ -3822,6 +3822,27 @@ function DashboardPage() {
                                 </div>
                               </button>
                             )}
+
+                            {/* Cadastrar Produto - sempre visível para usuários logados */}
+                            {!!user && (
+                              <>
+                                <div className="mx-4 my-1 border-t border-slate-100 dark:border-slate-800" />
+                                <button
+                                  onClick={() => { setShowAddBaseCodigoModal(true); setShowAjustesMenu(false); }}
+                                  className="w-full flex items-center justify-between px-4 py-3 rounded-2xl hover:bg-white dark:hover:bg-slate-800 transition-colors group text-left"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className="h-8 w-8 rounded-xl bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform">
+                                      <Plus size={14} />
+                                    </div>
+                                    <div>
+                                      <p className="text-xs font-bold text-slate-700 dark:text-slate-200 leading-none mb-1">Cadastrar Produto</p>
+                                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Adicionar na Base de Códigos</p>
+                                    </div>
+                                  </div>
+                                </button>
+                              </>
+                            )}
                           </motion.div>
                         </>
                       )}
