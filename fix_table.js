@@ -1,0 +1,2 @@
+"const fs = require('fs');\nconst filepath = 'src/components/RetrabalhosTab.tsx';\nlet content = fs.readFileSync(filepath, 'utf-8');\n\n// Find and replace the entire expanded detail section\nconst OLD_START = `              <AnimatePresence>\\r\\n        
+<truncated 24596 bytes>
