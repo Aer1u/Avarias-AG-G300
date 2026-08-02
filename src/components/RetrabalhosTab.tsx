@@ -917,14 +917,14 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
-                      <tr className="border-b border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02]">
-                        <th className="py-3.5 px-4 text-[9px] font-black text-slate-500 uppercase tracking-widest">SKU / Lote</th>
-                        <th className="py-3.5 px-4 text-[9px] font-black text-slate-500 uppercase tracking-widest">Produto</th>
-                        <th className="py-3.5 px-4 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">Status</th>
-                        <th className="py-3.5 px-4 text-[9px] font-black text-slate-500 uppercase tracking-widest text-right">Embalagens</th>
-                        <th className="py-3.5 px-4 text-[9px] font-black text-blue-500 uppercase tracking-widest text-right">Enviado</th>
-                        <th className="py-3.5 px-4 text-[9px] font-black text-emerald-500 uppercase tracking-widest text-right">Retrabalhado</th>
-                        <th className="py-3.5 px-4 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">Ações</th>
+                      <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+                        <th className="py-3 px-4 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Lote / SKU</th>
+                        <th className="py-3 px-4 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Produto</th>
+                        <th className="py-3 px-4 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center">Status</th>
+                        <th className="py-3 px-4 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Embalagens</th>
+                        <th className="py-3 px-4 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Enviado</th>
+                        <th className="py-3 px-4 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Retrabalhado</th>
+                        <th className="py-3 px-4 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-white/5">
@@ -936,12 +936,12 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                         >
                           {/* SKU / Lote */}
                           <td className="py-3 px-4 whitespace-nowrap">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[11px] font-black text-blue-400 font-mono tracking-wider bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
-                                {lote.codigo}
+                            <div className="flex flex-col">
+                              <span className="text-[13px] font-semibold text-slate-900 dark:text-slate-100">
+                                Lote {lote.lote}
                               </span>
-                              <span className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase">
-                                LOTE {lote.lote}
+                              <span className="text-xs font-medium text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                                {lote.codigo}
                               </span>
                             </div>
                           </td>
@@ -953,11 +953,11 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                 <img 
                                   src={`https://bvgwlkdqmkuuhqiwzfti.supabase.co/storage/v1/object/public/Store/Codigos%20icon/${lote.codigo?.trim() || '---'}.png`}
                                   alt={lote.codigo}
-                                  className="w-8 h-8 object-contain shrink-0 rounded bg-slate-900/40 p-0.5 border border-white/10"
+                                  className="w-8 h-8 object-contain shrink-0 rounded bg-slate-100 dark:bg-slate-800 p-0.5 border border-slate-200 dark:border-slate-700"
                                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                                 />
                               )}
-                              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase truncate leading-snug group-hover:text-blue-400 transition-colors" title={lote.descricao}>
+                              <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate leading-snug">
                                 {lote.descricao}
                               </span>
                             </div>
@@ -965,17 +965,17 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
 
                           {/* Status */}
                           <td className="py-3 px-4 text-center whitespace-nowrap">
-                            <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[9px] font-black uppercase tracking-wider", getStatusConfig(lote.status).style)}>
+                            <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md border text-[11px] font-medium tracking-wide", getStatusConfig(lote.status).style)}>
                               <span className={cn("w-1.5 h-1.5 rounded-full", getStatusConfig(lote.status).dot)} />
-                              {lote.status}
+                              <span className="capitalize">{lote.status.toLowerCase()}</span>
                             </span>
                           </td>
 
                           {/* Embalagens */}
                           <td className="py-3 px-4 text-right whitespace-nowrap">
-                            <span className="text-xs font-black font-mono text-slate-900 dark:text-white">{lote.totalEmbalagens}</span>
+                            <span className="text-[13px] font-medium text-slate-900 dark:text-slate-100">{lote.totalEmbalagens}</span>
                             {lote.grade > 0 && lote.totalEmbalagens > 0 && (
-                              <span className="text-[9px] font-extrabold text-slate-500 block">
+                              <span className="text-[10px] text-slate-500 block mt-0.5">
                                 {formatPallets(lote.totalEmbalagens, lote.grade, true)}
                               </span>
                             )}
@@ -983,9 +983,9 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
 
                           {/* Enviado */}
                           <td className="py-3 px-4 text-right whitespace-nowrap">
-                            <span className="text-xs font-black font-mono text-blue-400">{lote.totalEnviado}</span>
+                            <span className="text-[13px] font-medium text-slate-900 dark:text-slate-100">{lote.totalEnviado}</span>
                             {lote.grade > 0 && lote.totalEnviado > 0 && (
-                              <span className="text-[9px] font-extrabold text-blue-500/50 block">
+                              <span className="text-[10px] text-slate-500 block mt-0.5">
                                 {formatPallets(lote.totalEnviado, lote.grade, true)}
                               </span>
                             )}
@@ -993,9 +993,9 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
 
                           {/* Retrabalhado */}
                           <td className="py-3 px-4 text-right whitespace-nowrap">
-                            <span className="text-xs font-black font-mono text-emerald-400">{lote.totalRetornado}</span>
+                            <span className="text-[13px] font-medium text-slate-900 dark:text-slate-100">{lote.totalRetornado}</span>
                             {lote.grade > 0 && lote.totalRetornado > 0 && (
-                              <span className="text-[9px] font-extrabold text-emerald-500/50 block">
+                              <span className="text-[10px] text-slate-500 block mt-0.5">
                                 {formatPallets(lote.totalRetornado, lote.grade, true)}
                               </span>
                             )}
@@ -1008,23 +1008,23 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                 <>
                                   <button 
                                     onClick={() => setEditingLote(lote)}
-                                    className="p-1.5 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-blue-600 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                                    className="p-1.5 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                                     title="Editar Lote"
                                   >
-                                    <Edit3 size={12} />
+                                    <Edit3 size={14} />
                                   </button>
                                   <button 
                                     onClick={(e) => handleDeleteLoteCompleto(lote.lote, e)}
-                                    className="p-1.5 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-rose-600 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                                    className="p-1.5 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
                                     title="Excluir Lote"
                                   >
-                                    <Trash2 size={12} />
+                                    <Trash2 size={14} />
                                   </button>
                                 </>
                               )}
                               <button 
                                 onClick={() => setSelectedLoteDetail(lote)}
-                                className="px-2.5 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-[10px] font-extrabold uppercase transition-colors cursor-pointer"
+                                className="px-3 py-1.5 rounded bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-medium transition-colors shadow-sm"
                               >
                                 Abrir
                               </button>
@@ -1049,10 +1049,10 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                   className="group relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl transition-all duration-300 overflow-hidden shadow-sm hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-md cursor-pointer flex flex-col"
                 >
                   {/* Card Header with Status */}
-                  <div className="absolute top-6 left-6 z-30">
-                    <div className={cn("flex items-center gap-1.5 px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest backdrop-blur-md", getStatusConfig(lote.status).style)}>
+                  <div className="absolute top-4 left-4 z-30">
+                    <div className={cn("flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[10px] font-semibold tracking-wide bg-white/80 dark:bg-slate-900/80 backdrop-blur", getStatusConfig(lote.status).style)}>
                       <div className={cn("w-1.5 h-1.5 rounded-full", getStatusConfig(lote.status).dot)} />
-                      {lote.status}
+                      <span className="capitalize">{lote.status.toLowerCase()}</span>
                     </div>
                   </div>
                   {/* Action Buttons */}
@@ -1095,59 +1095,63 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                   </div>
 
                   {/* Card Content */}
-                  <div className="p-8 pt-6 flex flex-col flex-1">
+                  <div className="p-6 pt-5 flex flex-col flex-1">
                     <div className="mb-6">
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-[12px] font-black text-blue-400 font-mono tracking-[0.2em] bg-blue-500/10 px-2.5 py-1 rounded-lg border border-blue-500/20">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
                           {lote.codigo}
                         </span>
-                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                        <span className="text-xs font-semibold text-slate-500 uppercase">
                           LOTE {lote.lote}
                         </span>
                       </div>
-                      <h3 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-tight line-clamp-2 leading-tight group-hover:text-blue-400 transition-colors">
+                      <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300 line-clamp-2 leading-snug">
                         {lote.descricao}
                       </h3>
                     </div>
 
                     {/* Compact Metrics Grid */}
-               <div className="grid grid-cols-3 gap-4 mb-6 mt-auto">
-  <div className="space-y-1">
-    <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Embalagens</span>
-    <div className="flex items-baseline gap-1">
-      <span className="text-base font-black text-white font-mono">{lote.totalEmbalagens}</span>
-      <span className="text-[9px] font-black text-slate-600 uppercase">emb</span>
-    </div>
-    {lote.grade > 0 && lote.totalEmbalagens > 0 && (
-      <span className="text-[9px] font-black text-slate-600 uppercase block">
-        {formatPallets(lote.totalEmbalagens, lote.grade, true)}
-      </span>
-    )}
-  </div>
-  <div className="space-y-1">
-    <span className="text-[9px] font-black text-blue-500 uppercase tracking-widest block">Enviado</span>
-    <div className="flex items-baseline gap-1">
-      <span className="text-base font-black text-blue-400 font-mono">{lote.totalEnviado}</span>
-    </div>
-    <span className="text-[9px] font-black text-blue-500/40 uppercase block">
-      {formatPallets(lote.totalEnviado, lote.grade, true)}
-    </span>
-  </div>
-  <div className="space-y-1">
-    <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest block">Retrab.</span>
-    <div className="flex items-baseline gap-1">
-      <span className="text-base font-black text-emerald-400 font-mono">{lote.totalRetornado}</span>
-    </div>
-    <span className="text-[9px] font-black text-emerald-500/40 uppercase block">
-      {formatPallets(lote.totalRetornado, lote.grade, true)}
-    </span>
-  </div>
-</div>
+                    <div className="grid grid-cols-3 gap-4 mb-6 mt-auto">
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block">Embalagens</span>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-lg font-semibold text-slate-900 dark:text-white">{lote.totalEmbalagens}</span>
+                          <span className="text-[10px] font-medium text-slate-500 uppercase">emb</span>
+                        </div>
+                        {lote.grade > 0 && lote.totalEmbalagens > 0 && (
+                          <span className="text-[10px] text-slate-500 block">
+                            {formatPallets(lote.totalEmbalagens, lote.grade, true)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block">Enviado</span>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-lg font-semibold text-slate-900 dark:text-white">{lote.totalEnviado}</span>
+                        </div>
+                        {lote.grade > 0 && lote.totalEnviado > 0 && (
+                          <span className="text-[10px] text-slate-500 block">
+                            {formatPallets(lote.totalEnviado, lote.grade, true)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block">Retrab.</span>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-lg font-semibold text-slate-900 dark:text-white">{lote.totalRetornado}</span>
+                        </div>
+                        {lote.grade > 0 && lote.totalRetornado > 0 && (
+                          <span className="text-[10px] text-slate-500 block">
+                            {formatPallets(lote.totalRetornado, lote.grade, true)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
 
                     {/* Progress Bar */}
                     <div className="space-y-2.5">
                       <div className="flex items-center justify-between">
-                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Progresso Total</span>
+                        <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Progresso Total</span>
                         <span className="text-[11px] font-black text-blue-400 font-mono">{Math.round(lote.progresso)}%</span>
                       </div>
                       <div className="h-2 w-full bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
