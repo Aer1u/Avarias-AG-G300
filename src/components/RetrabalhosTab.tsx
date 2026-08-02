@@ -2231,151 +2231,99 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                       </button>
                     </div>
                   ) : (
-                    <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-5">
-                      <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                        <Package size={12} /> Itens Afetados
-                      </h3>
-                      <div className="flex flex-col border-t border-white/5">
-                        {editingViagemGroup.items.map((item, idx) => (
-                          <div 
-                            key={item.id} 
-                            className={cn(
-                              "group/row grid gap-3 px-4 py-1.5 border-b border-white/5 transition-colors items-center relative hover:bg-slate-800/40",
-                              selectionMode 
-                                ? "grid-cols-[2.5rem_2.5rem_110px_110px_90px_120px_110px_110px_90px_140px_35px]" 
-                                : "grid-cols-[2.5rem_110px_110px_90px_120px_110px_110px_90px_140px_35px]",
-                              selectedReservas.has(item.id) && "bg-emerald-500/10"
-                            )}
-                          >
-                            {selectionMode && (
-                              <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>
-                                <button 
-                                  onClick={() => {
-                                    const newSelection = new Set(selectedReservas);
-                                    if (newSelection.has(item.id)) newSelection.delete(item.id);
-                                    else newSelection.add(item.id);
-                                    setSelectedReservas(newSelection);
-                                  }}
-                                  className={cn(
-                                    "w-4 h-4 rounded border flex items-center justify-center transition-all",
-                                    selectedReservas.has(item.id) 
-                                      ? "bg-emerald-500 border-emerald-400" 
-                                      : "border-white/20 bg-white/5 group-hover/row:border-emerald-500/50"
-                                  )}
-                                >
-                                  {selectedReservas.has(item.id) && <Check size={11} className="text-white stroke-[3]" />}
-                                </button>
-                              </div>
-                            )}
-                            
-                            {/* Index */}
-                            <div className="text-center">
-                              <span className="text-[11px] font-mono font-bold text-slate-500">
-                                {String(idx + 1).padStart(2, '0')}
-                              </span>
-                            </div>
-                            
-                            {/* Reserva A */}
-                            <div>
-                              <input
-                                type="text"
-                                value={item.reserva_a501 || ""}
-                                onChange={e => updateReservaField(item.id, "reserva_a501", e.target.value)}
-                                placeholder="A501..."
-                                className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/60 focus:bg-slate-900/80 rounded px-2 py-1 text-[11px] font-mono font-bold text-white transition-all outline-none"
-                              />
-                            </div>
-                            
-                            {/* Reserva G */}
-                            <div>
-                              <input
-                                type="text"
-                                value={item.reserva_g501 || ""}
-                                onChange={e => updateReservaField(item.id, "reserva_g501", e.target.value)}
-                                placeholder="G501..."
-                                className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/60 focus:bg-slate-900/80 rounded px-2 py-1 text-[11px] font-mono font-bold text-slate-300 transition-all outline-none"
-                              />
-                            </div>
-
-                            {/* Volume Enviado */}
-                            <div className="text-center">
-                              <input
-                                type="number"
-                                value={item.quantidade_enviada || 0}
-                                onChange={e => updateReservaField(item.id, "quantidade_enviada", Number(e.target.value))}
-                                className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/60 focus:bg-slate-900/80 rounded px-1.5 py-1 text-xs font-mono font-bold text-white text-center transition-all outline-none"
-                              />
-                            </div>
-
-                            {/* Criado Em */}
-                            <div className="text-center">
-                              <input
-                                type="date"
-                                value={item.enviado_ao_cd || ""}
-                                onChange={e => updateReservaField(item.id, "enviado_ao_cd", e.target.value || null)}
-                                className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/60 focus:bg-slate-900/80 rounded px-1 py-1 text-[10px] font-mono font-bold text-blue-400 transition-all outline-none text-center [color-scheme:dark]"
-                              />
-                            </div>
-                            
-                            {/* Estorno A */}
-                            <div>
-                              <input
-                                type="text"
-                                value={item.estorno_a501 || ""}
-                                onChange={e => updateReservaField(item.id, "estorno_a501", e.target.value)}
-                                placeholder="Est. A..."
-                                className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/60 focus:bg-slate-900/80 rounded px-2 py-1 text-[11px] font-mono font-bold text-blue-300 transition-all outline-none"
-                              />
-                            </div>
-
-                            {/* Estorno G */}
-                            <div>
-                              <input
-                                type="text"
-                                value={item.estorno_g501 || ""}
-                                onChange={e => updateReservaField(item.id, "estorno_g501", e.target.value)}
-                                placeholder="Est. G..."
-                                className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/60 focus:bg-slate-900/80 rounded px-2 py-1 text-[11px] font-mono font-bold text-blue-300 transition-all outline-none"
-                              />
-                            </div>
-
-                            {/* Retornado */}
-                            <div className="text-center">
-                              <input
-                                type="number"
-                                value={item.quantidade_retornada || 0}
-                                onChange={e => updateReservaField(item.id, "quantidade_retornada", Number(e.target.value))}
-                                className="w-full bg-transparent border border-transparent hover:border-emerald-500/60 focus:bg-slate-900/80 rounded px-1.5 py-1 text-xs font-mono font-bold text-emerald-400 text-center transition-all outline-none"
-                              />
-                            </div>
-
-                            {/* Situação */}
-                            <div>
-                              <select 
-                                value={item.situacao || 'Em preparação'} 
-                                onChange={e => updateReservaField(item.id, "situacao", e.target.value)}
-                                className="w-full bg-slate-900/60 border border-white/10 hover:border-white/20 rounded px-2 py-1 text-[10px] font-extrabold text-slate-200 focus:border-blue-500 outline-none uppercase cursor-pointer"
-                              >
-                                {SITUACAO_OPTIONS.map(o => (
-                                  <option key={o.value} value={o.value} className="bg-[#0F172A] text-white text-[10px]">{o.value}</option>
-                                ))}
-                              </select>
-                            </div>
-
-                            {/* Excluir Reserva */}
-                            <div className="text-center" onClick={(e) => e.stopPropagation()}>
-                              {user && (
-                                <button
-                                  onClick={(e) => handleDeleteReserva(item.id, e)}
-                                  className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                                  title="Excluir reserva"
-                                >
-                                  <Trash2 size={13} />
-                                </button>
+                    <div className="rounded-xl overflow-hidden border border-slate-700/60">
+                      <div className="overflow-auto max-h-[55vh]">
+                        <table className="w-full border-collapse text-left" style={{ minWidth: 900 }}>
+                          <thead className="sticky top-0 z-10 bg-slate-800">
+                            <tr>
+                              {selectionMode && (
+                                <th className="w-9 px-2 py-2 text-center border-r border-b border-slate-700/60 bg-slate-800">
+                                  <button type="button" onClick={() => { if (selectedReservas.size === editingViagemGroup.items.length) setSelectedReservas(new Set()); else setSelectedReservas(new Set(editingViagemGroup.items.map(i => i.id))); }} className="w-4 h-4 rounded border border-white/30 bg-white/10 flex items-center justify-center mx-auto">
+                                    {selectedReservas.size === editingViagemGroup.items.length && <Check size={10} className="text-white stroke-[3]" />}
+                                  </button>
+                                </th>
                               )}
-                            </div>
-                          </div>
-                        ))}
+                              <th className="w-10 px-2 py-2 text-[10px] font-bold text-slate-400 text-center border-r border-b border-slate-700/60">#</th>
+                              <th className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-r border-b border-slate-700/60">Reserva A</th>
+                              <th className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-r border-b border-slate-700/60">Reserva G</th>
+                              <th className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center border-r border-b border-slate-700/60">Volume</th>
+                              <th className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center border-r border-b border-slate-700/60">Criado Em</th>
+                              <th className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-r border-b border-slate-700/60">Estorno A</th>
+                              <th className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-r border-b border-slate-700/60">Estorno G</th>
+                              <th className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center border-r border-b border-slate-700/60">Retornado</th>
+                              <th className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-r border-b border-slate-700/60">Situação</th>
+                              <th className="w-9 border-b border-slate-700/60"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {editingViagemGroup.items.map((item, idx) => (
+                              <tr
+                                key={item.id}
+                                className={cn(
+                                  "group/row border-b border-slate-700/40 hover:bg-slate-800/40 transition-colors",
+                                  selectedReservas.has(item.id) && "bg-emerald-500/10"
+                                )}
+                              >
+                                {selectionMode && (
+                                  <td className="px-2 py-1 text-center border-r border-slate-700/40" onClick={(e) => e.stopPropagation()}>
+                                    <button onClick={() => { const s = new Set(selectedReservas); if (s.has(item.id)) s.delete(item.id); else s.add(item.id); setSelectedReservas(s); }} className={cn("w-4 h-4 rounded border flex items-center justify-center mx-auto transition-all", selectedReservas.has(item.id) ? "bg-emerald-500 border-emerald-400" : "border-white/20 bg-white/5 group-hover/row:border-emerald-500/50")}>
+                                      {selectedReservas.has(item.id) && <Check size={10} className="text-white stroke-[3]" />}
+                                    </button>
+                                  </td>
+                                )}
+                                {/* # */}
+                                <td className="px-2 py-0 text-center border-r border-slate-700/40 text-[11px] font-mono text-slate-500 select-none bg-slate-800/30">
+                                  {String(idx + 1).padStart(2, '0')}
+                                </td>
+                            
+                                {/* Reserva A */}
+                                <td className="p-0 border-r border-slate-700/40">
+                                  <input type="text" value={item.reserva_a501 || ""} onChange={e => updateReservaField(item.id, "reserva_a501", e.target.value)} placeholder="A501..." className="w-full h-full px-3 py-2 bg-transparent text-[11px] font-mono text-white focus:outline-none focus:bg-blue-500/10 transition-colors" />
+                                </td>
+                            
+                                {/* Reserva G */}
+                                <td className="p-0 border-r border-slate-700/40">
+                                  <input type="text" value={item.reserva_g501 || ""} onChange={e => updateReservaField(item.id, "reserva_g501", e.target.value)} placeholder="G501..." className="w-full h-full px-3 py-2 bg-transparent text-[11px] font-mono text-slate-300 focus:outline-none focus:bg-blue-500/10 transition-colors" />
+                                </td>
+                                {/* Volume Enviado */}
+                                <td className="p-0 border-r border-slate-700/40">
+                                  <input type="number" value={item.quantidade_enviada || 0} onChange={e => updateReservaField(item.id, "quantidade_enviada", Number(e.target.value))} className="w-full h-full px-2 py-2 bg-transparent text-[11px] font-mono font-bold text-white text-center focus:outline-none focus:bg-blue-500/10 transition-colors" />
+                                </td>
+                                {/* Criado Em */}
+                                <td className="p-0 border-r border-slate-700/40">
+                                  <input type="date" value={item.enviado_ao_cd || ""} onChange={e => updateReservaField(item.id, "enviado_ao_cd", e.target.value || null)} className="w-full h-full px-2 py-2 bg-transparent text-[10px] font-mono text-blue-400 focus:outline-none focus:bg-blue-500/10 transition-colors text-center [color-scheme:dark]" />
+                                </td>
+                            
+                                {/* Estorno A */}
+                                <td className="p-0 border-r border-slate-700/40">
+                                  <input type="text" value={item.estorno_a501 || ""} onChange={e => updateReservaField(item.id, "estorno_a501", e.target.value)} placeholder="Est. A..." className="w-full h-full px-3 py-2 bg-transparent text-[11px] font-mono text-blue-300 focus:outline-none focus:bg-blue-500/10 transition-colors" />
+                                </td>
+                                {/* Estorno G */}
+                                <td className="p-0 border-r border-slate-700/40">
+                                  <input type="text" value={item.estorno_g501 || ""} onChange={e => updateReservaField(item.id, "estorno_g501", e.target.value)} placeholder="Est. G..." className="w-full h-full px-3 py-2 bg-transparent text-[11px] font-mono text-blue-300 focus:outline-none focus:bg-blue-500/10 transition-colors" />
+                                </td>
+                                {/* Retornado */}
+                                <td className="p-0 border-r border-slate-700/40">
+                                  <input type="number" value={item.quantidade_retornada || 0} onChange={e => updateReservaField(item.id, "quantidade_retornada", Number(e.target.value))} className="w-full h-full px-2 py-2 bg-transparent text-[11px] font-mono font-bold text-emerald-400 text-center focus:outline-none focus:bg-emerald-500/10 transition-colors" />
+                                </td>
+                                {/* Situação */}
+                                <td className="p-0 border-r border-slate-700/40">
+                                  <select value={item.situacao || 'Em preparação'} onChange={e => updateReservaField(item.id, "situacao", e.target.value)} className="w-full h-full px-2 py-2 bg-transparent text-[11px] text-slate-200 focus:outline-none focus:bg-blue-500/10 transition-colors cursor-pointer border-none">
+                                    {SITUACAO_OPTIONS.map(o => <option key={o.value} value={o.value} className="bg-slate-900 text-white">{o.value}</option>)}
+                                  </select>
+                                </td>
+                                {/* Excluir */}
+                                <td className="px-1 py-0 text-center" onClick={(e) => e.stopPropagation()}>
+                                  {user && (
+                                    <button onClick={(e) => handleDeleteReserva(item.id, e)} className="p-1 rounded text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer" title="Excluir reserva">
+                                      <Trash2 size={13} />
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
                   )}
