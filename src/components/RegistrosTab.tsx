@@ -758,10 +758,10 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                           type="text"
                           value={row.transportadora ?? ''}
                           disabled={!row.isNew}
-                          onChange={(e) => updateRow(idx, 'transportadora', e.target.value)}
+                          onChange={(e) => updateRow(idx, 'transportadora', e.target.value.toUpperCase())}
                           placeholder="---"
                           className={cn(
-                            "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors",
+                            "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors uppercase",
                             !row.isNew 
                               ? "text-slate-800 dark:text-slate-200 cursor-default" 
                               : "text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/20 group-hover:text-slate-900 dark:group-hover:text-white cursor-text"
@@ -796,10 +796,15 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                           type="text"
                           value={row.placa ?? ''}
                           disabled={!row.isNew}
-                          onChange={(e) => updateRow(idx, 'placa', e.target.value)}
-                          placeholder="---"
+                          maxLength={8}
+                          onChange={(e) => {
+                            const raw = e.target.value.toUpperCase().replace(/-/g, '');
+                            const formatted = raw.length > 3 ? raw.slice(0, 3) + '-' + raw.slice(3) : raw;
+                            updateRow(idx, 'placa', formatted);
+                          }}
+                          placeholder="ABC-1234"
                           className={cn(
-                            "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors",
+                            "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors uppercase",
                             !row.isNew 
                               ? "text-slate-800 dark:text-slate-200 cursor-default" 
                               : "text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/20 group-hover:text-slate-900 dark:group-hover:text-white cursor-text"
@@ -815,10 +820,10 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                           type="text"
                           value={row.container ?? ''}
                           disabled={!row.isNew}
-                          onChange={(e) => updateRow(idx, 'container', e.target.value)}
+                          onChange={(e) => updateRow(idx, 'container', e.target.value.toUpperCase())}
                           placeholder="---"
                           className={cn(
-                            "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors",
+                            "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors uppercase",
                             !row.isNew 
                               ? "text-slate-800 dark:text-slate-200 cursor-default" 
                               : "text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/20 group-hover:text-slate-900 dark:group-hover:text-white cursor-text"
@@ -834,10 +839,10 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                           type="text"
                           value={row.lacre ?? ''}
                           disabled={!row.isNew}
-                          onChange={(e) => updateRow(idx, 'lacre', e.target.value)}
+                          onChange={(e) => updateRow(idx, 'lacre', e.target.value.toUpperCase())}
                           placeholder="---"
                           className={cn(
-                            "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors",
+                            "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors uppercase",
                             !row.isNew 
                               ? "text-slate-800 dark:text-slate-200 cursor-default" 
                               : "text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/20 group-hover:text-slate-900 dark:group-hover:text-white cursor-text"
