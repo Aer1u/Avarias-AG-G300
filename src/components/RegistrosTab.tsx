@@ -19,7 +19,9 @@ import {
   XCircle,
   CheckCircle2,
   AlertCircle,
-  Info as InfoIcon
+  Info as InfoIcon,
+  Edit2,
+  FilterX
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
@@ -204,23 +206,72 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToast({ show: true, message, type });
   };
-  
+   // Row Editing State
+  const [editingRowIds, setEditingRowIds] = useState<Set<number>>(new Set());
+
+  const toggleEditRow = (id: number) => {
+    setEditingRowIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const isRowEditable = (row: Registro) => !!row.isNew || (!!row.id && editingRowIds.has(row.id));
+
   // Date filtering
+  const [dateMode, setDateMode] = useState<'week' | 'custom' | 'all'>('week');
   const [currentWeekStart, setCurrentWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
   const weekEnd = useMemo(() => endOfWeek(currentWeekStart, { weekStartsOn: 1 }), [currentWeekStart]);
+  const [customStartDate, setCustomStartDate] = useState(() => format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'));
+  const [customEndDate, setCustomEndDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
+
+  // Column Filtering
+  const [showColumnFilters, setShowColumnFilters] = useState(false);
+  const [colFilters, setColFilters] = useState({
+    nota_fiscal: '',
+    produto: '',
+    origem: '',
+    tipo_avaria: '',
+    responsavel: '',
+    transportadora: '',
+    placa: '',
+    container: '',
+    lacre: '',
+    turno: '',
+  });
+
+  const clearColumnFilters = () => {
+    setColFilters({
+      nota_fiscal: '',
+      produto: '',
+      origem: '',
+      tipo_avaria: '',
+      responsavel: '',
+      transportadora: '',
+      placa: '',
+      container: '',
+      lacre: '',
+      turno: '',
+    });
+  };
 
   const fetchRegistros = async () => {
     setLoading(true);
     try {
-      const startDate = format(currentWeekStart, 'yyyy-MM-dd');
-      const endDate = format(weekEnd, 'yyyy-MM-dd');
+      let query = supabase.from('Registros').select('*');
 
-      const { data, error } = await supabase
-        .from('Registros')
-        .select('*')
-        .gte('Data', startDate)
-        .lte('Data', endDate)
-        .order('Data', { ascending: false });
+      if (dateMode === 'week') {
+        const startDate = format(currentWeekStart, 'yyyy-MM-dd');
+        const endDate = format(weekEnd, 'yyyy-MM-dd');
+        query = query.gte('Data', startDate).lte('Data', endDate);
+      } else if (dateMode === 'custom') {
+        if (customStartDate) query = query.gte('Data', customStartDate);
+        if (customEndDate) query = query.lte('Data', customEndDate);
+      }
+
+      const { data, error } = await query.order('Data', { ascending: false });
 
       if (error) throw error;
       const mappedData = (data || []).map(r => ({
@@ -238,15 +289,18 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
   const fetchHistoricoDriveIn = async () => {
     setLoading(true);
     try {
-      const startDate = format(currentWeekStart, 'yyyy-MM-dd') + 'T00:00:00Z';
-      const endDate = format(addDays(weekEnd, 1), 'yyyy-MM-dd') + 'T00:00:00Z';
+      let query = supabase.from('historico_mapeamento').select('*');
 
-      const { data, error } = await supabase
-        .from('historico_mapeamento')
-        .select('*')
-        .gte('created_at', startDate)
-        .lt('created_at', endDate)
-        .order('created_at', { ascending: false });
+      if (dateMode === 'week') {
+        const startDate = format(currentWeekStart, 'yyyy-MM-dd') + 'T00:00:00Z';
+        const endDate = format(addDays(weekEnd, 1), 'yyyy-MM-dd') + 'T00:00:00Z';
+        query = query.gte('created_at', startDate).lt('created_at', endDate);
+      } else if (dateMode === 'custom') {
+        if (customStartDate) query = query.gte('created_at', customStartDate + 'T00:00:00Z');
+        if (customEndDate) query = query.lt('created_at', customEndDate + 'T23:59:59Z');
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) {
         console.warn('Erro do Supabase ao buscar historico:', error);
@@ -267,8 +321,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
     } else {
       fetchHistoricoDriveIn();
     }
-  }, [currentWeekStart, viewMode]);
-
+  }, [currentWeekStart, dateMode, customStartDate, customEndDate, viewMode]);
   const handleAddRow = () => {
     const newRow: Registro = {
       Data: format(new Date(), 'yyyy-MM-dd'),
@@ -467,17 +520,45 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
   };
 
   const filteredRegistros = useMemo(() => {
-    if (!searchTerm) return registros;
-    const lowSearch = searchTerm.toLowerCase();
-    return registros.filter(r => 
-      (r.Produto || '').toLowerCase().includes(lowSearch) ||
-      (r.Origem || '').toLowerCase().includes(lowSearch) ||
-      (r.responsavel || '').toLowerCase().includes(lowSearch) ||
-      (r.tipo_avaria || '').toLowerCase().includes(lowSearch) ||
-      (r.transportadora || '').toLowerCase().includes(lowSearch) ||
-      (r.placa || '').toLowerCase().includes(lowSearch)
-    );
-  }, [registros, searchTerm]);
+    return registros.filter(r => {
+      // Global Search
+      if (searchTerm) {
+        const low = searchTerm.toLowerCase();
+        const matchesGlobal = 
+          (r.Produto || '').toLowerCase().includes(low) ||
+          (r.Origem || '').toLowerCase().includes(low) ||
+          (r.responsavel || '').toLowerCase().includes(low) ||
+          (r.tipo_avaria || '').toLowerCase().includes(low) ||
+          (r.transportadora || '').toLowerCase().includes(low) ||
+          (r.placa || '').toLowerCase().includes(low) ||
+          (r.container || '').toLowerCase().includes(low) ||
+          (r.lacre || '').toLowerCase().includes(low) ||
+          (r.Observação || '').toLowerCase().includes(low) ||
+          String(r.nota_fiscal || '').toLowerCase().includes(low) ||
+          String(r.turno || '').toLowerCase().includes(low) ||
+          (r.Data || '').toLowerCase().includes(low) ||
+          String(r.Entrada || '').toLowerCase().includes(low) ||
+          String(r.Saída || '').toLowerCase().includes(low) ||
+          String(r.qtd_molhada || '').toLowerCase().includes(low);
+
+        if (!matchesGlobal) return false;
+      }
+
+      // Column Filters
+      if (colFilters.nota_fiscal && !String(r.nota_fiscal || '').toLowerCase().includes(colFilters.nota_fiscal.toLowerCase())) return false;
+      if (colFilters.produto && !(r.Produto || '').toLowerCase().includes(colFilters.produto.toLowerCase())) return false;
+      if (colFilters.origem && (r.Origem || '').toLowerCase() !== colFilters.origem.toLowerCase()) return false;
+      if (colFilters.tipo_avaria && (r.tipo_avaria || '').toLowerCase() !== colFilters.tipo_avaria.toLowerCase()) return false;
+      if (colFilters.responsavel && !(r.responsavel || '').toLowerCase().includes(colFilters.responsavel.toLowerCase())) return false;
+      if (colFilters.transportadora && !(r.transportadora || '').toLowerCase().includes(colFilters.transportadora.toLowerCase())) return false;
+      if (colFilters.placa && !(r.placa || '').toLowerCase().includes(colFilters.placa.toLowerCase())) return false;
+      if (colFilters.container && !(r.container || '').toLowerCase().includes(colFilters.container.toLowerCase())) return false;
+      if (colFilters.lacre && !(r.lacre || '').toLowerCase().includes(colFilters.lacre.toLowerCase())) return false;
+      if (colFilters.turno && String(r.turno || '') !== colFilters.turno) return false;
+
+      return true;
+    });
+  }, [registros, searchTerm, colFilters]);
 
   const filteredHistorico = useMemo(() => {
     if (!searchTerm) return historicoDriveIn;
@@ -522,36 +603,124 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
           </button>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 flex-wrap justify-end">
+          {/* Date Filter Bar */}
           <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-900/50 p-1 rounded-2xl border border-slate-200/50 dark:border-slate-800/50">
-            <button 
-              onClick={() => setCurrentWeekStart(subWeeks(currentWeekStart, 1))}
-              className="p-2 hover:bg-white dark:hover:bg-slate-800 rounded-xl transition-all text-slate-500"
-            >
-              <ChevronLeft size={16} />
-            </button>
-            <div className="px-3 flex items-center gap-2 text-xs font-bold text-slate-600 dark:text-slate-300 min-w-[180px] justify-center">
-              <Calendar size={14} className="text-blue-500" />
-              {format(currentWeekStart, "dd/MM")} — {format(weekEnd, "dd/MM/yyyy")}
+            <div className="flex items-center bg-white dark:bg-slate-800 rounded-xl p-0.5 border border-slate-200/50 dark:border-slate-700/50">
+              <button
+                type="button"
+                onClick={() => setDateMode('week')}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                  dateMode === 'week' 
+                    ? "bg-blue-600 text-white shadow-sm" 
+                    : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                )}
+              >
+                Semana
+              </button>
+              <button
+                type="button"
+                onClick={() => setDateMode('custom')}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                  dateMode === 'custom' 
+                    ? "bg-blue-600 text-white shadow-sm" 
+                    : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                )}
+              >
+                Período
+              </button>
+              <button
+                type="button"
+                onClick={() => setDateMode('all')}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                  dateMode === 'all' 
+                    ? "bg-blue-600 text-white shadow-sm" 
+                    : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                )}
+              >
+                Tudo
+              </button>
             </div>
-            <button 
-              onClick={() => setCurrentWeekStart(addWeeks(currentWeekStart, 1))}
-              className="p-2 hover:bg-white dark:hover:bg-slate-800 rounded-xl transition-all text-slate-500"
-            >
-              <ChevronRight size={16} />
-            </button>
+
+            {dateMode === 'week' && (
+              <div className="flex items-center gap-1">
+                <button 
+                  type="button"
+                  onClick={() => setCurrentWeekStart(subWeeks(currentWeekStart, 1))}
+                  className="p-1.5 hover:bg-white dark:hover:bg-slate-800 rounded-xl transition-all text-slate-500"
+                  title="Semana anterior"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <div className="px-2 flex items-center gap-2 text-xs font-bold text-slate-600 dark:text-slate-300 justify-center">
+                  <Calendar size={14} className="text-blue-500" />
+                  {format(currentWeekStart, "dd/MM")} — {format(weekEnd, "dd/MM/yyyy")}
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => setCurrentWeekStart(addWeeks(currentWeekStart, 1))}
+                  className="p-1.5 hover:bg-white dark:hover:bg-slate-800 rounded-xl transition-all text-slate-500"
+                  title="Próxima semana"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            )}
+
+            {dateMode === 'custom' && (
+              <div className="flex items-center gap-2 px-2">
+                <Calendar size={14} className="text-blue-500" />
+                <input 
+                  type="date"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-mono text-slate-700 dark:text-slate-200 outline-none focus:ring-1 focus:ring-blue-500 [color-scheme:light] dark:[color-scheme:dark]"
+                />
+                <span className="text-xs text-slate-400 font-bold">até</span>
+                <input 
+                  type="date"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-mono text-slate-700 dark:text-slate-200 outline-none focus:ring-1 focus:ring-blue-500 [color-scheme:light] dark:[color-scheme:dark]"
+                />
+              </div>
+            )}
           </div>
 
+          {/* Search Bar */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
             <input 
               type="text"
-              placeholder="Buscar..."
+              placeholder="Buscar por NF, SKU, Placa, Obs..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-900/50 border border-transparent rounded-xl text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 w-64 transition-all"
+              className="pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 w-64 transition-all"
             />
           </div>
+
+          {/* Column Filters Toggle Button */}
+          {viewMode === 'geral' && (
+            <button
+              type="button"
+              onClick={() => setShowColumnFilters(!showColumnFilters)}
+              className={cn(
+                "flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-all relative",
+                showColumnFilters || Object.values(colFilters).some(Boolean)
+                  ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30"
+                  : "bg-slate-50 dark:bg-slate-900/50 text-slate-500 border-slate-200 dark:border-slate-800 hover:text-slate-700 dark:hover:text-slate-300"
+              )}
+            >
+              <Filter size={15} />
+              <span>Filtros</span>
+              {Object.values(colFilters).some(Boolean) && (
+                <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+              )}
+            </button>
+          )}
 
           {viewMode === 'geral' && (
             <>
@@ -580,6 +749,168 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
           )}
         </div>
       </div>
+
+      {/* Column Filters Bar */}
+      <AnimatePresence>
+        {viewMode === 'geral' && showColumnFilters && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="mb-4 bg-slate-100/80 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 overflow-hidden"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Filter size={14} className="text-blue-500" />
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  Filtros por Coluna
+                </span>
+              </div>
+              {Object.values(colFilters).some(Boolean) && (
+                <button
+                  type="button"
+                  onClick={clearColumnFilters}
+                  className="flex items-center gap-1 text-xs font-bold text-rose-500 hover:text-rose-600 transition-colors"
+                >
+                  <FilterX size={14} />
+                  Limpar Filtros
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+              {/* NF */}
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Nota Fiscal (NF)</label>
+                <input
+                  type="text"
+                  placeholder="Ex: 5815..."
+                  value={colFilters.nota_fiscal}
+                  onChange={(e) => setColFilters(prev => ({ ...prev, nota_fiscal: e.target.value }))}
+                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Produto SKU */}
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Produto (SKU)</label>
+                <input
+                  type="text"
+                  placeholder="Ex: 9915-02..."
+                  value={colFilters.produto}
+                  onChange={(e) => setColFilters(prev => ({ ...prev, produto: e.target.value }))}
+                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Origem */}
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Origem</label>
+                <select
+                  value={colFilters.origem}
+                  onChange={(e) => setColFilters(prev => ({ ...prev, origem: e.target.value }))}
+                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="">Todas</option>
+                  {ORIGEM_OPTIONS.map(o => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Tipo Avaria */}
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Tipo Avaria</label>
+                <select
+                  value={colFilters.tipo_avaria}
+                  onChange={(e) => setColFilters(prev => ({ ...prev, tipo_avaria: e.target.value }))}
+                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="">Todas</option>
+                  {AVARIA_OPTIONS.map(a => (
+                    <option key={a} value={a}>{a}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Transportadora */}
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Transportadora</label>
+                <input
+                  type="text"
+                  placeholder="Ex: ALIANÇA..."
+                  value={colFilters.transportadora}
+                  onChange={(e) => setColFilters(prev => ({ ...prev, transportadora: e.target.value }))}
+                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Responsável */}
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Responsável</label>
+                <input
+                  type="text"
+                  placeholder="Nome..."
+                  value={colFilters.responsavel}
+                  onChange={(e) => setColFilters(prev => ({ ...prev, responsavel: e.target.value }))}
+                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Placa */}
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Placa</label>
+                <input
+                  type="text"
+                  placeholder="Ex: ABC-1234..."
+                  value={colFilters.placa}
+                  onChange={(e) => setColFilters(prev => ({ ...prev, placa: e.target.value }))}
+                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Container */}
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Container</label>
+                <input
+                  type="text"
+                  placeholder="Container..."
+                  value={colFilters.container}
+                  onChange={(e) => setColFilters(prev => ({ ...prev, container: e.target.value }))}
+                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Lacre */}
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Lacre</label>
+                <input
+                  type="text"
+                  placeholder="Lacre..."
+                  value={colFilters.lacre}
+                  onChange={(e) => setColFilters(prev => ({ ...prev, lacre: e.target.value }))}
+                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Turno */}
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Turno</label>
+                <select
+                  value={colFilters.turno}
+                  onChange={(e) => setColFilters(prev => ({ ...prev, turno: e.target.value }))}
+                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="">Todos</option>
+                  <option value="1">Turno 1</option>
+                  <option value="2">Turno 2</option>
+                  <option value="3">Turno 3</option>
+                </select>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="flex-1 overflow-auto border-none bg-white/50 dark:bg-slate-900/30 backdrop-blur-sm rounded-2xl overflow-hidden shadow-none custom-scrollbar relative">
         {viewMode === 'geral' ? (
@@ -626,6 +957,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                   const showTranspNF = isReceb;
                   const showContainer = isReceb && transpUpper !== 'JTD';
                   const showPlacaLacre = isReceb && transpUpper !== 'ALIANÇA' && transpUpper !== 'ALIANCA';
+                  const isEditable = isRowEditable(row);
                   
                   return (
                   <tr 
@@ -633,11 +965,12 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                     className={cn(
                       "hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all group relative z-0 hover:z-10 border-none",
                       row.isDirty && "bg-blue-50/30 dark:bg-blue-500/5",
-                      row.isNew && "bg-emerald-50/30 dark:bg-emerald-500/5"
+                      row.isNew && "bg-emerald-50/30 dark:bg-emerald-500/5",
+                      row.id && editingRowIds.has(row.id) && "bg-amber-50/30 dark:bg-amber-500/10"
                     )}
                   >
                     <td className="p-0">
-                      {row.isNew ? (
+                      {isEditable ? (
                         <input 
                           type="date"
                           value={row.Data ?? ''}
@@ -657,7 +990,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                       <input 
                         type="text"
                         value={row.Produto ?? ''}
-                        disabled={!row.isNew}
+                        disabled={!isEditable}
                         onChange={(e) => updateRow(idx, 'Produto', e.target.value)}
                         placeholder="0000-00"
                         className="w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight text-slate-800 dark:text-slate-200 group-hover:text-slate-900 dark:group-hover:text-white disabled:cursor-default placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/20 focus:outline-none transition-colors"
@@ -667,16 +1000,16 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                       <input 
                         type="text" 
                         value={row.responsavel ?? ''} 
-                        disabled={!row.isNew} 
+                        disabled={!isEditable} 
                         onChange={(e) => updateRow(idx, 'responsavel', e.target.value)} 
                         placeholder="---"
-                        className="w-full bg-transparent border-none px-5 py-3.5 text-sm focus:bg-white dark:focus:bg-slate-800 focus:outline-none transition-colors text-slate-800 dark:text-slate-200" 
+                        className="w-full bg-transparent border-none px-5 py-3.5 text-sm focus:bg-white dark:focus:bg-slate-800 focus:outline-none transition-colors text-slate-800 dark:text-slate-200 disabled:cursor-default" 
                       />
                     </td>
                     <td className="p-0">
                       <CustomSelect
                         value={row.tipo_avaria ?? ''}
-                        disabled={!row.isNew}
+                        disabled={!isEditable}
                         onChange={(v) => updateRow(idx, 'tipo_avaria', v)}
                         options={AVARIA_OPTIONS}
                         placeholder="Avaria?"
@@ -686,7 +1019,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                       <input 
                         type="number"
                         value={row.turno ?? ''}
-                        disabled={!row.isNew}
+                        disabled={!isEditable}
                         onChange={(e) => updateRow(idx, 'turno', e.target.value ? Number(e.target.value) : null)}
                         placeholder="---"
                         className={cn(
@@ -701,7 +1034,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                       <input 
                         type="text"
                         value={row.Entrada ?? ''}
-                        disabled={!row.isNew}
+                        disabled={!isEditable}
                         onChange={(e) => updateRow(idx, 'Entrada', e.target.value)}
                         placeholder="0"
                         className={cn(
@@ -716,7 +1049,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                       <input 
                         type="text"
                         value={row.Saída ?? ''}
-                        disabled={!row.isNew}
+                        disabled={!isEditable}
                         onChange={(e) => updateRow(idx, 'Saída', e.target.value)}
                         placeholder="0"
                         className={cn(
@@ -731,7 +1064,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                       <input 
                         type="text"
                         value={row.qtd_molhada ?? ''}
-                        disabled={!row.isNew}
+                        disabled={!isEditable}
                         onChange={(e) => updateRow(idx, 'qtd_molhada', e.target.value ? Number(e.target.value) : null)}
                         placeholder="0"
                         className={cn(
@@ -745,7 +1078,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                     <td className="p-0">
                       <CustomSelect
                         value={row.Origem ?? ''}
-                        disabled={!row.isNew}
+                        disabled={!isEditable}
                         onChange={(v) => updateRow(idx, 'Origem', v)}
                         options={ORIGEM_OPTIONS}
                       />
@@ -757,12 +1090,12 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                         <input 
                           type="text"
                           value={row.transportadora ?? ''}
-                          disabled={!row.isNew}
+                          disabled={!isEditable}
                           onChange={(e) => updateRow(idx, 'transportadora', e.target.value.toUpperCase())}
                           placeholder="---"
                           className={cn(
                             "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors uppercase",
-                            !row.isNew 
+                            !isEditable 
                               ? "text-slate-800 dark:text-slate-200 cursor-default" 
                               : "text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/20 group-hover:text-slate-900 dark:group-hover:text-white cursor-text"
                           )}
@@ -776,12 +1109,12 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                         <input 
                           type="text"
                           value={row.nota_fiscal ?? ''}
-                          disabled={!row.isNew}
+                          disabled={!isEditable}
                           onChange={(e) => updateRow(idx, 'nota_fiscal', e.target.value ? Number(e.target.value) : null)}
                           placeholder="---"
                           className={cn(
                             "w-full bg-transparent border-none px-5 py-3.5 text-sm tabular-nums focus:outline-none transition-colors",
-                            !row.isNew 
+                            !isEditable 
                               ? "text-slate-800 dark:text-slate-200 cursor-default" 
                               : "text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/20 group-hover:text-slate-900 dark:group-hover:text-white cursor-text"
                           )}
@@ -795,7 +1128,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                         <input 
                           type="text"
                           value={row.placa ?? ''}
-                          disabled={!row.isNew}
+                          disabled={!isEditable}
                           maxLength={8}
                           onChange={(e) => {
                             const raw = e.target.value.toUpperCase().replace(/-/g, '');
@@ -805,7 +1138,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                           placeholder="ABC-1234"
                           className={cn(
                             "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors uppercase",
-                            !row.isNew 
+                            !isEditable 
                               ? "text-slate-800 dark:text-slate-200 cursor-default" 
                               : "text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/20 group-hover:text-slate-900 dark:group-hover:text-white cursor-text"
                           )}
@@ -819,12 +1152,12 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                         <input 
                           type="text"
                           value={row.container ?? ''}
-                          disabled={!row.isNew}
+                          disabled={!isEditable}
                           onChange={(e) => updateRow(idx, 'container', e.target.value.toUpperCase())}
                           placeholder="---"
                           className={cn(
                             "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors uppercase",
-                            !row.isNew 
+                            !isEditable 
                               ? "text-slate-800 dark:text-slate-200 cursor-default" 
                               : "text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/20 group-hover:text-slate-900 dark:group-hover:text-white cursor-text"
                           )}
@@ -838,12 +1171,12 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                         <input 
                           type="text"
                           value={row.lacre ?? ''}
-                          disabled={!row.isNew}
+                          disabled={!isEditable}
                           onChange={(e) => updateRow(idx, 'lacre', e.target.value.toUpperCase())}
                           placeholder="---"
                           className={cn(
                             "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors uppercase",
-                            !row.isNew 
+                            !isEditable 
                               ? "text-slate-800 dark:text-slate-200 cursor-default" 
                               : "text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/20 group-hover:text-slate-900 dark:group-hover:text-white cursor-text"
                           )}
@@ -854,7 +1187,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                     <td className="p-0 text-center">
                       <div className="flex items-center justify-center gap-1 px-2">
                         <button 
-                          onClick={() => setObsModalTarget({ index: idx, isNew: !!row.isNew, value: row.Observação || '' })}
+                          onClick={() => setObsModalTarget({ index: idx, isNew: isEditable, value: row.Observação || '' })}
                           className={cn(
                             "p-2 rounded-lg transition-all",
                             row.Observação 
@@ -864,6 +1197,21 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                         >
                           <MessageSquare size={18} />
                         </button>
+                        {!row.isNew && row.id && (
+                          <button 
+                            type="button"
+                            onClick={() => toggleEditRow(row.id!)}
+                            title={editingRowIds.has(row.id!) ? "Concluir edição" : "Editar linha"}
+                            className={cn(
+                              "p-2 rounded-lg transition-all",
+                              editingRowIds.has(row.id!) 
+                                ? "text-amber-500 bg-amber-500/10 dark:bg-amber-500/20" 
+                                : "text-slate-400 hover:text-blue-500 hover:bg-blue-500/10 opacity-0 group-hover:opacity-100"
+                            )}
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                        )}
                         {row.isNew && (
                           <button 
                             onClick={() => removeRow(idx)}
@@ -995,7 +1343,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                     onClick={() => setObsModalTarget(null)}
                     className="px-6 py-2.5 text-xs font-bold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-all"
                   >
-                    Fechar
+                    {obsModalTarget.isNew ? "Cancelar" : "Fechar"}
                   </button>
                   {obsModalTarget.isNew && (
                     <button 
@@ -1005,7 +1353,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                       }}
                       className="px-8 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-blue-500/20 transition-all active:scale-95"
                     >
-                      Confirmar
+                      Salvar Observação
                     </button>
                   )}
                 </div>
