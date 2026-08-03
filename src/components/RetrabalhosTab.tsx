@@ -1955,10 +1955,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
               initial={{ opacity: 0, scale: 0.9, y: 20 }} 
               animate={{ opacity: 1, scale: 1, y: 0 }} 
               exit={{ opacity: 0, scale: 0.9, y: 20 }} 
-              className={cn(
-                "relative bg-[#0F172A] border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl transition-all duration-500",
-                editingViagemGroup.number ? "w-full max-w-lg" : "w-full max-w-[1000px]"
-              )}
+              className="relative bg-[#0F172A] border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl transition-all duration-500 w-full max-w-6xl"
             >
 
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500" />
@@ -2055,7 +2052,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                   setExcelRows(Array.from({ length: 20 }, () => ({ a501: '', g501: '', qtd: '' })));
                 }} className="space-y-6">
                   {/* Common Header Fields */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">Nº da Viagem</label>
                       <div className="relative group">
@@ -2067,7 +2064,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                           autoFocus
                           defaultValue={editingViagemGroup.number && editingViagemGroup.number !== "SEM_VIAGEM" ? editingViagemGroup.number : ""}
                           placeholder="Ex: 12345"
-                          className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-sm font-black text-white font-mono focus:outline-none focus:border-amber-500/50 focus:bg-amber-500/5 transition-all no-spinner"
+                          className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-sm font-black text-white font-mono focus:outline-none focus:border-amber-500/50 focus:bg-amber-500/5 transition-all no-spinner"
                         />
                       </div>
                     </div>
@@ -2080,30 +2077,29 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                           name="viagem_date"
                           type="date"
                           defaultValue={editingViagemGroup.items[0]?.enviado_ao_cd?.split('T')[0] || ""}
-                          className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-sm font-black text-white font-mono focus:outline-none focus:border-blue-500/50 focus:bg-blue-500/5 transition-all [color-scheme:dark]"
+                          className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-sm font-black text-white font-mono focus:outline-none focus:border-blue-500/50 focus:bg-blue-500/5 transition-all [color-scheme:dark]"
                         />
                       </div>
                     </div>
-                  </div>
 
-                  {/* Turno Selection */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">Turno da Viagem</label>
-                    <div className="grid grid-cols-3 gap-3">
-                      {[1, 2, 3].map((t) => (
-                        <label key={t} className="relative group cursor-pointer">
-                          <input 
-                            type="radio" 
-                            name="turno_da_viagem" 
-                            value={t}
-                            defaultChecked={editingViagemGroup.items[0]?.turno_da_viagem === t}
-                            className="peer sr-only" 
-                          />
-                          <div className="flex items-center justify-center py-3 rounded-xl bg-white/5 border border-white/10 text-slate-500 peer-checked:bg-amber-600 peer-checked:text-white peer-checked:border-amber-400 transition-all font-black text-sm">
-                            TURNO {t}
-                          </div>
-                        </label>
-                      ))}
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">Turno da Viagem</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[1, 2, 3].map((t) => (
+                          <label key={t} className="relative group cursor-pointer">
+                            <input 
+                              type="radio" 
+                              name="turno_da_viagem" 
+                              value={t}
+                              defaultChecked={editingViagemGroup.items[0]?.turno_da_viagem === t}
+                              className="peer sr-only" 
+                            />
+                            <div className="flex items-center justify-center py-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-500 peer-checked:bg-amber-600 peer-checked:text-white peer-checked:border-amber-400 transition-all font-black text-xs">
+                              TURNO {t}
+                            </div>
+                          </label>
+                        ))}
+                      </div>
                     </div>
                   </div>
 
