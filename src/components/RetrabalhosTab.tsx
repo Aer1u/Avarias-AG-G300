@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useMemo } from "react"
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import ReactDOM from "react-dom"
 
 import { 
@@ -271,6 +271,7 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
       const { error } = await supabase.from('retrabalhos').delete().eq('id', id);
       if (error) throw error;
       setRecords(prev => prev.filter(r => r.id !== id));
+      setLocalViagemItems(prev => prev.filter(r => r.id !== id));
       if (selectedLoteDetail) {
         setSelectedLoteDetail(prev => prev ? {
           ...prev,
@@ -282,8 +283,11 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
     }
   };
 
-  const updateReservaField = async (id: number, field: string, value: any) => {
-    // Atualização otimista imediata no estado local
+  // ──────────────────────────────────────────────────────────────
+  // PERFORMANCE FIX: salva somente no onBlur, não por keystroke
+  // ──────────────────────────────────────────────────────────────
+  const updateReservaField = useCallback(async (id: number, field: string, value: any) => {
+    // Atualiza estado local imediatamente (sem DB call)
     setRecords(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
     if (selectedLoteDetail) {
       setSelectedLoteDetail(prev => prev ? {
@@ -291,12 +295,121 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
         items: prev.items.map(i => i.id === id ? { ...i, [field]: value } : i)
       } : null);
     }
-    // Salva silenciosamente no banco
-    const { error } = await supabase.from('retrabalhos').update({ [field]: value }).eq('id', id);
-    if (error) {
-      console.error(`Erro ao atualizar ${field} da reserva ${id}:`, error);
+  }, [selectedLoteDetail]);
+
+  const saveReservaFieldToDb = useCallback(async (id: number, field: string, value: any) => {
+    let finalValue = value;
+    if (field === 'quantidade_enviada' || field === 'quantidade_retornada') {
+      finalValue = Number(value) || 0;
     }
-  };
+    const { error } = await supabase.from('retrabalhos').update({ [field]: finalValue }).eq('id', id);
+    if (error) console.error(`Erro ao salvar ${field}:`, error);
+  }, []);
+
+  // ──────────────────────────────────────────────────────────────
+  // EXCEL-LIKE: local state for viagem modal table
+  // ──────────────────────────────────────────────────────────────
+  const [localViagemItems, setLocalViagemItems] = useState<RetrabalhoRecord[]>([])
+  const [viagemDirty, setViagemDirty] = useState<Set<number>>(new Set()) // IDs modificados
+  const [isSavingViagem, setIsSavingViagem] = useState(false)
+  const anchorRowRef = useRef<number | null>(null) // index da linha âncora para shift-click
+
+  useEffect(() => {
+    if (editingViagemGroup) {
+      setLocalViagemItems(editingViagemGroup.items || []);
+      setViagemDirty(new Set());
+    } else {
+      setLocalViagemItems([]);
+      setViagemDirty(new Set());
+    }
+  }, [editingViagemGroup]);
+
+  // Atualiza célula local sem ir ao banco (imediato, estilo Excel)
+  const updateLocalViagemItem = useCallback((id: number, field: string, value: string) => {
+    setLocalViagemItems(prev => prev.map(r => r.id === id ? { ...r, [field]: value.toUpperCase() } : r));
+    setViagemDirty(prev => { const s = new Set(prev); s.add(id); return s; });
+  }, []);
+
+  // Salva todas as linhas modificadas de uma vez
+  const saveAllViagemChanges = useCallback(async () => {
+    if (viagemDirty.size === 0) return;
+    setIsSavingViagem(true);
+    const dirtyItems = localViagemItems.filter(r => viagemDirty.has(r.id));
+    try {
+      await Promise.all(dirtyItems.map(item =>
+        supabase.from('retrabalhos').update({
+          reserva_a501: item.reserva_a501,
+          reserva_g501: item.reserva_g501,
+          quantidade_enviada: Number(item.quantidade_enviada) || 0,
+          estorno_a501: item.estorno_a501,
+          estorno_g501: item.estorno_g501,
+          quantidade_retornada: Number(item.quantidade_retornada) || 0,
+          situacao: item.situacao,
+        }).eq('id', item.id)
+      ));
+      // Propaga para estado global
+      setRecords(prev => {
+        const map = new Map(localViagemItems.map(r => [r.id, r]));
+        return prev.map(r => map.get(r.id) ?? r);
+      });
+      setViagemDirty(new Set());
+    } catch (err: any) {
+      alert('Erro ao salvar: ' + err.message);
+    } finally {
+      setIsSavingViagem(false);
+    }
+  }, [localViagemItems, viagemDirty]);
+
+  // Seleção Excel-like: click simples, shift+click (range), ctrl+click (toggle)
+  const handleViagemRowClick = useCallback((e: React.MouseEvent, idx: number, id: number) => {
+    if (e.shiftKey && anchorRowRef.current !== null) {
+      const from = Math.min(anchorRowRef.current, idx);
+      const to   = Math.max(anchorRowRef.current, idx);
+      setSelectedReservas(prev => {
+        const s = new Set(prev);
+        for (let i = from; i <= to; i++) s.add(localViagemItems[i].id);
+        return s;
+      });
+    } else if (e.ctrlKey || e.metaKey) {
+      setSelectedReservas(prev => {
+        const s = new Set(prev);
+        s.has(id) ? s.delete(id) : s.add(id);
+        return s;
+      });
+      anchorRowRef.current = idx;
+    } else {
+      setSelectedReservas(new Set([id]));
+      anchorRowRef.current = idx;
+    }
+  }, [localViagemItems]);
+
+  // Ctrl+V: colar tabela do Excel (Tab-separated, newline por linha)
+  const handleViagemPaste = useCallback((e: React.ClipboardEvent, startIdx: number, startField: string) => {
+    e.preventDefault();
+    const text = e.clipboardData.getData('text/plain');
+    const rows = text.trim().split(/\r?\n/).map(r => r.split('\t'));
+    const FIELDS: (keyof RetrabalhoRecord)[] = ['reserva_a501', 'reserva_g501', 'quantidade_enviada', 'estorno_a501', 'estorno_g501', 'quantidade_retornada'];
+    const startFieldIdx = FIELDS.indexOf(startField as keyof RetrabalhoRecord);
+    if (startFieldIdx < 0) return;
+    setLocalViagemItems(prev => {
+      const updated = [...prev];
+      rows.forEach((rowData, ri) => {
+        const rowIdx = startIdx + ri;
+        if (rowIdx >= updated.length) return;
+        const item = { ...updated[rowIdx] };
+        rowData.forEach((val, ci) => {
+          const fieldIdx = startFieldIdx + ci;
+          if (fieldIdx < FIELDS.length) {
+            (item as any)[FIELDS[fieldIdx]] = val.trim().toUpperCase();
+          }
+        });
+        updated[rowIdx] = item;
+        setViagemDirty(prev2 => { const s = new Set(prev2); s.add(item.id); return s; });
+      });
+      return updated;
+    });
+  }, []);
+
   const [selectionMode, setSelectionMode] = useState(false)
   const [expandedViagens, setExpandedViagens] = useState<string | null>(null)
 
@@ -2042,6 +2155,9 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                     const ids = editingViagemGroup.items.map(i => i.id);
                     const { error } = await supabase.from('retrabalhos').update(updateData).in('id', ids);
                     if (error) alert("Erro ao atualizar: " + error.message);
+                    
+                    // Salva alterações de células individuais
+                    await saveAllViagemChanges();
                   }
 
                   // Cleanup and Refresh
@@ -2234,8 +2350,8 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                             <tr>
                               {selectionMode && (
                                 <th className="w-9 px-2 py-2 text-center border-r border-b border-slate-700/60 bg-slate-800">
-                                  <button type="button" onClick={() => { if (selectedReservas.size === editingViagemGroup.items.length) setSelectedReservas(new Set()); else setSelectedReservas(new Set(editingViagemGroup.items.map(i => i.id))); }} className="w-4 h-4 rounded border border-white/30 bg-white/10 flex items-center justify-center mx-auto">
-                                    {selectedReservas.size === editingViagemGroup.items.length && <Check size={10} className="text-white stroke-[3]" />}
+                                  <button type="button" onClick={() => { if (selectedReservas.size === localViagemItems.length) setSelectedReservas(new Set()); else setSelectedReservas(new Set(localViagemItems.map(i => i.id))); }} className="w-4 h-4 rounded border border-white/30 bg-white/10 flex items-center justify-center mx-auto">
+                                    {selectedReservas.size === localViagemItems.length && <Check size={10} className="text-white stroke-[3]" />}
                                   </button>
                                 </th>
                               )}
@@ -2252,11 +2368,12 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                             </tr>
                           </thead>
                           <tbody>
-                            {editingViagemGroup.items.map((item, idx) => (
+                            {localViagemItems.map((item, idx) => (
                               <tr
                                 key={item.id}
+                                onClick={(e) => handleViagemRowClick(e, idx, item.id)}
                                 className={cn(
-                                  "group/row border-b border-slate-700/40 hover:bg-slate-800/40 transition-colors",
+                                  "group/row border-b border-slate-700/40 hover:bg-slate-800/40 transition-colors select-none cursor-pointer",
                                   selectedReservas.has(item.id) && "bg-emerald-500/10"
                                 )}
                               >
@@ -2274,37 +2391,101 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                             
                                 {/* Reserva A */}
                                 <td className="p-0 border-r border-slate-700/40">
-                                  <input type="text" value={item.reserva_a501 || ""} onChange={e => updateReservaField(item.id, "reserva_a501", e.target.value)} placeholder="A501..." className="w-full h-full px-3 py-2 bg-transparent text-[11px] font-mono text-white focus:outline-none focus:bg-blue-500/10 transition-colors" />
+                                  <input 
+                                    type="text" 
+                                    value={item.reserva_a501 || ""} 
+                                    onChange={e => updateLocalViagemItem(item.id, "reserva_a501", e.target.value)} 
+                                    onBlur={e => { updateReservaField(item.id, "reserva_a501", e.target.value); saveReservaFieldToDb(item.id, "reserva_a501", e.target.value); }}
+                                    onPaste={e => handleViagemPaste(e, idx, "reserva_a501")}
+                                    onClick={e => e.stopPropagation()}
+                                    placeholder="A501..." 
+                                    className="w-full h-full px-3 py-2 bg-transparent text-[11px] font-mono text-white focus:outline-none focus:bg-blue-500/10 transition-colors" 
+                                  />
                                 </td>
                             
                                 {/* Reserva G */}
                                 <td className="p-0 border-r border-slate-700/40">
-                                  <input type="text" value={item.reserva_g501 || ""} onChange={e => updateReservaField(item.id, "reserva_g501", e.target.value)} placeholder="G501..." className="w-full h-full px-3 py-2 bg-transparent text-[11px] font-mono text-slate-300 focus:outline-none focus:bg-blue-500/10 transition-colors" />
+                                  <input 
+                                    type="text" 
+                                    value={item.reserva_g501 || ""} 
+                                    onChange={e => updateLocalViagemItem(item.id, "reserva_g501", e.target.value)} 
+                                    onBlur={e => { updateReservaField(item.id, "reserva_g501", e.target.value); saveReservaFieldToDb(item.id, "reserva_g501", e.target.value); }}
+                                    onPaste={e => handleViagemPaste(e, idx, "reserva_g501")}
+                                    onClick={e => e.stopPropagation()}
+                                    placeholder="G501..." 
+                                    className="w-full h-full px-3 py-2 bg-transparent text-[11px] font-mono text-slate-300 focus:outline-none focus:bg-blue-500/10 transition-colors" 
+                                  />
                                 </td>
                                 {/* Volume Enviado */}
                                 <td className="p-0 border-r border-slate-700/40">
-                                  <input type="number" value={item.quantidade_enviada || 0} onChange={e => updateReservaField(item.id, "quantidade_enviada", Number(e.target.value))} className="w-full h-full px-2 py-2 bg-transparent text-[11px] font-mono font-bold text-white text-center focus:outline-none focus:bg-blue-500/10 transition-colors" />
+                                  <input 
+                                    type="number" 
+                                    value={item.quantidade_enviada ?? ""} 
+                                    onChange={e => updateLocalViagemItem(item.id, "quantidade_enviada", e.target.value)} 
+                                    onBlur={e => { updateReservaField(item.id, "quantidade_enviada", Number(e.target.value)); saveReservaFieldToDb(item.id, "quantidade_enviada", e.target.value); }}
+                                    onPaste={e => handleViagemPaste(e, idx, "quantidade_enviada")}
+                                    onClick={e => e.stopPropagation()}
+                                    className="w-full h-full px-2 py-2 bg-transparent text-[11px] font-mono font-bold text-white text-center focus:outline-none focus:bg-blue-500/10 transition-colors no-spinner" 
+                                  />
                                 </td>
                                 {/* Criado Em */}
                                 <td className="p-0 border-r border-slate-700/40">
-                                  <input type="date" value={item.enviado_ao_cd || ""} onChange={e => updateReservaField(item.id, "enviado_ao_cd", e.target.value || null)} className="w-full h-full px-2 py-2 bg-transparent text-[10px] font-mono text-blue-400 focus:outline-none focus:bg-blue-500/10 transition-colors text-center [color-scheme:dark]" />
+                                  <input 
+                                    type="date" 
+                                    value={item.enviado_ao_cd || ""} 
+                                    onChange={e => updateLocalViagemItem(item.id, "enviado_ao_cd", e.target.value)} 
+                                    onBlur={e => { updateReservaField(item.id, "enviado_ao_cd", e.target.value || null); saveReservaFieldToDb(item.id, "enviado_ao_cd", e.target.value || null); }}
+                                    onClick={e => e.stopPropagation()}
+                                    className="w-full h-full px-2 py-2 bg-transparent text-[10px] font-mono text-blue-400 focus:outline-none focus:bg-blue-500/10 transition-colors text-center [color-scheme:dark]" 
+                                  />
                                 </td>
                             
                                 {/* Estorno A */}
                                 <td className="p-0 border-r border-slate-700/40">
-                                  <input type="text" value={item.estorno_a501 || ""} onChange={e => updateReservaField(item.id, "estorno_a501", e.target.value)} placeholder="Est. A..." className="w-full h-full px-3 py-2 bg-transparent text-[11px] font-mono text-blue-300 focus:outline-none focus:bg-blue-500/10 transition-colors" />
+                                  <input 
+                                    type="text" 
+                                    value={item.estorno_a501 || ""} 
+                                    onChange={e => updateLocalViagemItem(item.id, "estorno_a501", e.target.value)} 
+                                    onBlur={e => { updateReservaField(item.id, "estorno_a501", e.target.value); saveReservaFieldToDb(item.id, "estorno_a501", e.target.value); }}
+                                    onPaste={e => handleViagemPaste(e, idx, "estorno_a501")}
+                                    onClick={e => e.stopPropagation()}
+                                    placeholder="Est. A..." 
+                                    className="w-full h-full px-3 py-2 bg-transparent text-[11px] font-mono text-blue-300 focus:outline-none focus:bg-blue-500/10 transition-colors" 
+                                  />
                                 </td>
                                 {/* Estorno G */}
                                 <td className="p-0 border-r border-slate-700/40">
-                                  <input type="text" value={item.estorno_g501 || ""} onChange={e => updateReservaField(item.id, "estorno_g501", e.target.value)} placeholder="Est. G..." className="w-full h-full px-3 py-2 bg-transparent text-[11px] font-mono text-blue-300 focus:outline-none focus:bg-blue-500/10 transition-colors" />
+                                  <input 
+                                    type="text" 
+                                    value={item.estorno_g501 || ""} 
+                                    onChange={e => updateLocalViagemItem(item.id, "estorno_g501", e.target.value)} 
+                                    onBlur={e => { updateReservaField(item.id, "estorno_g501", e.target.value); saveReservaFieldToDb(item.id, "estorno_g501", e.target.value); }}
+                                    onPaste={e => handleViagemPaste(e, idx, "estorno_g501")}
+                                    onClick={e => e.stopPropagation()}
+                                    placeholder="Est. G..." 
+                                    className="w-full h-full px-3 py-2 bg-transparent text-[11px] font-mono text-blue-300 focus:outline-none focus:bg-blue-500/10 transition-colors" 
+                                  />
                                 </td>
                                 {/* Retornado */}
                                 <td className="p-0 border-r border-slate-700/40">
-                                  <input type="number" value={item.quantidade_retornada || 0} onChange={e => updateReservaField(item.id, "quantidade_retornada", Number(e.target.value))} className="w-full h-full px-2 py-2 bg-transparent text-[11px] font-mono font-bold text-emerald-400 text-center focus:outline-none focus:bg-emerald-500/10 transition-colors" />
+                                  <input 
+                                    type="number" 
+                                    value={item.quantidade_retornada ?? ""} 
+                                    onChange={e => updateLocalViagemItem(item.id, "quantidade_retornada", e.target.value)} 
+                                    onBlur={e => { updateReservaField(item.id, "quantidade_retornada", Number(e.target.value)); saveReservaFieldToDb(item.id, "quantidade_retornada", e.target.value); }}
+                                    onPaste={e => handleViagemPaste(e, idx, "quantidade_retornada")}
+                                    onClick={e => e.stopPropagation()}
+                                    className="w-full h-full px-2 py-2 bg-transparent text-[11px] font-mono font-bold text-emerald-400 text-center focus:outline-none focus:bg-emerald-500/10 transition-colors no-spinner" 
+                                  />
                                 </td>
                                 {/* Situação */}
                                 <td className="p-0 border-r border-slate-700/40">
-                                  <select value={item.situacao || 'Em preparação'} onChange={e => updateReservaField(item.id, "situacao", e.target.value)} className="w-full h-full px-2 py-2 bg-transparent text-[11px] text-slate-200 focus:outline-none focus:bg-blue-500/10 transition-colors cursor-pointer border-none">
+                                  <select 
+                                    value={item.situacao || 'Em preparação'} 
+                                    onChange={e => { updateLocalViagemItem(item.id, "situacao", e.target.value); updateReservaField(item.id, "situacao", e.target.value); saveReservaFieldToDb(item.id, "situacao", e.target.value); }} 
+                                    onClick={e => e.stopPropagation()}
+                                    className="w-full h-full px-2 py-2 bg-transparent text-[11px] text-slate-200 focus:outline-none focus:bg-blue-500/10 transition-colors cursor-pointer border-none"
+                                  >
                                     {SITUACAO_OPTIONS.map(o => <option key={o.value} value={o.value} className="bg-slate-900 text-white">{o.value}</option>)}
                                   </select>
                                 </td>
