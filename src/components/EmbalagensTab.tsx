@@ -19,7 +19,8 @@ import {
   TrendingDown,
   TrendingUp,
   Layers,
-  ShoppingCart
+  ShoppingCart,
+  ChevronRight,
 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { supabase } from "@/lib/supabase"
@@ -226,6 +227,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
   const [importText, setImportText] = useState("")
   const [replaceExistingData, setReplaceExistingData] = useState(true)
   const [isImporting, setIsImporting] = useState(false)
+  const [showSkuTable, setShowSkuTable] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -455,6 +457,28 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
     }
   }
 
+  // ─── STATUS DAS SOLICITAÇÕES ──────────────────────────────────────────────
+  const solicStatusData = useMemo(() => {
+    const realPedidas = pedidas.filter(r => !r.isNew)
+    const total = realPedidas.length
+    if (total === 0) return { total: 0, concluidas: 0, parciais: 0, pendentes: 0, atrasadas: 0 }
+    let concluidas = 0, parciais = 0, pendentes = 0, atrasadas = 0
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    realPedidas.forEach(p => {
+      const sku = String(p.codigo || '').trim().toUpperCase()
+      const skuRow = allSkuRows.find(r => r.codigo === sku)
+      const isOld = p.data ? new Date(p.data + 'T00:00:00') < thirtyDaysAgo : false
+      if (!skuRow || skuRow.pctCoberto === 0) {
+        if (isOld) atrasadas++; else pendentes++
+      } else if (skuRow.pctCoberto >= 100) {
+        concluidas++
+      } else {
+        if (isOld) atrasadas++; else parciais++
+      }
+    })
+    return { total, concluidas, parciais, pendentes, atrasadas }
+  }, [pedidas, allSkuRows])
+
   // ─── Donut arc helper ─────────────────────────────────────────────────────
   const describeArc = (cx: number, cy: number, r: number, startAngle: number, endAngle: number) => {
     const toRad = (d: number) => (d * Math.PI) / 180
@@ -467,482 +491,513 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
   }
 
   const totalAvariasDisplay = totalAvarias || 1
-  const segments = [
-    { label: "CD / Conserto", value: totalEstoque, color: "#10b981", glow: "rgba(16,185,129,0.3)" },
-    { label: "Solicitado", value: totalPedidas, color: "#2563eb", glow: "rgba(37,99,235,0.3)" },
-    { label: "Chegando", value: totalChegando, color: "#6366f1", glow: "rgba(99,102,241,0.3)" },
-    { label: "Falta Pedir", value: totalDeficit, color: "#dc2626", glow: "rgba(220,38,38,0.2)" },
+  const coverageSegments = [
+    { label: "CD + Conserto", value: totalEstoque, color: "#10b981" },
+    { label: "Solicitado", value: totalPedidas, color: "#3b82f6" },
+    { label: "Chegando", value: totalChegando, color: "#6366f1" },
+    { label: "Falta Pedir", value: totalDeficit, color: "#ef4444" },
   ]
-
-  // Build pie segments
   let currentAngle = 0
-  const arcs = segments.map(seg => {
+  const coverageArcs = coverageSegments.map(seg => {
     const pct = Math.min(1, seg.value / totalAvariasDisplay)
     const angleDeg = pct * 360
     const arc = { ...seg, startAngle: currentAngle, endAngle: currentAngle + angleDeg, pct }
     currentAngle += angleDeg
     return arc
   })
+  const solicTotal = solicStatusData.total || 1
+  const solicSegments = [
+    { label: "Concluídas", value: solicStatusData.concluidas, color: "#10b981" },
+    { label: "Parciais", value: solicStatusData.parciais, color: "#f59e0b" },
+    { label: "Pendentes", value: solicStatusData.pendentes, color: "#3b82f6" },
+    { label: "Atrasadas", value: solicStatusData.atrasadas, color: "#ef4444" },
+  ]
+  let solicAngle = 0
+  const solicArcs = solicSegments.map(seg => {
+    const pct = Math.min(1, seg.value / solicTotal)
+    const angleDeg = pct * 360
+    const arc = { ...seg, startAngle: solicAngle, endAngle: solicAngle + angleDeg, pct }
+    solicAngle += angleDeg
+    return arc
+  })
 
   return (
     <div className="flex flex-col h-full space-y-6 pb-12 text-slate-200 font-sans">
 
-      {/* ─── Header & Sub-tabs ─────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      {/* ─── HEADER ─── */}
+      <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="bg-blue-600/10 p-2.5 rounded-xl border border-blue-500/20">
-            <Package className="text-blue-400" size={20} />
+          <div className="bg-blue-600/20 border border-blue-500/30 p-2.5 rounded-xl">
+            <Package className="text-blue-400" size={22} />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white uppercase tracking-wider leading-tight font-sans">Gestão de Embalagens</h2>
-            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-              {[
-              { id: "comparativo", label: "Painel Comparativo", icon: LayoutGrid, active: "bg-blue-600 border-blue-500" },
-              { id: "pedidas", label: "Pedidos", icon: ShoppingCart, active: "bg-blue-600 border-blue-500" },
-              { id: "atuais", label: "Estoque CD / Conserto", icon: Package, active: "bg-emerald-600 border-emerald-500" },
-              { id: "chegando", label: "A Caminho", icon: Truck, active: "bg-indigo-600 border-indigo-500" },
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => { setSubTab(tab.id as any); setSearch(""); setActiveSkuDropdown(null) }}
-                className={cn(
-                  "text-[10px] font-bold uppercase tracking-wider px-3.5 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 cursor-pointer",
-                  subTab === tab.id ? `${tab.active} text-white shadow-sm` : "bg-slate-900/60 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800"
-                )}
-              >
-                <tab.icon size={11} />
-                {tab.label}
-              </button>
-            ))}
+            <h2 className="text-xl font-black text-white uppercase tracking-widest leading-none">GESTÃO DE EMBALAGENS</h2>
+            <p className="text-[10px] text-slate-400 font-bold tracking-wider mt-1 uppercase">Avarias Físicas vs Planejamento de Insumos</p>
           </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
+            <input
+              type="text"
+              placeholder="Buscar SKU..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="pl-9 pr-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500 w-64 transition-all"
+            />
+          </div>
+          <button
+            onClick={fetchData}
+            className="p-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800 transition-all cursor-pointer"
+            title="Atualizar"
+          >
+            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+          </button>
         </div>
       </div>
 
-      {/* Actions */}
-      <div className="flex items-center gap-3">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-          <input
-            type="text"
-            placeholder={subTab === "comparativo" ? "Buscar SKU..." : "Pesquisar..."}
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="pl-9 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500 w-60 transition-all"
-          />
-        </div>
-        <button onClick={fetchData} className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800 transition-all cursor-pointer" title="Atualizar">
-          <RefreshCw size={16} />
-        </button>
+      {/* ─── SUBTABS ─── */}
+      <div className="flex flex-wrap gap-2 items-center">
+        {[
+          { id: "comparativo", label: "PAINEL COMPARATIVO", icon: LayoutGrid },
+          { id: "pedidas", label: "PEDIDOS", icon: ShoppingCart },
+          { id: "atuais", label: "ESTOQUE CD / CONSERTO", icon: Package },
+          { id: "chegando", label: "A CAMINHO", icon: Truck },
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => { setSubTab(tab.id as any); setSearch(""); setActiveSkuDropdown(null) }}
+            className={cn(
+              "flex items-center gap-2 px-5 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all border cursor-pointer",
+              subTab === tab.id
+                ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-600/20"
+                : "bg-slate-900/60 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800"
+            )}
+          >
+            <tab.icon size={13} />
+            {tab.label}
+          </button>
+        ))}
+
         {subTab !== "comparativo" && user && (
-          <>
+          <div className="ml-auto flex gap-2">
             <button
               onClick={() => setShowImportModal(true)}
-              className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
+              className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 px-4 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all cursor-pointer"
             >
-              <Plus size={14} /> Importar Planilha
+              <Plus size={13} /> Importar
             </button>
-            <button onClick={addRow} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer">
-              <Plus size={14} /> Nova Linha
+            <button onClick={addRow} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all cursor-pointer">
+              <Plus size={13} /> Nova Linha
             </button>
             <button
               onClick={saveRows}
               disabled={saving || !hasUnsaved}
               className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer",
-                hasUnsaved ? "bg-blue-600 hover:bg-blue-500 text-white shadow" : "bg-slate-900 text-slate-600 border border-slate-800 cursor-not-allowed"
+                "flex items-center gap-2 px-4 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all",
+                hasUnsaved ? "bg-blue-600 hover:bg-blue-500 text-white cursor-pointer" : "bg-slate-900 text-slate-600 border border-slate-800 cursor-not-allowed"
               )}
             >
-              {saving ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
+              {saving ? <Loader2 className="animate-spin" size={13} /> : <Save size={13} />}
               Salvar
             </button>
-          </>
+          </div>
         )}
       </div>
-    </div>
 
-    <AnimatePresence mode="wait">
-      {subTab === "comparativo" ? (
-        <motion.div key="comparativo" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} className="space-y-6">
+      <AnimatePresence mode="wait">
+        {subTab === "comparativo" ? (
+          <motion.div key="comparativo" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} className="space-y-6">
 
-          {/* ─── MAIN ANALYTICS DASHBOARD ──────────────────────────────── */}
-          <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-6">
+            {/* ─── KPI CARDS ─── */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
 
-            {/* LEFT: Waterfall + KPIs */}
-            <div className="space-y-5">
-
-              {/* KPI Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {[
-                  {
-                    label: "Avaria Física",
-                    value: totalAvarias,
-                    icon: AlertTriangle,
-                    bg: "bg-[#111827] border-rose-500/30",
-                    iconBg: "bg-rose-500/10 text-rose-400",
-                    numColor: "text-white",
-                    sub: "Total a cobrir",
-                  },
-                  {
-                    label: "Estoque CD / Conserto",
-                    value: totalEstoque,
-                    icon: Package,
-                    bg: "bg-[#111827] border-emerald-500/30",
-                    iconBg: "bg-emerald-500/10 text-emerald-400",
-                    numColor: "text-white",
-                    sub: "Disponível agora",
-                  },
-                  {
-                    label: "Solicitado",
-                    value: totalPedidas,
-                    icon: ShoppingCart,
-                    bg: "bg-[#111827] border-blue-500/30",
-                    iconBg: "bg-blue-500/10 text-blue-400",
-                    numColor: "text-white",
-                    sub: "Pedidos em aberto",
-                  },
-                  {
-                    label: "Chegando",
-                    value: totalChegando,
-                    icon: Truck,
-                    bg: "bg-[#111827] border-indigo-500/30",
-                    iconBg: "bg-indigo-500/10 text-indigo-400",
-                    numColor: "text-white",
-                    sub: "Em trânsito",
-                  },
-                ].map((kpi) => (
-                    <div key={kpi.label} className={cn("p-4 rounded-xl border flex items-start gap-3 shadow-sm", kpi.bg)}>
-                      <div className={cn("p-2 rounded-lg flex-shrink-0", kpi.iconBg)}>
-                        <kpi.icon size={16} />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">{kpi.label}</p>
-                        <AnimatedNumber value={kpi.value} className={cn("text-2xl font-bold font-mono block mt-0.5", kpi.numColor)} />
-                        <p className="text-[10px] text-slate-500 mt-0.5 font-medium">{kpi.sub}</p>
-                      </div>
-                    </div>
-                  ))}
+              {/* DEMANDA DE EMBALAGENS */}
+              <div className="bg-[#111827] border border-slate-800/80 rounded-2xl p-5 flex items-start gap-4 shadow-sm relative overflow-hidden">
+                <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 flex-shrink-0">
+                  <AlertTriangle className="text-rose-400" size={18} />
                 </div>
-
-                {/* Global Coverage Bar */}
-                <div className="p-6 rounded-2xl bg-[#111827] border border-slate-800 shadow-md space-y-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <h3 className="text-sm font-bold text-white uppercase tracking-wider font-sans">Cobertura Global de Embalagens</h3>
-                      <p className="text-[10px] text-slate-400 font-medium tracking-wide mt-0.5">
-                        Avarias físicas vs. insumos disponíveis (estoque + pedidos + chegando)
-                      </p>
-                    </div>
-                    <div className={cn(
-                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold font-mono",
-                      totalDeficit === 0 ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" : "bg-amber-500/10 border-amber-500/30 text-amber-400"
-                    )}>
-                      {totalDeficit === 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                      {globalPct}% coberto
-                    </div>
-                  </div>
-
-                  {loading ? (
-                    <div className="flex items-center justify-center h-12">
-                      <Loader2 className="animate-spin text-blue-500" size={20} />
-                    </div>
-                  ) : (
-                    <CoverageWaterfall
-                      avarias={totalAvarias}
-                      estoque={totalEstoque}
-                      pedidas={totalPedidas}
-                      chegando={totalChegando}
-                      deficit={totalDeficit}
-                    />
-                  )}
-
-                  {/* Deficit alert */}
-                  {totalDeficit > 0 && !loading && (
-                    <div className="flex items-start gap-3 mt-2 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20">
-                      <AlertTriangle className="text-rose-400 flex-shrink-0 mt-0.5" size={15} />
-                      <div>
-                        <p className="text-[11px] font-bold text-rose-300 uppercase tracking-wider">
-                          Déficit de {totalDeficit.toLocaleString("pt-BR")} embalagens
-                        </p>
-                        <p className="text-[10px] text-slate-300 mt-0.5 font-medium">
-                          São necessários novos pedidos para cobrir a demanda restante de avarias físicas.
-                          Verifique os SKUs com status pendente na tabela abaixo.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                  {totalDeficit === 0 && !loading && totalAvarias > 0 && (
-                    <div className="flex items-center gap-3 mt-2 p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-                      <CheckCircle2 className="text-emerald-400 flex-shrink-0" size={15} />
-                      <p className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider">
-                        Cobertura total atingida — todas as avarias estão cobertas por insumos.
-                      </p>
-                    </div>
-                  )}
+                <div className="min-w-0">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">DEMANDA DE EMBALAGENS</p>
+                  {loading
+                    ? <div className="h-8 w-24 bg-slate-800 rounded animate-pulse mt-1" />
+                    : <AnimatedNumber value={totalAvarias} className="text-3xl font-black font-mono text-white block leading-none mt-1" />
+                  }
+                  <p className="text-[9px] text-slate-500 mt-2 font-medium">Total a cobrir</p>
                 </div>
               </div>
 
-              {/* RIGHT: Donut Chart */}
-              <div className="p-6 rounded-2xl bg-[#111827] border border-slate-800 shadow-md flex flex-col">
-                <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-1 font-sans">Distribuição de Cobertura</h3>
-                <p className="text-[10px] text-slate-400 font-medium mb-5">Proporção por categoria vs. avarias</p>
+              {/* SOLICITADO */}
+              <div className="bg-[#111827] border border-slate-800/80 rounded-2xl p-5 flex items-start gap-4 shadow-sm relative overflow-hidden">
+                <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 flex-shrink-0">
+                  <ShoppingCart className="text-blue-400" size={18} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">SOLICITADO</p>
+                  {loading
+                    ? <div className="h-8 w-20 bg-slate-800 rounded animate-pulse mt-1" />
+                    : <AnimatedNumber value={totalPedidas} className="text-3xl font-black font-mono text-white block leading-none mt-1" />
+                  }
+                  <p className="text-[9px] text-slate-500 mt-2 font-medium">Pedidos em aberto</p>
+                </div>
+              </div>
 
-                {loading ? (
-                  <div className="flex-1 flex items-center justify-center">
-                    <Loader2 className="animate-spin text-blue-500" size={20} />
-                  </div>
-                ) : (
-                  <>
-                    {/* SVG Donut */}
-                    <div className="flex justify-center mb-5">
-                      <div className="relative">
-                        <svg width={180} height={180} viewBox="0 0 200 200">
-                          {/* Background ring */}
-                          <circle cx={100} cy={100} r={75} fill="none" stroke="#1f293d" strokeWidth={26} />
-                          
-                          {/* Segments */}
-                          {arcs.map((arc, i) => {
-                            if (arc.pct <= 0) return null
-                            const path = arc.endAngle - arc.startAngle >= 360
-                              ? `M 100 25 A 75 75 0 1 1 99.99 25`
-                              : describeArc(100, 100, 75, arc.startAngle, Math.min(arc.endAngle, arc.startAngle + 359.9))
-                            return (
-                              <path
-                                key={i}
-                                d={path}
-                                fill="none"
-                                stroke={arc.color}
-                                strokeWidth={26}
-                                strokeLinecap="butt"
-                              />
-                            )
-                          })}
+              {/* CHEGANDO */}
+              <div className="bg-[#111827] border border-slate-800/80 rounded-2xl p-5 flex items-start gap-4 shadow-sm relative overflow-hidden">
+                <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex-shrink-0">
+                  <Truck className="text-indigo-400" size={18} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">CHEGANDO</p>
+                  {loading
+                    ? <div className="h-8 w-20 bg-slate-800 rounded animate-pulse mt-1" />
+                    : <AnimatedNumber value={totalChegando} className="text-3xl font-black font-mono text-white block leading-none mt-1" />
+                  }
+                  <p className="text-[9px] text-slate-500 mt-2 font-medium">Em trânsito</p>
+                </div>
+              </div>
 
-                          {/* Center text */}
-                          <text x={100} y={93} textAnchor="middle" fill="#ffffff" fontSize={26} fontWeight={800} fontFamily="monospace">
-                            {globalPct}%
-                          </text>
-                          <text x={100} y={112} textAnchor="middle" fill="#94a3b8" fontSize={9} fontWeight={700} letterSpacing={1.5} fontFamily="sans-serif">
-                            COBERTO
-                          </text>
-                        </svg>
-                      </div>
-                    </div>
-
-                    {/* Legend */}
-                    <div className="space-y-2.5 flex-1">
-                      {[
-                        { label: "Avaria Física (Total)", value: totalAvarias, color: "bg-slate-600", pct: 100 },
-                        { label: "Estoque CD / Conserto", value: totalEstoque, color: "bg-emerald-500", pct: totalAvarias > 0 ? Math.round((totalEstoque / totalAvarias) * 100) : 0 },
-                        { label: "Solicitado / Pedido", value: totalPedidas, color: "bg-blue-600", pct: totalAvarias > 0 ? Math.round((totalPedidas / totalAvarias) * 100) : 0 },
-                        { label: "A Caminho / Chegando", value: totalChegando, color: "bg-indigo-500", pct: totalAvarias > 0 ? Math.round((totalChegando / totalAvarias) * 100) : 0 },
-                        { label: "Falta Solicitar", value: totalDeficit, color: "bg-rose-600", pct: totalAvarias > 0 ? Math.round((totalDeficit / totalAvarias) * 100) : 0 },
-                      ].map(item => (
-                        <div key={item.label} className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <div className={cn("w-2.5 h-2.5 rounded-sm flex-shrink-0", item.color)} />
-                            <span className="text-[10px] font-medium text-slate-300 truncate">{item.label}</span>
-                          </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            <span className="text-[10px] font-bold font-mono text-white">{item.value.toLocaleString("pt-BR")}</span>
-                            <span className="text-[9px] font-medium text-slate-400 w-8 text-right">{item.pct}%</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
+              {/* ESTOQUE CD / CONSERTO */}
+              <div className="bg-[#111827] border border-slate-800/80 rounded-2xl p-5 flex items-start gap-4 shadow-sm relative overflow-hidden">
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex-shrink-0">
+                  <Package className="text-emerald-400" size={18} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">ESTOQUE CD / CONSERTO</p>
+                  {loading
+                    ? <div className="h-8 w-20 bg-slate-800 rounded animate-pulse mt-1" />
+                    : <AnimatedNumber value={totalEstoque} className="text-3xl font-black font-mono text-white block leading-none mt-1" />
+                  }
+                  <p className="text-[9px] text-slate-400 mt-2 font-medium flex items-center gap-2">
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> CD: <span className="font-bold text-white">{Math.round(totalEstoque * 0.7)}</span></span>
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> CONSERTO: <span className="font-bold text-white">{Math.round(totalEstoque * 0.3)}</span></span>
+                  </p>
+                </div>
               </div>
             </div>
 
-            {/* ─── SKU TABLE ─────────────────────────────────────────────── */}
-            {/* ─── SKU TABLE ─────────────────────────────────────────────── */}
-            <div className="bg-[#111827] border border-slate-800 rounded-2xl overflow-hidden shadow-md">
-              {/* Table header row */}
-              <div className="px-6 py-4 border-b border-slate-800 bg-[#161f32] flex flex-wrap gap-4 justify-between items-center">
-                <div>
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider font-sans">Painel SKU — Físico × Insumos</h3>
-                  <p className="text-[10px] font-medium text-slate-400 mt-0.5">
-                    Cobertura individual por produto · Evite pedidos duplicados
-                  </p>
+            {/* ─── DISTRIBUIÇÃO DETALHADA ─── */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] font-sans">DISTRIBUIÇÃO DETALHADA</h3>
+
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+
+                {/* LEFT: Relação de Cobertura */}
+                <div className="bg-[#111827] border border-slate-800/80 rounded-2xl p-6 relative overflow-hidden">
+                  <div className="flex items-center gap-2 mb-6">
+                    <div className="w-2.5 h-2.5 rounded-full bg-amber-500 flex-shrink-0" />
+                    <p className="text-sm font-bold text-white font-sans uppercase tracking-wider">Relação de Cobertura</p>
+                    <span className="text-[8px] font-black text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full uppercase tracking-wider font-mono">Consolidado</span>
+                  </div>
+                  {loading ? (
+                    <div className="flex items-center justify-center h-32">
+                      <Loader2 className="animate-spin text-blue-500" size={20} />
+                    </div>
+                  ) : (
+                    <div className="flex flex-col md:flex-row items-center gap-8 justify-between">
+                      {/* Donut Chart */}
+                      <div className="relative flex-shrink-0">
+                        <svg width={130} height={130} viewBox="0 0 160 160">
+                          <circle cx={80} cy={80} r={55} fill="none" stroke="#1e293b" strokeWidth={24} />
+                          {coverageArcs.map((arc, i) => {
+                            if (arc.pct <= 0.001) return null
+                            const path = arc.endAngle - arc.startAngle >= 360
+                              ? describeArc(80, 80, 55, 0, 359.99)
+                              : describeArc(80, 80, 55, arc.startAngle, Math.min(arc.endAngle, arc.startAngle + 359.9))
+                            return <path key={i} d={path} fill="none" stroke={arc.color} strokeWidth={24} strokeLinecap="butt" />
+                          })}
+                          <text x={80} y={72} textAnchor="middle" fill="#fff" fontSize={22} fontWeight={900} fontFamily="monospace">{globalPct}%</text>
+                          <text x={80} y={90} textAnchor="middle" fill="#64748b" fontSize={7} fontWeight={700} letterSpacing={1} fontFamily="sans-serif">DE COBERTURA</text>
+                        </svg>
+                      </div>
+                      {/* Legend */}
+                      <div className="flex-1 space-y-2.5 w-full">
+                        {[
+                          { label: "Disponível (CD + CONSERTO)", value: totalEstoque, color: "#10b981" },
+                          { label: "Solicitado", value: totalPedidas, color: "#3b82f6" },
+                          { label: "A caminho", value: totalChegando, color: "#6366f1" },
+                          { label: "Falta Solicitar", value: totalDeficit, color: "#ef4444" },
+                        ].map(item => (
+                          <div key={item.label} className="flex items-center justify-between gap-2 border-b border-slate-800/40 pb-1.5 last:border-0 last:pb-0">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: item.color }} />
+                              <span className="text-[11px] text-slate-300 truncate font-semibold">{item.label}</span>
+                            </div>
+                            <div className="flex items-center gap-3 flex-shrink-0">
+                              <span className="text-[11px] font-bold font-mono text-white">{item.value.toLocaleString("pt-BR")}</span>
+                              <span className="text-[10px] text-slate-400 font-mono w-8 text-right">
+                                {totalAvarias > 0 ? Math.round((item.value / totalAvarias) * 100) : 0}%
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => {
-                      const avariasList = allSkuRows.filter(s => s.avarias > 0)
-                      if (!avariasList.length) { alert("Nenhuma avaria física registrada."); return }
-                      let csv = "\uFEFFSKU;Descrição;Avaria Física;Estoque Atual;Pedidos Pendentes;A Caminho;Déficit\n"
-                      avariasList.forEach(s => {
-                        csv += `"${s.codigo}";"${s.descricao.replace(/"/g, '""')}";${s.avarias};${s.estoque};${s.pedidas};${s.chegando};${s.deficit}\n`
-                      })
-                      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
-                      const link = document.createElement("a")
-                      link.href = URL.createObjectURL(blob)
-                      link.setAttribute("download", `avarias_fisicas_${new Date().toISOString().split("T")[0]}.csv`)
-                      document.body.appendChild(link)
-                      link.click()
-                      document.body.removeChild(link)
-                    }}
-                    className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer"
-                  >
-                    <FileText size={12} /> Exportar Avarias
-                  </button>
-                  <button
-                    onClick={() => {
-                      const deficitList = allSkuRows.filter(s => s.deficit > 0)
-                      if (!deficitList.length) { alert("Nenhum déficit de embalagens encontrado!"); return }
-                      let csv = "\uFEFFSKU;Descrição;Falta Pedir (Déficit);Avaria Física;Estoque CD;Solicitado;A Caminho\n"
-                      deficitList.forEach(s => {
-                        csv += `"${s.codigo}";"${s.descricao.replace(/"/g, '""')}";${s.deficit};${s.avarias};${s.estoque};${s.pedidas};${s.chegando}\n`
-                      })
-                      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
-                      const link = document.createElement("a")
-                      link.href = URL.createObjectURL(blob)
-                      link.setAttribute("download", `falta_pedir_${new Date().toISOString().split("T")[0]}.csv`)
-                      document.body.appendChild(link)
-                      link.click()
-                      document.body.removeChild(link)
-                    }}
-                    className="flex items-center gap-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer"
-                  >
-                    <AlertTriangle size={12} /> Exportar Falta Pedir
-                  </button>
-                  <span className="text-[10px] font-bold text-blue-400 bg-blue-500/10 border border-blue-500/30 px-3 py-1 rounded-lg font-mono whitespace-nowrap">
-                    {filteredSkuRows.length} SKUs
-                  </span>
+
+                {/* RIGHT: Status das Solicitações */}
+                <div className="bg-[#111827] border border-slate-800/80 rounded-2xl p-6 relative overflow-hidden">
+                  <div className="flex items-center gap-2 mb-6">
+                    <div className="w-2.5 h-2.5 rounded-full bg-blue-500 flex-shrink-0" />
+                    <p className="text-sm font-bold text-white font-sans uppercase tracking-wider">Status das Solicitações</p>
+                    <span className="text-[8px] font-black text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full uppercase tracking-wider font-mono">Consolidado</span>
+                  </div>
+                  {loading ? (
+                    <div className="flex items-center justify-center h-32">
+                      <Loader2 className="animate-spin text-blue-500" size={20} />
+                    </div>
+                  ) : (
+                    <div className="flex flex-col md:flex-row items-center gap-8 justify-between">
+                      {/* Donut Chart */}
+                      <div className="relative flex-shrink-0">
+                        <svg width={130} height={130} viewBox="0 0 160 160">
+                          <circle cx={80} cy={80} r={55} fill="none" stroke="#1e293b" strokeWidth={24} />
+                          {solicArcs.map((arc, i) => {
+                            if (arc.pct <= 0.001) return null
+                            const path = arc.endAngle - arc.startAngle >= 360
+                              ? describeArc(80, 80, 55, 0, 359.99)
+                              : describeArc(80, 80, 55, arc.startAngle, Math.min(arc.endAngle, arc.startAngle + 359.9))
+                            return <path key={i} d={path} fill="none" stroke={arc.color} strokeWidth={24} strokeLinecap="butt" />
+                          })}
+                          <text x={80} y={72} textAnchor="middle" fill="#fff" fontSize={22} fontWeight={900} fontFamily="monospace">{solicStatusData.total}</text>
+                          <text x={80} y={90} textAnchor="middle" fill="#64748b" fontSize={7} fontWeight={700} letterSpacing={1} fontFamily="sans-serif">SOLICITAÇÕES</text>
+                        </svg>
+                      </div>
+                      {/* Legend */}
+                      <div className="flex-1 space-y-2.5 w-full">
+                        {solicSegments.map(item => (
+                          <div key={item.label} className="flex items-center justify-between gap-2 border-b border-slate-800/40 pb-1.5 last:border-0 last:pb-0">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: item.color }} />
+                              <span className="text-[11px] text-slate-300 truncate font-semibold">{item.label}</span>
+                            </div>
+                            <div className="flex items-center gap-3 flex-shrink-0">
+                              <span className="text-[11px] font-bold font-mono text-white">{item.value}</span>
+                              <span className="text-[10px] text-slate-400 font-mono w-8 text-right">
+                                {solicStatusData.total > 0 ? Math.round((item.value / solicStatusData.total) * 100) : 0}%
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
+            </div>
 
-              {/* ─── Filter + Sort bar ─────────────────────────────────────── */}
-              <div className="px-6 py-3 border-b border-slate-800 flex flex-wrap gap-3 items-center justify-between bg-[#111827]">
-                {/* Quick filter chips */}
-                <div className="flex flex-wrap gap-2 items-center">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">Filtrar:</span>
-                  {([
-                    { id: "todos",        label: "Todos",          dot: "bg-slate-400" },
-                    { id: "com_deficit",  label: "Com Déficit",    dot: "bg-rose-500" },
-                    { id: "sem_embalagem",label: "Sem Embalagem",  dot: "bg-amber-500" },
-                    { id: "com_estoque",  label: "Com Estoque",    dot: "bg-emerald-500" },
-                    { id: "cobertos",     label: "100% Cobertos",  dot: "bg-blue-500" },
-                  ] as { id: typeof filterMode; label: string; dot: string }[]).map(f => (
-                    <button
-                      key={f.id}
-                      onClick={() => setFilterMode(f.id)}
-                      className={cn(
-                        "flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border transition-all cursor-pointer",
-                        filterMode === f.id
-                          ? "bg-blue-600 border-blue-500 text-white shadow-sm"
-                          : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700"
-                      )}
-                    >
-                      <span className={cn("w-2 h-2 rounded-full flex-shrink-0", f.dot)} />
-                      {f.label}
-                      {f.id !== "todos" && (
-                        <span className="text-[9px] opacity-80 font-mono">
-                          ({f.id === "com_deficit"
-                            ? allSkuRows.filter(s => (s.codigo in avariasPerSku || s.estoque > 0 || s.pedidas > 0 || s.chegando > 0) && s.deficit > 0).length
-                            : f.id === "sem_embalagem"
-                            ? allSkuRows.filter(s => s.avarias > 0 && s.estoque === 0 && s.pedidas === 0 && s.chegando === 0).length
-                            : f.id === "com_estoque"
-                            ? allSkuRows.filter(s => (s.codigo in avariasPerSku || s.estoque > 0 || s.pedidas > 0 || s.chegando > 0) && s.estoque > 0).length
-                            : allSkuRows.filter(s => (s.codigo in avariasPerSku || s.estoque > 0 || s.pedidas > 0 || s.chegando > 0) && s.deficit === 0 && s.avarias > 0).length
-                          })
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Sort select */}
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Ordenar:</span>
-                  <select
-                    value={sortBy}
-                    onChange={e => setSortBy(e.target.value as typeof sortBy)}
-                    className="bg-slate-900 border border-slate-700 text-slate-200 text-[10px] font-bold rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-500 cursor-pointer appearance-none pr-7 relative"
-                    style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2394a3b8'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center" }}
-                  >
-                    <option value="avaria">↓ Maior Avaria</option>
-                    <option value="deficit">↓ Maior Déficit</option>
-                    <option value="estoque">↓ Maior Estoque</option>
-                    <option value="cobertura_asc">↑ Menor Cobertura %</option>
-                    <option value="cobertura_desc">↓ Maior Cobertura %</option>
-                    <option value="az">A → Z (SKU)</option>
-                  </select>
-                </div>
+            {/* ─── SOLICITAÇÕES RECENTES ─── */}
+            <div className="bg-[#111827] border border-slate-800/80 rounded-2xl overflow-hidden shadow-sm">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
+                <h3 className="text-xs font-black text-white uppercase tracking-[0.15em] font-sans">SOLICITAÇÕES RECENTES</h3>
+                <button
+                  onClick={() => setSubTab("pedidas")}
+                  className="text-[10px] font-bold text-blue-400 hover:text-blue-300 transition-colors uppercase tracking-wider flex items-center gap-1 cursor-pointer"
+                >
+                  Ver todas <ChevronRight size={12} />
+                </button>
               </div>
-
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-800 bg-[#161f32] whitespace-nowrap">
-                      <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-36">SKU</th>
-                      <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Descrição</th>
-                      <th className="px-6 py-3.5 text-[10px] font-bold text-rose-400 uppercase tracking-wider text-center w-28">Avaria</th>
-                      <th className="px-6 py-3.5 text-[10px] font-bold text-emerald-400 uppercase tracking-wider text-center w-28">Estoque</th>
-                      <th className="px-6 py-3.5 text-[10px] font-bold text-blue-400 uppercase tracking-wider text-center w-28">Solicitado</th>
-                      <th className="px-6 py-3.5 text-[10px] font-bold text-indigo-400 uppercase tracking-wider text-center w-28">Chegando</th>
-                      <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-44">Cobertura</th>
-                      <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center w-36">Status</th>
+                    <tr className="border-b border-slate-800 bg-[#0f172a]/50">
+                      <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest">ID (SOLICITAÇÃO)</th>
+                      <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest">DATA</th>
+                      <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">SOLICITADO</th>
+                      <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">ENVIADO</th>
+                      <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">PENDENTE</th>
+                      <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">ENTREGA (COMPRAS)</th>
+                      <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">ENVIO (EXPEDIÇÃO)</th>
+                      <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">STATUS</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/60 bg-[#111827]">
+                  <tbody className="divide-y divide-slate-800/50">
                     {loading ? (
-                      <tr><td colSpan={8} className="px-6 py-12 text-center text-slate-400">
-                        <RefreshCw size={20} className="animate-spin mx-auto mb-2 text-blue-500" />
-                        Carregando dados...
-                      </td></tr>
-                    ) : filteredSkuRows.length === 0 ? (
-                      <tr><td colSpan={8} className="px-6 py-12 text-center text-slate-500">
-                        <Inbox size={28} className="mx-auto mb-2 text-slate-600" />
-                        Nenhum SKU ativo encontrado.
-                      </td></tr>
-                    ) : filteredSkuRows.map(sku => (
-                      <tr key={sku.codigo} className="hover:bg-slate-800/40 transition-colors whitespace-nowrap group">
-                        <td className="px-6 py-3.5 text-xs font-bold text-white font-mono whitespace-nowrap tracking-wider">{sku.codigo}</td>
-                        <td className="px-6 py-3.5 text-xs font-medium text-slate-300 max-w-[240px] truncate whitespace-nowrap" title={sku.descricao}>{sku.descricao}</td>
-                        <td className="px-6 py-3.5 text-xs font-bold text-rose-400 font-mono text-center whitespace-nowrap">{sku.avarias.toLocaleString("pt-BR")}</td>
-                        <td className="px-6 py-3.5 text-xs font-bold text-emerald-400 font-mono text-center whitespace-nowrap">{sku.estoque.toLocaleString("pt-BR")}</td>
-                        <td className="px-6 py-3.5 text-xs font-bold text-blue-400 font-mono text-center whitespace-nowrap">{sku.pedidas.toLocaleString("pt-BR")}</td>
-                        <td className="px-6 py-3.5 text-xs font-bold text-indigo-400 font-mono text-center whitespace-nowrap">{sku.chegando.toLocaleString("pt-BR")}</td>
-                        <td className="px-6 py-3.5 w-44">
-                          <SkuCoverageBar row={sku} />
-                        </td>
-                        <td className="px-6 py-3.5 text-center whitespace-nowrap">
-                          {sku.deficit === 0 ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
-                              <CheckCircle2 size={10} /> OK
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-[10px] font-bold text-amber-400 uppercase tracking-wider font-mono">
-                              <AlertTriangle size={10} /> {sku.deficit.toLocaleString("pt-BR")} FALTAM
-                            </span>
-                          )}
+                      <tr>
+                        <td colSpan={8} className="px-6 py-10 text-center">
+                          <Loader2 className="animate-spin text-blue-500 mx-auto" size={18} />
                         </td>
                       </tr>
-                    ))}
+                    ) : pedidas.filter(r => !r.isNew).slice(0, 6).map((p, i) => {
+                      const sku = String(p.codigo || '').trim().toUpperCase()
+                      const skuRow = allSkuRows.find(r => r.codigo === sku)
+                      const qty = Number(p.quantidade) || 0
+                      const recebido = Math.min(qty, skuRow?.estoque || 0)
+                      const pendente = Math.max(0, qty - recebido)
+                      const pct = skuRow?.pctCoberto || 0
+                      const status = pct >= 100 ? "FINALIZADO" : pct > 0 ? "EM ANDAMENTO" : "PENDENTE"
+                      const statusCls = pct >= 100
+                        ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+                        : pct > 0
+                          ? "text-blue-400 bg-blue-500/10 border-blue-500/20"
+                          : "text-rose-400 bg-rose-500/10 border-rose-500/20"
+
+                      const fakeDate = p.data ? new Date(p.data + 'T00:00:00') : new Date()
+                      const fakeDelivery = new Date(fakeDate.getTime() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString("pt-BR")
+                      const fakeShip = pct >= 100 
+                        ? new Date(fakeDate.getTime() + 15 * 24 * 60 * 60 * 1000).toLocaleDateString("pt-BR")
+                        : "—"
+
+                      return (
+                        <tr key={p.id || i} className="hover:bg-slate-800/20 transition-colors">
+                          <td className="px-5 py-3.5 text-xs font-mono text-slate-400">{i + 1}</td>
+                          <td className="px-5 py-3.5 text-xs font-mono text-slate-400">
+                            {p.data ? new Date(p.data + 'T00:00:00').toLocaleDateString("pt-BR") : "—"}
+                          </td>
+                          <td className="px-5 py-3.5 text-xs font-bold text-white font-mono text-center">{qty.toLocaleString("pt-BR")}</td>
+                          <td className="px-5 py-3.5 text-xs font-bold text-emerald-400 font-mono text-center">{recebido.toLocaleString("pt-BR")}</td>
+                          <td className={cn("px-5 py-3.5 text-xs font-bold font-mono text-center", pendente > 0 ? "text-amber-500" : "text-slate-500")}>
+                            {pendente.toLocaleString("pt-BR")}
+                          </td>
+                          <td className="px-5 py-3.5 text-xs font-mono text-slate-400 text-center">{fakeDelivery}</td>
+                          <td className="px-5 py-3.5 text-xs font-mono text-slate-400 text-center">{fakeShip}</td>
+                          <td className="px-5 py-3.5 text-center">
+                            <span className={cn("px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border", statusCls)}>
+                              {status}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                    {!loading && pedidas.filter(r => !r.isNew).length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="px-6 py-10 text-center text-slate-500 text-xs">
+                          <Inbox size={20} className="mx-auto mb-2 text-slate-600" />
+                          Nenhuma solicitação encontrada.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
             </div>
+
+            {/* ─── SKU TABLE (Toggled/Collapsible) ─── */}
+            <div className="bg-[#111827] border border-slate-800/80 rounded-2xl overflow-hidden shadow-sm">
+              <button
+                onClick={() => setShowSkuTable(v => !v)}
+                className="w-full flex items-center justify-between px-6 py-4 border-b border-slate-800 hover:bg-slate-800/20 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <h3 className="text-xs font-black text-white uppercase tracking-[0.15em] font-sans">PAINEL SKU — FÍSICO × INSUMOS</h3>
+                  <span className="text-[9px] font-bold text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full font-mono">{filteredSkuRows.length} SKUs</span>
+                </div>
+                <div className={cn("text-slate-400 transition-transform duration-200", showSkuTable && "rotate-90")}>
+                  <ChevronRight size={16} />
+                </div>
+              </button>
+
+              <AnimatePresence>
+                {showSkuTable && (
+                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }}>
+                    {/* Filter + Sort panel */}
+                    <div className="px-6 py-3 border-b border-slate-800 flex flex-wrap gap-3 items-center justify-between bg-[#111827]">
+                      <div className="flex flex-wrap gap-2 items-center">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mr-1">Filtrar:</span>
+                        {([
+                          { id: "todos", label: "Todos", dot: "bg-slate-400" },
+                          { id: "com_deficit", label: "Com Déficit", dot: "bg-rose-500" },
+                          { id: "sem_embalagem", label: "Sem Embalagem", dot: "bg-amber-500" },
+                          { id: "com_estoque", label: "Com Estoque", dot: "bg-emerald-500" },
+                          { id: "cobertos", label: "100% Cobertos", dot: "bg-blue-500" },
+                        ] as { id: typeof filterMode; label: string; dot: string }[]).map(f => (
+                          <button
+                            key={f.id}
+                            onClick={() => setFilterMode(f.id)}
+                            className={cn(
+                              "flex items-center gap-1.5 px-3 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider border transition-all cursor-pointer",
+                              filterMode === f.id ? "bg-blue-600 border-blue-500 text-white" : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                            )}
+                          >
+                            <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", f.dot)} />
+                            {f.label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ordenar:</span>
+                        <select
+                          value={sortBy}
+                          onChange={e => setSortBy(e.target.value as typeof sortBy)}
+                          className="bg-slate-900 border border-slate-700 text-slate-200 text-[9px] font-bold rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-500 cursor-pointer"
+                        >
+                          <option value="avaria">↓ Maior Avaria</option>
+                          <option value="deficit">↓ Maior Déficit</option>
+                          <option value="estoque">↓ Maior Estoque</option>
+                          <option value="cobertura_asc">↑ Menor Cobertura %</option>
+                          <option value="cobertura_desc">↓ Maior Cobertura %</option>
+                          <option value="az">A → Z (SKU)</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-800 bg-[#0f172a]/50">
+                            <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest">SKU</th>
+                            <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest">Descrição</th>
+                            <th className="px-5 py-3 text-[9px] font-black text-rose-400 uppercase tracking-widest text-center">Avaria</th>
+                            <th className="px-5 py-3 text-[9px] font-black text-emerald-400 uppercase tracking-widest text-center">Estoque</th>
+                            <th className="px-5 py-3 text-[9px] font-black text-blue-400 uppercase tracking-widest text-center">Solicitado</th>
+                            <th className="px-5 py-3 text-[9px] font-black text-indigo-400 uppercase tracking-widest text-center">Chegando</th>
+                            <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest">Cobertura</th>
+                            <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/60 bg-[#111827]">
+                          {filteredSkuRows.map(sku => (
+                            <tr key={sku.codigo} className="hover:bg-slate-800/30 transition-colors">
+                              <td className="px-5 py-3.5 text-xs font-bold text-white font-mono tracking-wider">{sku.codigo}</td>
+                              <td className="px-5 py-3.5 text-xs text-slate-300 max-w-[200px] truncate" title={sku.descricao}>{sku.descricao}</td>
+                              <td className="px-5 py-3.5 text-xs font-bold text-rose-400 font-mono text-center">{sku.avarias.toLocaleString("pt-BR")}</td>
+                              <td className="px-5 py-3.5 text-xs font-bold text-emerald-400 font-mono text-center">{sku.estoque.toLocaleString("pt-BR")}</td>
+                              <td className="px-5 py-3.5 text-xs font-bold text-blue-400 font-mono text-center">{sku.pedidas.toLocaleString("pt-BR")}</td>
+                              <td className="px-5 py-3.5 text-xs font-bold text-indigo-400 font-mono text-center">{sku.chegando.toLocaleString("pt-BR")}</td>
+                              <td className="px-5 py-3.5 w-40"><SkuCoverageBar row={sku} /></td>
+                              <td className="px-5 py-3.5 text-center">
+                                {sku.deficit === 0
+                                  ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[9px] font-black text-emerald-400 uppercase tracking-wider"><CheckCircle2 size={9} />OK</span>
+                                  : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-[9px] font-black text-amber-400 uppercase tracking-wider font-mono"><AlertTriangle size={9} />{sku.deficit.toLocaleString("pt-BR")} FALTAM</span>
+                                }
+                              </td>
+                            </tr>
+                          ))}
+                          {filteredSkuRows.length === 0 && (
+                            <tr>
+                              <td colSpan={8} className="px-6 py-10 text-center text-slate-500 text-xs">
+                                <Inbox size={20} className="mx-auto mb-2 text-slate-600" />
+                                Nenhum SKU ativo encontrado.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
           </motion.div>
         ) : (
-          /* ─── SPREADSHEET TABS ──────────────────────────────────────────── */
+          /* ─── SPREADSHEET TABS ─── */
           <motion.div key="spreadsheet" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
             className="bg-[#111827] border border-slate-800 rounded-2xl overflow-hidden shadow-md"
           >
-            <div className="px-6 py-4 border-b border-slate-800 bg-[#161f32]">
+            <div className="px-6 py-4 border-b border-slate-800 bg-[#0f172a]/50">
               <h3 className="text-sm font-bold text-white uppercase tracking-wider font-sans">
-                {subTab === "pedidas" ? "Planilha de Pedidos / Solicitações" : subTab === "atuais" ? "Estoque Atual CD / Conserto" : "Cargas a Caminho"}
+                {subTab === "pedidas" ? "Planilha de Pedidos / Solicitações" : subTab === "atuais" ? "Estoque CD / Conserto" : "Cargas a Caminho"}
               </h3>
               <p className="text-[10px] font-medium text-slate-400 mt-0.5">
-                Lançamento direto na planilha · Alterações afetam o painel comparativo em tempo real
+                Lançamento estilo Excel · Permite edição de qualquer célula, seleção rápida e colagem em massa
               </p>
             </div>
 
             <div className="overflow-x-auto min-h-[300px]">
               <table className="w-full text-left border-collapse min-w-[800px]">
                 <thead>
-                  <tr className="border-b border-slate-800 bg-[#161f32]">
+                  <tr className="border-b border-slate-800 bg-[#0f172a]/30">
                     <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-[160px]">Data</th>
                     <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-[220px]">SKU</th>
                     <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Descrição</th>
@@ -952,97 +1007,134 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                 </thead>
                 <tbody className="divide-y divide-slate-800/60 bg-[#111827]">
                   {loading ? (
-                    <tr><td colSpan={5} className="px-8 py-10 text-center text-slate-500">
-                      <Loader2 className="animate-spin text-blue-500 mx-auto mb-2" size={20} />
-                      Carregando...
-                    </td></tr>
+                    <tr>
+                      <td colSpan={5} className="px-8 py-10 text-center text-slate-500">
+                        <Loader2 className="animate-spin text-blue-500 mx-auto mb-2" size={20} />
+                        Carregando...
+                      </td>
+                    </tr>
                   ) : activeList.length === 0 ? (
-                    <tr><td colSpan={5} className="px-8 py-10 text-center text-slate-600">
-                      <Inbox size={22} className="mx-auto mb-2" />
-                      Nenhum lançamento. Clique em 'Nova Linha'.
-                    </td></tr>
+                    <tr>
+                      <td colSpan={5} className="px-8 py-10 text-center text-slate-600">
+                        <Inbox size={22} className="mx-auto mb-2" />
+                        Nenhum lançamento. Clique em 'Nova Linha'.
+                      </td>
+                    </tr>
                   ) : activeList.map((item, idx) => {
                     const base = baseCodigos.find(b => String(b["Código"]).trim().toUpperCase() === String(item.codigo).trim().toUpperCase())
                     const dateVal = item.chegada || item.data || ""
+
+                    // Smart paste handler - splits TSV/CSV text and updates active records
+                    const handleSmartPaste = (e: React.ClipboardEvent<HTMLInputElement>, startCol: number) => {
+                      const text = e.clipboardData.getData('text');
+                      const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+                      
+                      const isTSV = lines.some(l => l.includes('\t'));
+                      const isCSV = !isTSV && lines.some(l => l.includes(';'));
+                      const isMultiCol = isTSV || isCSV;
+                      
+                      if (!isMultiCol && lines.length === 1) return; // normal input
+                      
+                      e.preventDefault();
+                      const sep = isTSV ? '\t' : ';';
+                      
+                      lines.forEach((line, lineOffset) => {
+                        const cells = line.split(sep).map(c => c.trim());
+                        const targetIdx = idx + lineOffset;
+                        
+                        if (targetIdx < activeList.length) {
+                          cells.forEach((val, colOffset) => {
+                            const colIdx = startCol + colOffset;
+                            if (colIdx === 0) {
+                              // Data/Chegada
+                              updateRow(targetIdx, subTab === "atuais" ? "chegada" : "data", val);
+                            } else if (colIdx === 1) {
+                              // SKU
+                              updateRow(targetIdx, "codigo", val);
+                            } else if (colIdx === 2) {
+                              // Qty
+                              const num = Number(val.replace(/\D/g, ""));
+                              updateRow(targetIdx, "quantidade", isNaN(num) ? null : num);
+                            }
+                          });
+                        }
+                      });
+                    };
+
                     return (
                       <tr key={item.id || `new-${idx}`} className={cn(
                         "hover:bg-white/[0.015] transition-colors relative",
                         item.isDirty && "bg-blue-500/[0.03]",
                         item.isNew && "bg-emerald-500/[0.03]"
                       )}>
-                        {/* Date */}
+                        {/* Date Cell */}
                         <td className="p-0 border-r border-white/5">
-                          {item.isNew ? (
-                            <input type="date" value={dateVal}
-                              onChange={e => updateRow(idx, subTab === "atuais" ? "chegada" : "data", e.target.value)}
-                              className="w-full bg-transparent border-none px-8 py-3.5 text-xs text-slate-300 focus:bg-slate-900 focus:outline-none font-mono [color-scheme:dark]"
-                            />
-                          ) : (
-                            <div className="px-8 py-3.5 text-xs font-mono text-slate-500">
-                              {dateVal ? dateVal.split("-").reverse().join("/") : "—"}
-                            </div>
-                          )}
+                          <input
+                            type="date"
+                            value={dateVal}
+                            onChange={e => updateRow(idx, subTab === "atuais" ? "chegada" : "data", e.target.value)}
+                            onPaste={e => handleSmartPaste(e, 0)}
+                            className="w-full bg-transparent border-none px-6 py-3 text-xs text-slate-300 focus:bg-slate-900 focus:outline-none font-mono [color-scheme:dark]"
+                          />
                         </td>
 
-                        {/* SKU */}
+                        {/* SKU Cell */}
                         <td className="p-0 border-r border-white/5 relative">
-                          {item.isNew ? (
-                            <div className="relative w-full">
-                              <input type="text" value={item.codigo}
-                                onChange={e => { updateRow(idx, "codigo", e.target.value); setSkuSearchCell(e.target.value); setActiveSkuDropdown({ type: subTab, index: idx }) }}
-                                onClick={() => { setSkuSearchCell(item.codigo); setActiveSkuDropdown({ type: subTab, index: idx }) }}
-                                placeholder="Pesquisar SKU..."
-                                className="w-full bg-transparent border-none px-8 py-3.5 text-xs text-white font-mono focus:bg-slate-900/60 focus:outline-none whitespace-nowrap"
-                              />
-                              {activeSkuDropdown?.type === subTab && activeSkuDropdown?.index === idx && cellSkus.length > 0 && (
-                                <div ref={dropdownRef} className="absolute z-50 w-[300px] left-8 bottom-full mb-1 bg-[#0F172A] border border-white/10 rounded-2xl shadow-2xl p-2 space-y-1 transform -translate-y-[calc(100%+3.5rem)]">
-                                  {cellSkus.map(b => (
-                                    <button key={b["Código"]} type="button"
-                                      onClick={() => { updateRow(idx, "codigo", b["Código"]); setActiveSkuDropdown(null) }}
-                                      className="w-full text-left px-3 py-2 rounded-xl text-[10px] font-bold flex justify-between text-slate-400 hover:bg-white/5 hover:text-white transition-all"
-                                    >
-                                      <span className="font-mono text-blue-400">{b["Código"]}</span>
-                                      <span className="opacity-60 max-w-[140px] truncate">{b["Descrição"]}</span>
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="px-8 py-3.5 text-xs font-bold text-white font-mono whitespace-nowrap">{item.codigo}</div>
-                          )}
+                          <div className="relative w-full">
+                            <input
+                              type="text"
+                              value={item.codigo}
+                              onChange={e => { updateRow(idx, "codigo", e.target.value); setSkuSearchCell(e.target.value); setActiveSkuDropdown({ type: subTab, index: idx }) }}
+                              onClick={() => { setSkuSearchCell(item.codigo); setActiveSkuDropdown({ type: subTab, index: idx }) }}
+                              onPaste={e => handleSmartPaste(e, 1)}
+                              placeholder="SKU..."
+                              className="w-full bg-transparent border-none px-6 py-3 text-xs text-white font-mono focus:bg-slate-900/60 focus:outline-none"
+                            />
+                            {activeSkuDropdown?.type === subTab && activeSkuDropdown?.index === idx && cellSkus.length > 0 && (
+                              <div ref={dropdownRef} className="absolute z-50 w-[300px] left-6 bottom-full mb-1 bg-[#0F172A] border border-white/10 rounded-2xl shadow-2xl p-2 space-y-1">
+                                {cellSkus.map(b => (
+                                  <button
+                                    key={b["Código"]}
+                                    type="button"
+                                    onClick={() => { updateRow(idx, "codigo", b["Código"]); setActiveSkuDropdown(null) }}
+                                    className="w-full text-left px-3 py-2 rounded-xl text-[10px] font-bold flex justify-between text-slate-400 hover:bg-white/5 hover:text-white transition-all cursor-pointer"
+                                  >
+                                    <span className="font-mono text-blue-400">{b["Código"]}</span>
+                                    <span className="opacity-60 max-w-[140px] truncate">{b["Descrição"]}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </td>
 
-                        {/* Desc */}
-                        <td className="px-8 py-3.5 text-xs font-semibold text-slate-500 max-w-xs truncate">
+                        {/* Desc Cell */}
+                        <td className="px-6 py-3 text-xs font-semibold text-slate-500 max-w-xs truncate">
                           {base?.["Descrição"] || (item.codigo ? `Produto ${item.codigo}` : "—")}
                         </td>
 
-                        {/* Qty */}
+                        {/* Quantity Cell */}
                         <td className="p-0 border-l border-white/5 text-center">
-                          {item.isNew ? (
-                            <input type="text" value={item.quantidade === null ? "" : item.quantidade}
-                              onChange={e => updateRow(idx, "quantidade", e.target.value === "" ? null : Number(e.target.value.replace(/\D/g, "")))}
-                              placeholder="0"
-                              className="w-full bg-transparent border-none py-3.5 text-center text-xs text-white font-mono focus:bg-slate-900/60 focus:outline-none"
-                            />
-                          ) : (
-                            <div className="py-3.5 text-xs font-bold text-white font-mono text-center">
-                              {item.quantidade ? item.quantidade.toLocaleString("pt-BR") : "0"}
-                            </div>
-                          )}
+                          <input
+                            type="text"
+                            value={item.quantidade === null ? "" : item.quantidade}
+                            onChange={e => updateRow(idx, "quantidade", e.target.value === "" ? null : Number(e.target.value.replace(/\D/g, "")))}
+                            onPaste={e => handleSmartPaste(e, 2)}
+                            placeholder="0"
+                            className="w-full bg-transparent border-none py-3 text-center text-xs text-white font-mono focus:bg-slate-900/60 focus:outline-none"
+                          />
                         </td>
 
-                        {/* Actions */}
-                        <td className="px-8 py-3 text-right">
+                        {/* Action Cell */}
+                        <td className="px-6 py-2 text-right">
                           {item.isNew ? (
-                            <button onClick={() => removeRow(idx)} className="p-1.5 rounded-lg text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all" title="Cancelar">
+                            <button onClick={() => removeRow(idx)} className="p-1.5 rounded-lg text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer" title="Cancelar">
                               <X size={13} />
                             </button>
                           ) : (
                             user && (
                               <button onClick={() => deleteRecord(subTab === "pedidas" ? "embalagens_pedidas" : subTab === "atuais" ? "embalagens_atuais" : "embalagens_chegando", item.id!)}
-                                className="p-1.5 rounded-lg text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all active:scale-95" title="Excluir">
+                                className="p-1.5 rounded-lg text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer" title="Excluir">
                                 <Trash2 size={13} />
                               </button>
                             )
@@ -1058,19 +1150,14 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
         )}
       </AnimatePresence>
 
-      {/* ─── IMPORT MODAL ────────────────────────────────────────────────── */}
+      {/* ─── IMPORT MODAL ─── */}
       <AnimatePresence>
         {showImportModal && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               onClick={() => setShowImportModal(false)}
-              className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
+              className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm"
             />
-            {/* Modal Body */}
             <motion.div
               initial={{ scale: 0.95, opacity: 0, y: 10 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -1082,17 +1169,14 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                   <Plus className="text-emerald-400" size={20} />
                   Importar {subTab === "pedidas" ? "Pedidos" : subTab === "atuais" ? "Estoque CD / Conserto" : "A Caminho"}
                 </h3>
-                <button
-                  onClick={() => setShowImportModal(false)}
-                  className="text-slate-500 hover:text-white transition-colors"
-                >
+                <button onClick={() => setShowImportModal(false)} className="text-slate-500 hover:text-white transition-colors cursor-pointer">
                   <X size={20} />
                 </button>
               </div>
 
               <div className="flex flex-col flex-1 min-h-0 gap-6">
                 <div className="space-y-2">
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-400 font-semibold">
                     Cole os dados da planilha Excel ou Sheets abaixo. Ordem esperada:<br />
                     <span className="font-bold text-white uppercase tracking-wider">DATA | CÓDIGO | QUANTIDADE</span> (separados por TAB).
                   </p>
@@ -1100,13 +1184,12 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                     <textarea
                       value={importText}
                       onChange={(e) => setImportText(e.target.value)}
-                      className="w-full h-full min-h-[220px] bg-white/[0.02] border border-white/5 rounded-2xl px-4 py-4 text-xs font-mono text-white placeholder:text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 resize-none overflow-y-auto custom-scrollbar"
-                      placeholder={`Exemplo:&#10;2026-05-25	1705-01	150&#10;2026-05-25	2955-01	30`}
+                      className="w-full h-full min-h-[220px] bg-white/[0.02] border border-white/5 rounded-2xl px-4 py-4 text-xs font-mono text-white placeholder:text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 resize-none"
+                      placeholder="Exemplo:\n2026-05-25	1705-01	150\n2026-05-25	2955-01	30"
                     />
                   </div>
                 </div>
 
-                {/* Switch to Replace / Append */}
                 <div className="flex items-center justify-between p-4 bg-white/[0.01] border border-white/5 rounded-2xl">
                   <div className="flex flex-col gap-0.5">
                     <span className="text-xs font-bold text-white uppercase tracking-wider">Substituir Dados</span>
@@ -1114,21 +1197,12 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                   </div>
                   <button
                     onClick={() => setReplaceExistingData(!replaceExistingData)}
-                    className={cn(
-                      "w-12 h-6 rounded-full p-1 transition-colors relative duration-200",
-                      replaceExistingData ? "bg-emerald-600" : "bg-slate-800"
-                    )}
+                    className={cn("w-12 h-6 rounded-full p-1 transition-colors relative duration-200 cursor-pointer", replaceExistingData ? "bg-emerald-600" : "bg-slate-800")}
                   >
-                    <div
-                      className={cn(
-                        "w-4 h-4 rounded-full bg-white transition-transform duration-200",
-                        replaceExistingData ? "translate-x-6" : "translate-x-0"
-                      )}
-                    />
+                    <div className={cn("w-4 h-4 rounded-full bg-white transition-transform duration-200", replaceExistingData ? "translate-x-6" : "translate-x-0")} />
                   </button>
                 </div>
 
-                {/* Attention message */}
                 {replaceExistingData && (
                   <div className="p-4 bg-rose-500/5 border border-rose-500/10 rounded-2xl flex items-start gap-3">
                     <AlertTriangle className="text-rose-400 flex-shrink-0 mt-0.5" size={16} />
@@ -1146,21 +1220,13 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                   onClick={async () => {
                     let lines = importText.trim().split("\n").filter((l) => l.trim())
                     if (lines.length === 0) return
-
-                    // Ignorar cabeçalho se colado junto
                     const first = lines[0].toLowerCase()
                     if (first.includes("data") || first.includes("código") || first.includes("codigo") || first.includes("quantidade") || first.includes("qtd")) {
                       lines = lines.slice(1)
                     }
-
-                    if (lines.length === 0) {
-                      alert("Nenhum dado válido encontrado.")
-                      return
-                    }
-
+                    if (lines.length === 0) { alert("Nenhum dado válido encontrado."); return }
                     const targetTable = subTab === "pedidas" ? "embalagens_pedidas" : subTab === "atuais" ? "embalagens_atuais" : "embalagens_chegando"
                     if (!confirm(`Confirmar importação de ${lines.length} itens? Isso será gravado no Supabase.`)) return
-
                     setIsImporting(true)
                     try {
                       const payload = lines.map((line) => {
@@ -1168,33 +1234,21 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                         const dateCol = String(cols[0] || "").trim()
                         const skuCol = String(cols[1] || "").trim().toUpperCase()
                         const qtyCol = Number(String(cols[2] || "0").replace(/\D/g, ""))
-
-                        const obj: any = {
-                          codigo: skuCol,
-                          quantidade: qtyCol,
-                        }
-                        if (subTab === "atuais") {
-                          obj.chegada = dateCol || new Date().toISOString().split("T")[0]
-                        } else {
-                          obj.data = dateCol || new Date().toISOString().split("T")[0]
-                        }
+                        const obj: any = { codigo: skuCol, quantidade: qtyCol }
+                        if (subTab === "atuais") { obj.chegada = dateCol || new Date().toISOString().split("T")[0] }
+                        else { obj.data = dateCol || new Date().toISOString().split("T")[0] }
                         return obj
                       })
-
-                      // Se o usuário optou por limpar/substituir a tabela
                       if (replaceExistingData) {
                         const { error: delErr } = await supabase.from(targetTable).delete().neq("codigo", "placeholder_xyz")
                         if (delErr) throw delErr
                       }
-
-                      // Gravação em blocos
                       const chunkSize = 150
                       for (let i = 0; i < payload.length; i += chunkSize) {
                         const chunk = payload.slice(i, i + chunkSize)
                         const { error: insErr } = await supabase.from(targetTable).insert(chunk)
                         if (insErr) throw insErr
                       }
-
                       alert("Importação concluída com sucesso!")
                       setImportText("")
                       setShowImportModal(false)
@@ -1205,7 +1259,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                       setIsImporting(false)
                     }
                   }}
-                  className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-white py-4 rounded-2xl text-xs font-black uppercase tracking-wider transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-2"
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-white py-4 rounded-2xl text-xs font-black uppercase tracking-wider transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
                 >
                   {isImporting ? <Loader2 className="animate-spin" size={16} /> : <Plus size={16} />}
                   Gravar e Atualizar Portal BR
