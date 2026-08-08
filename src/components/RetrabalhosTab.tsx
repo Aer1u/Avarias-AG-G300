@@ -264,6 +264,24 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
   const [modalSituacaoFilter, setModalSituacaoFilter] = useState("all")
   const [selectedReservas, setSelectedReservas] = useState<Set<number>>(new Set())
 
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [expandedViagens, setExpandedViagens] = useState<string | null>(null)
+
+  const [isViagemModalOpen, setIsViagemModalOpen] = useState(false)
+  const [editingViagemGroup, setEditingViagemGroup] = useState<{ number: string, items: RetrabalhoRecord[] } | null>(null)
+  const [excelRows, setExcelRows] = useState<{ a501: string, g501: string, qtd: string }[]>(
+    Array.from({ length: 20 }, () => ({ a501: '', g501: '', qtd: '' }))
+  )
+
+  // Scanner States
+  const [scanBuffer, setScanBuffer] = useState("")
+  const [lastScanTime, setLastScanTime] = useState(0)
+  const [scanToast, setScanToast] = useState<{ show: boolean, message: string, type: 'success' | 'error' }>({
+    show: false,
+    message: "",
+    type: 'success'
+  })
+
   const handleDeleteReserva = async (id: number, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (!confirm("Tem certeza que deseja excluir esta reserva?")) return;
@@ -410,23 +428,7 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
     });
   }, []);
 
-  const [selectionMode, setSelectionMode] = useState(false)
-  const [expandedViagens, setExpandedViagens] = useState<string | null>(null)
 
-  const [isViagemModalOpen, setIsViagemModalOpen] = useState(false)
-  const [editingViagemGroup, setEditingViagemGroup] = useState<{ number: string, items: RetrabalhoRecord[] } | null>(null)
-  const [excelRows, setExcelRows] = useState<{ a501: string, g501: string, qtd: string }[]>(
-    Array.from({ length: 20 }, () => ({ a501: '', g501: '', qtd: '' }))
-  )
-
-  // Scanner States
-  const [scanBuffer, setScanBuffer] = useState("")
-  const [lastScanTime, setLastScanTime] = useState(0)
-  const [scanToast, setScanToast] = useState<{ show: boolean, message: string, type: 'success' | 'error' }>({
-    show: false,
-    message: "",
-    type: 'success'
-  })
 
 
 
