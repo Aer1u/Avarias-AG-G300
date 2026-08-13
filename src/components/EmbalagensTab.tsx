@@ -1547,42 +1547,42 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                       {/* Expanded detail rows */}
                       {isExpanded && (
                         <div className="bg-slate-950/40 border-t border-slate-800/50 overflow-x-auto">
-                          <div className="min-w-[1800px]">
+                          <div className="min-w-[1600px]">
                             {/* Detail header */}
-                            <div className="grid grid-cols-[1fr_1fr_0.6fr_1.2fr_1.4fr_0.7fr_1fr_0.6fr_0.6fr_0.9fr_0.9fr_0.9fr_0.7fr_0.9fr] px-6 py-2.5 text-[9px] font-mono font-medium text-slate-500 uppercase tracking-wider border-b border-slate-800/60">
+                            <div className="grid grid-cols-[90px_120px_60px_130px_160px_80px_110px_70px_70px_100px_100px_100px_70px_100px] px-6 py-2.5 text-[9px] font-mono font-medium text-slate-500 uppercase tracking-wider border-b border-slate-800/60">
                               <span>Cód. Produto</span>
                               <span>Modelo</span>
-                              <span className="text-center">Qtd Solic.</span>
+                              <span className="text-center">Qtd</span>
                               <span>Cód. Embalagem</span>
-                              <span>Descrição Embalagem</span>
+                              <span>Descrição Emb.</span>
                               <span>Tipo</span>
-                              <span>Tipo Embalagem</span>
+                              <span>Tipo Emb.</span>
                               <span className="text-center text-emerald-400">Enviado</span>
                               <span className="text-center text-amber-400">Pendente</span>
                               <span className="text-center">Entrega (Compras)</span>
-                              <span className="text-center">Envio (Expedição)</span>
+                              <span className="text-center">Envio (Expediç.)</span>
                               <span className="text-center">Status</span>
                               <span className="text-center">NF</span>
-                              <span className="text-center">Previsão Entrega</span>
+                              <span className="text-center">Previsão</span>
                             </div>
                             {rowDetails.map((row, ri) => (
                               <div key={ri} className={cn(
-                                "grid grid-cols-[1fr_1fr_0.6fr_1.2fr_1.4fr_0.7fr_1fr_0.6fr_0.6fr_0.9fr_0.9fr_0.9fr_0.7fr_0.9fr] px-6 py-2.5 items-center text-[10px] border-b border-slate-800/30 last:border-0 transition-colors hover:bg-slate-800/10",
+                                "grid grid-cols-[90px_120px_60px_130px_160px_80px_110px_70px_70px_100px_100px_100px_70px_100px] px-6 py-2.5 items-center text-[10px] border-b border-slate-800/30 last:border-0 transition-colors hover:bg-slate-800/10",
                                 ri % 2 === 1 ? "bg-slate-800/10" : ""
                               )}>
                                 {/* CÓD. PRODUTO – hover shows MODELO DO PRODUTO */}
                                 <span
-                                  className="font-mono font-normal text-white cursor-help"
+                                  className="font-mono font-normal text-white cursor-help truncate min-w-0"
                                   title={row.p.modelo_produto || row.p.modelo || ''}
                                 >
                                   {row.sku}
                                 </span>
-                                <span className="font-mono font-normal text-slate-400 truncate">{row.p.modelo || '—'}</span>
+                                <span className="font-mono font-normal text-slate-400 truncate min-w-0" title={row.p.modelo || ''}>{row.p.modelo || '—'}</span>
                                 <span className="font-mono font-normal text-white text-center">{row.qty.toLocaleString('pt-BR')}</span>
-                                <span className="font-mono font-normal text-slate-500 text-[10px]">{row.p.codigo_embalagem || '—'}</span>
-                                <span className="font-mono font-normal text-slate-400 truncate" title={row.p.descricao_embalagem || ''}>{row.p.descricao_embalagem || '—'}</span>
-                                <span className="font-mono font-normal text-slate-400 uppercase">{row.p.tipo || 'EMBALAGEM'}</span>
-                                <span className="font-mono font-normal text-slate-400 uppercase">{row.p.tipo_embalagem || '—'}</span>
+                                <span className="font-mono font-normal text-slate-500 text-[10px] truncate min-w-0" title={row.p.codigo_embalagem || ''}>{row.p.codigo_embalagem || '—'}</span>
+                                <span className="font-mono font-normal text-slate-400 truncate min-w-0 overflow-hidden" title={row.p.descricao_embalagem || ''}>{row.p.descricao_embalagem || '—'}</span>
+                                <span className="font-mono font-normal text-slate-400 uppercase truncate min-w-0">{row.p.tipo || 'EMB.'}</span>
+                                <span className="font-mono font-normal text-slate-400 uppercase truncate min-w-0">{row.p.tipo_embalagem || '—'}</span>
                                 <span className="font-mono font-normal text-emerald-400 text-center">{row.enviado.toLocaleString('pt-BR')}</span>
                                 <span className={cn("font-mono font-normal text-center", row.pendente > 0 ? 'text-amber-400' : 'text-slate-600')}>{row.pendente.toLocaleString('pt-BR')}</span>
                                 <span className="font-mono font-normal text-slate-400 text-center text-[9px]">{row.p.entrega_compras || 'TBC'}</span>
