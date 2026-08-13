@@ -180,12 +180,12 @@ function AvariasGrowthChart({ pedidas, allSkuRows }: GrowthChartProps) {
           </div>
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
-              <h3 className="text-xs font-black text-white uppercase tracking-wider font-sans">
+              <h3 className="text-xs font-semibold text-white uppercase tracking-wider font-sans">
                 Aumento Consolidado & Composição por Produto
               </h3>
               <div className="px-2 py-0.5 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center gap-1">
                 <ArrowUpRight size={12} className="text-rose-400" />
-                <span className="text-[9px] font-mono font-bold text-rose-400">+{totalVariation.toLocaleString('pt-BR')} un (variação)</span>
+                <span className="text-[9px] font-mono font-normal text-rose-400">+{totalVariation.toLocaleString('pt-BR')} un (variação)</span>
               </div>
             </div>
             <p className="text-[9px] text-slate-500 mt-0.5 font-mono">
@@ -318,7 +318,7 @@ function AvariasGrowthChart({ pedidas, allSkuRows }: GrowthChartProps) {
       {activePoint && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="sm:col-span-1 bg-slate-900/60 border border-slate-800/60 rounded-xl p-4 flex flex-col gap-2">
-            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 font-mono mb-1">{activePoint.label}</p>
+            <p className="text-[9px] font-medium uppercase tracking-widest text-slate-400 font-mono mb-1">{activePoint.label}</p>
             <div className="flex flex-col gap-1.5">
               {[
                 { label: 'Total Avarias', val: activePoint.totalAvarias.toLocaleString('pt-BR'), cls: 'text-rose-400' },
@@ -856,7 +856,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
             <Package className="text-blue-400" size={22} />
           </div>
           <div>
-            <h2 className="text-xl font-black text-white uppercase tracking-widest leading-none">GESTÃO DE EMBALAGENS</h2>
+            <h2 className="text-xl font-semibold text-white uppercase tracking-widest leading-none">GESTÃO DE EMBALAGENS</h2>
             <p className="text-[10px] text-slate-400 font-bold tracking-wider mt-1 uppercase">Avarias Físicas vs Planejamento de Insumos</p>
           </div>
         </div>
@@ -914,7 +914,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
             key={tab.id}
             onClick={() => { setSubTab(tab.id as any); setSearch(""); setActiveSkuDropdown(null) }}
             className={cn(
-              "flex items-center gap-2 px-5 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all border cursor-pointer",
+              "flex items-center gap-2 px-5 py-2.5 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition-all border cursor-pointer",
               subTab === tab.id
                 ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-600/20"
                 : "bg-slate-900/60 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800"
@@ -929,18 +929,18 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
           <div className="ml-auto flex gap-2">
             <button
               onClick={() => setShowImportModal(true)}
-              className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 px-4 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all cursor-pointer"
+              className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 px-4 py-2.5 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition-all cursor-pointer"
             >
               <Plus size={13} /> Importar
             </button>
-            <button onClick={addRow} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all cursor-pointer">
+            <button onClick={addRow} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition-all cursor-pointer">
               <Plus size={13} /> Nova Linha
             </button>
             <button
               onClick={saveRows}
               disabled={saving || !hasUnsaved}
               className={cn(
-                "flex items-center gap-2 px-4 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all",
+                "flex items-center gap-2 px-4 py-2.5 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition-all",
                 hasUnsaved ? "bg-blue-600 hover:bg-blue-500 text-white cursor-pointer" : "bg-slate-900 text-slate-600 border border-slate-800 cursor-not-allowed"
               )}
             >
@@ -964,10 +964,10 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                   <AlertTriangle className="text-rose-400" size={18} />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">DEMANDA DE EMBALAGENS</p>
+                  <p className="text-[9px] font-medium text-slate-400 uppercase tracking-widest mb-1">DEMANDA DE EMBALAGENS</p>
                   {loading
                     ? <div className="h-8 w-24 bg-slate-800 rounded animate-pulse mt-1" />
-                    : <AnimatedNumber value={totalAvarias} className="text-3xl font-black text-white block leading-none mt-1" />
+                    : <AnimatedNumber value={totalAvarias} className="text-3xl font-light text-white block leading-none mt-1" />
                   }
                   <p className="text-[9px] text-slate-500 mt-2 font-medium">Total a cobrir</p>
                 </div>
@@ -979,10 +979,10 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                   <ShoppingCart className="text-blue-400" size={18} />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">SOLICITADO</p>
+                  <p className="text-[9px] font-medium text-slate-400 uppercase tracking-widest mb-1">SOLICITADO</p>
                   {loading
                     ? <div className="h-8 w-20 bg-slate-800 rounded animate-pulse mt-1" />
-                    : <AnimatedNumber value={totalPedidas} className="text-3xl font-black text-white block leading-none mt-1" />
+                    : <AnimatedNumber value={totalPedidas} className="text-3xl font-light text-white block leading-none mt-1" />
                   }
                   <p className="text-[9px] text-slate-500 mt-2 font-medium">Pedidos em aberto</p>
                 </div>
@@ -994,10 +994,10 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                   <Truck className="text-indigo-400" size={18} />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">CHEGANDO</p>
+                  <p className="text-[9px] font-medium text-slate-400 uppercase tracking-widest mb-1">CHEGANDO</p>
                   {loading
                     ? <div className="h-8 w-20 bg-slate-800 rounded animate-pulse mt-1" />
-                    : <AnimatedNumber value={totalChegando} className="text-3xl font-black text-white block leading-none mt-1" />
+                    : <AnimatedNumber value={totalChegando} className="text-3xl font-light text-white block leading-none mt-1" />
                   }
                   <p className="text-[9px] text-slate-500 mt-2 font-medium">Em trânsito</p>
                 </div>
@@ -1009,10 +1009,10 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                   <Package className="text-emerald-400" size={18} />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">ESTOQUE CD / CONSERTO</p>
+                  <p className="text-[9px] font-medium text-slate-400 uppercase tracking-widest mb-1">ESTOQUE CD / CONSERTO</p>
                   {loading
                     ? <div className="h-8 w-20 bg-slate-800 rounded animate-pulse mt-1" />
-                    : <AnimatedNumber value={totalEstoque} className="text-3xl font-black text-white block leading-none mt-1" />
+                    : <AnimatedNumber value={totalEstoque} className="text-3xl font-light text-white block leading-none mt-1" />
                   }
                   <p className="text-[9px] text-slate-400 mt-2 font-bold flex items-center gap-2">
                     <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> CD: <span className="text-white font-bold">{Math.round(totalEstoque * 0.7).toLocaleString("pt-BR")}</span></span>
@@ -1024,7 +1024,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
 
             {/* ─── DISTRIBUIÇÃO DETALHADA ─── */}
             <div className="space-y-3">
-              <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] font-sans">DISTRIBUIÇÃO DETALHADA</h3>
+              <h3 className="text-xs font-medium text-slate-400 uppercase tracking-[0.2em] font-sans">DISTRIBUIÇÃO DETALHADA</h3>
 
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
 
@@ -1033,7 +1033,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                   <div className="flex items-center gap-2 mb-6">
                     <div className="w-2.5 h-2.5 rounded-full bg-amber-500 flex-shrink-0" />
                     <p className="text-sm font-bold text-white font-sans uppercase tracking-wider">Relação de Cobertura</p>
-                    <span className="text-[8px] font-black text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full uppercase tracking-wider">Consolidado</span>
+                    <span className="text-[8px] font-medium text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full uppercase tracking-wider">Consolidado</span>
                   </div>
                   {loading ? (
                     <div className="flex items-center justify-center h-32">
@@ -1088,7 +1088,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                   <div className="flex items-center gap-2 mb-6">
                     <div className="w-2.5 h-2.5 rounded-full bg-blue-500 flex-shrink-0" />
                     <p className="text-sm font-bold text-white font-sans uppercase tracking-wider">Status das Solicitações</p>
-                    <span className="text-[8px] font-black text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full uppercase tracking-wider">Consolidado</span>
+                    <span className="text-[8px] font-medium text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full uppercase tracking-wider">Consolidado</span>
                   </div>
                   {loading ? (
                     <div className="flex items-center justify-center h-32">
@@ -1141,7 +1141,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
               {/* LEFT COLUMN: TOP AVARIAS COM DÉFICIT DE EMBALAGENS */}
               <div className="bg-[#111827] border border-slate-800/80 rounded-2xl overflow-hidden shadow-sm flex flex-col">
                 <div className="flex items-center px-6 py-4 border-b border-slate-800">
-                  <h3 className="text-xs font-black text-white uppercase tracking-[0.15em] font-sans">
+                  <h3 className="text-xs font-semibold text-white uppercase tracking-[0.15em] font-sans">
                     TOP AVARIAS COM DÉFICIT DE EMBALAGENS
                   </h3>
                 </div>
@@ -1187,12 +1187,12 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
               {/* RIGHT COLUMN: SOLICITAÇÕES RECENTES */}
               <div className="bg-[#111827] border border-slate-800/80 rounded-2xl overflow-hidden shadow-sm flex flex-col">
                 <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
-                  <h3 className="text-xs font-black text-white uppercase tracking-[0.15em] font-sans">
+                  <h3 className="text-xs font-semibold text-white uppercase tracking-[0.15em] font-sans">
                     SOLICITAÇÕES RECENTES
                   </h3>
                   <button
                     onClick={() => setSubTab("pedidas")}
-                    className="text-[10px] font-bold text-blue-400 hover:text-blue-300 transition-colors uppercase tracking-widest flex items-center gap-1 cursor-pointer"
+                    className="text-[10px] font-medium text-blue-400 hover:text-blue-300 transition-colors uppercase tracking-widest flex items-center gap-1 cursor-pointer"
                   >
                     VER TODAS <ChevronRight size={10} />
                   </button>
@@ -1457,7 +1457,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
               className="relative w-full max-w-2xl rounded-[2.5rem] bg-[#090D16] p-8 shadow-2xl border border-white/5 flex flex-col max-h-[90vh] text-slate-200"
             >
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-black text-white flex items-center gap-2 uppercase tracking-tight font-sans">
+                <h3 className="text-lg font-semibold text-white flex items-center gap-2 uppercase tracking-tight font-sans">
                   <Plus className="text-emerald-400" size={20} />
                   Importar {subTab === "pedidas" ? "Pedidos" : subTab === "atuais" ? "Estoque CD / Conserto" : "A Caminho"}
                 </h3>
@@ -1484,7 +1484,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
 
                 <div className="flex items-center justify-between p-4 bg-white/[0.01] border border-white/5 rounded-2xl">
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-xs font-bold text-white uppercase tracking-wider">Substituir Dados</span>
+                    <span className="text-xs font-semibold text-white uppercase tracking-wider">Substituir Dados</span>
                     <span className="text-[10px] text-slate-500">Limpa todos os dados existentes antes de inserir.</span>
                   </div>
                   <button
