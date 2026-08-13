@@ -1431,9 +1431,10 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
           <motion.div key="pedidos-accordion" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} className="space-y-2">
             {/* Accordion header */}
             <div className="bg-[#111827] border border-slate-800 rounded-2xl overflow-hidden shadow-md">
-              <div className="grid grid-cols-[2fr_1.5fr_4fr_1fr_1fr_1fr] px-5 py-3 border-b border-slate-800 bg-[#0f172a]/60 text-[10px] font-mono font-medium text-slate-500 uppercase tracking-wider">
+              <div className="grid grid-cols-[2fr_1.5fr_1.5fr_4fr_1fr_1fr_1fr] px-5 py-3 border-b border-slate-800 bg-[#0f172a]/60 text-[10px] font-mono font-medium text-slate-500 uppercase tracking-wider">
                 <span>Solicitação</span>
                 <span>Data Solicitação</span>
+                <span>Solicitante</span>
                 <span>Resumo Operacional (Responsável / Status)</span>
                 <span className="text-right">Solicitado</span>
                 <span className="text-right">Enviado</span>
@@ -1512,7 +1513,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                       {/* Summary row */}
                       <button
                         onClick={toggle}
-                        className="w-full grid grid-cols-[2fr_1.5fr_4fr_1fr_1fr_1fr] px-5 py-3.5 hover:bg-slate-800/20 transition-colors text-left items-center cursor-pointer"
+                        className="w-full grid grid-cols-[2fr_1.5fr_1.5fr_4fr_1fr_1fr_1fr] px-5 py-3.5 hover:bg-slate-800/20 transition-colors text-left items-center cursor-pointer"
                       >
                         <span className="flex items-center gap-2">
                           <span className={cn("text-slate-400 transition-transform duration-200", isExpanded ? "rotate-0" : "-rotate-90")}>
@@ -1525,6 +1526,9 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                         <span className="flex items-center gap-1.5 font-mono text-[11px] font-normal text-slate-400">
                           <span className="text-slate-600">⧉</span>
                           {dateLabel}
+                        </span>
+                        <span className="font-mono text-[11px] font-normal text-slate-300 truncate">
+                          {items[0]?.solicitante || '—'}
                         </span>
                         <span className="flex items-center gap-3 font-mono text-[11px] font-normal text-slate-300">
                           <span className="text-slate-400">{items.length} {items.length === 1 ? 'item' : 'itens'}</span>
