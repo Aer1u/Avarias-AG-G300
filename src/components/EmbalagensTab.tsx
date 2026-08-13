@@ -479,7 +479,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
     return { total, concluidas, parciais, pendentes, atrasadas }
   }, [pedidas, allSkuRows])
 
-  // ─── Donut arc helper ─────────────────────────────────────────────────────
+  // ─── Donut arc helper (segmented with gaps + rounded caps) ──────────────────
   const describeArc = (cx: number, cy: number, r: number, startAngle: number, endAngle: number) => {
     const toRad = (d: number) => (d * Math.PI) / 180
     const x1 = cx + r * Math.cos(toRad(startAngle - 90))
@@ -490,6 +490,24 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
     return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`
   }
 
+  // Build gapped segmented arcs: each segment gets a small gap in degrees
+  const GAP_DEG = 4 // degrees of gap between segments
+  const buildGappedArcs = (segments: { label: string; value: number; color: string }[], total: number) => {
+    const totalVal = total || 1
+    const activeSegs = segments.filter(s => s.value > 0)
+    const totalGap = activeSegs.length > 1 ? GAP_DEG * activeSegs.length : 0
+    const availableDeg = 360 - totalGap
+    let angle = 0
+    return segments.map(seg => {
+      if (seg.value <= 0) return { ...seg, startAngle: angle, endAngle: angle, pct: 0 }
+      const pct = Math.min(1, seg.value / totalVal)
+      const angleDeg = pct * availableDeg
+      const arc = { ...seg, startAngle: angle, endAngle: angle + angleDeg, pct }
+      angle += angleDeg + (activeSegs.length > 1 ? GAP_DEG : 0)
+      return arc
+    })
+  }
+
   const totalAvariasDisplay = totalAvarias || 1
   const coverageSegments = [
     { label: "CD + Conserto", value: totalEstoque, color: "#10b981" },
@@ -497,14 +515,8 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
     { label: "Chegando", value: totalChegando, color: "#6366f1" },
     { label: "Falta Pedir", value: totalDeficit, color: "#ef4444" },
   ]
-  let currentAngle = 0
-  const coverageArcs = coverageSegments.map(seg => {
-    const pct = Math.min(1, seg.value / totalAvariasDisplay)
-    const angleDeg = pct * 360
-    const arc = { ...seg, startAngle: currentAngle, endAngle: currentAngle + angleDeg, pct }
-    currentAngle += angleDeg
-    return arc
-  })
+  const coverageArcs = buildGappedArcs(coverageSegments, totalAvariasDisplay)
+
   const solicTotal = solicStatusData.total || 1
   const solicSegments = [
     { label: "Concluídas", value: solicStatusData.concluidas, color: "#10b981" },
@@ -512,14 +524,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
     { label: "Pendentes", value: solicStatusData.pendentes, color: "#3b82f6" },
     { label: "Atrasadas", value: solicStatusData.atrasadas, color: "#ef4444" },
   ]
-  let solicAngle = 0
-  const solicArcs = solicSegments.map(seg => {
-    const pct = Math.min(1, seg.value / solicTotal)
-    const angleDeg = pct * 360
-    const arc = { ...seg, startAngle: solicAngle, endAngle: solicAngle + angleDeg, pct }
-    solicAngle += angleDeg
-    return arc
-  })
+  const solicArcs = buildGappedArcs(solicSegments, solicTotal)
 
   return (
     <div className="flex flex-col h-full space-y-6 pb-12 text-slate-200 font-sans">
@@ -716,19 +721,20 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                     </div>
                   ) : (
                     <div className="flex flex-col md:flex-row items-center gap-8 justify-between">
-                      {/* Donut Chart */}
-                      <div className="relative flex-shrink-0">
-                        <svg width={130} height={130} viewBox="0 0 160 160">
-                          <circle cx={80} cy={80} r={55} fill="none" stroke="#1e293b" strokeWidth={24} />
+                      {/* Donut Chart - Relação de Cobertura */}
+                      <div className="relative flex-shrink-0 flex items-center justify-center">
+                        <svg width={150} height={150} viewBox="0 0 180 180">
+                          {/* Track */}
+                          <circle cx={90} cy={90} r={62} fill="none" stroke="#1e293b" strokeWidth={22} />
+                          {/* Segments */}
                           {coverageArcs.map((arc, i) => {
                             if (arc.pct <= 0.001) return null
-                            const path = arc.endAngle - arc.startAngle >= 360
-                              ? describeArc(80, 80, 55, 0, 359.99)
-                              : describeArc(80, 80, 55, arc.startAngle, Math.min(arc.endAngle, arc.startAngle + 359.9))
-                            return <path key={i} d={path} fill="none" stroke={arc.color} strokeWidth={24} strokeLinecap="butt" />
+                            const path = describeArc(90, 90, 62, arc.startAngle, arc.endAngle)
+                            return <path key={i} d={path} fill="none" stroke={arc.color} strokeWidth={22} strokeLinecap="round" />
                           })}
-                          <text x={80} y={72} textAnchor="middle" fill="#fff" fontSize={22} fontWeight={900} fontFamily="sans-serif">{globalPct}%</text>
-                          <text x={80} y={90} textAnchor="middle" fill="#64748b" fontSize={7} fontWeight={700} letterSpacing={1} fontFamily="sans-serif">COBERTURA</text>
+                          {/* Center label */}
+                          <text x={90} y={84} textAnchor="middle" fill="#ffffff" fontSize={26} fontWeight={900} fontFamily="sans-serif">{globalPct}%</text>
+                          <text x={90} y={103} textAnchor="middle" fill="#64748b" fontSize={9} fontWeight={700} letterSpacing={2} fontFamily="sans-serif">COBERTURA</text>
                         </svg>
                       </div>
                       {/* Legend */}
@@ -770,19 +776,20 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                     </div>
                   ) : (
                     <div className="flex flex-col md:flex-row items-center gap-8 justify-between">
-                      {/* Donut Chart */}
-                      <div className="relative flex-shrink-0">
-                        <svg width={130} height={130} viewBox="0 0 160 160">
-                          <circle cx={80} cy={80} r={55} fill="none" stroke="#1e293b" strokeWidth={24} />
+                      {/* Donut Chart - Status das Solicitações */}
+                      <div className="relative flex-shrink-0 flex items-center justify-center">
+                        <svg width={150} height={150} viewBox="0 0 180 180">
+                          {/* Track */}
+                          <circle cx={90} cy={90} r={62} fill="none" stroke="#1e293b" strokeWidth={22} />
+                          {/* Segments */}
                           {solicArcs.map((arc, i) => {
                             if (arc.pct <= 0.001) return null
-                            const path = arc.endAngle - arc.startAngle >= 360
-                              ? describeArc(80, 80, 55, 0, 359.99)
-                              : describeArc(80, 80, 55, arc.startAngle, Math.min(arc.endAngle, arc.startAngle + 359.9))
-                            return <path key={i} d={path} fill="none" stroke={arc.color} strokeWidth={24} strokeLinecap="butt" />
+                            const path = describeArc(90, 90, 62, arc.startAngle, arc.endAngle)
+                            return <path key={i} d={path} fill="none" stroke={arc.color} strokeWidth={22} strokeLinecap="round" />
                           })}
-                          <text x={80} y={72} textAnchor="middle" fill="#fff" fontSize={22} fontWeight={900} fontFamily="sans-serif">{solicStatusData.total}</text>
-                          <text x={80} y={90} textAnchor="middle" fill="#64748b" fontSize={7} fontWeight={700} letterSpacing={1} fontFamily="sans-serif">SOLICITAÇÕES</text>
+                          {/* Center label */}
+                          <text x={90} y={84} textAnchor="middle" fill="#ffffff" fontSize={26} fontWeight={900} fontFamily="sans-serif">{solicStatusData.total}</text>
+                          <text x={90} y={103} textAnchor="middle" fill="#64748b" fontSize={9} fontWeight={700} letterSpacing={2} fontFamily="sans-serif">SOLICITAÇÕES</text>
                         </svg>
                       </div>
                       {/* Legend */}
