@@ -604,11 +604,22 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
             return Number(clean) || 0;
           };
           
-          const parseBrDateToIso = (s: string) => {
+          const parseBrDateToIso = (s: string): string | null => {
             if (!s) return null;
-            const parts = s.trim().split('/');
+            const str = s.trim();
+            // Try DD/MM/YYYY or DD/MM/YY formats (separator /, - or .)
+            const parts = str.split(/[\/\-\.]/).filter(Boolean);
             if (parts.length === 3) {
-              return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+              let [d, m, y] = parts;
+              // If year is 2-digit, assume 2000s
+              if (y.length === 2) y = `20${y}`;
+              // Validate before returning
+              const yyyy = parseInt(y, 10);
+              const mm = parseInt(m, 10);
+              const dd = parseInt(d, 10);
+              if (yyyy >= 2000 && yyyy <= 2100 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+                return `${yyyy}-${mm.toString().padStart(2, '0')}-${dd.toString().padStart(2, '0')}`;
+              }
             }
             return null;
           };
