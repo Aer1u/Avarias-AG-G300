@@ -574,9 +574,92 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
   const [importedFileName, setImportedFileName] = useState("")
   const dropdownRef = useRef<HTMLDivElement>(null)
 
+  const [parsedRows, setParsedRows] = useState<any[]>([])
+  const [selectedSolicitantes, setSelectedSolicitantes] = useState<string[]>([])
+  const uniqueSolicitantes = useMemo(() => Array.from(new Set(parsedRows.map(r => r.solicitante).filter(Boolean))) as string[], [parsedRows])
+
   const handleExcelUpload = (file: File) => {
     setImportedFileName(file.name)
     const ext = file.name.split('.').pop()?.toLowerCase()
+    
+    const parseData = (rawText: string) => {
+      const lines = rawText.split('\n').filter(l => l.trim() !== '')
+      if (lines.length === 0) return
+      
+      const first = lines[0].toLowerCase()
+      let dataLines = lines
+      if (
+        first.includes("solicitação") || first.includes("solicitacao") ||
+        first.includes("data") || first.includes("código") || first.includes("codigo") ||
+        first.includes("quantidade") || first.includes("qtd") || first.includes("solicitante")
+      ) {
+        dataLines = lines.slice(1)
+      }
+
+      const payload = dataLines.map((line) => {
+        const cols = line.split("\t")
+        if (subTab === "pedidas") {
+          const parseBrNum = (s: string) => {
+            const clean = String(s || "0").replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
+            return Number(clean) || 0;
+          };
+          
+          const parseBrDateToIso = (s: string) => {
+            if (!s) return null;
+            const parts = s.trim().split('/');
+            if (parts.length === 3) {
+              return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+            }
+            return null;
+          };
+
+          const dateCol = parseBrDateToIso(cols[1]) || new Date().toISOString().split("T")[0];
+
+          return {
+            solicitacao: String(cols[0] || "").trim(),
+            data_solicitacao: dateCol,
+            data: dateCol, // Fallback for charts
+            solicitante: String(cols[2] || "").trim(),
+            destino: String(cols[3] || "").trim(),
+            codigo_embalagem: String(cols[4] || "").trim(),
+            descricao_embalagem: String(cols[5] || "").trim(),
+            tipo: String(cols[6] || "").trim(),
+            tipo_embalagem: String(cols[7] || "").trim(),
+            codigo: String(cols[8] || "").trim().toUpperCase(), // Cód. Produto -> codigo
+            modelo_produto: String(cols[9] || "").trim(),
+            modelo: String(cols[10] || "").trim(),
+            quantidade: parseBrNum(cols[11]), // Solicitado -> quantidade
+            enviado: parseBrNum(cols[12]),
+            pendente: parseBrNum(cols[13]),
+            entrega_compras: String(cols[14] || "").trim(),
+            envio_expedicao: String(cols[15] || "").trim(),
+            status: String(cols[16] || "").trim(),
+            comentario_tatiana: String(cols[17] || "").trim(),
+            comentario: String(cols[18] || "").trim(),
+            responsabilidade: String(cols[19] || "").trim(),
+            nf: String(cols[20] || "").trim(),
+            placa: String(cols[21] || "").trim(),
+            previsao_entrega: String(cols[22] || "").trim(),
+          };
+        } else {
+          const dateCol = String(cols[0] || "").trim()
+          const skuCol = String(cols[1] || "").trim().toUpperCase()
+          const qtyCol = Number(String(cols[2] || "0").replace(/\D/g, ""))
+          const obj: any = { codigo: skuCol, quantidade: qtyCol }
+          if (subTab === "atuais") { obj.chegada = dateCol || new Date().toISOString().split("T")[0] }
+          else { obj.data = dateCol || new Date().toISOString().split("T")[0] }
+          return obj
+        }
+      })
+      setParsedRows(payload)
+      
+      // Auto-select all unique solicitantes
+      if (subTab === "pedidas") {
+        const unique = Array.from(new Set(payload.map(r => r.solicitante).filter(Boolean))) as string[]
+        setSelectedSolicitantes(unique)
+      }
+    }
+
     if (ext === 'xlsx' || ext === 'xls') {
       const reader = new FileReader()
       reader.onload = (evt) => {
@@ -585,7 +668,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
           const workbook = XLSX.read(data, { type: 'array' })
           const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
           const tsv = XLSX.utils.sheet_to_csv(firstSheet, { FS: '\t' })
-          setImportText(tsv)
+          parseData(tsv)
         } catch (err: any) {
           alert('Erro ao ler o arquivo Excel: ' + err.message)
         }
@@ -593,7 +676,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
       reader.readAsArrayBuffer(file)
     } else {
       const reader = new FileReader()
-      reader.onload = (evt) => setImportText(evt.target?.result as string || '')
+      reader.onload = (evt) => parseData(evt.target?.result as string || '')
       reader.readAsText(file, 'UTF-8')
     }
   }
@@ -1673,7 +1756,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
         {showImportModal && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => { setShowImportModal(false); setImportedFileName(""); setImportText(""); }}
+              onClick={() => { setShowImportModal(false); setImportedFileName(""); setParsedRows([]); setSelectedSolicitantes([]); }}
               className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm"
             />
             <motion.div
@@ -1687,25 +1770,25 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                   <Plus className="text-emerald-400" size={20} />
                   Importar {subTab === "pedidas" ? "Pedidos" : subTab === "atuais" ? "Estoque CD / Conserto" : "A Caminho"}
                 </h3>
-                <button onClick={() => { setShowImportModal(false); setImportedFileName(""); setImportText(""); }} className="text-slate-500 hover:text-white transition-colors cursor-pointer">
+                <button onClick={() => { setShowImportModal(false); setImportedFileName(""); setParsedRows([]); setSelectedSolicitantes([]); }} className="text-slate-500 hover:text-white transition-colors cursor-pointer">
                   <X size={20} />
                 </button>
               </div>
 
               <div className="flex flex-col flex-1 min-h-0 gap-6 font-sans">
-                <div className="space-y-2">
+                <div className="space-y-4">
                   <p className="text-xs text-slate-400 font-semibold leading-relaxed">
                     {subTab === "pedidas" ? (
                       <>
-                        Cole as colunas do Excel de Compras (separados por TAB):<br />
+                        Carregue a planilha Excel de Compras com as colunas na ordem esperada:<br />
                         <span className="font-mono text-[9px] text-slate-500 font-normal uppercase tracking-wider block bg-slate-950 p-2 rounded-xl mt-1 overflow-x-auto whitespace-nowrap">
                           SOLICITAÇÃO | DATA | SOLICITANTE | DESTINO | CÓD. EMBALAGEM | DESCRIÇÃO | TIPO | TIPO EMB. | CÓD. PRODUTO | MODELO PROD. | MODELO | SOLICITADO | ENVIADO | PENDENTE | ENTREGA | ENVIO | STATUS | COM. TATIANA | COMENTÁRIO | RESPONSABILIDADE | NF | PLACA | PREVISÃO
                         </span>
                       </>
                     ) : (
                       <>
-                        Cole os dados da planilha Excel ou Sheets abaixo. Ordem esperada:<br />
-                        <span className="font-bold text-white uppercase tracking-wider">DATA | CÓDIGO | QUANTIDADE</span> (separados por TAB).
+                        Carregue a planilha Excel ou Sheets com as colunas na ordem esperada:<br />
+                        <span className="font-bold text-white uppercase tracking-wider">DATA | CÓDIGO | QUANTIDADE</span>.
                       </>
                     )}
                   </p>
@@ -1733,20 +1816,74 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2 text-slate-500 my-1 justify-center">
-                    <div className="h-px bg-slate-800/40 flex-1" />
-                    <span className="text-[9px] font-mono uppercase tracking-wider text-slate-600">ou cole o texto da planilha abaixo</span>
-                    <div className="h-px bg-slate-800/40 flex-1" />
-                  </div>
+                  {/* Data Validation Checklist Filters for SOLICITANTE */}
+                  {subTab === "pedidas" && parsedRows.length > 0 && uniqueSolicitantes.length > 0 && (
+                    <div className="space-y-3 bg-white/[0.01] border border-white/5 rounded-2xl p-4">
+                      <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                        <span className="text-[10px] font-mono font-semibold text-white uppercase tracking-wider">Selecione os Solicitantes para Importar</span>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setSelectedSolicitantes(uniqueSolicitantes)}
+                            className="text-[9px] font-mono font-medium text-blue-400 hover:text-blue-300 uppercase tracking-widest cursor-pointer bg-transparent border-none"
+                          >
+                            Marcar Todos
+                          </button>
+                          <span className="text-[9px] text-slate-700 font-mono">•</span>
+                          <button
+                            onClick={() => setSelectedSolicitantes([])}
+                            className="text-[9px] font-mono font-medium text-rose-400 hover:text-rose-300 uppercase tracking-widest cursor-pointer bg-transparent border-none"
+                          >
+                            Desmarcar Todos
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[140px] overflow-y-auto pr-2">
+                        {uniqueSolicitantes.map(name => {
+                          const isChecked = selectedSolicitantes.includes(name)
+                          const count = parsedRows.filter(r => r.solicitante === name).length
+                          return (
+                            <label key={name} className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 cursor-pointer select-none transition-all">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {
+                                  if (isChecked) {
+                                    setSelectedSolicitantes(prev => prev.filter(n => n !== name))
+                                  } else {
+                                    setSelectedSolicitantes(prev => [...prev, name])
+                                  }
+                                }}
+                                className="w-3.5 h-3.5 rounded border-slate-800 text-blue-600 bg-slate-950 focus:ring-blue-500/20 focus:ring-2 focus:ring-offset-0 cursor-pointer"
+                              />
+                              <div className="flex flex-col gap-0.5 min-w-0">
+                                <span className="text-[10px] font-mono text-slate-300 font-medium truncate uppercase">{name}</span>
+                                <span className="text-[8px] font-mono text-slate-500">{count} {count === 1 ? 'item' : 'itens'}</span>
+                              </div>
+                            </label>
+                          )
+                        })}
+                      </div>
+                      <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 pt-1 border-t border-white/5">
+                        <span>Filtrados para importação:</span>
+                        <span className="font-bold text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-lg">
+                          {parsedRows.filter(r => selectedSolicitantes.includes(r.solicitante)).length} de {parsedRows.length} linhas
+                        </span>
+                      </div>
+                    </div>
+                  )}
 
-                  <div className="relative flex-1 min-h-[140px]">
-                    <textarea
-                      value={importText}
-                      onChange={(e) => setImportText(e.target.value)}
-                      className="w-full h-full min-h-[140px] bg-white/[0.02] border border-white/5 rounded-2xl px-4 py-4 text-xs text-white placeholder:text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 resize-none font-mono"
-                      placeholder="Os dados importados ou colados aparecerão aqui em formato texto..."
-                    />
-                  </div>
+                  {/* Simple success card for other tabs */}
+                  {subTab !== "pedidas" && parsedRows.length > 0 && (
+                    <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-2xl p-4 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="text-emerald-400" size={16} />
+                        <span className="text-[10px] font-mono font-semibold text-white uppercase tracking-wider">Planilha carregada com sucesso</span>
+                      </div>
+                      <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg">
+                        {parsedRows.length} registros prontos
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between p-4 bg-white/[0.01] border border-white/5 rounded-2xl">
@@ -1769,84 +1906,33 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                       <span className="font-semibold text-rose-300 uppercase">Atenção:</span> Esta operação irá{" "}
                       <span className="font-bold text-rose-400 underline decoration-wavy">SOBRESCREVER E LIMPAR</span> toda a tabela de{" "}
                       {subTab === "pedidas" ? "embalagens_pedidas" : subTab === "atuais" ? "embalagens_atuais" : "embalagens_chegando"}{" "}
-                      no Supabase com o novo conteúdo colado acima.
+                      no Supabase com o novo conteúdo da planilha.
                     </p>
                   </div>
                 )}
 
                 <button
-                  disabled={isImporting || !importText.trim()}
+                  disabled={
+                    isImporting || 
+                    parsedRows.length === 0 || 
+                    (subTab === "pedidas" && selectedSolicitantes.length === 0)
+                  }
                   onClick={async () => {
-                    let lines = importText.trim().split("\n").filter((l) => l.trim())
-                    if (lines.length === 0) return
-                    const first = lines[0].toLowerCase()
-                    if (
-                      first.includes("solicitação") || first.includes("solicitacao") ||
-                      first.includes("data") || first.includes("código") || first.includes("codigo") ||
-                      first.includes("quantidade") || first.includes("qtd") || first.includes("solicitante")
-                    ) {
-                      lines = lines.slice(1)
+                    if (parsedRows.length === 0) return
+                    
+                    const payload = subTab === "pedidas"
+                      ? parsedRows.filter(r => selectedSolicitantes.includes(r.solicitante))
+                      : parsedRows
+
+                    if (payload.length === 0) {
+                      alert("Nenhum registro selecionado.")
+                      return
                     }
-                    if (lines.length === 0) { alert("Nenhum dado válido encontrado."); return }
+
                     const targetTable = subTab === "pedidas" ? "embalagens_pedidas" : subTab === "atuais" ? "embalagens_atuais" : "embalagens_chegando"
-                    if (!confirm(`Confirmar importação de ${lines.length} itens? Isso será gravado no Supabase.`)) return
+                    if (!confirm(`Confirmar importação de ${payload.length} itens? Isso será gravado no Supabase.`)) return
                     setIsImporting(true)
                     try {
-                      const payload = lines.map((line) => {
-                        const cols = line.split("\t")
-                        if (subTab === "pedidas") {
-                          const parseBrNum = (s: string) => {
-                            const clean = String(s || "0").replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
-                            return Number(clean) || 0;
-                          };
-                          
-                          const parseBrDateToIso = (s: string) => {
-                            if (!s) return null;
-                            const parts = s.trim().split('/');
-                            if (parts.length === 3) {
-                              return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-                            }
-                            return null;
-                          };
-
-                          const dateCol = parseBrDateToIso(cols[1]) || new Date().toISOString().split("T")[0];
-
-                          return {
-                            solicitacao: String(cols[0] || "").trim(),
-                            data_solicitacao: dateCol,
-                            data: dateCol, // Fallback for charts
-                            solicitante: String(cols[2] || "").trim(),
-                            destino: String(cols[3] || "").trim(),
-                            codigo_embalagem: String(cols[4] || "").trim(),
-                            descricao_embalagem: String(cols[5] || "").trim(),
-                            tipo: String(cols[6] || "").trim(),
-                            tipo_embalagem: String(cols[7] || "").trim(),
-                            codigo: String(cols[8] || "").trim().toUpperCase(), // Cód. Produto -> codigo
-                            modelo_produto: String(cols[9] || "").trim(),
-                            modelo: String(cols[10] || "").trim(),
-                            quantidade: parseBrNum(cols[11]), // Solicitado -> quantidade
-                            enviado: parseBrNum(cols[12]),
-                            pendente: parseBrNum(cols[13]),
-                            entrega_compras: String(cols[14] || "").trim(),
-                            envio_expedicao: String(cols[15] || "").trim(),
-                            status: String(cols[16] || "").trim(),
-                            comentario_tatiana: String(cols[17] || "").trim(),
-                            comentario: String(cols[18] || "").trim(),
-                            responsabilidade: String(cols[19] || "").trim(),
-                            nf: String(cols[20] || "").trim(),
-                            placa: String(cols[21] || "").trim(),
-                            previsao_entrega: String(cols[22] || "").trim(),
-                          };
-                        } else {
-                          const dateCol = String(cols[0] || "").trim()
-                          const skuCol = String(cols[1] || "").trim().toUpperCase()
-                          const qtyCol = Number(String(cols[2] || "0").replace(/\D/g, ""))
-                          const obj: any = { codigo: skuCol, quantidade: qtyCol }
-                          if (subTab === "atuais") { obj.chegada = dateCol || new Date().toISOString().split("T")[0] }
-                          else { obj.data = dateCol || new Date().toISOString().split("T")[0] }
-                          return obj
-                        }
-                      })
                       if (replaceExistingData) {
                         const { error: delErr } = await supabase.from(targetTable).delete().neq("codigo", "placeholder_xyz")
                         if (delErr) throw delErr
@@ -1858,7 +1944,9 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                         if (insErr) throw insErr
                       }
                       alert("Importação concluída com sucesso!")
-                      setImportText("")
+                      setParsedRows([])
+                      setSelectedSolicitantes([])
+                      setImportedFileName("")
                       setShowImportModal(false)
                       fetchData()
                     } catch (err: any) {
