@@ -826,24 +826,24 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                   ) : filteredSkuRows.filter(s => s.deficit > 0).length === 0 ? (
                     <div className="flex-1 flex flex-col items-center justify-center py-16 text-slate-500 text-xs">
                       <Inbox size={28} className="mb-2 text-slate-600" />
-                      <p className="font-semibold uppercase tracking-wider">Nenhum déficit de embalagem encontrado!</p>
+                      <p className="font-semibold uppercase tracking-wider font-sans">Nenhum déficit de embalagem encontrado!</p>
                     </div>
                   ) : (
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="border-b border-slate-800 bg-[#0f172a]/50">
-                          <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest">SKU / ITEM</th>
-                          <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">AVARIAS</th>
-                          <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">S/ SOLICITAÇÃO</th>
-                          <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">ESTOQUE</th>
-                          <th className="px-5 py-3 text-[9px] font-black text-rose-400 uppercase tracking-widest text-center">DÉFICIT</th>
-                          <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">COBERTURA</th>
+                          <th className="px-5 py-3 font-mono text-[11px] font-medium text-slate-400 uppercase tracking-wider">SKU / ITEM</th>
+                          <th className="px-5 py-3 font-mono text-[11px] font-medium text-slate-400 uppercase tracking-wider text-center">AVARIAS</th>
+                          <th className="px-5 py-3 font-mono text-[11px] font-medium text-slate-400 uppercase tracking-wider text-center">S/ SOLICITAÇÃO</th>
+                          <th className="px-5 py-3 font-mono text-[11px] font-medium text-slate-400 uppercase tracking-wider text-center">ESTOQUE</th>
+                          <th className="px-5 py-3 font-mono text-[11px] font-medium text-rose-400 uppercase tracking-wider text-center">DÉFICIT</th>
+                          <th className="px-5 py-3 font-mono text-[11px] font-medium text-slate-400 uppercase tracking-wider text-center">COBERTURA</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/50">
                         {filteredSkuRows.filter(s => s.deficit > 0).slice(0, 5).map((sku) => (
                           <tr key={sku.codigo} className="hover:bg-slate-800/20 transition-colors">
-                            <td className="px-5 py-3.5 text-xs font-bold text-slate-300">{sku.codigo}</td>
+                            <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-slate-300">{sku.codigo}</td>
                             <td className="px-5 py-3.5 text-xs font-bold text-white text-center">{sku.avarias.toLocaleString("pt-BR")}</td>
                             <td className="px-5 py-3.5 text-xs font-bold text-slate-400 text-center">{Math.max(0, sku.avarias - sku.pedidas - sku.chegando).toLocaleString("pt-BR")}</td>
                             <td className="px-5 py-3.5 text-xs font-bold text-emerald-400 text-center">{sku.estoque.toLocaleString("pt-BR")}</td>
@@ -878,19 +878,19 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                   ) : pedidas.filter(r => !r.isNew).length === 0 ? (
                     <div className="flex-1 flex flex-col items-center justify-center py-16 text-slate-500 text-xs">
                       <Inbox size={28} className="mb-2 text-slate-600" />
-                      <p className="font-semibold uppercase tracking-wider">Nenhuma solicitação encontrada!</p>
+                      <p className="font-semibold uppercase tracking-wider font-sans">Nenhuma solicitação encontrada!</p>
                     </div>
                   ) : (
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="border-b border-slate-800 bg-[#0f172a]/50">
-                          <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest">ID</th>
-                          <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest">DATA</th>
-                          <th className="px-5 py-3 text-[9px] font-black text-blue-400 uppercase tracking-widest text-center">SOLICITADO</th>
-                          <th className="px-5 py-3 text-[9px] font-black text-emerald-400 uppercase tracking-widest text-center">ENVIADO</th>
-                          <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">PENDENTE</th>
-                          <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">ENTREGA</th>
-                          <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">STATUS</th>
+                          <th className="px-5 py-3 font-mono text-[11px] font-medium text-slate-400 uppercase tracking-wider">ID</th>
+                          <th className="px-5 py-3 font-mono text-[11px] font-medium text-slate-400 uppercase tracking-wider">DATA</th>
+                          <th className="px-5 py-3 font-mono text-[11px] font-medium text-blue-400 uppercase tracking-wider text-center">SOLICITADO</th>
+                          <th className="px-5 py-3 font-mono text-[11px] font-medium text-emerald-400 uppercase tracking-wider text-center">ENVIADO</th>
+                          <th className="px-5 py-3 font-mono text-[11px] font-medium text-slate-400 uppercase tracking-wider text-center">PENDENTE</th>
+                          <th className="px-5 py-3 font-mono text-[11px] font-medium text-slate-400 uppercase tracking-wider text-center">ENTREGA</th>
+                          <th className="px-5 py-3 font-mono text-[11px] font-medium text-slate-400 uppercase tracking-wider text-center">STATUS</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/50">
@@ -915,8 +915,8 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
 
                           return (
                             <tr key={p.id || i} className="hover:bg-slate-800/20 transition-colors">
-                              <td className="px-5 py-3.5 text-xs text-slate-400">{i + 1}</td>
-                              <td className="px-5 py-3.5 text-xs text-slate-400">
+                              <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-slate-400">{i + 1}</td>
+                              <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-slate-400">
                                 {p.data ? new Date(p.data + 'T00:00:00').toLocaleDateString("pt-BR") : "—"}
                               </td>
                               <td className="px-5 py-3.5 text-xs font-bold text-blue-400 text-center">{qty.toLocaleString("pt-BR")}</td>
@@ -1036,7 +1036,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                             value={dateVal}
                             onChange={e => updateRow(idx, subTab === "atuais" ? "chegada" : "data", e.target.value)}
                             onPaste={e => handleSmartPaste(e, 0)}
-                            className="w-full bg-transparent border-none px-6 py-3 text-xs text-slate-300 focus:bg-slate-900 focus:outline-none [color-scheme:dark]"
+                            className="w-full bg-transparent border-none px-6 py-3 text-[11px] text-slate-300 font-mono font-normal focus:bg-slate-900 focus:outline-none [color-scheme:dark]"
                           />
                         </td>
 
@@ -1050,7 +1050,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                               onClick={() => { setSkuSearchCell(item.codigo); setActiveSkuDropdown({ type: subTab, index: idx }) }}
                               onPaste={e => handleSmartPaste(e, 1)}
                               placeholder="SKU..."
-                              className="w-full bg-transparent border-none px-6 py-3 text-xs text-white focus:bg-slate-900/60 focus:outline-none"
+                              className="w-full bg-transparent border-none px-6 py-3 text-[11px] text-white font-mono font-normal focus:bg-slate-900/60 focus:outline-none"
                             />
                             {activeSkuDropdown?.type === subTab && activeSkuDropdown?.index === idx && cellSkus.length > 0 && (
                               <div ref={dropdownRef} className="absolute z-50 w-[300px] left-6 bottom-full mb-1 bg-[#0F172A] border border-white/10 rounded-2xl shadow-2xl p-2 space-y-1">
@@ -1061,7 +1061,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                                     onClick={() => { updateRow(idx, "codigo", b["Código"]); setActiveSkuDropdown(null) }}
                                     className="w-full text-left px-3 py-2 rounded-xl text-[10px] font-bold flex justify-between text-slate-400 hover:bg-white/5 hover:text-white transition-all cursor-pointer"
                                   >
-                                    <span className="text-blue-400">{b["Código"]}</span>
+                                    <span className="font-mono text-blue-400">{b["Código"]}</span>
                                     <span className="opacity-60 max-w-[140px] truncate">{b["Descrição"]}</span>
                                   </button>
                                 ))}
@@ -1071,7 +1071,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                         </td>
 
                         {/* Desc Cell */}
-                        <td className="px-6 py-3 text-xs font-semibold text-slate-500 max-w-xs truncate">
+                        <td className="px-6 py-3 text-[11px] font-normal text-slate-500 max-w-xs truncate">
                           {base?.["Descrição"] || (item.codigo ? `Produto ${item.codigo}` : "—")}
                         </td>
 
@@ -1083,7 +1083,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                             onChange={e => updateRow(idx, "quantidade", e.target.value === "" ? null : Number(e.target.value.replace(/\D/g, "")))}
                             onPaste={e => handleSmartPaste(e, 2)}
                             placeholder="0"
-                            className="w-full bg-transparent border-none py-3 text-center text-xs text-white focus:bg-slate-900/60 focus:outline-none"
+                            className="w-full bg-transparent border-none py-3 text-center text-[11px] text-white font-mono font-normal focus:bg-slate-900/60 focus:outline-none"
                           />
                         </td>
 
@@ -1146,7 +1146,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                     <textarea
                       value={importText}
                       onChange={(e) => setImportText(e.target.value)}
-                      className="w-full h-full min-h-[220px] bg-white/[0.02] border border-white/5 rounded-2xl px-4 py-4 text-xs text-white placeholder:text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 resize-none"
+                      className="w-full h-full min-h-[220px] bg-white/[0.02] border border-white/5 rounded-2xl px-4 py-4 text-xs text-white placeholder:text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 resize-none font-mono"
                       placeholder="Exemplo:\n2026-05-25	1705-01	150\n2026-05-25	2955-01	30"
                     />
                   </div>
