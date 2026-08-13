@@ -163,7 +163,7 @@ function CoverageWaterfall({
             <div className={cn("w-2.5 h-2.5 rounded-sm flex-shrink-0", seg.color)} />
             <div className="min-w-0">
               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider truncate">{seg.label}</p>
-              <p className={cn("text-xs font-bold font-mono", seg.textColor)}>
+              <p className={cn("text-xs font-bold ", seg.textColor)}>
                 {seg.value.toLocaleString("pt-BR")}
               </p>
             </div>
@@ -197,7 +197,7 @@ function SkuCoverageBar({ row }: { row: SkuRow }) {
         )}
       </div>
       <span className={cn(
-        "text-[10px] font-bold font-mono w-9 text-right",
+        "text-[10px] font-bold  w-9 text-right",
         covered >= 100 ? "text-emerald-400" : covered > 0 ? "text-amber-400" : "text-rose-400"
       )}>
         {Math.round(covered)}%
@@ -547,6 +547,27 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
             />
           </div>
           <button
+            onClick={() => {
+              const avariasList = allSkuRows.filter(s => s.avarias > 0)
+              if (!avariasList.length) { alert("Nenhuma avaria física registrada."); return }
+              let csv = "\uFEFFSKU;Descrição;Avaria Física;Estoque Atual;Pedidos Pendentes;A Caminho;Déficit\n"
+              avariasList.forEach(s => {
+                csv += `"${s.codigo}";"${s.descricao.replace(/"/g, '""')}";${s.avarias};${s.estoque};${s.pedidas};${s.chegando};${s.deficit}\n`
+              })
+              const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+              const link = document.createElement("a")
+              link.href = URL.createObjectURL(blob)
+              link.setAttribute("download", `avarias_fisicas_${new Date().toISOString().split("T")[0]}.csv`)
+              document.body.appendChild(link)
+              link.click()
+              document.body.removeChild(link)
+            }}
+            className="p-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800 transition-all cursor-pointer"
+            title="Exportar Excel"
+          >
+            <FileText size={16} />
+          </button>
+          <button
             onClick={fetchData}
             className="p-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800 transition-all cursor-pointer"
             title="Atualizar"
@@ -621,7 +642,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">DEMANDA DE EMBALAGENS</p>
                   {loading
                     ? <div className="h-8 w-24 bg-slate-800 rounded animate-pulse mt-1" />
-                    : <AnimatedNumber value={totalAvarias} className="text-3xl font-black font-mono text-white block leading-none mt-1" />
+                    : <AnimatedNumber value={totalAvarias} className="text-3xl font-black text-white block leading-none mt-1" />
                   }
                   <p className="text-[9px] text-slate-500 mt-2 font-medium">Total a cobrir</p>
                 </div>
@@ -636,7 +657,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">SOLICITADO</p>
                   {loading
                     ? <div className="h-8 w-20 bg-slate-800 rounded animate-pulse mt-1" />
-                    : <AnimatedNumber value={totalPedidas} className="text-3xl font-black font-mono text-white block leading-none mt-1" />
+                    : <AnimatedNumber value={totalPedidas} className="text-3xl font-black text-white block leading-none mt-1" />
                   }
                   <p className="text-[9px] text-slate-500 mt-2 font-medium">Pedidos em aberto</p>
                 </div>
@@ -651,7 +672,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">CHEGANDO</p>
                   {loading
                     ? <div className="h-8 w-20 bg-slate-800 rounded animate-pulse mt-1" />
-                    : <AnimatedNumber value={totalChegando} className="text-3xl font-black font-mono text-white block leading-none mt-1" />
+                    : <AnimatedNumber value={totalChegando} className="text-3xl font-black text-white block leading-none mt-1" />
                   }
                   <p className="text-[9px] text-slate-500 mt-2 font-medium">Em trânsito</p>
                 </div>
@@ -659,18 +680,18 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
 
               {/* ESTOQUE CD / CONSERTO */}
               <div className="bg-[#111827] border border-slate-800/80 rounded-2xl p-5 flex items-start gap-4 shadow-sm relative overflow-hidden">
-                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex-shrink-0">
+                <div className="p-2.5 rounded-xl bg-[#10b981]/10 border border-[#10b981]/20 flex-shrink-0">
                   <Package className="text-emerald-400" size={18} />
                 </div>
                 <div className="min-w-0">
                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">ESTOQUE CD / CONSERTO</p>
                   {loading
                     ? <div className="h-8 w-20 bg-slate-800 rounded animate-pulse mt-1" />
-                    : <AnimatedNumber value={totalEstoque} className="text-3xl font-black font-mono text-white block leading-none mt-1" />
+                    : <AnimatedNumber value={totalEstoque} className="text-3xl font-black text-white block leading-none mt-1" />
                   }
-                  <p className="text-[9px] text-slate-400 mt-2 font-medium flex items-center gap-2">
-                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> CD: <span className="font-bold text-white">{Math.round(totalEstoque * 0.7)}</span></span>
-                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> CONSERTO: <span className="font-bold text-white">{Math.round(totalEstoque * 0.3)}</span></span>
+                  <p className="text-[9px] text-slate-400 mt-2 font-bold flex items-center gap-2">
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> CD: <span className="text-white font-bold">{Math.round(totalEstoque * 0.7).toLocaleString("pt-BR")}</span></span>
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> CONSERTO: <span className="text-white font-bold">{Math.round(totalEstoque * 0.3).toLocaleString("pt-BR")}</span></span>
                   </p>
                 </div>
               </div>
@@ -687,7 +708,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                   <div className="flex items-center gap-2 mb-6">
                     <div className="w-2.5 h-2.5 rounded-full bg-amber-500 flex-shrink-0" />
                     <p className="text-sm font-bold text-white font-sans uppercase tracking-wider">Relação de Cobertura</p>
-                    <span className="text-[8px] font-black text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full uppercase tracking-wider font-mono">Consolidado</span>
+                    <span className="text-[8px] font-black text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full uppercase tracking-wider">Consolidado</span>
                   </div>
                   {loading ? (
                     <div className="flex items-center justify-center h-32">
@@ -706,8 +727,8 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                               : describeArc(80, 80, 55, arc.startAngle, Math.min(arc.endAngle, arc.startAngle + 359.9))
                             return <path key={i} d={path} fill="none" stroke={arc.color} strokeWidth={24} strokeLinecap="butt" />
                           })}
-                          <text x={80} y={72} textAnchor="middle" fill="#fff" fontSize={22} fontWeight={900} fontFamily="monospace">{globalPct}%</text>
-                          <text x={80} y={90} textAnchor="middle" fill="#64748b" fontSize={7} fontWeight={700} letterSpacing={1} fontFamily="sans-serif">DE COBERTURA</text>
+                          <text x={80} y={72} textAnchor="middle" fill="#fff" fontSize={22} fontWeight={900} fontFamily="sans-serif">{globalPct}%</text>
+                          <text x={80} y={90} textAnchor="middle" fill="#64748b" fontSize={7} fontWeight={700} letterSpacing={1} fontFamily="sans-serif">COBERTURA</text>
                         </svg>
                       </div>
                       {/* Legend */}
@@ -724,8 +745,8 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                               <span className="text-[11px] text-slate-300 truncate font-semibold">{item.label}</span>
                             </div>
                             <div className="flex items-center gap-3 flex-shrink-0">
-                              <span className="text-[11px] font-bold font-mono text-white">{item.value.toLocaleString("pt-BR")}</span>
-                              <span className="text-[10px] text-slate-400 font-mono w-8 text-right">
+                              <span className="text-[11px] font-bold text-white">{item.value.toLocaleString("pt-BR")}</span>
+                              <span className="text-[10px] text-slate-400 w-8 text-right">
                                 {totalAvarias > 0 ? Math.round((item.value / totalAvarias) * 100) : 0}%
                               </span>
                             </div>
@@ -741,7 +762,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                   <div className="flex items-center gap-2 mb-6">
                     <div className="w-2.5 h-2.5 rounded-full bg-blue-500 flex-shrink-0" />
                     <p className="text-sm font-bold text-white font-sans uppercase tracking-wider">Status das Solicitações</p>
-                    <span className="text-[8px] font-black text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full uppercase tracking-wider font-mono">Consolidado</span>
+                    <span className="text-[8px] font-black text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full uppercase tracking-wider">Consolidado</span>
                   </div>
                   {loading ? (
                     <div className="flex items-center justify-center h-32">
@@ -760,7 +781,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                               : describeArc(80, 80, 55, arc.startAngle, Math.min(arc.endAngle, arc.startAngle + 359.9))
                             return <path key={i} d={path} fill="none" stroke={arc.color} strokeWidth={24} strokeLinecap="butt" />
                           })}
-                          <text x={80} y={72} textAnchor="middle" fill="#fff" fontSize={22} fontWeight={900} fontFamily="monospace">{solicStatusData.total}</text>
+                          <text x={80} y={72} textAnchor="middle" fill="#fff" fontSize={22} fontWeight={900} fontFamily="sans-serif">{solicStatusData.total}</text>
                           <text x={80} y={90} textAnchor="middle" fill="#64748b" fontSize={7} fontWeight={700} letterSpacing={1} fontFamily="sans-serif">SOLICITAÇÕES</text>
                         </svg>
                       </div>
@@ -773,8 +794,8 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                               <span className="text-[11px] text-slate-300 truncate font-semibold">{item.label}</span>
                             </div>
                             <div className="flex items-center gap-3 flex-shrink-0">
-                              <span className="text-[11px] font-bold font-mono text-white">{item.value}</span>
-                              <span className="text-[10px] text-slate-400 font-mono w-8 text-right">
+                              <span className="text-[11px] font-bold text-white">{item.value}</span>
+                              <span className="text-[10px] text-slate-400 w-8 text-right">
                                 {solicStatusData.total > 0 ? Math.round((item.value / solicStatusData.total) * 100) : 0}%
                               </span>
                             </div>
@@ -787,196 +808,137 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
               </div>
             </div>
 
-            {/* ─── SOLICITAÇÕES RECENTES ─── */}
-            <div className="bg-[#111827] border border-slate-800/80 rounded-2xl overflow-hidden shadow-sm">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
-                <h3 className="text-xs font-black text-white uppercase tracking-[0.15em] font-sans">SOLICITAÇÕES RECENTES</h3>
-                <button
-                  onClick={() => setSubTab("pedidas")}
-                  className="text-[10px] font-bold text-blue-400 hover:text-blue-300 transition-colors uppercase tracking-wider flex items-center gap-1 cursor-pointer"
-                >
-                  Ver todas <ChevronRight size={12} />
-                </button>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-800 bg-[#0f172a]/50">
-                      <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest">ID (SOLICITAÇÃO)</th>
-                      <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest">DATA</th>
-                      <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">SOLICITADO</th>
-                      <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">ENVIADO</th>
-                      <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">PENDENTE</th>
-                      <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">ENTREGA (COMPRAS)</th>
-                      <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">ENVIO (EXPEDIÇÃO)</th>
-                      <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">STATUS</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/50">
-                    {loading ? (
-                      <tr>
-                        <td colSpan={8} className="px-6 py-10 text-center">
-                          <Loader2 className="animate-spin text-blue-500 mx-auto" size={18} />
-                        </td>
-                      </tr>
-                    ) : pedidas.filter(r => !r.isNew).slice(0, 6).map((p, i) => {
-                      const sku = String(p.codigo || '').trim().toUpperCase()
-                      const skuRow = allSkuRows.find(r => r.codigo === sku)
-                      const qty = Number(p.quantidade) || 0
-                      const recebido = Math.min(qty, skuRow?.estoque || 0)
-                      const pendente = Math.max(0, qty - recebido)
-                      const pct = skuRow?.pctCoberto || 0
-                      const status = pct >= 100 ? "FINALIZADO" : pct > 0 ? "EM ANDAMENTO" : "PENDENTE"
-                      const statusCls = pct >= 100
-                        ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
-                        : pct > 0
-                          ? "text-blue-400 bg-blue-500/10 border-blue-500/20"
-                          : "text-rose-400 bg-rose-500/10 border-rose-500/20"
+            {/* ─── BOTTOM TWO COLUMNS ─── */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
 
-                      const fakeDate = p.data ? new Date(p.data + 'T00:00:00') : new Date()
-                      const fakeDelivery = new Date(fakeDate.getTime() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString("pt-BR")
-                      const fakeShip = pct >= 100 
-                        ? new Date(fakeDate.getTime() + 15 * 24 * 60 * 60 * 1000).toLocaleDateString("pt-BR")
-                        : "—"
-
-                      return (
-                        <tr key={p.id || i} className="hover:bg-slate-800/20 transition-colors">
-                          <td className="px-5 py-3.5 text-xs font-mono text-slate-400">{i + 1}</td>
-                          <td className="px-5 py-3.5 text-xs font-mono text-slate-400">
-                            {p.data ? new Date(p.data + 'T00:00:00').toLocaleDateString("pt-BR") : "—"}
-                          </td>
-                          <td className="px-5 py-3.5 text-xs font-bold text-white font-mono text-center">{qty.toLocaleString("pt-BR")}</td>
-                          <td className="px-5 py-3.5 text-xs font-bold text-emerald-400 font-mono text-center">{recebido.toLocaleString("pt-BR")}</td>
-                          <td className={cn("px-5 py-3.5 text-xs font-bold font-mono text-center", pendente > 0 ? "text-amber-500" : "text-slate-500")}>
-                            {pendente.toLocaleString("pt-BR")}
-                          </td>
-                          <td className="px-5 py-3.5 text-xs font-mono text-slate-400 text-center">{fakeDelivery}</td>
-                          <td className="px-5 py-3.5 text-xs font-mono text-slate-400 text-center">{fakeShip}</td>
-                          <td className="px-5 py-3.5 text-center">
-                            <span className={cn("px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border", statusCls)}>
-                              {status}
-                            </span>
-                          </td>
+              {/* LEFT COLUMN: TOP AVARIAS COM DÉFICIT DE EMBALAGENS */}
+              <div className="bg-[#111827] border border-slate-800/80 rounded-2xl overflow-hidden shadow-sm flex flex-col">
+                <div className="flex items-center px-6 py-4 border-b border-slate-800">
+                  <h3 className="text-xs font-black text-white uppercase tracking-[0.15em] font-sans">
+                    TOP AVARIAS COM DÉFICIT DE EMBALAGENS
+                  </h3>
+                </div>
+                <div className="overflow-x-auto flex-1 flex flex-col">
+                  {loading ? (
+                    <div className="flex-1 flex items-center justify-center p-10">
+                      <Loader2 className="animate-spin text-blue-500" size={18} />
+                    </div>
+                  ) : filteredSkuRows.filter(s => s.deficit > 0).length === 0 ? (
+                    <div className="flex-1 flex flex-col items-center justify-center py-16 text-slate-500 text-xs">
+                      <Inbox size={28} className="mb-2 text-slate-600" />
+                      <p className="font-semibold uppercase tracking-wider">Nenhum déficit de embalagem encontrado!</p>
+                    </div>
+                  ) : (
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-800 bg-[#0f172a]/50">
+                          <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest">SKU / ITEM</th>
+                          <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">AVARIAS</th>
+                          <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">S/ SOLICITAÇÃO</th>
+                          <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">ESTOQUE</th>
+                          <th className="px-5 py-3 text-[9px] font-black text-rose-400 uppercase tracking-widest text-center">DÉFICIT</th>
+                          <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">COBERTURA</th>
                         </tr>
-                      )
-                    })}
-                    {!loading && pedidas.filter(r => !r.isNew).length === 0 && (
-                      <tr>
-                        <td colSpan={8} className="px-6 py-10 text-center text-slate-500 text-xs">
-                          <Inbox size={20} className="mx-auto mb-2 text-slate-600" />
-                          Nenhuma solicitação encontrada.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* ─── SKU TABLE (Toggled/Collapsible) ─── */}
-            <div className="bg-[#111827] border border-slate-800/80 rounded-2xl overflow-hidden shadow-sm">
-              <button
-                onClick={() => setShowSkuTable(v => !v)}
-                className="w-full flex items-center justify-between px-6 py-4 border-b border-slate-800 hover:bg-slate-800/20 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <h3 className="text-xs font-black text-white uppercase tracking-[0.15em] font-sans">PAINEL SKU — FÍSICO × INSUMOS</h3>
-                  <span className="text-[9px] font-bold text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full font-mono">{filteredSkuRows.length} SKUs</span>
-                </div>
-                <div className={cn("text-slate-400 transition-transform duration-200", showSkuTable && "rotate-90")}>
-                  <ChevronRight size={16} />
-                </div>
-              </button>
-
-              <AnimatePresence>
-                {showSkuTable && (
-                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }}>
-                    {/* Filter + Sort panel */}
-                    <div className="px-6 py-3 border-b border-slate-800 flex flex-wrap gap-3 items-center justify-between bg-[#111827]">
-                      <div className="flex flex-wrap gap-2 items-center">
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mr-1">Filtrar:</span>
-                        {([
-                          { id: "todos", label: "Todos", dot: "bg-slate-400" },
-                          { id: "com_deficit", label: "Com Déficit", dot: "bg-rose-500" },
-                          { id: "sem_embalagem", label: "Sem Embalagem", dot: "bg-amber-500" },
-                          { id: "com_estoque", label: "Com Estoque", dot: "bg-emerald-500" },
-                          { id: "cobertos", label: "100% Cobertos", dot: "bg-blue-500" },
-                        ] as { id: typeof filterMode; label: string; dot: string }[]).map(f => (
-                          <button
-                            key={f.id}
-                            onClick={() => setFilterMode(f.id)}
-                            className={cn(
-                              "flex items-center gap-1.5 px-3 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider border transition-all cursor-pointer",
-                              filterMode === f.id ? "bg-blue-600 border-blue-500 text-white" : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
-                            )}
-                          >
-                            <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", f.dot)} />
-                            {f.label}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ordenar:</span>
-                        <select
-                          value={sortBy}
-                          onChange={e => setSortBy(e.target.value as typeof sortBy)}
-                          className="bg-slate-900 border border-slate-700 text-slate-200 text-[9px] font-bold rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-500 cursor-pointer"
-                        >
-                          <option value="avaria">↓ Maior Avaria</option>
-                          <option value="deficit">↓ Maior Déficit</option>
-                          <option value="estoque">↓ Maior Estoque</option>
-                          <option value="cobertura_asc">↑ Menor Cobertura %</option>
-                          <option value="cobertura_desc">↓ Maior Cobertura %</option>
-                          <option value="az">A → Z (SKU)</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse">
-                        <thead>
-                          <tr className="border-b border-slate-800 bg-[#0f172a]/50">
-                            <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest">SKU</th>
-                            <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest">Descrição</th>
-                            <th className="px-5 py-3 text-[9px] font-black text-rose-400 uppercase tracking-widest text-center">Avaria</th>
-                            <th className="px-5 py-3 text-[9px] font-black text-emerald-400 uppercase tracking-widest text-center">Estoque</th>
-                            <th className="px-5 py-3 text-[9px] font-black text-blue-400 uppercase tracking-widest text-center">Solicitado</th>
-                            <th className="px-5 py-3 text-[9px] font-black text-indigo-400 uppercase tracking-widest text-center">Chegando</th>
-                            <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest">Cobertura</th>
-                            <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">Status</th>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/50">
+                        {filteredSkuRows.filter(s => s.deficit > 0).slice(0, 5).map((sku) => (
+                          <tr key={sku.codigo} className="hover:bg-slate-800/20 transition-colors">
+                            <td className="px-5 py-3.5 text-xs font-bold text-slate-300">{sku.codigo}</td>
+                            <td className="px-5 py-3.5 text-xs font-bold text-white text-center">{sku.avarias.toLocaleString("pt-BR")}</td>
+                            <td className="px-5 py-3.5 text-xs font-bold text-slate-400 text-center">{Math.max(0, sku.avarias - sku.pedidas - sku.chegando).toLocaleString("pt-BR")}</td>
+                            <td className="px-5 py-3.5 text-xs font-bold text-emerald-400 text-center">{sku.estoque.toLocaleString("pt-BR")}</td>
+                            <td className="px-5 py-3.5 text-xs font-bold text-rose-500 text-center">{sku.deficit.toLocaleString("pt-BR")}</td>
+                            <td className="px-5 py-3.5 text-xs font-bold text-slate-300 text-center">{sku.pctCoberto}%</td>
                           </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-800/60 bg-[#111827]">
-                          {filteredSkuRows.map(sku => (
-                            <tr key={sku.codigo} className="hover:bg-slate-800/30 transition-colors">
-                              <td className="px-5 py-3.5 text-xs font-bold text-white font-mono tracking-wider">{sku.codigo}</td>
-                              <td className="px-5 py-3.5 text-xs text-slate-300 max-w-[200px] truncate" title={sku.descricao}>{sku.descricao}</td>
-                              <td className="px-5 py-3.5 text-xs font-bold text-rose-400 font-mono text-center">{sku.avarias.toLocaleString("pt-BR")}</td>
-                              <td className="px-5 py-3.5 text-xs font-bold text-emerald-400 font-mono text-center">{sku.estoque.toLocaleString("pt-BR")}</td>
-                              <td className="px-5 py-3.5 text-xs font-bold text-blue-400 font-mono text-center">{sku.pedidas.toLocaleString("pt-BR")}</td>
-                              <td className="px-5 py-3.5 text-xs font-bold text-indigo-400 font-mono text-center">{sku.chegando.toLocaleString("pt-BR")}</td>
-                              <td className="px-5 py-3.5 w-40"><SkuCoverageBar row={sku} /></td>
-                              <td className="px-5 py-3.5 text-center">
-                                {sku.deficit === 0
-                                  ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[9px] font-black text-emerald-400 uppercase tracking-wider"><CheckCircle2 size={9} />OK</span>
-                                  : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-[9px] font-black text-amber-400 uppercase tracking-wider font-mono"><AlertTriangle size={9} />{sku.deficit.toLocaleString("pt-BR")} FALTAM</span>
-                                }
-                              </td>
-                            </tr>
-                          ))}
-                          {filteredSkuRows.length === 0 && (
-                            <tr>
-                              <td colSpan={8} className="px-6 py-10 text-center text-slate-500 text-xs">
-                                <Inbox size={20} className="mx-auto mb-2 text-slate-600" />
-                                Nenhum SKU ativo encontrado.
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+
+              {/* RIGHT COLUMN: SOLICITAÇÕES RECENTES */}
+              <div className="bg-[#111827] border border-slate-800/80 rounded-2xl overflow-hidden shadow-sm flex flex-col">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
+                  <h3 className="text-xs font-black text-white uppercase tracking-[0.15em] font-sans">
+                    SOLICITAÇÕES RECENTES
+                  </h3>
+                  <button
+                    onClick={() => setSubTab("pedidas")}
+                    className="text-[10px] font-bold text-blue-400 hover:text-blue-300 transition-colors uppercase tracking-widest flex items-center gap-1 cursor-pointer"
+                  >
+                    VER TODAS <ChevronRight size={10} />
+                  </button>
+                </div>
+                <div className="overflow-x-auto flex-1 flex flex-col">
+                  {loading ? (
+                    <div className="flex-1 flex items-center justify-center p-10">
+                      <Loader2 className="animate-spin text-blue-500" size={18} />
                     </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                  ) : pedidas.filter(r => !r.isNew).length === 0 ? (
+                    <div className="flex-1 flex flex-col items-center justify-center py-16 text-slate-500 text-xs">
+                      <Inbox size={28} className="mb-2 text-slate-600" />
+                      <p className="font-semibold uppercase tracking-wider">Nenhuma solicitação encontrada!</p>
+                    </div>
+                  ) : (
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-800 bg-[#0f172a]/50">
+                          <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest">ID</th>
+                          <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest">DATA</th>
+                          <th className="px-5 py-3 text-[9px] font-black text-blue-400 uppercase tracking-widest text-center">SOLICITADO</th>
+                          <th className="px-5 py-3 text-[9px] font-black text-emerald-400 uppercase tracking-widest text-center">ENVIADO</th>
+                          <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">PENDENTE</th>
+                          <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">ENTREGA</th>
+                          <th className="px-5 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">STATUS</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/50">
+                        {pedidas.filter(r => !r.isNew).slice(0, 5).map((p, i) => {
+                          const sku = String(p.codigo || '').trim().toUpperCase()
+                          const skuRow = allSkuRows.find(r => r.codigo === sku)
+                          const qty = Number(p.quantidade) || 0
+                          const recebido = Math.min(qty, skuRow?.estoque || 0)
+                          const pendente = Math.max(0, qty - recebido)
+                          const pct = skuRow?.pctCoberto || 0
+                          const status = pct >= 100 ? "FINALIZADO" : pct > 0 ? "EM ANDAMENTO" : "PENDENTE"
+                          const statusCls = pct >= 100
+                            ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+                            : pct > 0
+                              ? "text-blue-400 bg-blue-500/10 border-blue-500/20"
+                              : "text-rose-400 bg-rose-500/10 border-rose-500/20"
+
+                          const fakeDate = p.data ? new Date(p.data + 'T00:00:00') : new Date()
+                          const fakeDelivery = pct >= 100 
+                            ? new Date(fakeDate.getTime() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString("pt-BR")
+                            : "TBC"
+
+                          return (
+                            <tr key={p.id || i} className="hover:bg-slate-800/20 transition-colors">
+                              <td className="px-5 py-3.5 text-xs text-slate-400">{i + 1}</td>
+                              <td className="px-5 py-3.5 text-xs text-slate-400">
+                                {p.data ? new Date(p.data + 'T00:00:00').toLocaleDateString("pt-BR") : "—"}
+                              </td>
+                              <td className="px-5 py-3.5 text-xs font-bold text-blue-400 text-center">{qty.toLocaleString("pt-BR")}</td>
+                              <td className="px-5 py-3.5 text-xs font-bold text-emerald-400 text-center">{recebido.toLocaleString("pt-BR")}</td>
+                              <td className={cn("px-5 py-3.5 text-xs font-bold text-center", pendente > 0 ? "text-amber-500" : "text-slate-500")}>
+                                {pendente.toLocaleString("pt-BR")}
+                              </td>
+                              <td className="px-5 py-3.5 text-xs text-slate-400 text-center">{fakeDelivery}</td>
+                              <td className="px-5 py-3.5 text-center">
+                                <span className={cn("px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border", statusCls)}>
+                                  {status}
+                                </span>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+
             </div>
 
           </motion.div>
@@ -989,13 +951,13 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
               <h3 className="text-sm font-bold text-white uppercase tracking-wider font-sans">
                 {subTab === "pedidas" ? "Planilha de Pedidos / Solicitações" : subTab === "atuais" ? "Estoque CD / Conserto" : "Cargas a Caminho"}
               </h3>
-              <p className="text-[10px] font-medium text-slate-400 mt-0.5">
+              <p className="text-[10px] font-medium text-slate-400 mt-0.5 font-sans">
                 Lançamento estilo Excel · Permite edição de qualquer célula, seleção rápida e colagem em massa
               </p>
             </div>
 
             <div className="overflow-x-auto min-h-[300px]">
-              <table className="w-full text-left border-collapse min-w-[800px]">
+              <table className="w-full text-left border-collapse min-w-[800px] font-sans">
                 <thead>
                   <tr className="border-b border-slate-800 bg-[#0f172a]/30">
                     <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-[160px]">Data</th>
@@ -1074,7 +1036,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                             value={dateVal}
                             onChange={e => updateRow(idx, subTab === "atuais" ? "chegada" : "data", e.target.value)}
                             onPaste={e => handleSmartPaste(e, 0)}
-                            className="w-full bg-transparent border-none px-6 py-3 text-xs text-slate-300 focus:bg-slate-900 focus:outline-none font-mono [color-scheme:dark]"
+                            className="w-full bg-transparent border-none px-6 py-3 text-xs text-slate-300 focus:bg-slate-900 focus:outline-none [color-scheme:dark]"
                           />
                         </td>
 
@@ -1088,7 +1050,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                               onClick={() => { setSkuSearchCell(item.codigo); setActiveSkuDropdown({ type: subTab, index: idx }) }}
                               onPaste={e => handleSmartPaste(e, 1)}
                               placeholder="SKU..."
-                              className="w-full bg-transparent border-none px-6 py-3 text-xs text-white font-mono focus:bg-slate-900/60 focus:outline-none"
+                              className="w-full bg-transparent border-none px-6 py-3 text-xs text-white focus:bg-slate-900/60 focus:outline-none"
                             />
                             {activeSkuDropdown?.type === subTab && activeSkuDropdown?.index === idx && cellSkus.length > 0 && (
                               <div ref={dropdownRef} className="absolute z-50 w-[300px] left-6 bottom-full mb-1 bg-[#0F172A] border border-white/10 rounded-2xl shadow-2xl p-2 space-y-1">
@@ -1099,7 +1061,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                                     onClick={() => { updateRow(idx, "codigo", b["Código"]); setActiveSkuDropdown(null) }}
                                     className="w-full text-left px-3 py-2 rounded-xl text-[10px] font-bold flex justify-between text-slate-400 hover:bg-white/5 hover:text-white transition-all cursor-pointer"
                                   >
-                                    <span className="font-mono text-blue-400">{b["Código"]}</span>
+                                    <span className="text-blue-400">{b["Código"]}</span>
                                     <span className="opacity-60 max-w-[140px] truncate">{b["Descrição"]}</span>
                                   </button>
                                 ))}
@@ -1121,7 +1083,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                             onChange={e => updateRow(idx, "quantidade", e.target.value === "" ? null : Number(e.target.value.replace(/\D/g, "")))}
                             onPaste={e => handleSmartPaste(e, 2)}
                             placeholder="0"
-                            className="w-full bg-transparent border-none py-3 text-center text-xs text-white font-mono focus:bg-slate-900/60 focus:outline-none"
+                            className="w-full bg-transparent border-none py-3 text-center text-xs text-white focus:bg-slate-900/60 focus:outline-none"
                           />
                         </td>
 
@@ -1165,7 +1127,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
               className="relative w-full max-w-2xl rounded-[2.5rem] bg-[#090D16] p-8 shadow-2xl border border-white/5 flex flex-col max-h-[90vh] text-slate-200"
             >
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-black text-white flex items-center gap-2 uppercase tracking-tight">
+                <h3 className="text-lg font-black text-white flex items-center gap-2 uppercase tracking-tight font-sans">
                   <Plus className="text-emerald-400" size={20} />
                   Importar {subTab === "pedidas" ? "Pedidos" : subTab === "atuais" ? "Estoque CD / Conserto" : "A Caminho"}
                 </h3>
@@ -1174,7 +1136,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                 </button>
               </div>
 
-              <div className="flex flex-col flex-1 min-h-0 gap-6">
+              <div className="flex flex-col flex-1 min-h-0 gap-6 font-sans">
                 <div className="space-y-2">
                   <p className="text-xs text-slate-400 font-semibold">
                     Cole os dados da planilha Excel ou Sheets abaixo. Ordem esperada:<br />
@@ -1184,7 +1146,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                     <textarea
                       value={importText}
                       onChange={(e) => setImportText(e.target.value)}
-                      className="w-full h-full min-h-[220px] bg-white/[0.02] border border-white/5 rounded-2xl px-4 py-4 text-xs font-mono text-white placeholder:text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 resize-none"
+                      className="w-full h-full min-h-[220px] bg-white/[0.02] border border-white/5 rounded-2xl px-4 py-4 text-xs text-white placeholder:text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 resize-none"
                       placeholder="Exemplo:\n2026-05-25	1705-01	150\n2026-05-25	2955-01	30"
                     />
                   </div>
