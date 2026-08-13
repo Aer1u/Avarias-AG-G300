@@ -851,11 +851,11 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                         {filteredSkuRows.filter(s => s.deficit > 0).slice(0, 5).map((sku) => (
                           <tr key={sku.codigo} className="hover:bg-slate-800/20 transition-colors">
                             <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-slate-300">{sku.codigo}</td>
-                            <td className="px-5 py-3.5 text-xs font-bold text-white text-center">{sku.avarias.toLocaleString("pt-BR")}</td>
-                            <td className="px-5 py-3.5 text-xs font-bold text-slate-400 text-center">{Math.max(0, sku.avarias - sku.pedidas - sku.chegando).toLocaleString("pt-BR")}</td>
-                            <td className="px-5 py-3.5 text-xs font-bold text-emerald-400 text-center">{sku.estoque.toLocaleString("pt-BR")}</td>
-                            <td className="px-5 py-3.5 text-xs font-bold text-rose-500 text-center">{sku.deficit.toLocaleString("pt-BR")}</td>
-                            <td className="px-5 py-3.5 text-xs font-bold text-slate-300 text-center">{sku.pctCoberto}%</td>
+                            <td className="px-5 py-3.5 font-mono text-[11px] font-bold text-white text-center">{sku.avarias.toLocaleString("pt-BR")}</td>
+                            <td className="px-5 py-3.5 font-mono text-[11px] font-bold text-slate-400 text-center">{Math.max(0, sku.avarias - sku.pedidas - sku.chegando).toLocaleString("pt-BR")}</td>
+                            <td className="px-5 py-3.5 font-mono text-[11px] font-bold text-emerald-400 text-center">{sku.estoque.toLocaleString("pt-BR")}</td>
+                            <td className="px-5 py-3.5 font-mono text-[11px] font-bold text-rose-500 text-center">{sku.deficit.toLocaleString("pt-BR")}</td>
+                            <td className="px-5 py-3.5 font-mono text-[11px] font-bold text-slate-300 text-center">{sku.pctCoberto}%</td>
                           </tr>
                         ))}
                       </tbody>
@@ -926,12 +926,12 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                               <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-slate-400">
                                 {p.data ? new Date(p.data + 'T00:00:00').toLocaleDateString("pt-BR") : "—"}
                               </td>
-                              <td className="px-5 py-3.5 text-xs font-bold text-blue-400 text-center">{qty.toLocaleString("pt-BR")}</td>
-                              <td className="px-5 py-3.5 text-xs font-bold text-emerald-400 text-center">{recebido.toLocaleString("pt-BR")}</td>
-                              <td className={cn("px-5 py-3.5 text-xs font-bold text-center", pendente > 0 ? "text-amber-500" : "text-slate-500")}>
+                              <td className="px-5 py-3.5 font-mono text-[11px] font-bold text-blue-400 text-center">{qty.toLocaleString("pt-BR")}</td>
+                              <td className="px-5 py-3.5 font-mono text-[11px] font-bold text-emerald-400 text-center">{recebido.toLocaleString("pt-BR")}</td>
+                              <td className={cn("px-5 py-3.5 font-mono text-[11px] font-bold text-center", pendente > 0 ? "text-amber-500" : "text-slate-500")}>
                                 {pendente.toLocaleString("pt-BR")}
                               </td>
-                              <td className="px-5 py-3.5 text-xs text-slate-400 text-center">{fakeDelivery}</td>
+                              <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-slate-400 text-center">{fakeDelivery}</td>
                               <td className="px-5 py-3.5 text-center">
                                 <span className={cn("px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border", statusCls)}>
                                   {status}
