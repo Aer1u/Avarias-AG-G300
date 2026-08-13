@@ -1482,9 +1482,9 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                   let totSolic = 0, totEnviado = 0, totPendente = 0
                   const rowDetails = items.map(p => {
                     const sku = String(p.codigo || '').trim().toUpperCase()
-                    const qty = Number(p.quantidade) || 0
-                    const enviado = Number(p.enviado) || 0
-                    const pendente = Number(p.pendente) || 0
+                    const qty = Math.round(Number(p.quantidade) || 0)
+                    const enviado = Math.round(Number(p.enviado) || 0)
+                    const pendente = Math.round(Number(p.pendente) || 0)
                     totSolic += qty; totEnviado += enviado; totPendente += pendente
                     
                     const status = String(p.status || 'PENDENTE').toUpperCase()
