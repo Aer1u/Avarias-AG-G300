@@ -1566,56 +1566,56 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                             </colgroup>
                             <thead>
                               <tr className="border-b border-slate-800/60 bg-slate-950/20">
-                                <th className="px-3 py-2 text-left text-[9px] font-medium text-slate-500 uppercase tracking-wider">Cód. Produto</th>
-                                <th className="px-3 py-2 text-left text-[9px] font-medium text-slate-500 uppercase tracking-wider">Modelo</th>
-                                <th className="px-3 py-2 text-center text-[9px] font-medium text-slate-500 uppercase tracking-wider">Qtd</th>
-                                <th className="px-3 py-2 text-left text-[9px] font-medium text-slate-500 uppercase tracking-wider">Cód. Emb.</th>
-                                <th className="px-3 py-2 text-left text-[9px] font-medium text-slate-500 uppercase tracking-wider">Descrição Emb.</th>
-                                <th className="px-3 py-2 text-left text-[9px] font-medium text-slate-500 uppercase tracking-wider">Tipo</th>
-                                <th className="px-3 py-2 text-left text-[9px] font-medium text-slate-500 uppercase tracking-wider">Tipo Emb.</th>
-                                <th className="px-3 py-2 text-center text-[9px] font-medium text-emerald-500 uppercase tracking-wider">Enviado</th>
-                                <th className="px-3 py-2 text-center text-[9px] font-medium text-amber-500 uppercase tracking-wider">Pendente</th>
-                                <th className="px-3 py-2 text-center text-[9px] font-medium text-slate-500 uppercase tracking-wider">Entrega (C.)</th>
-                                <th className="px-3 py-2 text-center text-[9px] font-medium text-slate-500 uppercase tracking-wider">Envio (E.)</th>
-                                <th className="px-3 py-2 text-center text-[9px] font-medium text-slate-500 uppercase tracking-wider">Status</th>
-                                <th className="px-3 py-2 text-center text-[9px] font-medium text-slate-500 uppercase tracking-wider">NF</th>
-                                <th className="px-3 py-2 text-center text-[9px] font-medium text-slate-500 uppercase tracking-wider">Previsão</th>
+                                <th className="px-3 py-2 text-left text-[9px] font-normal text-slate-500 uppercase tracking-wider">Cód. Produto</th>
+                                <th className="px-3 py-2 text-left text-[9px] font-normal text-slate-500 uppercase tracking-wider">Modelo</th>
+                                <th className="px-3 py-2 text-center text-[9px] font-normal text-slate-500 uppercase tracking-wider">Qtd</th>
+                                <th className="px-3 py-2 text-left text-[9px] font-normal text-slate-500 uppercase tracking-wider">Cód. Emb.</th>
+                                <th className="px-3 py-2 text-left text-[9px] font-normal text-slate-500 uppercase tracking-wider">Descrição Emb.</th>
+                                <th className="px-3 py-2 text-left text-[9px] font-normal text-slate-500 uppercase tracking-wider">Tipo</th>
+                                <th className="px-3 py-2 text-left text-[9px] font-normal text-slate-500 uppercase tracking-wider">Tipo Emb.</th>
+                                <th className="px-3 py-2 text-center text-[9px] font-normal text-emerald-500/80 uppercase tracking-wider">Enviado</th>
+                                <th className="px-3 py-2 text-center text-[9px] font-normal text-orange-400/80 uppercase tracking-wider">Pendente</th>
+                                <th className="px-3 py-2 text-center text-[9px] font-normal text-slate-500 uppercase tracking-wider">Entrega (C.)</th>
+                                <th className="px-3 py-2 text-center text-[9px] font-normal text-slate-500 uppercase tracking-wider">Envio (E.)</th>
+                                <th className="px-3 py-2 text-center text-[9px] font-normal text-slate-500 uppercase tracking-wider">Status</th>
+                                <th className="px-3 py-2 text-center text-[9px] font-normal text-slate-500 uppercase tracking-wider">NF</th>
+                                <th className="px-3 py-2 text-center text-[9px] font-normal text-slate-500 uppercase tracking-wider">Previsão</th>
                               </tr>
                             </thead>
                             <tbody>
                               {rowDetails.map((row, ri) => (
                                 <tr key={ri} className={cn(
-                                  "border-b border-slate-800/30 last:border-0 transition-colors hover:bg-slate-800/10",
+                                  "border-b border-slate-800/30 last:border-0 transition-colors hover:bg-slate-800/10 font-normal",
                                   ri % 2 === 1 ? "bg-slate-800/10" : ""
                                 )}>
                                   <td className="px-3 py-2.5 overflow-hidden">
-                                    <span className="block truncate text-white cursor-help" title={row.p.modelo_produto || row.p.modelo || ''}>{row.sku}</span>
+                                    <span className="block truncate text-slate-300 font-normal cursor-help" title={row.p.modelo_produto || row.p.modelo || ''}>{row.sku}</span>
                                   </td>
                                   <td className="px-3 py-2.5 overflow-hidden">
-                                    <span className="block truncate text-slate-400" title={row.p.modelo || ''}>{row.p.modelo || '—'}</span>
+                                    <span className="block truncate text-slate-400 font-normal" title={row.p.modelo || ''}>{row.p.modelo || '—'}</span>
                                   </td>
-                                  <td className="px-3 py-2.5 text-center text-white">{row.qty.toLocaleString('pt-BR')}</td>
+                                  <td className="px-3 py-2.5 text-center text-slate-300 font-normal">{row.qty.toLocaleString('pt-BR')}</td>
                                   <td className="px-3 py-2.5 overflow-hidden">
-                                    <span className="block truncate text-slate-500" title={row.p.codigo_embalagem || ''}>{row.p.codigo_embalagem || '—'}</span>
-                                  </td>
-                                  <td className="px-3 py-2.5 overflow-hidden">
-                                    <span className="block truncate text-slate-400" title={row.p.descricao_embalagem || ''}>{row.p.descricao_embalagem || '—'}</span>
+                                    <span className="block truncate text-slate-500 font-normal" title={row.p.codigo_embalagem || ''}>{row.p.codigo_embalagem || '—'}</span>
                                   </td>
                                   <td className="px-3 py-2.5 overflow-hidden">
-                                    <span className="block truncate text-slate-400 uppercase">{row.p.tipo || '—'}</span>
+                                    <span className="block truncate text-slate-400 font-normal" title={row.p.descricao_embalagem || ''}>{row.p.descricao_embalagem || '—'}</span>
                                   </td>
                                   <td className="px-3 py-2.5 overflow-hidden">
-                                    <span className="block truncate text-slate-400 uppercase">{row.p.tipo_embalagem || '—'}</span>
+                                    <span className="block truncate text-slate-400 font-normal uppercase">{row.p.tipo || '—'}</span>
                                   </td>
-                                  <td className="px-3 py-2.5 text-center text-emerald-400">{row.enviado.toLocaleString('pt-BR')}</td>
-                                  <td className={cn("px-3 py-2.5 text-center", row.pendente > 0 ? 'text-amber-400' : 'text-slate-600')}>{row.pendente.toLocaleString('pt-BR')}</td>
-                                  <td className="px-3 py-2.5 text-center text-slate-400 text-[9px]">{row.p.entrega_compras || 'TBC'}</td>
-                                  <td className="px-3 py-2.5 text-center text-slate-400 text-[9px]">{row.p.envio_expedicao || 'TBC'}</td>
-                                  <td className="px-3 py-2.5 text-center text-[9px] uppercase tracking-wider">
-                                    <span className={row.statusCls}>{row.status}</span>
+                                  <td className="px-3 py-2.5 overflow-hidden">
+                                    <span className="block truncate text-slate-400 font-normal uppercase">{row.p.tipo_embalagem || '—'}</span>
                                   </td>
-                                  <td className="px-3 py-2.5 text-center text-slate-400 text-[9px]">{row.p.nf || '—'}</td>
-                                  <td className="px-3 py-2.5 text-center text-slate-400 text-[9px]">{row.p.previsao_entrega || '—'}</td>
+                                  <td className="px-3 py-2.5 text-center text-emerald-400/90 font-normal">{row.enviado.toLocaleString('pt-BR')}</td>
+                                  <td className={cn("px-3 py-2.5 text-center font-normal", row.pendente > 0 ? 'text-orange-400' : 'text-slate-600')}>{row.pendente.toLocaleString('pt-BR')}</td>
+                                  <td className="px-3 py-2.5 text-center text-slate-400 font-normal text-[9px]">{row.p.entrega_compras || 'TBC'}</td>
+                                  <td className="px-3 py-2.5 text-center text-slate-400 font-normal text-[9px]">{row.p.envio_expedicao || 'TBC'}</td>
+                                  <td className="px-3 py-2.5 text-center text-[9px] font-normal uppercase tracking-wider">
+                                    <span className={cn(row.statusCls, "font-normal")}>{row.status}</span>
+                                  </td>
+                                  <td className="px-3 py-2.5 text-center text-slate-400 font-normal text-[9px]">{row.p.nf || '—'}</td>
+                                  <td className="px-3 py-2.5 text-center text-slate-400 font-normal text-[9px]">{row.p.previsao_entrega || '—'}</td>
                                 </tr>
                               ))}
                             </tbody>
