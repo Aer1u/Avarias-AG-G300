@@ -1109,7 +1109,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
   const coverageSegments = [
     { label: "CD + Conserto", value: totalEstoque, color: "#10b981" },
     { label: "Solicitado", value: totalPedidas, color: "#3b82f6" },
-    { label: "Chegando", value: totalChegando, color: "#6366f1" },
+    { label: "Chegando", value: totalChegando, color: "#f97316" },
     { label: "Falta Pedir", value: totalDeficit, color: "#ef4444" },
   ]
   const coverageArcs = buildGappedArcs(coverageSegments, totalAvariasDisplay)
@@ -1344,7 +1344,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                         {[
                           { label: "Disponível (CD + CONSERTO)", value: totalEstoque, color: "#10b981" },
                           { label: "Solicitado", value: totalPedidas, color: "#3b82f6" },
-                          { label: "A caminho", value: totalChegando, color: "#6366f1" },
+                          { label: "A caminho", value: totalChegando, color: "#f97316" },
                           { label: "Falta Solicitar", value: totalDeficit, color: "#ef4444" },
                         ].map(item => (
                           <div key={item.label} className="flex items-center justify-between gap-2 border-b border-slate-800/40 pb-1.5 last:border-0 last:pb-0">
@@ -1827,9 +1827,6 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
               <h3 className="text-sm font-bold text-white uppercase tracking-wider font-sans">
                 {subTab === "conserto" ? "Conserto" : subTab === "estoque_g300" ? "Estoque G300" : subTab === "atuais" ? "Estoque CD / Conserto" : "Cargas a Caminho"}
               </h3>
-              <p className="text-[10px] font-medium text-slate-400 mt-0.5 font-sans">
-                Lançamento estilo Excel · Permite edição de qualquer célula, seleção rápida e colagem em massa
-              </p>
             </div>
 
             <div className="overflow-x-auto min-h-[300px]">
