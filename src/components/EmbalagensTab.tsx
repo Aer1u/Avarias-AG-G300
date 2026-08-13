@@ -28,6 +28,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion"
 import { supabase } from "@/lib/supabase"
 import { cn } from "@/lib/utils"
+import * as XLSX from "xlsx"
 
 interface BaseCodigo {
   "Código": string
@@ -570,7 +571,32 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
   const [isImporting, setIsImporting] = useState(false)
   const [showSkuTable, setShowSkuTable] = useState(false)
   const [expandedSolicitations, setExpandedSolicitations] = useState<Set<string>>(new Set())
+  const [importedFileName, setImportedFileName] = useState("")
   const dropdownRef = useRef<HTMLDivElement>(null)
+
+  const handleExcelUpload = (file: File) => {
+    setImportedFileName(file.name)
+    const ext = file.name.split('.').pop()?.toLowerCase()
+    if (ext === 'xlsx' || ext === 'xls') {
+      const reader = new FileReader()
+      reader.onload = (evt) => {
+        try {
+          const data = evt.target?.result
+          const workbook = XLSX.read(data, { type: 'array' })
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
+          const tsv = XLSX.utils.sheet_to_csv(firstSheet, { FS: '\t' })
+          setImportText(tsv)
+        } catch (err: any) {
+          alert('Erro ao ler o arquivo Excel: ' + err.message)
+        }
+      }
+      reader.readAsArrayBuffer(file)
+    } else {
+      const reader = new FileReader()
+      reader.onload = (evt) => setImportText(evt.target?.result as string || '')
+      reader.readAsText(file, 'UTF-8')
+    }
+  }
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setUser(session?.user ?? null))
@@ -1647,7 +1673,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
         {showImportModal && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setShowImportModal(false)}
+              onClick={() => { setShowImportModal(false); setImportedFileName(""); setImportText(""); }}
               className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm"
             />
             <motion.div
@@ -1661,7 +1687,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                   <Plus className="text-emerald-400" size={20} />
                   Importar {subTab === "pedidas" ? "Pedidos" : subTab === "atuais" ? "Estoque CD / Conserto" : "A Caminho"}
                 </h3>
-                <button onClick={() => setShowImportModal(false)} className="text-slate-500 hover:text-white transition-colors cursor-pointer">
+                <button onClick={() => { setShowImportModal(false); setImportedFileName(""); setImportText(""); }} className="text-slate-500 hover:text-white transition-colors cursor-pointer">
                   <X size={20} />
                 </button>
               </div>
@@ -1683,12 +1709,42 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                       </>
                     )}
                   </p>
-                  <div className="relative flex-1 min-h-[220px]">
+
+                  {/* Drag and Drop Excel Area */}
+                  <div className="border border-dashed border-white/10 rounded-2xl p-5 bg-white/[0.01] hover:bg-white/[0.02] transition-all flex flex-col items-center justify-center gap-2.5 relative cursor-pointer group">
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.tsv,.csv,.txt"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleExcelUpload(file);
+                      }}
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                    />
+                    <FileText className="text-blue-400 group-hover:scale-105 transition-transform" size={24} />
+                    <div className="text-center">
+                      <p className="text-[11px] font-semibold text-white uppercase tracking-wider">Arraste ou Selecione seu arquivo Excel</p>
+                      <p className="text-[9px] text-slate-500 mt-0.5">Formatos suportados: .xlsx, .xls, .csv, .txt, .tsv</p>
+                    </div>
+                    {importedFileName && (
+                      <div className="px-2.5 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-[9px] font-mono text-blue-400 font-medium uppercase tracking-widest mt-1">
+                        📂 {importedFileName}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 text-slate-500 my-1 justify-center">
+                    <div className="h-px bg-slate-800/40 flex-1" />
+                    <span className="text-[9px] font-mono uppercase tracking-wider text-slate-600">ou cole o texto da planilha abaixo</span>
+                    <div className="h-px bg-slate-800/40 flex-1" />
+                  </div>
+
+                  <div className="relative flex-1 min-h-[140px]">
                     <textarea
                       value={importText}
                       onChange={(e) => setImportText(e.target.value)}
-                      className="w-full h-full min-h-[220px] bg-white/[0.02] border border-white/5 rounded-2xl px-4 py-4 text-xs text-white placeholder:text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 resize-none font-mono"
-                      placeholder="Exemplo:\n2026-05-25	1705-01	150\n2026-05-25	2955-01	30"
+                      className="w-full h-full min-h-[140px] bg-white/[0.02] border border-white/5 rounded-2xl px-4 py-4 text-xs text-white placeholder:text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 resize-none font-mono"
+                      placeholder="Os dados importados ou colados aparecerão aqui em formato texto..."
                     />
                   </div>
                 </div>
