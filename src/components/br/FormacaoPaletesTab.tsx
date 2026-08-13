@@ -53,7 +53,7 @@ function renderPosicaoHighlight(posicao: string) {
     return (
       <span className="inline-flex items-center font-bold">
         <span className="text-[10px] text-slate-400/60 dark:text-slate-500/60 font-bold tracking-wider">{prefix}</span>
-        <span className="text-emerald-500 dark:text-emerald-400 text-sm font-black ml-0.5">{suffix}</span>
+        <span className="text-emerald-500 dark:text-emerald-400 text-sm font-semibold ml-0.5">{suffix}</span>
       </span>
     )
   }
@@ -417,7 +417,7 @@ export default function FormacaoPaletesTab({
             <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
               Formação de Paletes
             </h1>
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+            <p className="text-[11px] font-medium text-slate-400 uppercase tracking-widest mt-0.5">
               Portal BR · MKBR E G300
             </p>
           </div>
@@ -442,7 +442,7 @@ export default function FormacaoPaletesTab({
                 setShowImportModal(true)
               }
             }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold uppercase tracking-wider shadow-lg shadow-emerald-500/25 transition-all active:scale-95 cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium uppercase tracking-wider shadow-lg shadow-emerald-500/25 transition-all active:scale-95 cursor-pointer"
           >
             <PlusSquare size={16} />
             Importar Relação
@@ -479,7 +479,7 @@ export default function FormacaoPaletesTab({
               <m.icon size={18} className={m.color} />
             </div>
             <p className="text-2xl font-bold text-slate-900 dark:text-white">{loading ? "..." : m.value.toLocaleString("pt-BR")}</p>
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">{m.label}</p>
+            <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wider mt-0.5">{m.label}</p>
           </motion.div>
         ))}
       </div>
@@ -612,7 +612,7 @@ export default function FormacaoPaletesTab({
               type="button"
               onClick={() => setGroupedView(true)}
               className={cn(
-                "px-3 h-8 flex items-center rounded-lg text-[10px] font-bold uppercase tracking-wider transition cursor-pointer",
+                "px-3 h-8 flex items-center rounded-lg text-[10px] font-medium uppercase tracking-wider transition cursor-pointer",
                 groupedView
                   ? "bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm"
                   : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-400"
@@ -624,7 +624,7 @@ export default function FormacaoPaletesTab({
               type="button"
               onClick={() => setGroupedView(false)}
               className={cn(
-                "px-3 h-8 flex items-center rounded-lg text-[10px] font-bold uppercase tracking-wider transition cursor-pointer",
+                "px-3 h-8 flex items-center rounded-lg text-[10px] font-medium uppercase tracking-wider transition cursor-pointer",
                 !groupedView
                   ? "bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm"
                   : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-400"
@@ -634,7 +634,7 @@ export default function FormacaoPaletesTab({
             </button>
           </div>
 
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest px-2 whitespace-nowrap">
+          <span className="text-[11px] font-medium text-slate-400 uppercase tracking-widest px-2 whitespace-nowrap">
             {groupedView 
               ? `${filteredGroups.length} ${filteredGroups.length === 1 ? "palete" : "paletes"}`
               : `${filteredItems.length} ${filteredItems.length === 1 ? "item" : "itens"}`
@@ -647,7 +647,7 @@ export default function FormacaoPaletesTab({
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 space-y-4">
           <RefreshCw className="animate-spin text-emerald-500" size={32} />
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest animate-pulse">Carregando Informações...</p>
+          <p className="text-xs font-normal text-slate-400 uppercase tracking-widest animate-pulse">Carregando Informações...</p>
         </div>
       ) : (
         <AnimatePresence mode="wait">
@@ -681,7 +681,7 @@ export default function FormacaoPaletesTab({
                   >
                     {/* MIX badge if multi-SKU */}
                     {g.uniqueSkus > 1 && (
-                      <span className="absolute top-1.5 right-1.5 text-[6px] font-black tracking-wider uppercase bg-amber-400 text-slate-900 px-1 py-0.5 rounded-xs leading-none shadow-xs z-10">
+                      <span className="absolute top-1.5 right-1.5 text-[6px] font-semibold tracking-wider uppercase bg-amber-400 text-slate-900 px-1 py-0.5 rounded-xs leading-none shadow-xs z-10">
                         MIX
                       </span>
                     )}
@@ -797,7 +797,7 @@ export default function FormacaoPaletesTab({
                         {modalPhase === "form_palete" ? "Formando Palete" : "Palete Ativo"}
                       </span>
                     </h3>
-                    <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">
+                    <p className="text-slate-400 text-xs font-medium uppercase tracking-widest mt-1">
                       {selectedPosGroup.uniqueSkus} SKUs Únicos · {selectedPosGroup.totalQtd} Peças Totais
                     </p>
                   </div>
@@ -816,11 +816,11 @@ export default function FormacaoPaletesTab({
                     <table className="w-full text-left">
                       <thead>
                         <tr className="border-b border-slate-100 dark:border-slate-800">
-                          <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">SKU Código</th>
-                          <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Descrição</th>
-                          <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Depósito</th>
-                          <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Qtd</th>
-                          <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center pl-8">Ação</th>
+                          <th className="px-4 py-3 text-[10px] font-medium text-slate-400 uppercase tracking-widest">SKU Código</th>
+                          <th className="px-4 py-3 text-[10px] font-medium text-slate-400 uppercase tracking-widest">Descrição</th>
+                          <th className="px-4 py-3 text-[10px] font-medium text-slate-400 uppercase tracking-widest text-center">Depósito</th>
+                          <th className="px-4 py-3 text-[10px] font-medium text-slate-400 uppercase tracking-widest text-right">Qtd</th>
+                          <th className="px-4 py-3 text-[10px] font-medium text-slate-400 uppercase tracking-widest text-center pl-8">Ação</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50 dark:divide-slate-800/40">
@@ -841,7 +841,7 @@ export default function FormacaoPaletesTab({
                                     className={cn(
                                       "text-xs font-mono font-bold px-2.5 py-1 rounded-md inline-block transition-all",
                                       isF2
-                                        ? "bg-rose-500/20 text-rose-500 border border-rose-500/40 font-black shadow-sm animate-pulse"
+                                        ? "bg-rose-500/20 text-rose-500 border border-rose-500/40 font-semibold shadow-sm animate-pulse"
                                         : "text-slate-400"
                                     )}
                                   >
@@ -851,7 +851,7 @@ export default function FormacaoPaletesTab({
                               })()}
                             </td>
                             <td className="px-4 py-3.5 text-right whitespace-nowrap">
-                              <span className="text-xs font-bold text-slate-900 dark:text-white">{item.quantidade}</span>
+                              <span className="text-xs font-normal text-slate-900 dark:text-white">{item.quantidade}</span>
                             </td>
                             <td className="px-4 py-3.5 text-center pl-8">
                               <div className="inline-flex justify-center">
@@ -881,7 +881,7 @@ export default function FormacaoPaletesTab({
                       <button
                         type="button"
                         onClick={() => setModalPhase("form_palete")}
-                        className="flex items-center gap-2 px-5 py-3 rounded-2xl text-xs font-bold uppercase tracking-wider transition-all bg-emerald-600 hover:bg-emerald-500 text-white border-transparent active:scale-[0.98] shadow-lg shadow-emerald-500/20 cursor-pointer"
+                        className="flex items-center gap-2 px-5 py-3 rounded-2xl text-xs font-medium uppercase tracking-wider transition-all bg-emerald-600 hover:bg-emerald-500 text-white border-transparent active:scale-[0.98] shadow-lg shadow-emerald-500/20 cursor-pointer"
                       >
                         <Plus size={15} />
                         Formar Palete
@@ -891,7 +891,7 @@ export default function FormacaoPaletesTab({
                         <button
                           type="button"
                           onClick={() => handleClearPosition(selectedPosGroup.posicao, selectedPosGroup.palete)}
-                          className="flex items-center gap-2 px-5 py-3 rounded-2xl text-xs font-bold uppercase tracking-wider transition-all bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-450 hover:bg-rose-100 dark:hover:bg-rose-500/20 cursor-pointer"
+                          className="flex items-center gap-2 px-5 py-3 rounded-2xl text-xs font-medium uppercase tracking-wider transition-all bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-450 hover:bg-rose-100 dark:hover:bg-rose-500/20 cursor-pointer"
                           title="Descarregar Posição / Palete"
                         >
                           <Trash2 size={15} />
@@ -903,7 +903,7 @@ export default function FormacaoPaletesTab({
                     <button
                       type="button"
                       onClick={() => setSelectedPosGroup(null)}
-                      className="px-6 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
+                      className="px-6 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium uppercase tracking-wider transition-all cursor-pointer"
                     >
                       Fechar Painel
                     </button>
@@ -915,7 +915,7 @@ export default function FormacaoPaletesTab({
                     {/* SAP Copy Pills */}
                     <div className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-100 dark:border-slate-800">
                       <div className="flex flex-col">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Cópias para SAP MB21</span>
+                        <span className="text-[10px] font-medium text-slate-400 uppercase tracking-widest">Cópias para SAP MB21</span>
                         <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Clique para copiar e colar no SAP.</span>
                       </div>
                       <div className="flex items-center gap-2">
@@ -960,15 +960,15 @@ export default function FormacaoPaletesTab({
 
                     {/* Fully Editable Table */}
                     <div>
-                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 ml-1">Itens no Palete</h4>
+                      <h4 className="text-[10px] font-medium text-slate-400 uppercase tracking-widest mb-1 ml-1">Itens no Palete</h4>
                       <table className="w-full text-left">
                         <thead>
                           <tr className="border-b border-slate-100 dark:border-slate-800">
-                            <th className="px-3 py-1 text-[9px] font-bold text-slate-400 uppercase tracking-widest">SKU</th>
-                            <th className="px-3 py-1 text-[9px] font-bold text-slate-400 uppercase tracking-widest">Descrição</th>
-                            <th className="px-3 py-1 text-[9px] font-bold text-slate-400 uppercase tracking-widest text-center">Retirada</th>
-                            <th className="px-3 py-1 text-[9px] font-bold text-slate-400 uppercase tracking-widest text-right pr-4">Qtd</th>
-                            <th className="px-3 py-1 text-[9px] font-bold text-slate-400 uppercase tracking-widest text-center">Incluso</th>
+                            <th className="px-3 py-1 text-[9px] font-medium text-slate-400 uppercase tracking-widest">SKU</th>
+                            <th className="px-3 py-1 text-[9px] font-medium text-slate-400 uppercase tracking-widest">Descrição</th>
+                            <th className="px-3 py-1 text-[9px] font-medium text-slate-400 uppercase tracking-widest text-center">Retirada</th>
+                            <th className="px-3 py-1 text-[9px] font-medium text-slate-400 uppercase tracking-widest text-right pr-4">Qtd</th>
+                            <th className="px-3 py-1 text-[9px] font-medium text-slate-400 uppercase tracking-widest text-center">Incluso</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50 dark:divide-slate-800/40">
@@ -993,7 +993,7 @@ export default function FormacaoPaletesTab({
                                 </p>
                               </td>
                               <td className="px-3 py-1 text-center whitespace-nowrap">
-                                <span className={cn("text-xs font-black", item.incluido ? "text-slate-500" : "text-slate-400 line-through")}>L100</span>
+                                <span className={cn("text-xs font-semibold", item.incluido ? "text-slate-500" : "text-slate-400 line-through")}>L100</span>
                               </td>
                               <td className="px-3 py-1 text-right whitespace-nowrap pr-3">
                                 <div className="inline-flex items-center rounded-lg bg-slate-50 dark:bg-slate-950 p-0.5 border border-slate-200 dark:border-slate-800">
@@ -1051,7 +1051,7 @@ export default function FormacaoPaletesTab({
                                     </div>
                                   </label>
                                   {!item.incluido && (
-                                    <span className="text-[8px] font-black text-rose-600 bg-rose-100 dark:bg-rose-500/10 px-1.5 py-0.5 rounded uppercase tracking-wider animate-pulse">
+                                    <span className="text-[8px] font-semibold text-rose-600 bg-rose-100 dark:bg-rose-500/10 px-1.5 py-0.5 rounded uppercase tracking-wider animate-pulse">
                                       TIRAR
                                     </span>
                                   )}
@@ -1066,15 +1066,15 @@ export default function FormacaoPaletesTab({
                     {/* SAP Fields */}
                     <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-2">
                       <div className="pb-1.5 border-b border-slate-100 dark:border-slate-800">
-                        <h4 className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-widest">Documentação SAP</h4>
+                        <h4 className="text-xs font-normal text-slate-600 dark:text-slate-300 uppercase tracking-widest">Documentação SAP</h4>
                         <p className="text-[10px] text-slate-400 mt-1">Remessa e Documento são sempre obrigatórios. Reserva somente se gerada via MB21.</p>
                       </div>
 
                       {/* COPIE E COLE ESTE BLOCO ABAIXO: */}
 <div className="space-y-1.5">
-  <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">
+  <label className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500 uppercase tracking-wider ml-1">
     Tipo de Avaria
-    <span className="text-[9px] font-bold text-rose-400 uppercase tracking-wider">*</span>
+    <span className="text-[9px] font-medium text-rose-400 uppercase tracking-wider">*</span>
   </label>
   <div className="flex flex-wrap gap-2">
     {avariaTipos.map((tipo) => {
@@ -1104,9 +1104,9 @@ export default function FormacaoPaletesTab({
 
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1.5">
-                          <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">
+                          <label className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500 uppercase tracking-wider ml-1">
                             Reserva SAP
-                            <span className="text-[9px] font-bold text-slate-300 dark:text-slate-600 normal-case tracking-normal">(opcional)</span>
+                            <span className="text-[9px] font-medium text-slate-300 dark:text-slate-600 normal-case tracking-normal">(opcional)</span>
                           </label>
                           <input
                             type="text"
@@ -1117,9 +1117,9 @@ export default function FormacaoPaletesTab({
                           />
                         </div>
                         <div className="space-y-1.5">
-                          <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">
+                          <label className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500 uppercase tracking-wider ml-1">
                             Remessa MIGO
-                            <span className="text-[9px] font-bold text-rose-400 uppercase tracking-wider">*</span>
+                            <span className="text-[9px] font-medium text-rose-400 uppercase tracking-wider">*</span>
                           </label>
                           <input
                             type="text"
@@ -1136,9 +1136,9 @@ export default function FormacaoPaletesTab({
                       </div>
 
                       <div className="space-y-1.5">
-                        <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">
+                        <label className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500 uppercase tracking-wider ml-1">
                           Documento SAP (pós-SM)
-                          <span className="text-[9px] font-bold text-rose-400 uppercase tracking-wider">*</span>
+                          <span className="text-[9px] font-medium text-rose-400 uppercase tracking-wider">*</span>
                         </label>
                         <input
                           type="text"
@@ -1159,7 +1159,7 @@ export default function FormacaoPaletesTab({
                     <button
                       type="button"
                       onClick={() => setModalPhase("view")}
-                      className="px-5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
+                      className="px-5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium uppercase tracking-wider transition-all cursor-pointer"
                     >
                       Voltar
                     </button>
@@ -1169,7 +1169,7 @@ export default function FormacaoPaletesTab({
                       disabled={isSavingPalete || !remessaNum.trim() || !documentoSM.trim() || !avariaType}
                       onClick={handleConfirmarFormarPalete}
                       className={cn(
-                        "flex-1 flex items-center justify-center gap-2 px-5 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg cursor-pointer",
+                        "flex-1 flex items-center justify-center gap-2 px-5 py-2 rounded-xl text-xs font-semibold uppercase tracking-widest transition-all shadow-lg cursor-pointer",
                         isSavingPalete || !remessaNum.trim() || !documentoSM.trim() || !avariaType
                           ? "bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed shadow-none"
                           : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-500/25 active:scale-[0.98]"
@@ -1257,14 +1257,14 @@ export default function FormacaoPaletesTab({
               <div className="flex flex-col flex-1 min-h-0 gap-5 overflow-y-auto custom-scrollbar pr-1">
                 {importTab === "digitar" ? (
                   <div className="space-y-4 bg-slate-50 dark:bg-slate-950 p-5 rounded-2xl border border-slate-200/60 dark:border-slate-800/80">
-                    <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    <p className="text-xs font-normal text-slate-700 dark:text-slate-300">
                       Digite os dados abaixo. A descrição será preenchida automaticamente conforme o produto:
                     </p>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       {/* Posição */}
                       <div>
-                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Posição</label>
+                        <label className="text-[10px] font-medium text-slate-500 uppercase tracking-widest block mb-1">Posição</label>
                         <input
                           type="text"
                           value={manualPosicao}
@@ -1276,7 +1276,7 @@ export default function FormacaoPaletesTab({
 
                       {/* Produto / SKU Código com Autocomplete */}
                       <div className="relative">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Produto (Código)</label>
+                        <label className="text-[10px] font-medium text-slate-500 uppercase tracking-widest block mb-1">Produto (Código)</label>
                         <input
                           type="text"
                           value={manualCodigo}
@@ -1305,7 +1305,7 @@ export default function FormacaoPaletesTab({
 
                       {/* Quantidade */}
                       <div>
-                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Quantidade</label>
+                        <label className="text-[10px] font-medium text-slate-500 uppercase tracking-widest block mb-1">Quantidade</label>
                         <input
                           type="number"
                           min={1}
@@ -1346,7 +1346,7 @@ export default function FormacaoPaletesTab({
                 {importText.trim() && (
                   <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-800/80">
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Itens Prontos para Gravar ({importText.trim().split('\n').filter(l => l.trim()).length})</span>
+                      <span className="text-[10px] font-medium text-slate-500 uppercase tracking-widest">Itens Prontos para Gravar ({importText.trim().split('\n').filter(l => l.trim()).length})</span>
                       <button
                         type="button"
                         onClick={() => setImportText("")}
@@ -1358,11 +1358,11 @@ export default function FormacaoPaletesTab({
                     <table className="w-full text-left">
                       <thead>
                         <tr className="border-b border-slate-200/60 dark:border-slate-800">
-                          <th className="px-2 py-1 text-[9px] font-bold text-slate-400 uppercase">Posição</th>
-                          <th className="px-2 py-1 text-[9px] font-bold text-slate-400 uppercase">Código</th>
-                          <th className="px-2 py-1 text-[9px] font-bold text-slate-400 uppercase">Descrição</th>
-                          <th className="px-2 py-1 text-[9px] font-bold text-slate-400 uppercase text-center">Depósito</th>
-                          <th className="px-2 py-1 text-[9px] font-bold text-slate-400 uppercase text-right">Qtd</th>
+                          <th className="px-2 py-1 text-[9px] font-medium text-slate-400 uppercase">Posição</th>
+                          <th className="px-2 py-1 text-[9px] font-medium text-slate-400 uppercase">Código</th>
+                          <th className="px-2 py-1 text-[9px] font-medium text-slate-400 uppercase">Descrição</th>
+                          <th className="px-2 py-1 text-[9px] font-medium text-slate-400 uppercase text-center">Depósito</th>
+                          <th className="px-2 py-1 text-[9px] font-medium text-slate-400 uppercase text-right">Qtd</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40">
@@ -1382,7 +1382,7 @@ export default function FormacaoPaletesTab({
                               <td className="px-2 py-1 text-center">
                                 <span className={cn(
                                   "font-mono font-bold text-[11px] px-1.5 py-0.5 rounded",
-                                  isF ? "bg-rose-500/20 text-rose-500 border border-rose-500/40 font-black animate-pulse" : "text-slate-400"
+                                  isF ? "bg-rose-500/20 text-rose-500 border border-rose-500/40 font-semibold animate-pulse" : "text-slate-400"
                                 )}>
                                   {dep}
                                 </span>
@@ -1408,7 +1408,7 @@ export default function FormacaoPaletesTab({
                         />
                         <div className="w-9 h-5 bg-slate-200 dark:bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-[16px] peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500" />
                       </div>
-                      <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider group-hover:text-emerald-500 transition-colors">
+                      <span className="text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider group-hover:text-emerald-500 transition-colors">
                         Substituir Dados
                       </span>
                     </label>
@@ -1432,14 +1432,14 @@ export default function FormacaoPaletesTab({
                           />
                           <div className="w-9 h-5 bg-slate-200 dark:bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-[16px] peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500" />
                         </div>
-                        <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider group-hover:text-emerald-500 transition-colors">
+                        <span className="text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider group-hover:text-emerald-500 transition-colors">
                           Quebrar por Grade
                         </span>
                       </label>
                       
                       {splitByGrade && (
                         <div className="flex items-center gap-1.5 shrink-0">
-                          <span className="text-[9px] font-bold text-slate-400 uppercase">Qtd:</span>
+                          <span className="text-[9px] font-medium text-slate-400 uppercase">Qtd:</span>
                           <input
                             type="number"
                             min={1}

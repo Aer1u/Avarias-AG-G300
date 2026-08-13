@@ -2757,7 +2757,7 @@ function DashboardPage() {
             return invalid ? (
               <span className="text-[10px] text-slate-400 dark:text-slate-500 italic">Palete Simples</span>
             ) : (
-              <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 tracking-wide uppercase">{String(val).toUpperCase()}</span>
+              <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 tracking-wide uppercase">{String(val).toUpperCase()}</span>
             );
           }
         },
@@ -3152,7 +3152,7 @@ function DashboardPage() {
       <div className="flex min-h-screen items-center justify-center bg-[#020617] text-white">
         <div className="flex flex-col items-center gap-3">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-400 font-sans">Carregando Painel...</span>
+          <span className="text-xs font-medium uppercase tracking-wider text-slate-400 font-sans">Carregando Painel...</span>
         </div>
       </div>
     )
@@ -3168,24 +3168,24 @@ function DashboardPage() {
             <div className="font-sans">
               <div className="flex justify-between items-center border-b-[2px] border-black pb-2 mb-6">
                 <div>
-                  <h1 className="text-xl font-black uppercase tracking-tight">Relação de Produtos por Estoque</h1>
-                  <p className="text-[10px] font-bold text-slate-500 uppercase">G300 PAINEL OPERACIONAL</p>
+                  <h1 className="text-xl font-semibold uppercase tracking-tight">Relação de Produtos por Estoque</h1>
+                  <p className="text-[10px] font-medium text-slate-500 uppercase">G300 PAINEL OPERACIONAL</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-[10px] font-bold uppercase">{new Date().toLocaleString('pt-BR')}</p>
-                  <p className="text-[10px] font-bold text-blue-600 uppercase">{printData.length} SKUs Encontrados</p>
+                  <p className="text-[10px] font-medium uppercase">{new Date().toLocaleString('pt-BR')}</p>
+                  <p className="text-[10px] font-medium text-blue-600 uppercase">{printData.length} SKUs Encontrados</p>
                 </div>
               </div>
 
               <table className="w-full border-collapse border border-black text-[10px]">
                 <thead>
                   <tr className="bg-slate-100">
-                    <th className="border border-black p-2 text-left font-black uppercase w-24">SKU</th>
-                    <th className="border border-black p-2 text-left font-black uppercase">Descrição</th>
-                    <th className="border border-black p-2 text-center font-black uppercase w-16">Peças</th>
-                    <th className="border border-black p-2 text-center font-black uppercase w-16">Paletes</th>
-                    <th className="border border-black p-2 text-center font-black uppercase w-16">Posições</th>
-                    <th className="border border-black p-2 text-left font-black uppercase w-48">Observações</th>
+                    <th className="border border-black p-2 text-left font-semibold uppercase w-24">SKU</th>
+                    <th className="border border-black p-2 text-left font-semibold uppercase">Descrição</th>
+                    <th className="border border-black p-2 text-center font-semibold uppercase w-16">Peças</th>
+                    <th className="border border-black p-2 text-center font-semibold uppercase w-16">Paletes</th>
+                    <th className="border border-black p-2 text-center font-semibold uppercase w-16">Posições</th>
+                    <th className="border border-black p-2 text-left font-semibold uppercase w-48">Observações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3203,15 +3203,15 @@ function DashboardPage() {
               </table>
 
               <div className="mt-8 pt-4 border-t border-slate-200 text-center">
-                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Documento interno para conferência operacional — AG G300</p>
+                <p className="text-[8px] font-medium text-slate-400 uppercase tracking-widest">Documento interno para conferência operacional — AG G300</p>
               </div>
             </div>
           ) : (
             /* Layout 2: Manifesto de Conferência (By Position Mapping) */
             <>
               <div className="flex justify-between items-center border-b-[2px] border-black pb-1 mb-4">
-                <h1 className="text-[16px] font-black uppercase tracking-tight">Manifesto de Conferência de Drive - G300</h1>
-                <p className="text-[8px] font-bold text-slate-500 uppercase">{new Date().toLocaleString('pt-BR')} • {printData.length} Registros</p>
+                <h1 className="text-[16px] font-semibold uppercase tracking-tight">Manifesto de Conferência de Drive - G300</h1>
+                <p className="text-[8px] font-medium text-slate-500 uppercase">{new Date().toLocaleString('pt-BR')} • {printData.length} Registros</p>
               </div>
 
               <div className="grid grid-cols-2 gap-x-3 gap-y-2">
@@ -3237,7 +3237,7 @@ function DashboardPage() {
                       {/* Header */}
                       <div className="bg-[#E5E7EB] px-3 py-1 flex justify-between items-baseline border border-[#D1D5DB]">
                         <div className="flex items-baseline gap-2">
-                          <span className="text-[12px] font-black tracking-tight">{posId}</span>
+                          <span className="text-[12px] font-semibold tracking-tight">{posId}</span>
                           <span className="text-[7px] font-bold uppercase opacity-60">Cap. {items[0]?.capacidade || "--"}</span>
                         </div>
                         <span className="text-[10px] font-bold">Qtd. Total: {fmtNum(totalPosUnits)}</span>
@@ -3289,7 +3289,7 @@ function DashboardPage() {
                           return (
                             <div key={lvl} className="flex items-stretch gap-1">
                               <div className="w-8 border border-black flex items-center justify-center shrink-0">
-                                <span className="text-[9px] font-black">N{lvl}</span>
+                                <span className="text-[9px] font-semibold">N{lvl}</span>
                               </div>
 
                               <div className="flex-1 space-y-[-1px]">
@@ -3306,10 +3306,10 @@ function DashboardPage() {
                                         {group.items.map((item, iIdx) => (
                                           <div key={iIdx} className={`flex flex-1 ${iIdx > 0 ? 'border-t border-black' : ''}`}>
                                             <div className="flex-1 px-2 border-r border-black flex items-center min-w-0">
-                                              <span className="text-[9.5px] font-black uppercase truncate">CÓD: {item.sku}</span>
+                                              <span className="text-[9.5px] font-semibold uppercase truncate">CÓD: {item.sku}</span>
                                             </div>
                                             <div className="w-24 px-2 flex items-center justify-end shrink-0">
-                                              <span className="text-[12px] font-black">{fmtNum(item.portion)} UN</span>
+                                              <span className="text-[12px] font-semibold">{fmtNum(item.portion)} UN</span>
                                             </div>
                                           </div>
                                         ))}
@@ -3353,8 +3353,8 @@ function DashboardPage() {
               <Package className="text-white" size={32} />
             </div>
             <div className="flex flex-col items-center opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300 whitespace-nowrap overflow-hidden w-full space-y-1">
-              <h2 className="text-base font-black tracking-tight text-slate-900 dark:text-white leading-tight">Portal <span className="text-blue-600">AG</span></h2>
-              <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">G300 PAINEL OPERACIONAL</p>
+              <h2 className="text-base font-semibold tracking-tight text-slate-900 dark:text-white leading-tight">Portal <span className="text-blue-600">AG</span></h2>
+              <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-[0.2em]">G300 PAINEL OPERACIONAL</p>
             </div>
           </div>
 
@@ -3402,7 +3402,7 @@ function DashboardPage() {
                   )} />
                 </div>
                 <span className={cn(
-                  "text-[11px] font-black uppercase tracking-wider opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300 whitespace-nowrap text-left",
+                  "text-[11px] font-semibold uppercase tracking-wider opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300 whitespace-nowrap text-left",
                   topTab === tab.id ? "text-blue-600 dark:text-blue-400" : ""
                 )}>
                   {tab.label}
@@ -3421,7 +3421,7 @@ function DashboardPage() {
               <div className="flex min-w-[48px] h-12 items-center justify-center">
                 <Repeat2 size={18} className="text-emerald-500" />
               </div>
-              <span className="ml-1 text-[10px] font-black uppercase tracking-wider opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300 whitespace-nowrap text-emerald-600 dark:text-emerald-400">
+              <span className="ml-1 text-[10px] font-semibold uppercase tracking-wider opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300 whitespace-nowrap text-emerald-600 dark:text-emerald-400">
                 Trocar Módulo
               </span>
             </button>
@@ -3433,7 +3433,7 @@ function DashboardPage() {
               <div className="flex min-w-[48px] h-12 items-center justify-center">
                 {theme === "light" ? <Moon size={20} /> : <Sun size={20} />}
               </div>
-              <span className="ml-2 text-[10px] font-black uppercase tracking-wider opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300 whitespace-nowrap">
+              <span className="ml-2 text-[10px] font-semibold uppercase tracking-wider opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300 whitespace-nowrap">
                 {theme === "light" ? "Escuro" : "Claro"}
               </span>
             </button>
@@ -3454,7 +3454,7 @@ function DashboardPage() {
                   title={user ? `Logado como ${user.email} - Clique para Sair` : "Fazer Login"}
                 >
                   {user ? (
-                    <span className="text-sm font-black uppercase">{user.email[0]}</span>
+                    <span className="text-sm font-semibold uppercase">{user.email[0]}</span>
                   ) : (
                     <User size={20} />
                   )}
@@ -3579,7 +3579,7 @@ function DashboardPage() {
                             className="absolute right-0 mt-3 w-72 bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.2)] border border-white/20 dark:border-slate-800/50 z-50 origin-top-right overflow-hidden p-2"
                           >
                             <div className="px-4 py-3 mb-1">
-                              <p className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-500 tracking-[0.2em]">
+                              <p className="text-[10px] font-semibold uppercase text-slate-400 dark:text-slate-500 tracking-[0.2em]">
                                 {topTab === 'confrontos' ? 'Filtro de Exportação' : 'Opções'}
                               </p>
                             </div>
@@ -3598,7 +3598,7 @@ function DashboardPage() {
                                     key={f.id}
                                     onClick={() => setExportFilter(f.id as any)}
                                     className={cn(
-                                      "w-full text-left px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all",
+                                      "w-full text-left px-3 py-1.5 rounded-xl text-[10px] font-medium uppercase tracking-wider transition-all",
                                       exportFilter === f.id
                                         ? "bg-blue-600 text-white shadow-sm"
                                         : "text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
@@ -3658,8 +3658,8 @@ function DashboardPage() {
                                     <FileText size={14} />
                                   </div>
                                   <div>
-                                    <p className="text-xs font-bold text-slate-700 dark:text-slate-200 leading-none mb-1">Exportar PDF</p>
-                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{confrontoType === 'fisico_x_a501' ? 'Físico vs Sistema' : 'A501 vs G501'}</p>
+                                    <p className="text-xs font-normal text-slate-700 dark:text-slate-200 leading-none mb-1">Exportar PDF</p>
+                                    <p className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">{confrontoType === 'fisico_x_a501' ? 'Físico vs Sistema' : 'A501 vs G501'}</p>
                                   </div>
                                 </div>
                               </button>
@@ -3717,8 +3717,8 @@ function DashboardPage() {
                                     <Download size={14} />
                                   </div>
                                   <div>
-                                    <p className="text-xs font-bold text-slate-700 dark:text-slate-200 leading-none mb-1">Exportar Excel</p>
-                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{confrontoType === 'fisico_x_a501' ? 'Físico vs Sistema' : 'A501 vs G501'}</p>
+                                    <p className="text-xs font-normal text-slate-700 dark:text-slate-200 leading-none mb-1">Exportar Excel</p>
+                                    <p className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">{confrontoType === 'fisico_x_a501' ? 'Físico vs Sistema' : 'A501 vs G501'}</p>
                                   </div>
                                 </div>
                               </button>
@@ -3738,8 +3738,8 @@ function DashboardPage() {
                                     <PlusSquare size={14} />
                                   </div>
                                   <div>
-                                    <p className="text-xs font-bold text-slate-700 dark:text-slate-200 leading-none mb-1">Importar A501</p>
-                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Atualizar base do sistema</p>
+                                    <p className="text-xs font-normal text-slate-700 dark:text-slate-200 leading-none mb-1">Importar A501</p>
+                                    <p className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">Atualizar base do sistema</p>
                                   </div>
                                 </div>
                               </button>
@@ -3759,8 +3759,8 @@ function DashboardPage() {
                                     <Layers size={14} />
                                   </div>
                                   <div>
-                                    <p className="text-xs font-bold text-slate-700 dark:text-slate-200 leading-none mb-1">Importar G501</p>
-                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Atualizar base de vistoria</p>
+                                    <p className="text-xs font-normal text-slate-700 dark:text-slate-200 leading-none mb-1">Importar G501</p>
+                                    <p className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">Atualizar base de vistoria</p>
                                   </div>
                                 </div>
                               </button>
@@ -3780,8 +3780,8 @@ function DashboardPage() {
                                     <DownloadCloud size={14} />
                                   </div>
                                   <div>
-                                    <p className="text-xs font-bold text-slate-700 dark:text-slate-200 leading-none mb-1">Importar Ajustes</p>
-                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Colar código compartilhado</p>
+                                    <p className="text-xs font-normal text-slate-700 dark:text-slate-200 leading-none mb-1">Importar Ajustes</p>
+                                    <p className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">Colar código compartilhado</p>
                                   </div>
                                 </div>
                               </button>
@@ -3798,8 +3798,8 @@ function DashboardPage() {
                                     <Package size={14} />
                                   </div>
                                   <div>
-                                    <p className="text-xs font-bold text-slate-700 dark:text-slate-200 leading-none mb-1">Relatório Geral</p>
-                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Planilha Consolidada</p>
+                                    <p className="text-xs font-normal text-slate-700 dark:text-slate-200 leading-none mb-1">Relatório Geral</p>
+                                    <p className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">Planilha Consolidada</p>
                                   </div>
                                 </div>
                               </button>
@@ -3816,8 +3816,8 @@ function DashboardPage() {
                                     <Presentation size={14} />
                                   </div>
                                   <div>
-                                    <p className="text-xs font-bold text-slate-700 dark:text-slate-200 leading-none mb-1">Exportar Apresentação</p>
-                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Gerar print com OBS</p>
+                                    <p className="text-xs font-normal text-slate-700 dark:text-slate-200 leading-none mb-1">Exportar Apresentação</p>
+                                    <p className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">Gerar print com OBS</p>
                                   </div>
                                 </div>
                               </button>
@@ -3836,8 +3836,8 @@ function DashboardPage() {
                                       <Plus size={14} />
                                     </div>
                                     <div>
-                                      <p className="text-xs font-bold text-slate-700 dark:text-slate-200 leading-none mb-1">Cadastrar Produto</p>
-                                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Adicionar na Base de Códigos</p>
+                                      <p className="text-xs font-normal text-slate-700 dark:text-slate-200 leading-none mb-1">Cadastrar Produto</p>
+                                      <p className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">Adicionar na Base de Códigos</p>
                                     </div>
                                   </div>
                                 </button>
@@ -3863,7 +3863,7 @@ function DashboardPage() {
                 >
                   <div className="flex items-center justify-center gap-2 py-2.5 px-4 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/20 rounded-2xl transition-colors shadow-sm">
                     <RefreshCw size={12} className="animate-spin text-blue-600 dark:text-blue-400" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-400">Atualizando dados...</span>
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-blue-600 dark:text-blue-400">Atualizando dados...</span>
                   </div>
                 </motion.div>
               )}
@@ -3907,7 +3907,7 @@ function DashboardPage() {
                       delay={0.1}
                       description={
                         palletTrend !== undefined ? (
-                          <div className="flex items-center gap-1 mt-1 text-[10px] font-black uppercase tracking-wider">
+                          <div className="flex items-center gap-1 mt-1 text-[10px] font-semibold uppercase tracking-wider">
                             <span className={cn(
                               "flex items-center gap-0.5",
                               palletTrend >= 0
@@ -3924,13 +3924,13 @@ function DashboardPage() {
                       hoverContent={
                         <div className="flex items-center justify-around gap-10 text-center w-full">
                           <div className="flex flex-col">
-                            <span className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider">Alocados</span>
-                            <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 transition-colors">{fmtNum(advancedStats.alocadosPallets)}</span>
+                            <span className="text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400 tracking-wider">Alocados</span>
+                            <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 transition-colors">{fmtNum(advancedStats.alocadosPallets)}</span>
                           </div>
                           <div className="h-6 w-[1px] bg-slate-200 dark:bg-white/10" />
                           <div className="flex flex-col">
-                            <span className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider">Não Alocados</span>
-                            <span className="text-sm font-black text-orange-600 dark:text-orange-400 transition-colors">{fmtNum(advancedStats.naoAlocadosPallets)}</span>
+                            <span className="text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400 tracking-wider">Não Alocados</span>
+                            <span className="text-sm font-semibold text-orange-600 dark:text-orange-400 transition-colors">{fmtNum(advancedStats.naoAlocadosPallets)}</span>
                           </div>
                         </div>
                       }
@@ -3955,7 +3955,7 @@ function DashboardPage() {
                           const delta = todayNet;
                           
                           return (
-                            <div className="flex items-center gap-1 mt-1 text-[10px] font-black uppercase tracking-wider">
+                            <div className="flex items-center gap-1 mt-1 text-[10px] font-semibold uppercase tracking-wider">
                               <span className={cn(
                                 "flex items-center gap-0.5",
                                 delta > 0
@@ -3975,27 +3975,27 @@ function DashboardPage() {
                       hoverContent={
                         <div className="grid grid-cols-2 gap-x-10 gap-y-4 text-center w-full">
                           <div className="flex flex-col">
-                            <span className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider">Alocadas</span>
-                            <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 transition-colors">{fmtNum(effectiveData.filter(i => {
+                            <span className="text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400 tracking-wider">Alocadas</span>
+                            <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 transition-colors">{fmtNum(effectiveData.filter(i => {
                               const p = String(i.posicao || "").toUpperCase();
                               return p !== "CHÃO" && p !== "CHAO";
                             }).reduce((s, i) => s + (i.quantidade_total || 0), 0))}</span>
                           </div>
                           <div className="flex flex-col">
-                            <span className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider">Não Alocadas</span>
-                            <span className="text-sm font-black text-orange-600 dark:text-orange-400 transition-colors">{fmtNum(effectiveData.filter(i => {
+                            <span className="text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400 tracking-wider">Não Alocadas</span>
+                            <span className="text-sm font-semibold text-orange-600 dark:text-orange-400 transition-colors">{fmtNum(effectiveData.filter(i => {
                               const p = String(i.posicao || "").toUpperCase();
                               return p === "CHÃO" || p === "CHAO";
                             }).reduce((s, i) => s + (i.quantidade_total || 0), 0))}</span>
                           </div>
                           <div className="col-span-2 h-[1px] bg-slate-200 dark:bg-white/10 my-1" />
                           <div className="flex flex-col border-r border-slate-200 dark:border-white/10 pr-6">
-                            <span className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider">Molhados</span>
-                            <span className="text-sm font-black text-blue-600 dark:text-blue-400 transition-colors">{fmtNum(stats?.qtd_molhado || 0)} <span className="text-[10px] text-slate-500 dark:text-slate-500 font-medium">un</span></span>
+                            <span className="text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400 tracking-wider">Molhados</span>
+                            <span className="text-sm font-semibold text-blue-600 dark:text-blue-400 transition-colors">{fmtNum(stats?.qtd_molhado || 0)} <span className="text-[10px] text-slate-500 dark:text-slate-500 font-medium">un</span></span>
                           </div>
                           <div className="flex flex-col">
-                            <span className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider">Tombadas</span>
-                            <span className="text-sm font-black text-red-600 dark:text-red-400 transition-colors">{fmtNum(stats?.qtd_tombada || 0)} <span className="text-[10px] text-slate-500 dark:text-slate-500 font-medium">un</span></span>
+                            <span className="text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400 tracking-wider">Tombadas</span>
+                            <span className="text-sm font-semibold text-red-600 dark:text-red-400 transition-colors">{fmtNum(stats?.qtd_tombada || 0)} <span className="text-[10px] text-slate-500 dark:text-slate-500 font-medium">un</span></span>
                           </div>
                         </div>
                       }
@@ -4008,13 +4008,13 @@ function DashboardPage() {
                       hoverContent={
                         <div className="flex items-center justify-around gap-8 text-center w-full">
                           <div className="flex flex-col">
-                            <span className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider">Completos</span>
-                            <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 transition-colors">{advancedStats.completoCount}</span>
+                            <span className="text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400 tracking-wider">Completos</span>
+                            <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 transition-colors">{advancedStats.completoCount}</span>
                           </div>
                           <div className="h-6 w-[1px] bg-slate-200 dark:bg-white/10" />
                           <div className="flex flex-col">
-                            <span className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider">Disponíveis</span>
-                            <span className="text-sm font-black text-blue-600 dark:text-blue-400 transition-colors">{advancedStats.disponivelCount}</span>
+                            <span className="text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400 tracking-wider">Disponíveis</span>
+                            <span className="text-sm font-semibold text-blue-600 dark:text-blue-400 transition-colors">{advancedStats.disponivelCount}</span>
                           </div>
                         </div>
                       }
@@ -4037,8 +4037,8 @@ function DashboardPage() {
                     <motion.div className="group relative rounded-[2.5rem] bg-white dark:bg-[#0F172A] p-5 shadow-xl border border-slate-100 dark:border-slate-800 transition-colors h-[310px] flex flex-col">
                       <div className="flex items-center justify-between mb-4">
                         <div>
-                          <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-[0.2em]">CAPACIDADE FÍSICA</h3>
-                          <p className="text-[8px] font-black text-slate-400 dark:text-slate-500 tracking-widest mt-1">VOL. GEOGRÁFICO G300</p>
+                          <h3 className="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-[0.2em]">CAPACIDADE FÍSICA</h3>
+                          <p className="text-[8px] font-semibold text-slate-400 dark:text-slate-500 tracking-widest mt-1">VOL. GEOGRÁFICO G300</p>
                         </div>
                         <History size={18} className="text-slate-400 dark:text-slate-600" />
                       </div>
@@ -4046,12 +4046,12 @@ function DashboardPage() {
                         <div className="group/donut relative h-40 w-40 cursor-help">
                           {/* Overlay de Composição no Hover */}
                           <div className="opacity-0 group-hover/donut:opacity-100 absolute inset-[-10%] bg-slate-950/98 backdrop-blur-xl rounded-[2.5rem] flex flex-col items-center justify-center transition-all duration-300 z-30 scale-95 group-hover/donut:scale-100 border border-white/20 p-5 shadow-2xl">
-                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">COMPOSIÇÃO</span>
+                            <span className="text-[8px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-4">COMPOSIÇÃO</span>
                             <div className="w-full space-y-2">
                               {advancedStats.breakdown.map((item, idx) => (
                                 <div key={idx} className="flex justify-between items-center border-b border-white/10 pb-1.5 last:border-0">
-                                  <span className="text-[9px] font-black text-slate-400 uppercase">{item.count} DRIVE-IN DE</span>
-                                  <span className="text-[10px] font-black text-white">{item.capacity}</span>
+                                  <span className="text-[9px] font-semibold text-slate-400 uppercase">{item.count} DRIVE-IN DE</span>
+                                  <span className="text-[10px] font-semibold text-white">{item.capacity}</span>
                                 </div>
                               ))}
                             </div>
@@ -4063,10 +4063,10 @@ function DashboardPage() {
                           </svg>
                           <div className="absolute inset-0 flex flex-col items-center justify-center group-hover/donut:opacity-0 transition-opacity duration-200">
                             <div className="flex items-baseline">
-                              <span className="text-3xl font-black text-slate-900 dark:text-slate-100 tracking-tighter">{Math.round(advancedStats.occupiedPercent)}</span>
-                              <span className="text-base font-black text-blue-500 dark:text-blue-400 ml-0.5">%</span>
+                              <span className="text-3xl font-light text-slate-900 dark:text-slate-100 tracking-tighter">{Math.round(advancedStats.occupiedPercent)}</span>
+                              <span className="text-base font-semibold text-blue-500 dark:text-blue-400 ml-0.5">%</span>
                             </div>
-                            <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-0.5">OCUPAÇÃO</span>
+                            <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-0.5">OCUPAÇÃO</span>
                           </div>
                         </div>
 
@@ -4074,15 +4074,15 @@ function DashboardPage() {
                         <div className="mt-auto w-full flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800/50">
                           <div className="flex flex-col">
                             <span className="text-[7px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-0.5">TOTAL</span>
-                            <span className="text-[12px] font-black text-slate-900 dark:text-slate-100 tracking-tight">{advancedStats.totalCapacity.toLocaleString('pt-BR')}</span>
+                            <span className="text-[12px] font-semibold text-slate-900 dark:text-slate-100 tracking-tight">{advancedStats.totalCapacity.toLocaleString('pt-BR')}</span>
                           </div>
                           <div className="flex flex-col items-center">
                             <span className="text-[7px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-0.5">USADO</span>
-                            <span className="text-[12px] font-black text-slate-900 dark:text-slate-100 tracking-tight">{advancedStats.occupied.toLocaleString('pt-BR')}</span>
+                            <span className="text-[12px] font-semibold text-slate-900 dark:text-slate-100 tracking-tight">{advancedStats.occupied.toLocaleString('pt-BR')}</span>
                           </div>
                           <div className="flex flex-col items-end">
                             <span className="text-[7px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-0.5">LIVRE</span>
-                            <span className="text-[12px] font-black text-emerald-500 dark:text-emerald-400 tracking-tight">{advancedStats.free.toLocaleString('pt-BR')}</span>
+                            <span className="text-[12px] font-semibold text-emerald-500 dark:text-emerald-400 tracking-tight">{advancedStats.free.toLocaleString('pt-BR')}</span>
                           </div>
                         </div>
                       </div>
@@ -4092,19 +4092,19 @@ function DashboardPage() {
                     <motion.div className="group relative rounded-[2.5rem] bg-white dark:bg-[#0F172A] p-5 shadow-xl border border-slate-100 dark:border-slate-800 transition-colors h-[310px] flex flex-col">
                       <div className="flex items-center justify-between mb-6">
                         <div>
-                          <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-[0.2em]">HISTÓRICO</h3>
-                          <p className="text-[8px] font-black text-slate-400 dark:text-slate-500 tracking-widest mt-1">CRESCIMENTO DE PALETES</p>
+                          <h3 className="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-[0.2em]">HISTÓRICO</h3>
+                          <p className="text-[8px] font-semibold text-slate-400 dark:text-slate-500 tracking-widest mt-1">CRESCIMENTO DE PALETES</p>
                         </div>
                         <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/50 rounded-xl">
                           <button
                             onClick={() => setPalletHistoryFilter('hoje')}
-                            className={cn("px-2 py-1 text-[8px] font-black uppercase rounded-lg transition-all", palletHistoryFilter === 'hoje' ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm" : "text-slate-400")}
+                            className={cn("px-2 py-1 text-[8px] font-semibold uppercase rounded-lg transition-all", palletHistoryFilter === 'hoje' ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm" : "text-slate-400")}
                           >
                             Hoje
                           </button>
                           <button
                             onClick={() => setPalletHistoryFilter('dias')}
-                            className={cn("px-2 py-1 text-[8px] font-black uppercase rounded-lg transition-all", palletHistoryFilter === 'dias' ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm" : "text-slate-400")}
+                            className={cn("px-2 py-1 text-[8px] font-semibold uppercase rounded-lg transition-all", palletHistoryFilter === 'dias' ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm" : "text-slate-400")}
                           >
                             Dias
                           </button>
@@ -4116,8 +4116,8 @@ function DashboardPage() {
                           <>
                              <div className="grid grid-cols-3 items-center">
                               <div className="flex flex-col">
-                                <span className="text-[9px] font-black text-slate-400/80 uppercase tracking-widest mb-0.5">MANHÃ</span>
-                                <span className="text-xs font-black text-slate-900 dark:text-slate-100 tracking-tight">14:20</span>
+                                <span className="text-[9px] font-semibold text-slate-400/80 uppercase tracking-widest mb-0.5">MANHÃ</span>
+                                <span className="text-xs font-semibold text-slate-900 dark:text-slate-100 tracking-tight">14:20</span>
                               </div>
                               <div className="flex flex-col items-center">
                                 {(() => {
@@ -4129,19 +4129,19 @@ function DashboardPage() {
                                   if (palletHistory.t14 === 0) {
                                     if (!pastTime) {
                                       return (
-                                        <span className="text-[9px] font-black text-slate-400 dark:text-slate-600 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
+                                        <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-600 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
                                           Aguardando
                                         </span>
                                       );
                                     }
                                     return (
-                                      <span className="text-[9px] font-black text-amber-500 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800/40">
+                                      <span className="text-[9px] font-semibold text-amber-500 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800/40">
                                         Não apurado
                                       </span>
                                     );
                                   }
                                   return (
-                                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300 tracking-tight">
+                                    <span className="text-xs font-normal text-slate-700 dark:text-slate-300 tracking-tight">
                                       {palletHistory.t14.toLocaleString('pt-BR')}
                                       <span className="text-[10px] font-medium text-slate-400 ml-1">Paletes</span>
                                     </span>
@@ -4151,15 +4151,15 @@ function DashboardPage() {
                               <div className="flex items-center justify-end">
                                 {(() => {
                                   const diff = palletHistory.t14 - palletHistory.prevT22;
-                                  if (palletHistory.t14 === 0) return <span className="text-[9px] font-bold text-slate-400">-</span>;
-                                  if (palletHistory.prevT22 === 0) return <span className="text-[9px] font-bold text-slate-400">-</span>;
+                                  if (palletHistory.t14 === 0) return <span className="text-[9px] font-medium text-slate-400">-</span>;
+                                  if (palletHistory.prevT22 === 0) return <span className="text-[9px] font-medium text-slate-400">-</span>;
                                   return (
                                     <div className={cn("flex flex-col items-end gap-0", diff >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-500 dark:text-red-400")}>
-                                      <div className="flex items-center gap-0.5 text-xs font-black">
+                                      <div className="flex items-center gap-0.5 text-xs font-semibold">
                                         {diff >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
                                         {diff >= 0 ? '+' : ''}{diff}
                                       </div>
-                                      <span className="text-[7px] font-black opacity-60 uppercase">Vs ontem</span>
+                                      <span className="text-[7px] font-semibold opacity-60 uppercase">Vs ontem</span>
                                     </div>
                                   )
                                 })()}
@@ -4167,8 +4167,8 @@ function DashboardPage() {
                             </div>
                             <div className="grid grid-cols-3 items-center">
                               <div className="flex flex-col">
-                                <span className="text-[9px] font-black text-slate-400/80 uppercase tracking-widest mb-0.5">TARDE</span>
-                                <span className="text-xs font-black text-slate-900 dark:text-slate-100 tracking-tight">17:00</span>
+                                <span className="text-[9px] font-semibold text-slate-400/80 uppercase tracking-widest mb-0.5">TARDE</span>
+                                <span className="text-xs font-semibold text-slate-900 dark:text-slate-100 tracking-tight">17:00</span>
                               </div>
                               <div className="flex flex-col items-center">
                                 {(() => {
@@ -4179,19 +4179,19 @@ function DashboardPage() {
                                   if (palletHistory.t17 === 0) {
                                     if (!pastTime) {
                                       return (
-                                        <span className="text-[9px] font-black text-slate-400 dark:text-slate-600 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
+                                        <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-600 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
                                           Aguardando
                                         </span>
                                       );
                                     }
                                     return (
-                                      <span className="text-[9px] font-black text-amber-500 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800/40">
+                                      <span className="text-[9px] font-semibold text-amber-500 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800/40">
                                         Não apurado
                                       </span>
                                     );
                                   }
                                   return (
-                                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300 tracking-tight">
+                                    <span className="text-xs font-normal text-slate-700 dark:text-slate-300 tracking-tight">
                                       {palletHistory.t17.toLocaleString('pt-BR')}
                                       <span className="text-[10px] font-medium text-slate-400 ml-1">Paletes</span>
                                     </span>
@@ -4201,15 +4201,15 @@ function DashboardPage() {
                               <div className="flex items-center justify-end">
                                 {(() => {
                                   const diff = palletHistory.t17 - palletHistory.t14;
-                                  if (palletHistory.t17 === 0) return <span className="text-[9px] font-bold text-slate-400">-</span>;
-                                  if (palletHistory.t14 === 0) return <span className="text-[9px] font-bold text-slate-400">-</span>;
+                                  if (palletHistory.t17 === 0) return <span className="text-[9px] font-medium text-slate-400">-</span>;
+                                  if (palletHistory.t14 === 0) return <span className="text-[9px] font-medium text-slate-400">-</span>;
                                   return (
                                     <div className={cn("flex flex-col items-end gap-0", diff >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-500 dark:text-red-400")}>
-                                      <div className="flex items-center gap-0.5 text-xs font-black">
+                                      <div className="flex items-center gap-0.5 text-xs font-semibold">
                                         {diff >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
                                         {diff >= 0 ? '+' : ''}{diff}
                                       </div>
-                                      <span className="text-[7px] font-black opacity-60 uppercase">Vs 14:20</span>
+                                      <span className="text-[7px] font-semibold opacity-60 uppercase">Vs 14:20</span>
                                     </div>
                                   )
                                 })()}
@@ -4217,8 +4217,8 @@ function DashboardPage() {
                             </div>
                             <div className="grid grid-cols-3 items-center">
                               <div className="flex flex-col">
-                                <span className="text-[9px] font-black text-slate-400/80 uppercase tracking-widest mb-0.5">FECHAMENTO</span>
-                                <span className="text-xs font-black text-slate-900 dark:text-slate-100 tracking-tight">22:20</span>
+                                <span className="text-[9px] font-semibold text-slate-400/80 uppercase tracking-widest mb-0.5">FECHAMENTO</span>
+                                <span className="text-xs font-semibold text-slate-900 dark:text-slate-100 tracking-tight">22:20</span>
                               </div>
                               <div className="flex flex-col items-center">
                                 {(() => {
@@ -4227,20 +4227,20 @@ function DashboardPage() {
                                   const pastClosing = nowHour > 22 || (nowHour === 22 && nowMin >= 20);
                                   if (palletHistory.t22 === 0 && !pastClosing) {
                                     return (
-                                      <span className="text-[9px] font-black text-slate-400 dark:text-slate-600 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
+                                      <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-600 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
                                         Aguardando
                                       </span>
                                     );
                                   }
                                   if (palletHistory.t22 === 0 && pastClosing) {
                                     return (
-                                      <span className="text-[9px] font-black text-amber-500 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800/40">
+                                      <span className="text-[9px] font-semibold text-amber-500 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800/40">
                                         Não apurado
                                       </span>
                                     );
                                   }
                                   return (
-                                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300 tracking-tight">
+                                    <span className="text-xs font-normal text-slate-700 dark:text-slate-300 tracking-tight">
                                       {palletHistory.t22.toLocaleString('pt-BR')}
                                       <span className="text-[10px] font-medium text-slate-400 ml-1">Paletes</span>
                                     </span>
@@ -4250,15 +4250,15 @@ function DashboardPage() {
                               <div className="flex items-center justify-end">
                                 {(() => {
                                   const diff = palletHistory.t22 - palletHistory.t17;
-                                  if (palletHistory.t22 === 0) return <span className="text-[9px] font-bold text-slate-400">-</span>;
-                                  if (palletHistory.t17 === 0) return <span className="text-[9px] font-bold text-slate-400">-</span>;
+                                  if (palletHistory.t22 === 0) return <span className="text-[9px] font-medium text-slate-400">-</span>;
+                                  if (palletHistory.t17 === 0) return <span className="text-[9px] font-medium text-slate-400">-</span>;
                                   return (
                                     <div className={cn("flex flex-col items-end gap-0", diff >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-500 dark:text-red-400")}>
-                                      <div className="flex items-center gap-0.5 text-xs font-black">
+                                      <div className="flex items-center gap-0.5 text-xs font-semibold">
                                         {diff >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
                                         {diff >= 0 ? '+' : ''}{diff}
                                       </div>
-                                      <span className="text-[7px] font-black opacity-60 uppercase">Vs 17:00</span>
+                                      <span className="text-[7px] font-semibold opacity-60 uppercase">Vs 17:00</span>
                                     </div>
                                   )
                                 })()}
@@ -4277,14 +4277,14 @@ function DashboardPage() {
                                 return (
                                   <div key={record.date} className="grid grid-cols-3 items-center border-b border-slate-100 dark:border-slate-800/30 pb-1 last:border-0 last:pb-0">
                                     <div className="flex items-center gap-1.5">
-                                      <span className="text-[10px] font-black text-slate-900 dark:text-slate-100 tracking-tight">
+                                      <span className="text-[10px] font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
                                         {recordDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
                                       </span>
-                                      <span className="text-[8px] font-black text-slate-400 uppercase">{weekday}</span>
+                                      <span className="text-[8px] font-semibold text-slate-400 uppercase">{weekday}</span>
                                     </div>
 
                                   <div className="flex justify-center">
-                                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300 tracking-tight">
+                                    <span className="text-xs font-normal text-slate-700 dark:text-slate-300 tracking-tight">
                                       {record.value.toLocaleString('pt-BR')} 
                                       <span className="text-[8px] font-medium text-slate-400 ml-0.5">Paletes</span>
                                     </span>
@@ -4292,12 +4292,12 @@ function DashboardPage() {
                                   <div className="flex items-center justify-end">
                                     {diff !== null ? (
                                       <div className={cn("flex items-center gap-1", diff >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-500 dark:text-red-400")}>
-                                        <span className="text-[9px] font-black">
+                                        <span className="text-[9px] font-semibold">
                                           {diff >= 0 ? '+' : ''}{diff}
                                         </span>
                                       </div>
                                     ) : (
-                                      <span className="text-[7px] font-black text-slate-300 dark:text-slate-700 uppercase">BASE</span>
+                                      <span className="text-[7px] font-semibold text-slate-300 dark:text-slate-700 uppercase">BASE</span>
                                     )}
                                   </div>
                                   </div>
@@ -4322,27 +4322,27 @@ function DashboardPage() {
                     <motion.div className="group relative rounded-[2.5rem] bg-white dark:bg-[#0F172A] p-5 shadow-xl border border-slate-100 dark:border-slate-800 transition-colors h-[310px] flex flex-col">
                       <div className="flex items-center justify-between mb-6">
                         <div>
-                          <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-[0.2em]">TOP 3 SKUS</h3>
-                          <p className="text-[8px] font-black text-slate-400 dark:text-slate-500 tracking-widest mt-1">
+                          <h3 className="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-[0.2em]">TOP 3 SKUS</h3>
+                          <p className="text-[8px] font-semibold text-slate-400 dark:text-slate-500 tracking-widest mt-1">
                             {topSkusFilter === "geral" ? "QUANTIDADE GERAL" : topSkusFilter === "molhado" ? "MOLHADOS/TOMBADOS" : "INCIDÊNCIA DE REG"}
                           </p>
                         </div>
                         <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/50 rounded-xl">
                           <button
                             onClick={() => setTopSkusFilter('geral')}
-                            className={cn("px-2 py-1 text-[8px] font-black uppercase rounded-lg transition-all", topSkusFilter === 'geral' ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm" : "text-slate-400")}
+                            className={cn("px-2 py-1 text-[8px] font-semibold uppercase rounded-lg transition-all", topSkusFilter === 'geral' ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm" : "text-slate-400")}
                           >
                             Geral
                           </button>
                           <button
                             onClick={() => setTopSkusFilter('molhado')}
-                            className={cn("px-2 py-1 text-[8px] font-black uppercase rounded-lg transition-all", topSkusFilter === 'molhado' ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm" : "text-slate-400")}
+                            className={cn("px-2 py-1 text-[8px] font-semibold uppercase rounded-lg transition-all", topSkusFilter === 'molhado' ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm" : "text-slate-400")}
                           >
                             Crit.
                           </button>
                           <button
                             onClick={() => setTopSkusFilter('incidencia')}
-                            className={cn("px-2 py-1 text-[8px] font-black uppercase rounded-lg transition-all", topSkusFilter === 'incidencia' ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm" : "text-slate-400")}
+                            className={cn("px-2 py-1 text-[8px] font-semibold uppercase rounded-lg transition-all", topSkusFilter === 'incidencia' ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm" : "text-slate-400")}
                           >
                             Reg.
                           </button>
@@ -4354,30 +4354,30 @@ function DashboardPage() {
                           topSkus.slice(0, 3).map((item: any, index: number) => (
                             <div key={item.sku} className="flex items-center justify-between group/sku p-1.5 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all border border-transparent hover:border-slate-100 dark:hover:border-slate-800">
                               <div className="flex items-center gap-2.5 flex-1">
-                                <div className="h-8 w-8 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-black text-xs text-slate-400 group-hover/sku:bg-blue-500 group-hover/sku:text-white transition-colors">
+                                <div className="h-8 w-8 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-semibold text-xs text-slate-400 group-hover/sku:bg-blue-500 group-hover/sku:text-white transition-colors">
                                   {index + 1}
                                 </div>
                                 <div className="flex flex-col min-w-0">
                                   <div className="flex items-center gap-2 mb-0.5">
-                                    <span className="text-xs font-black tracking-tight uppercase truncate text-slate-700 dark:text-slate-200">
+                                    <span className="text-xs font-semibold tracking-tight uppercase truncate text-slate-700 dark:text-slate-200">
                                       {item.sku}
                                     </span>
                                   </div>
-                                  <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase truncate leading-tight">
+                                  <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500 uppercase truncate leading-tight">
                                     {item.descricao}
                                   </span>
                                   <div className="flex items-center gap-2 mt-0.5">
-                                    <span className="text-[8px] font-black text-blue-500/60 dark:text-blue-400/40 uppercase tracking-widest">
+                                    <span className="text-[8px] font-semibold text-blue-500/60 dark:text-blue-400/40 uppercase tracking-widest">
                                       {item.posicoesCount} POSIÇÕES
                                     </span>
                                     <div className="h-1 w-1 rounded-full bg-slate-200 dark:bg-slate-800" />
-                                    <span className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                                    <span className="text-[8px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
                                       {Math.round(item.paletes)} PALETES
                                     </span>
                                   </div>
                                 </div>
                               </div>
-                              <div className="px-3 py-1.5 rounded-xl font-black text-[11px] tracking-tight min-w-[70px] text-center bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                              <div className="px-3 py-1.5 rounded-xl font-semibold text-[11px] tracking-tight min-w-[70px] text-center bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
                                 {topSkusSort === "incidencia" || topSkusFilter === "incidencia"
                                   ? `${item.incidencia} REG`
                                   : fmtNum(topSkusFilter === "molhado" ? item.molhados : item.quantidade)}
@@ -4387,7 +4387,7 @@ function DashboardPage() {
                         ) : (
                           <div className="py-10 flex flex-col items-center justify-center opacity-20 dark:opacity-50">
                             <Box size={32} className="mb-2 text-slate-400 dark:text-slate-500" />
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Aguardando dados...</p>
+                            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 dark:text-slate-400">Aguardando dados...</p>
                           </div>
                         )}
                       </div>
@@ -4402,23 +4402,23 @@ function DashboardPage() {
                         <div className="flex items-center gap-3">
                           <div className="w-1.5 h-6 bg-blue-500 rounded-full" />
                           <div>
-                            <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-[0.2em]">
+                            <h3 className="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-[0.2em]">
                               Fluxo de Registros
                             </h3>
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
-                              <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 tracking-widest">
+                              <p className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 tracking-widest">
                                 {`VOLUME TOTAL DO PERÍODO: ${movementPeriod.toUpperCase()}`}
                               </p>
                               <div className="flex items-center gap-3">
                                 <div className="flex items-center gap-1">
-                                  <span className="text-[8px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-tighter">Entradas:</span>
-                                  <span className="text-[9px] font-black text-emerald-500 dark:text-emerald-400">
+                                  <span className="text-[8px] font-medium text-slate-400 dark:text-slate-600 uppercase tracking-tighter">Entradas:</span>
+                                  <span className="text-[9px] font-semibold text-emerald-500 dark:text-emerald-400">
                                     {stats?.period_entries?.toLocaleString('pt-BR') || "0"}
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-1">
-                                  <span className="text-[8px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-tighter">Saídas:</span>
-                                  <span className="text-[9px] font-black text-orange-500 dark:text-orange-400">
+                                  <span className="text-[8px] font-medium text-slate-400 dark:text-slate-600 uppercase tracking-tighter">Saídas:</span>
+                                  <span className="text-[9px] font-semibold text-orange-500 dark:text-orange-400">
                                     {stats?.period_exits?.toLocaleString('pt-BR') || "0"}
                                   </span>
                                 </div>
@@ -4456,7 +4456,7 @@ function DashboardPage() {
                                         setShowMovementMenu(false)
                                       }}
                                       className={cn(
-                                        "w-full text-left px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors",
+                                        "w-full text-left px-3 py-2 rounded-xl text-[10px] font-semibold uppercase tracking-widest transition-colors",
                                         movementPeriod === p.id
                                           ? "bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400"
                                           : "text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800"
@@ -4628,7 +4628,7 @@ function DashboardPage() {
                                         return (
                                           <div key={iIdx} className={cn("relative flex flex-col items-center justify-end", isIndividual ? "w-10" : "flex-1")} style={{ height: '100%' }}>
                                             {item.val > 0 && (
-                                              <span className={cn("absolute text-[10px] font-black pointer-events-none transition-all drop-shadow-sm z-20", item.isEntrada ? "text-emerald-500" : "text-orange-500")} style={{ bottom: `calc(${hPct}% + 6px)` }}>
+                                              <span className={cn("absolute text-[10px] font-semibold pointer-events-none transition-all drop-shadow-sm z-20", item.isEntrada ? "text-emerald-500" : "text-orange-500")} style={{ bottom: `calc(${hPct}% + 6px)` }}>
                                                 {item.isEntrada ? `+${item.val}` : item.val}
                                               </span>
                                             )}
@@ -4647,15 +4647,15 @@ function DashboardPage() {
                                                 <div className="absolute z-[100] bottom-full left-1/2 -translate-x-1/2 mb-4">
                                                   <div className="bg-slate-900/95 backdrop-blur-md border border-slate-700/50 p-2.5 rounded-2xl shadow-2xl min-w-[140px]">
                                                     <div className="flex items-center justify-between mb-2">
-                                                      <span className="text-[10px] font-black text-white uppercase">{item.label}</span>
-                                                      <span className={cn("text-[9px] font-black", item.isEntrada ? "text-emerald-400" : "text-orange-400")}>{item.isEntrada ? "ENTRADA" : "SAÍDA"}</span>
+                                                      <span className="text-[10px] font-semibold text-white uppercase">{item.label}</span>
+                                                      <span className={cn("text-[9px] font-semibold", item.isEntrada ? "text-emerald-400" : "text-orange-400")}>{item.isEntrada ? "ENTRADA" : "SAÍDA"}</span>
                                                     </div>
                                                     <div className="space-y-1.5 max-h-[120px] overflow-y-auto custom-scrollbar">
                                                       {item.details?.slice(0, 5).map((d: any, di: number) => (
                                                         <div key={di} className="flex flex-col gap-0.5 border-l-2 border-slate-700 pl-2">
                                                           <div className="flex items-center justify-between gap-2">
-                                                            <span className="text-[9px] font-black text-slate-300 truncate">{d.sku}</span>
-                                                            <span className="text-[9px] font-black text-white">{item.isEntrada ? "+" : "-"}{d.val}</span>
+                                                            <span className="text-[9px] font-semibold text-slate-300 truncate">{d.sku}</span>
+                                                            <span className="text-[9px] font-semibold text-white">{item.isEntrada ? "+" : "-"}{d.val}</span>
                                                           </div>
                                                         </div>
                                                       ))}
@@ -4669,8 +4669,8 @@ function DashboardPage() {
                                       })}
                                     </div>
                                     <div className="flex flex-col items-center shrink-0 w-full overflow-hidden">
-                                      <span className="text-[7.5px] font-black text-slate-900 dark:text-slate-100 uppercase truncate text-center w-full">{firstItem.label}</span>
-                                      <span className="text-[8px] font-black text-blue-500 truncate w-full text-center mt-0.5">{shortDate}</span>
+                                      <span className="text-[7.5px] font-semibold text-slate-900 dark:text-slate-100 uppercase truncate text-center w-full">{firstItem.label}</span>
+                                      <span className="text-[8px] font-semibold text-blue-500 truncate w-full text-center mt-0.5">{shortDate}</span>
                                       <div className="flex justify-center gap-2 w-full mt-1">
                                         {group.map((it, idx) => (
                                           <span key={idx} className="text-[6px] font-bold text-slate-400 dark:text-slate-600 uppercase text-center">{it.sublabel}</span>
@@ -4692,7 +4692,7 @@ function DashboardPage() {
                                 </div>
                               </div>
                               <div className="flex flex-col gap-1">
-                                <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
                                   {movementPeriod === "hoje" ? "Sem movimentações hoje" : movementPeriod === "semana" ? "Sem movimentações esta semana" : "Sem movimentações este mês"}
                                 </p>
                                 <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500">
@@ -4702,7 +4702,7 @@ function DashboardPage() {
                               {movementPeriod === "hoje" && (
                                 <button
                                   onClick={() => setMovementPeriod("semana")}
-                                  className="text-[10px] font-black text-blue-500 uppercase tracking-widest hover:text-blue-400 transition-colors border border-blue-500/20 hover:border-blue-400/30 px-3 py-1.5 rounded-xl"
+                                  className="text-[10px] font-semibold text-blue-500 uppercase tracking-widest hover:text-blue-400 transition-colors border border-blue-500/20 hover:border-blue-400/30 px-3 py-1.5 rounded-xl"
                                 >
                                   {"Ver semana →"}
                                 </button>
@@ -4719,10 +4719,10 @@ function DashboardPage() {
                         <div className="flex items-center gap-2.5">
                           <div className="w-1 h-5 bg-emerald-500 rounded-full" />
                           <div>
-                            <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-[0.2em]">
+                            <h3 className="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-[0.2em]">
                               Origem
                             </h3>
-                            <p className="text-[8px] font-black text-slate-400 dark:text-slate-500 tracking-widest mt-1">
+                            <p className="text-[8px] font-semibold text-slate-400 dark:text-slate-500 tracking-widest mt-1">
                               DISTRIBUIÇÃO ANALÍTICA
                             </p>
                           </div>
@@ -4739,7 +4739,7 @@ function DashboardPage() {
                                 key={t.id}
                                 onClick={() => setOriginTypeFilter(t.id as any)}
                                 className={cn(
-                                  "px-3 h-6 flex items-center justify-center text-[9px] font-black uppercase rounded-lg transition-all",
+                                  "px-3 h-6 flex items-center justify-center text-[9px] font-semibold uppercase rounded-lg transition-all",
                                   originTypeFilter === t.id 
                                     ? cn("bg-white dark:bg-slate-600 shadow-sm", t.id === 'entrada' ? "text-emerald-500 dark:text-emerald-400" : "text-red-500 dark:text-red-400")
                                     : "text-slate-400 hover:text-slate-500"
@@ -4785,7 +4785,7 @@ function DashboardPage() {
                                           setShowOriginPeriodMenu(false);
                                         }}
                                         className={cn(
-                                          "w-full text-left px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors",
+                                          "w-full text-left px-3 py-2 rounded-xl text-[10px] font-semibold uppercase tracking-widest transition-colors",
                                           originPeriod === p.id 
                                             ? "bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400" 
                                             : "text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800"
@@ -4852,7 +4852,7 @@ function DashboardPage() {
                       <button
                         onClick={() => { setActiveView("produtos"); setSortMode("none"); }}
                         className={cn(
-                          "flex items-center gap-2 rounded-xl px-5 py-2.5 text-[11px] font-black transition-all shrink-0 whitespace-nowrap",
+                          "flex items-center gap-2 rounded-xl px-5 py-2.5 text-[11px] font-semibold transition-all shrink-0 whitespace-nowrap",
                           activeView === "produtos" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-sm" : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                         )}
                       >
@@ -4864,7 +4864,7 @@ function DashboardPage() {
                       <button
                         onClick={() => { setActiveView("molhados"); setSortMode("none"); }}
                         className={cn(
-                          "flex items-center gap-2 rounded-xl px-5 py-2.5 text-[11px] font-black transition-all relative group shrink-0 whitespace-nowrap",
+                          "flex items-center gap-2 rounded-xl px-5 py-2.5 text-[11px] font-semibold transition-all relative group shrink-0 whitespace-nowrap",
                           activeView === "molhados" ? "bg-blue-600 text-white shadow-lg shadow-blue-900/20" : "text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                         )}
                       >
@@ -4880,10 +4880,10 @@ function DashboardPage() {
 
                     <div className="flex flex-wrap items-center gap-3">
                       <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-900 rounded-2xl transition-colors border border-slate-200/50 dark:border-slate-800/50">
-                        <button onClick={() => { setSortMode("qty_desc"); setTableSort({ key: "none", direction: "asc" }); }} className={cn("px-4 py-2.5 text-[10px] font-black uppercase rounded-xl transition-all", sortMode === "qty_desc" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-sm" : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300")}>
+                        <button onClick={() => { setSortMode("qty_desc"); setTableSort({ key: "none", direction: "asc" }); }} className={cn("px-4 py-2.5 text-[10px] font-semibold uppercase rounded-xl transition-all", sortMode === "qty_desc" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-sm" : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300")}>
                           <ArrowDownWideNarrow size={14} className="inline mr-1" /> Maior Qtd.
                         </button>
-                        <button onClick={() => { setSortMode("alpha_asc"); setTableSort({ key: "none", direction: "asc" }); }} className={cn("px-4 py-2.5 text-[10px] font-black uppercase rounded-xl transition-all", sortMode === "alpha_asc" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-sm" : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300")}>
+                        <button onClick={() => { setSortMode("alpha_asc"); setTableSort({ key: "none", direction: "asc" }); }} className={cn("px-4 py-2.5 text-[10px] font-semibold uppercase rounded-xl transition-all", sortMode === "alpha_asc" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-sm" : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300")}>
                           <ArrowDownAZ size={14} className="inline mr-1" /> A-Z
                         </button>
                       </div>
@@ -4927,7 +4927,7 @@ function DashboardPage() {
 
                       {!loading && totalPages >= 1 && (
                         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-4 pb-12 transition-colors">
-                          <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest order-2 sm:order-1">
+                          <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest order-2 sm:order-1">
                             {rowsPerPage === 'ALL' ? `Exibindo todos os ${filteredData.length} itens` : `Página ${currentPage} de ${totalPages}`}
                           </span>
                           <div className="flex gap-3 order-1 sm:order-2 items-center">
@@ -4936,7 +4936,7 @@ function DashboardPage() {
                                 setRowsPerPage(prev => prev === 'ALL' ? 10 : 'ALL')
                                 setCurrentPage(1)
                               }}
-                              className="px-4 py-2 sm:px-3 sm:py-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
+                              className="px-4 py-2 sm:px-3 sm:py-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs font-normal text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
                             >
                               {rowsPerPage === 'ALL' ? "Voltar ao padrão" : "Ver todos"}
                             </button>
@@ -5007,7 +5007,7 @@ function DashboardPage() {
                       <div className="relative z-10 flex flex-col h-full justify-between gap-8">
                         <div className="flex items-start justify-between">
                           <div>
-                            <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                            <h3 className="text-xl font-semibold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
                               Capacidade de Drives
                               <div className="group/tip relative flex items-center">
                                 <Info size={14} className="text-slate-400 dark:text-slate-500 cursor-help" />
@@ -5016,13 +5016,13 @@ function DashboardPage() {
                                 </div>
                               </div>
                             </h3>
-                            <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Ocupação Física</p>
+                            <p className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Ocupação Física</p>
                           </div>
                         </div>
 
                         <div className="space-y-6">
                           <div className="space-y-2">
-                            <div className="flex justify-between text-[10px] font-black uppercase tracking-wider">
+                            <div className="flex justify-between text-[10px] font-semibold uppercase tracking-wider">
                               <span className="text-slate-400 dark:text-slate-500">Drives Ocupados</span>
                               <span className="text-slate-900 dark:text-white">{advancedStats.totalPositions - advancedStats.vazioCount} / {advancedStats.totalPositions}</span>
                             </div>
@@ -5036,7 +5036,7 @@ function DashboardPage() {
                           </div>
 
                           <div className="space-y-2">
-                            <div className="flex justify-between text-[10px] font-black uppercase tracking-wider">
+                            <div className="flex justify-between text-[10px] font-semibold uppercase tracking-wider">
                               <span className="text-slate-400 dark:text-slate-500">Capacidade Total</span>
                               <span className="text-slate-900 dark:text-white">{(advancedStats.occupiedPercent || 0).toFixed(1)}%</span>
                             </div>
@@ -5066,7 +5066,7 @@ function DashboardPage() {
                       <div className="relative z-10 flex flex-col h-full justify-between gap-8">
                         <div className="flex items-start justify-between">
                           <div>
-                            <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                            <h3 className="text-xl font-semibold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
                               Distribuição de Mix
                               <div className="group/tip relative flex items-center">
                                 <Info size={14} className="text-slate-400 dark:text-slate-500 cursor-help" />
@@ -5075,14 +5075,14 @@ function DashboardPage() {
                                 </div>
                               </div>
                             </h3>
-                            <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Eficiência de Armazenagem</p>
+                            <p className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Eficiência de Armazenagem</p>
                           </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-8 items-end">
                           <div className="space-y-4">
                             <div className="space-y-2">
-                              <div className="flex justify-between text-[10px] font-black uppercase tracking-wider">
+                              <div className="flex justify-between text-[10px] font-semibold uppercase tracking-wider">
                                 <span className="text-slate-400 dark:text-slate-500">Mono</span>
                                 <span className="text-slate-900 dark:text-white">{(100 - (advancedStats.mixPercent || 0)).toFixed(1)}%</span>
                               </div>
@@ -5095,7 +5095,7 @@ function DashboardPage() {
                               </div>
                             </div>
                             <div className="space-y-2">
-                              <div className="flex justify-between text-[10px] font-black uppercase tracking-wider">
+                              <div className="flex justify-between text-[10px] font-semibold uppercase tracking-wider">
                                 <span className="text-slate-400 dark:text-slate-500">Mix</span>
                                 <span className="text-slate-900 dark:text-white">{(advancedStats.mixPercent || 0).toFixed(1)}%</span>
                               </div>
@@ -5111,12 +5111,12 @@ function DashboardPage() {
 
                           <div className="flex flex-col gap-4 border-l border-slate-100 dark:border-white/5 pl-8">
                             <div>
-                              <span className="text-3xl font-black text-emerald-500 tracking-tighter leading-none">{advancedStats.totalMono}</span>
-                              <p className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-tight mt-1">Organizados</p>
+                              <span className="text-3xl font-light text-emerald-500 tracking-tighter leading-none">{advancedStats.totalMono}</span>
+                              <p className="text-[8px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-tight mt-1">Organizados</p>
                             </div>
                             <div>
-                              <span className="text-3xl font-black text-orange-500 tracking-tighter leading-none">{advancedStats.totalMixed}</span>
-                              <p className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-tight mt-1">Críticos</p>
+                              <span className="text-3xl font-light text-orange-500 tracking-tighter leading-none">{advancedStats.totalMixed}</span>
+                              <p className="text-[8px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-tight mt-1">Críticos</p>
                             </div>
                           </div>
                         </div>
@@ -5130,7 +5130,7 @@ function DashboardPage() {
                       <button
                         onClick={() => { setDisplayMode("mapa"); setActiveView("geral"); }}
                         className={cn(
-                          "flex items-center gap-2 rounded-xl px-4 py-2 text-[10px] font-black transition-all",
+                          "flex items-center gap-2 rounded-xl px-4 py-2 text-[10px] font-semibold transition-all",
                           displayMode === "mapa" ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                         )}
                       >
@@ -5139,7 +5139,7 @@ function DashboardPage() {
                       <button
                         onClick={() => { setDisplayMode("misto"); setActiveView("geral"); }}
                         className={cn(
-                          "flex items-center gap-2 rounded-xl px-4 py-2 text-[10px] font-black transition-all",
+                          "flex items-center gap-2 rounded-xl px-4 py-2 text-[10px] font-semibold transition-all",
                           displayMode === "misto" ? "bg-white dark:bg-slate-800 text-orange-600 dark:text-orange-400 shadow-sm" : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                         )}
                       >
@@ -5148,7 +5148,7 @@ function DashboardPage() {
                       <button
                         onClick={() => { setDisplayMode("nao_alocados"); setActiveView("nao_alocados"); setSortMode("none"); setTableSort({ key: "produto", direction: "asc" }); }}
                         className={cn(
-                          "flex items-center gap-2 rounded-xl px-4 py-2 text-[10px] uppercase font-black transition-all",
+                          "flex items-center gap-2 rounded-xl px-4 py-2 text-[10px] uppercase font-semibold transition-all",
                           displayMode === "nao_alocados" ? "bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-sm" : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                         )}
                       >
@@ -5157,7 +5157,7 @@ function DashboardPage() {
                       <button
                         onClick={() => { setDisplayMode("quarentena"); setActiveView("quarentena"); setSortMode("none"); setTableSort({ key: "produto", direction: "asc" }); }}
                         className={cn(
-                          "flex items-center gap-2 rounded-xl px-4 py-2 text-[10px] uppercase font-black transition-all",
+                          "flex items-center gap-2 rounded-xl px-4 py-2 text-[10px] uppercase font-semibold transition-all",
                           displayMode === "quarentena" ? "bg-white dark:bg-slate-800 text-rose-600 dark:text-rose-400 shadow-sm" : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                         )}
                       >
@@ -5171,19 +5171,19 @@ function DashboardPage() {
                         <>
                           <div className="flex items-center gap-2.5">
                             <div className="h-2.5 w-2.5 rounded-full bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700" />
-                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                            <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
                               VAZIO <span className="ml-1 text-slate-900 dark:text-white">{advancedStats.vazioCount}</span>
                             </span>
                           </div>
                           <div className="flex items-center gap-2.5">
                             <div className="h-2.5 w-2.5 rounded-full bg-[#2D5A27] shadow-[0_0_8px_rgba(45,90,39,0.4)]" />
-                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                            <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
                               DISPONÍVEL <span className="ml-1 text-slate-900 dark:text-white">{advancedStats.totalPositions - advancedStats.lotadoCount - advancedStats.vazioCount}</span>
                             </span>
                           </div>
                           <div className="flex items-center gap-2.5">
                             <div className="h-2.5 w-2.5 rounded-full bg-[#7F1D1D] shadow-[0_0_8px_rgba(127,29,29,0.4)]" />
-                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                            <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
                               LOTADO <span className="ml-1 text-slate-900 dark:text-white">{advancedStats.lotadoCount}</span>
                             </span>
                           </div>
@@ -5197,7 +5197,7 @@ function DashboardPage() {
                           <button
                             onClick={() => setSortMode("qty_desc")}
                             className={cn(
-                              "flex items-center gap-2 rounded-xl px-3 py-1.5 text-[9px] font-black transition-all",
+                              "flex items-center gap-2 rounded-xl px-3 py-1.5 text-[9px] font-semibold transition-all",
                               sortMode === "qty_desc" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-sm" : "text-slate-400 hover:text-slate-600"
                             )}
                           >
@@ -5206,7 +5206,7 @@ function DashboardPage() {
                           <button
                             onClick={() => setSortMode("alpha_asc")}
                             className={cn(
-                              "flex items-center gap-2 rounded-xl px-3 py-1.5 text-[9px] font-black transition-all",
+                              "flex items-center gap-2 rounded-xl px-3 py-1.5 text-[9px] font-semibold transition-all",
                               sortMode === "alpha_asc" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-sm" : "text-slate-400 hover:text-slate-600"
                             )}
                           >
@@ -5222,7 +5222,7 @@ function DashboardPage() {
                           placeholder="Pesquisar no mapeamento..."
                           value={search}
                           onChange={(e) => setSearch(e.target.value)}
-                          className="w-full h-11 pl-11 pr-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:border-blue-500 dark:focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none text-xs font-bold text-slate-700 dark:text-slate-200 transition-all shadow-sm"
+                          className="w-full h-11 pl-11 pr-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:border-blue-500 dark:focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none text-xs font-normal text-slate-700 dark:text-slate-200 transition-all shadow-sm"
                         />
                       </div>
 
@@ -5261,7 +5261,7 @@ function DashboardPage() {
                                       <Printer size={16} />
                                     </div>
                                     <div className="flex flex-col items-start text-left">
-                                      <span className="text-[11px] font-black uppercase tracking-tight">Imprimir Tudo</span>
+                                      <span className="text-[11px] font-semibold uppercase tracking-tight">Imprimir Tudo</span>
                                       <span className="text-[9px] font-medium opacity-60">Mapa completo (PDF)</span>
                                     </div>
                                   </button>
@@ -5287,7 +5287,7 @@ function DashboardPage() {
                                         <CheckSquare size={16} />
                                       </div>
                                       <div className="flex flex-col items-start text-left">
-                                        <span className="text-[11px] font-black uppercase tracking-tight">
+                                        <span className="text-[11px] font-semibold uppercase tracking-tight">
                                           {selectionModeActive ? "Sair da Seleção" : "Escolher Posições"}
                                         </span>
                                         <span className="text-[9px] font-medium opacity-60">Escolha manual para impressão</span>
@@ -5304,7 +5304,7 @@ function DashboardPage() {
                                       <FileText size={16} />
                                     </div>
                                     <div className="flex flex-col items-start text-left">
-                                      <span className="text-[11px] font-black uppercase tracking-tight">Imprimir Filtro</span>
+                                      <span className="text-[11px] font-semibold uppercase tracking-tight">Imprimir Filtro</span>
                                       <span className="text-[9px] font-medium opacity-60">Apenas resultados atuais</span>
                                     </div>
                                   </button>
@@ -5325,9 +5325,9 @@ function DashboardPage() {
                           <div className="h-8 w-8 rounded-xl bg-orange-50 dark:bg-orange-950/30 flex items-center justify-center text-orange-600 dark:text-orange-400">
                             <Layers size={16} />
                           </div>
-                          <span className="text-sm font-black text-slate-800 dark:text-slate-200">
+                          <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
                             {mixedPalletsData.length}
-                            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 ml-1">
+                            <span className="text-xs font-normal text-slate-400 dark:text-slate-500 ml-1">
                               {mixedPalletsData.length === 1 ? "palete misto" : "paletes mistos"}
                             </span>
                           </span>
@@ -5337,7 +5337,7 @@ function DashboardPage() {
                             onClick={() => setMixedSort("name_asc")}
                             title="Nome (A → Z)"
                             className={cn(
-                              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all",
+                              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-all",
                               mixedSort === "name_asc" ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                             )}
                           >
@@ -5347,7 +5347,7 @@ function DashboardPage() {
                             onClick={() => setMixedSort("name_desc")}
                             title="Nome (Z → A)"
                             className={cn(
-                              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all",
+                              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-all",
                               mixedSort === "name_desc" ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                             )}
                           >
@@ -5358,7 +5358,7 @@ function DashboardPage() {
                             onClick={() => setMixedSort("sku_desc")}
                             title="Mais SKUs primeiro"
                             className={cn(
-                              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all",
+                              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-all",
                               mixedSort === "sku_desc" ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                             )}
                           >
@@ -5368,7 +5368,7 @@ function DashboardPage() {
                             onClick={() => setMixedSort("sku_asc")}
                             title="Menos SKUs primeiro"
                             className={cn(
-                              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all",
+                              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-all",
                               mixedSort === "sku_asc" ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                             )}
                           >
@@ -5384,8 +5384,8 @@ function DashboardPage() {
                             <div className="h-20 w-20 rounded-full bg-slate-50 dark:bg-slate-800/50 flex items-center justify-center mb-6 border border-slate-100 dark:border-slate-800">
                                 <Box size={32} className="text-slate-300 dark:text-slate-700" />
                             </div>
-                            <h4 className="text-base font-black text-slate-800 dark:text-slate-200 mb-2">Ambiente Organizado</h4>
-                            <p className="text-xs font-bold text-slate-400 dark:text-slate-600 max-w-[280px] mx-auto">Nenhum palete misto detectado no mapeamento atual. Todo o estoque está segregado por SKU.</p>
+                            <h4 className="text-base font-semibold text-slate-800 dark:text-slate-200 mb-2">Ambiente Organizado</h4>
+                            <p className="text-xs font-normal text-slate-400 dark:text-slate-600 max-w-[280px] mx-auto">Nenhum palete misto detectado no mapeamento atual. Todo o estoque está segregado por SKU.</p>
                           </div>
                         ) : (
                           mixedPalletsData.map((pallet) => (
@@ -5402,34 +5402,34 @@ function DashboardPage() {
                                     <Layers size={20} />
                                   </div>
                                   <div>
-                                    <h4 className="text-lg font-black text-slate-900 dark:text-slate-100 tracking-tight transition-colors">{pallet.id}</h4>
-                                    <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-0.5 transition-colors">ID PALETE</p>
+                                    <h4 className="text-lg font-semibold text-slate-900 dark:text-slate-100 tracking-tight transition-colors">{pallet.id}</h4>
+                                    <p className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-0.5 transition-colors">ID PALETE</p>
                                   </div>
                                 </div>
                                 <div className="text-right">
-                                  <p className="text-2xl font-black text-slate-900 dark:text-slate-100 tracking-tight transition-colors">{fmtNum(pallet.totalQty)}</p>
-                                  <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-0.5 transition-colors">Peças</p>
+                                  <p className="text-2xl font-light text-slate-900 dark:text-slate-100 tracking-tight transition-colors">{fmtNum(pallet.totalQty)}</p>
+                                  <p className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-0.5 transition-colors">Peças</p>
                                 </div>
                               </div>
 
                               <div className="flex flex-wrap gap-2 py-0.5 transition-colors">
                                 {pallet.isMixedSku && (
-                                  <span className="px-2.5 py-1 rounded-xl bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 text-[10px] font-black uppercase border border-red-100 dark:border-red-900/40 flex items-center gap-1.5 transition-colors"><AlertCircle size={10} /> {pallet.skuCount} SKUs</span>
+                                  <span className="px-2.5 py-1 rounded-xl bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 text-[10px] font-semibold uppercase border border-red-100 dark:border-red-900/40 flex items-center gap-1.5 transition-colors"><AlertCircle size={10} /> {pallet.skuCount} SKUs</span>
                                 )}
                                 {pallet.isMixedStatus && (
-                                  <span className="px-2.5 py-1 rounded-xl bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 text-[10px] font-black uppercase border border-blue-100 dark:border-blue-900/40 flex items-center gap-1.5 transition-colors"><MapPin size={10} /> Misto Aloc/SP</span>
+                                  <span className="px-2.5 py-1 rounded-xl bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 text-[10px] font-semibold uppercase border border-blue-100 dark:border-blue-900/40 flex items-center gap-1.5 transition-colors"><MapPin size={10} /> Misto Aloc/SP</span>
                                 )}
                               </div>
 
                                 <div className="space-y-4 mt-auto pt-4 border-t border-slate-50 dark:border-slate-800 transition-colors">
-                                  <div className="flex items-center justify-between text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                                  <div className="flex items-center justify-between text-[10px] font-semibold uppercase text-slate-400 tracking-wider">
                                     <span>Produtos no Palete</span>
                                     <div className="flex items-center gap-1 text-orange-500 opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0">
                                       <span className="text-[9px]">DETALHES</span>
                                       <ChevronRight size={10} />
                                     </div>
                                   </div>
-                                  <p className="text-xs font-bold text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed transition-colors">
+                                  <p className="text-xs font-normal text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed transition-colors">
                                     {pallet.skus.join(", ")}
                                   </p>
                                   
@@ -5446,7 +5446,7 @@ function DashboardPage() {
                                           }
                                         }}
                                         disabled={isProcessingGroup}
-                                        className="w-full py-2.5 rounded-xl border border-rose-100 dark:border-rose-900/30 text-[10px] font-black uppercase tracking-widest text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100"
+                                        className="w-full py-2.5 rounded-xl border border-rose-100 dark:border-rose-900/30 text-[10px] font-semibold uppercase tracking-widest text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100"
                                       >
                                         <X size={12} /> Desagrupar Palete
                                       </button>
@@ -5477,17 +5477,17 @@ function DashboardPage() {
                             </div>
                             <div>
                               <div className="flex items-center gap-3 mb-1">
-                                <h2 className="text-2xl font-black uppercase tracking-tight">Erro de Mapeamento Detectado</h2>
-                                <div className="px-2 py-0.5 rounded-md bg-white/20 text-[10px] font-black uppercase tracking-widest border border-white/30">Alerta Crítico</div>
+                                <h2 className="text-2xl font-light uppercase tracking-tight">Erro de Mapeamento Detectado</h2>
+                                <div className="px-2 py-0.5 rounded-md bg-white/20 text-[10px] font-semibold uppercase tracking-widest border border-white/30">Alerta Crítico</div>
                               </div>
-                              <p className="text-xs font-bold uppercase text-red-100/90 tracking-widest leading-relaxed max-w-xl">
+                              <p className="text-xs font-medium uppercase text-red-100/90 tracking-widest leading-relaxed max-w-xl">
                                 Identificamos posições com capacidade excedida. Isso pode causar problemas na sincronização: <span className="text-white underline decoration-white/30 underline-offset-4">{advancedStats.overflowPositions.join(", ")}</span>
                               </p>
                             </div>
                           </div>
                           <button
                             onClick={() => handleVerNoMapa(advancedStats.overflowPositions[0])}
-                            className="px-8 py-4 bg-white text-red-600 hover:bg-red-50 rounded-2xl text-xs font-black uppercase tracking-[0.15em] transition-all shadow-xl hover:shadow-2xl active:scale-95 shrink-0 ring-1 ring-black/5"
+                            className="px-8 py-4 bg-white text-red-600 hover:bg-red-50 rounded-2xl text-xs font-semibold uppercase tracking-[0.15em] transition-all shadow-xl hover:shadow-2xl active:scale-95 shrink-0 ring-1 ring-black/5"
                           >
                             Ver no Mapa
                           </button>
@@ -5515,43 +5515,43 @@ function DashboardPage() {
                                     <Warehouse size={24} />
                                   </div>
                                   <div>
-                                    <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tight uppercase">Resumo Geral do Armazém</h3>
+                                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white tracking-tight uppercase">Resumo Geral do Armazém</h3>
                                     <div className="flex items-center gap-2 mt-0.5">
                                       <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Monitoramento em Tempo Real</p>
+                                      <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-[0.2em]">Monitoramento em Tempo Real</p>
                                     </div>
                                   </div>
                                 </div>
 
                                 <div className="flex flex-wrap items-center gap-8">
                                   <div className="flex flex-col">
-                                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Capacidade Total</span>
+                                    <span className="text-[8px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5">Capacidade Total</span>
                                     <div className="flex items-baseline gap-1.5">
-                                      <span className="text-2xl font-black text-slate-900 dark:text-white tabular-nums tracking-tighter">{fmtNum(globalCap)}</span>
-                                      <span className="text-[10px] font-bold text-slate-500 uppercase">PTs</span>
+                                      <span className="text-2xl font-light text-slate-900 dark:text-white tabular-nums tracking-tighter">{fmtNum(globalCap)}</span>
+                                      <span className="text-[10px] font-medium text-slate-500 uppercase">PTs</span>
                                     </div>
                                   </div>
                                   <div className="h-8 w-px bg-slate-100 dark:bg-slate-800" />
                                   <div className="flex flex-col">
-                                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Total em Uso</span>
+                                    <span className="text-[8px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5">Total em Uso</span>
                                     <div className="flex items-baseline gap-1.5">
-                                      <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums tracking-tighter">{fmtNum(globalUso)}</span>
-                                      <span className="text-[10px] font-bold text-emerald-600/40 dark:text-emerald-900 uppercase">PTs</span>
+                                      <span className="text-2xl font-light text-emerald-600 dark:text-emerald-400 tabular-nums tracking-tighter">{fmtNum(globalUso)}</span>
+                                      <span className="text-[10px] font-medium text-emerald-600/40 dark:text-emerald-900 uppercase">PTs</span>
                                     </div>
                                   </div>
                                   <div className="h-8 w-px bg-slate-100 dark:bg-slate-800" />
                                   <div className="flex flex-col">
-                                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Vagas Livres</span>
+                                    <span className="text-[8px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5">Vagas Livres</span>
                                     <div className="flex items-baseline gap-1.5">
-                                      <span className="text-2xl font-black text-blue-600 dark:text-blue-400 tabular-nums tracking-tighter">{fmtNum(globalLivre)}</span>
-                                      <span className="text-[10px] font-bold text-blue-600/40 dark:text-blue-900 uppercase">Vagas</span>
+                                      <span className="text-2xl font-light text-blue-600 dark:text-blue-400 tabular-nums tracking-tighter">{fmtNum(globalLivre)}</span>
+                                      <span className="text-[10px] font-medium text-blue-600/40 dark:text-blue-900 uppercase">Vagas</span>
                                     </div>
                                   </div>
                                   <div className="h-8 w-px bg-slate-100 dark:bg-slate-800" />
                                   <div className="flex flex-col items-end">
-                                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Ocupação</span>
+                                    <span className="text-[8px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5">Ocupação</span>
                                     <div className="flex items-baseline gap-1.5">
-                                      <span className="text-2xl font-black text-slate-900 dark:text-white tabular-nums tracking-tighter">{Math.round(globalOccupancy)}%</span>
+                                      <span className="text-2xl font-light text-slate-900 dark:text-white tabular-nums tracking-tighter">{Math.round(globalOccupancy)}%</span>
                                       <div className={cn(
                                         "h-1.5 w-10 rounded-full",
                                         globalOccupancy >= 95 ? "bg-red-500" : globalOccupancy >= 80 ? "bg-amber-500" : "bg-emerald-500"
@@ -5581,33 +5581,33 @@ function DashboardPage() {
                                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-8">
                                   <div className="flex items-center gap-4">
                                     <div className="flex overflow-hidden rounded-lg shadow-sm border border-black/5 dark:border-white/5">
-                                      <div className="bg-slate-200 dark:bg-slate-800 px-3 py-1.5 flex items-center justify-center font-black text-slate-700 dark:text-slate-300 text-[13px] tracking-tight border-r border-slate-300 dark:border-slate-700">{streetName}</div>
-                                      <div className="bg-slate-100 dark:bg-slate-700 px-4 py-1.5 flex items-center justify-center font-black text-slate-500 dark:text-slate-400 text-[11px] tracking-widest uppercase">Bloco</div>
+                                      <div className="bg-slate-200 dark:bg-slate-800 px-3 py-1.5 flex items-center justify-center font-semibold text-slate-700 dark:text-slate-300 text-[13px] tracking-tight border-r border-slate-300 dark:border-slate-700">{streetName}</div>
+                                      <div className="bg-slate-100 dark:bg-slate-700 px-4 py-1.5 flex items-center justify-center font-semibold text-slate-500 dark:text-slate-400 text-[11px] tracking-widest uppercase">Bloco</div>
                                     </div>
                                   </div>
 
                                   <div className="flex items-center gap-6">
                                     <div className="flex flex-col">
-                                      <span className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                                      <span className="text-[8px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1 flex items-center gap-1.5">
                                         <div className="h-1.5 w-1.5 rounded-full bg-red-600" /> LOTADOS
                                       </span>
-                                      <p className="text-lg font-black text-slate-900 dark:text-white leading-none tracking-tight">{lotadoPos}</p>
+                                      <p className="text-lg font-semibold text-slate-900 dark:text-white leading-none tracking-tight">{lotadoPos}</p>
                                     </div>
                                     <div className="flex flex-col border-l border-slate-100 dark:border-slate-800 pl-6">
-                                      <span className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                                      <span className="text-[8px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1 flex items-center gap-1.5">
                                         <div className="h-1.5 w-1.5 rounded-full bg-emerald-600" /> DISPONÍVEIS
                                       </span>
-                                      <p className="text-lg font-black text-slate-900 dark:text-white leading-none tracking-tight">{disponivelPos}</p>
+                                      <p className="text-lg font-semibold text-slate-900 dark:text-white leading-none tracking-tight">{disponivelPos}</p>
                                     </div>
                                     <div className="flex flex-col border-l border-slate-100 dark:border-slate-800 pl-6">
-                                      <span className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                                      <span className="text-[8px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1 flex items-center gap-1.5">
                                         <div className="h-1.5 w-1.5 rounded-full bg-slate-500" /> VAZIOS
                                       </span>
-                                      <p className="text-lg font-black text-slate-900 dark:text-white leading-none tracking-tight">{vazioPos}</p>
+                                      <p className="text-lg font-semibold text-slate-900 dark:text-white leading-none tracking-tight">{vazioPos}</p>
                                     </div>
                                     <div className="flex flex-col border-l border-slate-100 dark:border-slate-800 pl-6">
-                                      <span className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">OCUPAÇÍO</span>
-                                      <p className="text-lg font-black text-slate-900 dark:text-white leading-none tracking-tight">{Math.round(occupancyPercent)}%</p>
+                                      <span className="text-[8px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">OCUPAÇÍO</span>
+                                      <p className="text-lg font-semibold text-slate-900 dark:text-white leading-none tracking-tight">{Math.round(occupancyPercent)}%</p>
                                     </div>
                                   </div>
                                 </div>
@@ -5615,33 +5615,33 @@ function DashboardPage() {
                                 <div className="mb-3 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/60 flex items-center justify-between gap-2 transition-colors">
                                   <div className="flex items-center gap-4">
                                     <div className="flex flex-col">
-                                      <span className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">CAPACIDADE TOTAL</span>
+                                      <span className="text-[8px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">CAPACIDADE TOTAL</span>
                                       <div className="flex items-baseline gap-1">
-                                        <span className="text-base font-black text-slate-900 dark:text-white leading-none tracking-tight">{totalCap}</span>
-                                        <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase">PTs</span>
+                                        <span className="text-base font-semibold text-slate-900 dark:text-white leading-none tracking-tight">{totalCap}</span>
+                                        <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500 uppercase">PTs</span>
                                       </div>
                                     </div>
                                     <div className="h-6 w-px bg-slate-200 dark:bg-slate-700/50" />
                                     <div className="flex flex-col">
-                                      <span className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">EM USO</span>
+                                      <span className="text-[8px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">EM USO</span>
                                       <div className="flex items-baseline gap-1">
-                                        <span className="text-base font-black text-emerald-600 dark:text-emerald-400 leading-none tracking-tight">{totalUso}</span>
-                                        <span className="text-[9px] font-bold text-emerald-600/50 dark:text-emerald-400/50 uppercase">PTs</span>
+                                        <span className="text-base font-semibold text-emerald-600 dark:text-emerald-400 leading-none tracking-tight">{totalUso}</span>
+                                        <span className="text-[9px] font-medium text-emerald-600/50 dark:text-emerald-400/50 uppercase">PTs</span>
                                       </div>
                                     </div>
                                     <div className="h-6 w-px bg-slate-200 dark:bg-slate-700/50" />
                                     <div className="flex flex-col">
-                                      <span className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">ESPAÇO LIVRE</span>
+                                      <span className="text-[8px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">ESPAÇO LIVRE</span>
                                       <div className="flex items-baseline gap-1">
-                                        <span className="text-base font-black text-blue-600 dark:text-blue-400 leading-none tracking-tight">{Math.max(0, totalCap - totalUso)}</span>
-                                        <span className="text-[9px] font-bold text-blue-600/50 dark:text-blue-400/50 uppercase">Vagas</span>
+                                        <span className="text-base font-semibold text-blue-600 dark:text-blue-400 leading-none tracking-tight">{Math.max(0, totalCap - totalUso)}</span>
+                                        <span className="text-[9px] font-medium text-blue-600/50 dark:text-blue-400/50 uppercase">Vagas</span>
                                       </div>
                                     </div>
                                   </div>
                                   <div className="hidden sm:flex flex-col items-end">
-                                    <span className="text-[7px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-0.5">Status Global</span>
+                                    <span className="text-[7px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-0.5">Status Global</span>
                                     <div className={cn(
-                                      "px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-wider border",
+                                      "px-2 py-0.5 rounded-lg text-[8px] font-semibold uppercase tracking-wider border",
                                       occupancyPercent >= 95 ? "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-100 dark:border-red-900/30" :
                                         occupancyPercent >= 80 ? "bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border-amber-100 dark:border-amber-900/30" :
                                           "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/30"
@@ -5662,11 +5662,11 @@ function DashboardPage() {
                                     return (
                                       <div key={side} className="space-y-4 relative z-10 py-1">
                                         <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-2 mb-4 gap-2">
-                                          <p className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest leading-none">Lado {side === "even" ? "PAR" : "ÍMPAR"}</p>
+                                          <p className="text-[10px] font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-widest leading-none">Lado {side === "even" ? "PAR" : "ÍMPAR"}</p>
                                           <div className="flex items-center gap-3">
-                                            <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase">CAP: <span className="text-slate-700 dark:text-slate-300">{Math.round(sideCapacity)}</span></span>
-                                            <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase">USO: <span className="text-slate-700 dark:text-slate-300">{Math.round(sideUsage)}</span></span>
-                                            <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase">LIVRE: <span className="text-slate-700 dark:text-slate-300">{Math.round(sideAvailable)}</span></span>
+                                            <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500 uppercase">CAP: <span className="text-slate-700 dark:text-slate-300">{Math.round(sideCapacity)}</span></span>
+                                            <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500 uppercase">USO: <span className="text-slate-700 dark:text-slate-300">{Math.round(sideUsage)}</span></span>
+                                            <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500 uppercase">LIVRE: <span className="text-slate-700 dark:text-slate-300">{Math.round(sideAvailable)}</span></span>
                                           </div>
                                         </div>
                                         <div className="flex flex-wrap gap-2">
@@ -5709,7 +5709,7 @@ function DashboardPage() {
                                                   {pos.status === "Fechado" ? (
                                                     <Lock size={12} className="opacity-50" />
                                                   ) : (
-                                                    <span className="text-[11px] font-mono font-black tracking-tighter leading-none">
+                                                    <span className="text-[11px] font-mono font-semibold tracking-tighter leading-none">
                                                       {displayNum}
                                                     </span>
                                                   )}
@@ -5718,19 +5718,19 @@ function DashboardPage() {
                                                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-[300] w-60 pointer-events-none">
                                                   <div className="bg-slate-950/98 text-white rounded-2xl p-4 shadow-2xl border border-white/10 backdrop-blur-xl relative ring-1 ring-white/5">
                                                     <div className="flex items-center justify-between mb-3 border-b border-white/5 pb-2">
-                                                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{pos.id}</span>
+                                                      <span className="text-[10px] font-semibold uppercase text-slate-400 tracking-widest">{pos.id}</span>
                                                       <div className={cn("h-3 w-3 rounded-full ring-2 ring-white/10", isFull ? "bg-red-500" : "bg-emerald-500")} />
                                                     </div>
                                                     <div className="space-y-3">
-                                                      <div className="flex justify-between items-center text-[10px] font-black uppercase text-slate-400">
+                                                      <div className="flex justify-between items-center text-[10px] font-semibold uppercase text-slate-400">
                                                         <span>Ocupação</span>
-                                                        <span className="text-white text-[12px] font-black">
+                                                        <span className="text-white text-[12px] font-semibold">
                                                           {pos.is_blocked ? "BLOQUEADO" : pos.unregistered_error ? "ERRO" : `${Math.round(pos.paletes)}/${Math.round(pos.capacidade)} PTs`}
                                                         </span>
                                                       </div>
                                                       {pos.status === "Fechado" && pos.observacao_pos && (
                                                         <div className="pt-2 border-t border-white/5">
-                                                          <p className="text-[9px] font-black text-rose-400 uppercase mb-1">Observação</p>
+                                                          <p className="text-[9px] font-semibold text-rose-400 uppercase mb-1">Observação</p>
                                                           <p className="text-[11px] font-medium text-slate-200 leading-tight italic break-words">
                                                             {pos.observacao_pos}
                                                           </p>
@@ -5738,12 +5738,12 @@ function DashboardPage() {
                                                       )}
                                                       {pos.products.length > 0 && (
                                                         <div className="pt-2 border-t border-white/5">
-                                                          <p className="text-[9px] font-black text-slate-500 uppercase mb-1">Item no Slot</p>
-                                                          <p className="text-[12px] font-black text-slate-100 truncate leading-tight tracking-tight">{pos.products[0].sku}</p>
+                                                          <p className="text-[9px] font-semibold text-slate-500 uppercase mb-1">Item no Slot</p>
+                                                          <p className="text-[12px] font-semibold text-slate-100 truncate leading-tight tracking-tight">{pos.products[0].sku}</p>
                                                           {pos.products.length > 1 && (
                                                             <div className="mt-2 py-1 px-2 bg-blue-500/10 border border-blue-500/20 rounded-lg flex items-center gap-1.5">
                                                               <div className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
-                                                              <p className="text-[9px] font-black text-blue-400 uppercase tracking-tight">+ {pos.products.length - 1} ITENS (SKU MIX)</p>
+                                                              <p className="text-[9px] font-semibold text-blue-400 uppercase tracking-tight">+ {pos.products.length - 1} ITENS (SKU MIX)</p>
                                                             </div>
                                                           )}
                                                         </div>
@@ -5819,8 +5819,8 @@ function DashboardPage() {
                           }}
                         >
                           <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex justify-between items-center">
-                            <h4 className="text-sm font-black text-slate-800 dark:text-slate-200 tracking-tight">{title}</h4>
-                            <span className="text-[10px] font-bold text-slate-500 bg-slate-200 dark:bg-slate-700 px-2.5 py-1 rounded-full">{groupData.length} registros</span>
+                            <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200 tracking-tight">{title}</h4>
+                            <span className="text-[10px] font-medium text-slate-500 bg-slate-200 dark:bg-slate-700 px-2.5 py-1 rounded-full">{groupData.length} registros</span>
                           </div>
                           <div className="flex-1 overflow-x-auto overflow-y-auto custom-scrollbar relative">
                             {groupData.length === 0 ? (
@@ -5831,13 +5831,13 @@ function DashboardPage() {
                               <table className="w-full min-w-[500px] text-left">
                                 <thead className="sticky top-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm z-10">
                                   <tr className="border-b border-slate-100 dark:border-slate-800">
-                                    <th className="px-3 py-3 text-[9px] font-black uppercase tracking-widest text-slate-400 w-6"></th>
-                                    <th className="px-3 py-3 text-[9px] font-black uppercase tracking-widest text-slate-400">ID Palete</th>
-                                    <th className="px-3 py-3 text-[9px] font-black uppercase tracking-widest text-slate-400">Produto</th>
-                                    <th className="px-3 py-3 text-[9px] font-black uppercase tracking-widest text-slate-400">Descrição</th>
-                                    <th className="px-3 py-3 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right">Qtd</th>
-                                    <th className="px-3 py-3 text-[9px] font-black uppercase tracking-widest text-slate-400">Obs</th>
-                                    {user && <th className="px-3 py-3 text-[9px] font-black uppercase tracking-widest text-slate-400 text-center w-8">Ação</th>}
+                                    <th className="px-3 py-3 text-[9px] font-semibold uppercase tracking-widest text-slate-400 w-6"></th>
+                                    <th className="px-3 py-3 text-[9px] font-semibold uppercase tracking-widest text-slate-400">ID Palete</th>
+                                    <th className="px-3 py-3 text-[9px] font-semibold uppercase tracking-widest text-slate-400">Produto</th>
+                                    <th className="px-3 py-3 text-[9px] font-semibold uppercase tracking-widest text-slate-400">Descrição</th>
+                                    <th className="px-3 py-3 text-[9px] font-semibold uppercase tracking-widest text-slate-400 text-right">Qtd</th>
+                                    <th className="px-3 py-3 text-[9px] font-semibold uppercase tracking-widest text-slate-400">Obs</th>
+                                    {user && <th className="px-3 py-3 text-[9px] font-semibold uppercase tracking-widest text-slate-400 text-center w-8">Ação</th>}
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -5895,9 +5895,9 @@ function DashboardPage() {
                                               <span className="text-[10px] italic text-slate-400">S/ ALOCAÇÃO</span>
                                             ) : (
                                               <div className="flex items-center gap-1.5 flex-wrap">
-                                                <span className="text-[10px] font-black text-blue-500 dark:text-blue-300 tracking-wide">{group.label}</span>
+                                                <span className="text-[10px] font-semibold text-blue-500 dark:text-blue-300 tracking-wide">{group.label}</span>
                                                 {isComposite && (
-                                                  <span className="text-[8px] font-bold text-blue-400 bg-blue-50 dark:bg-blue-500/10 px-1.5 py-0.5 rounded-full whitespace-nowrap">{group.items.length} SKUs</span>
+                                                  <span className="text-[8px] font-medium text-blue-400 bg-blue-50 dark:bg-blue-500/10 px-1.5 py-0.5 rounded-full whitespace-nowrap">{group.items.length} SKUs</span>
                                                 )}
                                               </div>
                                             )}
@@ -5907,7 +5907,7 @@ function DashboardPage() {
                                             {isComposite ? (
                                               <span className="text-[10px] text-slate-300 dark:text-slate-600 italic">—</span>
                                             ) : (
-                                              <span className="text-xs font-bold text-slate-700 dark:text-slate-300 tracking-tight">{singleItem.produto || "—"}</span>
+                                              <span className="text-xs font-normal text-slate-700 dark:text-slate-300 tracking-tight">{singleItem.produto || "—"}</span>
                                             )}
                                           </td>
                                           {/* Descrição */}
@@ -5920,7 +5920,7 @@ function DashboardPage() {
                                           </td>
                                           {/* Qtd Total */}
                                           <td className="px-3 py-3 text-right">
-                                            <span className="text-sm font-black text-slate-700 dark:text-slate-300">{fmtNum(totalQty)}</span>
+                                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">{fmtNum(totalQty)}</span>
                                           </td>
                                           {/* Observação */}
                                           <td className="px-3 py-3">
@@ -6019,16 +6019,16 @@ function DashboardPage() {
                                                 <div className="w-px h-full bg-blue-200 dark:bg-blue-700 mx-auto opacity-50"></div>
                                               </td>
                                               <td className="px-3 py-2">
-                                                <span className="text-[9px] font-bold text-blue-500 dark:text-blue-400 pl-2 border-l-2 border-blue-200">╰ sub-item</span>
+                                                <span className="text-[9px] font-medium text-blue-500 dark:text-blue-400 pl-2 border-l-2 border-blue-200">╰ sub-item</span>
                                               </td>
                                               <td className="px-3 py-2">
-                                                <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">{sub.produto || "—"}</span>
+                                                <span className="text-[11px] font-medium text-slate-700 dark:text-slate-300">{sub.produto || "—"}</span>
                                               </td>
                                               <td className="px-3 py-2 max-w-[150px]">
                                                 <span className="text-[9px] text-slate-400 uppercase truncate block max-w-[150px]">{sub.descricao || "—"}</span>
                                               </td>
                                               <td className="px-3 py-2 text-right">
-                                                <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400">{fmtNum(sub.quantidade_total)}</span>
+                                                <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400">{fmtNum(sub.quantidade_total)}</span>
                                               </td>
                                               <td className="px-3 py-2">
                                                 {(() => {
@@ -6110,7 +6110,7 @@ function DashboardPage() {
                   {
                     (displayMode === "tabela" || displayMode === "nao_alocados" || displayMode === "quarentena") && totalPages >= 1 && (
                       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-4 pb-12 transition-colors">
-                        <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest order-2 sm:order-1">
+                        <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest order-2 sm:order-1">
                           {rowsPerPage === 'ALL' ? `Exibindo todos os ${filteredData.length} itens` : `Página ${currentPage} de ${totalPages}`}
                         </span>
                         <div className="flex gap-3 order-1 sm:order-2 items-center">
@@ -6128,7 +6128,7 @@ function DashboardPage() {
                               setRowsPerPage(prev => prev === 'ALL' ? 10 : 'ALL')
                               setCurrentPage(1)
                             }}
-                            className="px-4 py-2 sm:px-3 sm:py-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
+                            className="px-4 py-2 sm:px-3 sm:py-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs font-normal text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
                           >
                             {rowsPerPage === 'ALL' ? "Voltar ao padrão" : "Ver todos"}
                           </button>
@@ -6157,11 +6157,11 @@ function DashboardPage() {
                                 <AlertTriangle className="text-amber-600 dark:text-amber-400" size={20} />
                               </div>
                               <div>
-                                <h3 className="text-lg font-black text-amber-900 dark:text-amber-300">Janela de Pendências</h3>
+                                <h3 className="text-lg font-semibold text-amber-900 dark:text-amber-300">Janela de Pendências</h3>
                                 <p className="text-[10px] uppercase font-bold text-amber-700/60 dark:text-amber-400/60 tracking-wider">Produtos no Registro sem Mapeamento Físico Completo</p>
                               </div>
                             </div>
-                            <div className="px-3 py-1 bg-white/60 dark:bg-slate-900/60 rounded-lg text-xs font-bold text-amber-700 dark:text-amber-400 border border-amber-200/50 dark:border-amber-500/20 backdrop-blur-sm shadow-sm">
+                            <div className="px-3 py-1 bg-white/60 dark:bg-slate-900/60 rounded-lg text-xs font-normal text-amber-700 dark:text-amber-400 border border-amber-200/50 dark:border-amber-500/20 backdrop-blur-sm shadow-sm">
                               {globalStats.pendencias.length} {globalStats.pendencias.length === 1 ? 'Código com Pendência' : 'Códigos com Pendência'}
                             </div>
                           </div>
@@ -6171,7 +6171,7 @@ function DashboardPage() {
                               <div key={div.sku} className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl p-4 border border-amber-100 dark:border-amber-500/10 flex flex-col gap-3 transition-transform hover:scale-[1.02] shadow-[0_4px_20px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)] hover:border-amber-300 dark:hover:border-amber-500/30">
                                 <div className="flex items-center justify-between">
                                   <span className="font-extrabold text-slate-800 dark:text-slate-200 text-lg">{div.sku}</span>
-                                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-lg border bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20">
+                                  <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-lg border bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20">
                                     {div.diff.toLocaleString('pt-BR')} UN
                                   </span>
                                 </div>
@@ -6179,11 +6179,11 @@ function DashboardPage() {
                                 <div className="grid grid-cols-2 gap-2 text-xs font-medium text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
                                   <div className="flex flex-col p-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
                                     <span className="text-[9px] uppercase tracking-wider font-bold mb-1">Mapeado</span>
-                                    <span className="text-sm font-black text-slate-700 dark:text-slate-300">{div.mapQty.toLocaleString('pt-BR')} <span className="text-[10px] font-medium text-slate-400">UN</span></span>
+                                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">{div.mapQty.toLocaleString('pt-BR')} <span className="text-[10px] font-medium text-slate-400">UN</span></span>
                                   </div>
                                   <div className="flex flex-col text-right p-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
                                     <span className="text-[9px] uppercase tracking-wider font-bold mb-1 text-slate-400">Registrado</span>
-                                    <span className="text-sm font-black text-slate-700 dark:text-slate-300">{div.regQty.toLocaleString('pt-BR')} <span className="text-[10px] font-medium text-slate-400">UN</span></span>
+                                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">{div.regQty.toLocaleString('pt-BR')} <span className="text-[10px] font-medium text-slate-400">UN</span></span>
                                   </div>
                                 </div>
                               </div>
@@ -6272,7 +6272,7 @@ function DashboardPage() {
                         </motion.div>
                       </div>
                       <div className="text-center">
-                        <p className="text-sm font-black text-slate-400 uppercase tracking-[0.3em] animate-pulse">Sincronizando Confrontos</p>
+                        <p className="text-sm font-semibold text-slate-400 uppercase tracking-[0.3em] animate-pulse">Sincronizando Confrontos</p>
                         <p className="text-[10px] text-slate-500 mt-2 font-medium">Isso pode levar alguns segundos dependendo da base...</p>
                       </div>
                     </div>
@@ -6282,12 +6282,12 @@ function DashboardPage() {
                         <RefreshCw size={28} />
                       </div>
                       <div className="text-center">
-                        <h4 className="text-lg font-black text-slate-800 dark:text-slate-200 uppercase tracking-tight">{errorConfrontos}</h4>
+                        <h4 className="text-lg font-semibold text-slate-800 dark:text-slate-200 uppercase tracking-tight">{errorConfrontos}</h4>
                         <p className="text-xs text-slate-500 mt-1 max-w-[280px]">Verifique sua conexão com o servidor ou tente novamente em alguns instantes.</p>
                       </div>
                       <button
                         onClick={() => fetchConfrontos()}
-                        className="group flex items-center gap-3 px-8 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl shadow-slate-200 dark:shadow-none"
+                        className="group flex items-center gap-3 px-8 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-semibold text-xs uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl shadow-slate-200 dark:shadow-none"
                       >
                         <RefreshCw size={14} className="group-hover:rotate-180 transition-transform duration-500" />
                         Tentar Novamente
@@ -6404,38 +6404,38 @@ function DashboardPage() {
                                     onClick={() => setConfrontoFilter("all")}
                                     className={cn("px-5 py-2.5 text-xs font-bold tracking-wide rounded-[1rem] transition-all flex items-center gap-1.5", confrontoFilter === "all" ? "bg-white text-slate-800 shadow-md dark:bg-slate-800/90 dark:text-white" : "bg-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-800/30")}
                                   >
-                                    Tudo <span className="opacity-70 text-[10px] font-black bg-slate-200/50 dark:bg-slate-700/50 px-1.5 py-0.5 rounded-md">{counts.all}</span>
+                                    Tudo <span className="opacity-70 text-[10px] font-semibold bg-slate-200/50 dark:bg-slate-700/50 px-1.5 py-0.5 rounded-md">{counts.all}</span>
                                   </button>
                                   <button
                                     onClick={() => setConfrontoFilter("divergent")}
                                     className={cn("px-5 py-2.5 text-xs font-bold tracking-wide rounded-[1rem] transition-all flex items-center gap-1.5", confrontoFilter === "divergent" ? "bg-white text-slate-800 shadow-md dark:bg-slate-800/90 dark:text-white" : "bg-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-800/30")}
                                   >
-                                    Divergentes <span className="opacity-70 text-[10px] font-black bg-slate-200/50 dark:bg-slate-700/50 px-1.5 py-0.5 rounded-md">{counts.divergent}</span>
+                                    Divergentes <span className="opacity-70 text-[10px] font-semibold bg-slate-200/50 dark:bg-slate-700/50 px-1.5 py-0.5 rounded-md">{counts.divergent}</span>
                                   </button>
                                   <button
                                     onClick={() => setConfrontoFilter("excess")}
                                     className={cn("px-5 py-2.5 text-xs font-bold tracking-wide rounded-[1rem] transition-all flex items-center gap-1.5", confrontoFilter === "excess" ? "bg-white text-slate-800 shadow-md dark:bg-slate-800/90 dark:text-white" : "bg-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-800/30")}
                                   >
-                                    Sobras <span className="opacity-70 text-[10px] font-black bg-slate-200/50 dark:bg-slate-700/50 px-1.5 py-0.5 rounded-md">{counts.excess}</span>
+                                    Sobras <span className="opacity-70 text-[10px] font-semibold bg-slate-200/50 dark:bg-slate-700/50 px-1.5 py-0.5 rounded-md">{counts.excess}</span>
                                   </button>
                                   <button
                                     onClick={() => setConfrontoFilter("missing")}
                                     className={cn("px-5 py-2.5 text-xs font-bold tracking-wide rounded-[1rem] transition-all flex items-center gap-1.5", confrontoFilter === "missing" ? "bg-white text-slate-800 shadow-md dark:bg-slate-800/90 dark:text-white" : "bg-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-800/30")}
                                   >
-                                    Faltas <span className="opacity-70 text-[10px] font-black bg-slate-200/50 dark:bg-slate-700/50 px-1.5 py-0.5 rounded-md">{counts.missing}</span>
+                                    Faltas <span className="opacity-70 text-[10px] font-semibold bg-slate-200/50 dark:bg-slate-700/50 px-1.5 py-0.5 rounded-md">{counts.missing}</span>
                                   </button>
                                   <button
                                     onClick={() => setConfrontoFilter("match")}
                                     className={cn("px-5 py-2.5 text-xs font-bold tracking-wide rounded-[1rem] transition-all flex items-center gap-1.5", confrontoFilter === "match" ? "bg-white text-slate-800 shadow-md dark:bg-slate-800/90 dark:text-white" : "bg-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-800/30")}
                                   >
-                                    Batendo <span className="opacity-70 text-[10px] font-black bg-slate-200/50 dark:bg-slate-700/50 px-1.5 py-0.5 rounded-md">{counts.match}</span>
+                                    Batendo <span className="opacity-70 text-[10px] font-semibold bg-slate-200/50 dark:bg-slate-700/50 px-1.5 py-0.5 rounded-md">{counts.match}</span>
                                   </button>
                                   {confrontoType === "fisico_x_a501" && (
                                     <button
                                       onClick={() => setConfrontoFilter("adjusted")}
-                                      className={cn("px-5 py-2.5 text-xs font-bold tracking-wide rounded-[1rem] transition-all flex items-center gap-1.5", confrontoFilter === "adjusted" ? "bg-white text-slate-800 shadow-md dark:bg-slate-800/90 dark:text-white" : "bg-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-800/30 font-black")}
+                                      className={cn("px-5 py-2.5 text-xs font-bold tracking-wide rounded-[1rem] transition-all flex items-center gap-1.5", confrontoFilter === "adjusted" ? "bg-white text-slate-800 shadow-md dark:bg-slate-800/90 dark:text-white" : "bg-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-800/30 font-semibold")}
                                     >
-                                      Ajustados <span className="opacity-70 text-[10px] font-black bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded-md">{counts.adjusted}</span>
+                                      Ajustados <span className="opacity-70 text-[10px] font-semibold bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded-md">{counts.adjusted}</span>
                                     </button>
                                   )}
                                 </div>
@@ -6480,11 +6480,11 @@ function DashboardPage() {
                             <table className="w-full text-left min-w-[700px]">
                               <thead className="bg-slate-100/80 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800">
                                 <tr>
-                                  <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest transition-colors">Código</th>
-                                  <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest transition-colors">Descrição</th>
-                                  <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest text-right transition-colors">{confrontoType === "fisico_x_a501" ? "Física" : "Sist. A501"}</th>
-                                  <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest text-right transition-colors">{confrontoType === "fisico_x_a501" ? "Sistema" : "Sist. G501"}</th>
-                                  <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest text-right transition-colors">Saldo</th>
+                                  <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest transition-colors">Código</th>
+                                  <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest transition-colors">Descrição</th>
+                                  <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest text-right transition-colors">{confrontoType === "fisico_x_a501" ? "Física" : "Sist. A501"}</th>
+                                  <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest text-right transition-colors">{confrontoType === "fisico_x_a501" ? "Sistema" : "Sist. G501"}</th>
+                                  <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest text-right transition-colors">Saldo</th>
                                 </tr>
                               </thead>
                               <AnimatePresence mode="wait">
@@ -6583,7 +6583,7 @@ function DashboardPage() {
                                         </td>
                                         <td className="px-5 py-3.5 text-right">
                                           {c.diferenca === 0 ? (
-                                            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Bateu</span>
+                                            <span className="text-xs font-normal text-emerald-600 dark:text-emerald-400">Bateu</span>
                                           ) : (
                                             <span className={cn("text-xs font-bold", c.diferenca > 0 ? "text-amber-500 dark:text-amber-400" : "text-rose-600 dark:text-rose-400")}>
                                               {c.diferenca > 0 ? "+" : ""}{c.diferenca} {c.diferenca > 0 ? "(Positivado)" : "(Negativo)"}
@@ -6709,7 +6709,7 @@ function DashboardPage() {
                         </motion.div>
                       </div>
                       <div className="text-center">
-                        <p className="text-sm font-black text-slate-400 uppercase tracking-[0.3em] animate-pulse">Aguardando Dados...</p>
+                        <p className="text-sm font-semibold text-slate-400 uppercase tracking-[0.3em] animate-pulse">Aguardando Dados...</p>
                       </div>
                     </div>
                   )}
@@ -6775,12 +6775,12 @@ function DashboardPage() {
                             }} className="space-y-4 mb-8">
 
                               <div>
-                                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Código do Produto (SKU)</label>
+                                <label className="block text-[10px] font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Código do Produto (SKU)</label>
                                 <input required name="produto" type="text" className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-800 dark:text-white focus:outline-none focus:border-blue-500" placeholder="Ex: 1024-00" />
                               </div>
 
                               <div>
-                                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">QTD de Ajuste (+ ou -)</label>
+                                <label className="block text-[10px] font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">QTD de Ajuste (+ ou -)</label>
                                 <input
                                   required
                                   name="quantidade"
@@ -6798,7 +6798,7 @@ function DashboardPage() {
                               </div>
 
                               <div>
-                                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Motivo do Ajuste</label>
+                                <label className="block text-[10px] font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Motivo do Ajuste</label>
                                 <textarea required name="motivo" rows={2} className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-800 dark:text-white focus:outline-none focus:border-blue-500 resize-none" placeholder="Ex: Contagem dupla na Doca 3..." />
                               </div>
 
@@ -6814,7 +6814,7 @@ function DashboardPage() {
 
                           <div className="border-t border-slate-200 dark:border-slate-800 pt-6">
                             <div className="flex justify-between items-center mb-4">
-                              <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Histórico de Ajustes ({ajustesConfronto.length})</h4>
+                              <h4 className="text-[10px] font-medium uppercase tracking-wider text-slate-500">Histórico de Ajustes ({ajustesConfronto.length})</h4>
                               {ajustesConfronto.length > 0 && (
                                 <button onClick={async () => {
                                   if (!user) {
@@ -6834,7 +6834,7 @@ function DashboardPage() {
                                     }
                                   }
                                 }} className={cn(
-                                  "text-[10px] font-bold uppercase tracking-widest transition-colors",
+                                  "text-[10px] font-medium uppercase tracking-widest transition-colors",
                                   user ? "text-rose-500 hover:text-rose-400" : "text-slate-400"
                                 )}>
                                   {user ? "Remover Todos" : "Login para Limpar"}
@@ -6851,7 +6851,7 @@ function DashboardPage() {
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center gap-2">
                                         <span className="font-bold text-sm text-slate-800 dark:text-slate-200">{aj.produto}</span>
-                                        <span className={cn("text-xs font-black", aj.quantidade > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")}>{aj.quantidade > 0 ? "+" : ""}{aj.quantidade}</span>
+                                        <span className={cn("text-xs font-semibold", aj.quantidade > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")}>{aj.quantidade > 0 ? "+" : ""}{aj.quantidade}</span>
                                         {aj.timestamp && (
                                           <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium ml-auto">
                                             {new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' }).format(new Date(aj.timestamp))}
@@ -6922,7 +6922,7 @@ function DashboardPage() {
                   {!user ? (
                     <div className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 text-center">
                       <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">Você precisa estar logado para atualizar a base de dados do sistema.</p>
-                      <button onClick={() => { setModalImportA501Open(false); setShowLoginModal(true); }} className="px-6 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold uppercase tracking-wider">Fazer Login</button>
+                      <button onClick={() => { setModalImportA501Open(false); setShowLoginModal(true); }} className="px-6 py-2 bg-blue-600 text-white rounded-xl text-xs font-medium uppercase tracking-wider">Fazer Login</button>
                     </div>
                   ) : (
                     <div className="flex flex-col flex-1 min-h-0 gap-6">
@@ -6941,7 +6941,7 @@ function DashboardPage() {
                       <div className="p-4 bg-amber-50 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/20 rounded-2xl flex items-start gap-3">
                         <AlertTriangle className="text-amber-600 flex-shrink-0" size={18} />
                         <p className="text-[10px] text-amber-800 dark:text-amber-400 leading-relaxed font-medium">
-                          <span className="font-black uppercase">Atenção:</span> Esta operação irá <span className="font-black underline italic">APAGAR TODOS</span> os registros atuais da tabela A501 no Supabase e substituí-los pelo conteúdo acima.
+                          <span className="font-semibold uppercase">Atenção:</span> Esta operação irá <span className="font-semibold underline italic">APAGAR TODOS</span> os registros atuais da tabela A501 no Supabase e substituí-los pelo conteúdo acima.
                         </p>
                       </div>
 
@@ -6998,7 +6998,7 @@ function DashboardPage() {
                           }
                         }}
                         className={cn(
-                          "w-full py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3",
+                          "w-full py-4 rounded-2xl font-semibold text-xs uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3",
                           isImportingA501
                             ? "bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-wait"
                             : "bg-blue-600 hover:bg-blue-500 text-white shadow-xl shadow-blue-500/20 active:scale-[0.98]"
@@ -7038,7 +7038,7 @@ function DashboardPage() {
                   {!user ? (
                     <div className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 text-center">
                       <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">Você precisa estar logado para atualizar a base de dados G501.</p>
-                      <button onClick={() => { setModalImportG501Open(false); setShowLoginModal(true); }} className="px-6 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold uppercase tracking-wider">Fazer Login</button>
+                      <button onClick={() => { setModalImportG501Open(false); setShowLoginModal(true); }} className="px-6 py-2 bg-blue-600 text-white rounded-xl text-xs font-medium uppercase tracking-wider">Fazer Login</button>
                     </div>
                   ) : (
                     <div className="flex flex-col flex-1 min-h-0 gap-6">
@@ -7057,7 +7057,7 @@ function DashboardPage() {
                       <div className="p-4 bg-amber-50 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/20 rounded-2xl flex items-start gap-3">
                         <AlertTriangle className="text-amber-600 flex-shrink-0" size={18} />
                         <p className="text-[10px] text-amber-800 dark:text-amber-400 leading-relaxed font-medium">
-                          <span className="font-black uppercase">Atenção:</span> Esta operação irá <span className="font-black underline italic">APAGAR TODOS</span> os registros atuais da tabela G501 no Supabase e substituí-los pelo conteúdo acima.
+                          <span className="font-semibold uppercase">Atenção:</span> Esta operação irá <span className="font-semibold underline italic">APAGAR TODOS</span> os registros atuais da tabela G501 no Supabase e substituí-los pelo conteúdo acima.
                         </p>
                       </div>
 
@@ -7114,7 +7114,7 @@ function DashboardPage() {
                           }
                         }}
                         className={cn(
-                          "w-full py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3",
+                          "w-full py-4 rounded-2xl font-semibold text-xs uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3",
                           isImportingG501
                             ? "bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-wait"
                             : "bg-blue-600 hover:bg-blue-500 text-white shadow-xl shadow-blue-500/20 active:scale-[0.98]"
@@ -7150,13 +7150,13 @@ function DashboardPage() {
                           {modalFilter ? <Droplet size={20} className="md:w-6 md:h-6" /> : <Tag size={20} className="md:w-6 md:h-6" />}
                         </div>
                         <div className="flex flex-col">
-                          <h3 className="text-lg md:text-3xl font-black text-slate-900 dark:text-white truncate max-w-[150px] sm:max-w-xs">{selectedProduct}</h3>
+                          <h3 className="text-lg md:text-3xl font-light text-slate-900 dark:text-white truncate max-w-[150px] sm:max-w-xs">{selectedProduct}</h3>
                           {productDetail.descricao && productDetail.descricao !== "-" && (
                             <p className="text-[10px] md:text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tight truncate max-w-[300px]">
                               {productDetail.descricao}
                             </p>
                           )}
-                          <p className="text-[8px] md:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-0.5 md:mt-1">
+                          <p className="text-[8px] md:text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-0.5 md:mt-1">
                             {Math.round(productDetail.total_paletes)} Paletes â€¢ {Math.round(productDetail.total_quantidade).toLocaleString('pt-BR')} Peças
                           </p>
                         </div>
@@ -7168,10 +7168,10 @@ function DashboardPage() {
                         <table className="w-full text-left">
                           <thead className="sticky top-0 z-10 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-sm">
                             <tr className="border-b border-slate-100 dark:border-slate-800">
-                              <th className="px-6 py-5 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">Posição</th>
-                              <th className="px-6 py-5 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider text-center">Nível</th>
-                              <th className="px-6 py-5 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider text-center">Prof.</th>
-                              <th className="px-6 py-5 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider text-right">Qtd Total</th>
+                              <th className="px-6 py-5 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Posição</th>
+                              <th className="px-6 py-5 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider text-center">Nível</th>
+                              <th className="px-6 py-5 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider text-center">Prof.</th>
+                              <th className="px-6 py-5 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider text-right">Qtd Total</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
@@ -7183,25 +7183,25 @@ function DashboardPage() {
                                       <div className="h-7 w-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
                                         <MapPin size={12} />
                                       </div>
-                                      <span className="text-sm font-black text-slate-800 dark:text-slate-100">{p.posicao}</span>
+                                      <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{p.posicao}</span>
                                     </div>
                                     <div className="flex items-center gap-2 pl-9">
-                                      <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase">{fmtNum(p.paletes)} PTs</span>
-                                      {p.qtd_molhado > 0 && <span className="text-[9px] font-black text-blue-500 dark:text-blue-400 uppercase">| {fmtNum(p.qtd_molhado)} M</span>}
-                                      {p.qtd_tombada > 0 && <span className="text-[9px] font-black text-red-500 dark:text-red-400 uppercase">| {fmtNum(p.qtd_tombada)} T</span>}
+                                      <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase">{fmtNum(p.paletes)} PTs</span>
+                                      {p.qtd_molhado > 0 && <span className="text-[9px] font-semibold text-blue-500 dark:text-blue-400 uppercase">| {fmtNum(p.qtd_molhado)} M</span>}
+                                      {p.qtd_tombada > 0 && <span className="text-[9px] font-semibold text-red-500 dark:text-red-400 uppercase">| {fmtNum(p.qtd_tombada)} T</span>}
                                     </div>
                                   </div>
                                 </td>
                                 <td className="px-6 py-5 text-center">
-                                  <span className="inline-flex h-7 items-center rounded-lg bg-slate-100 dark:bg-slate-800 px-3 text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase">
+                                  <span className="inline-flex h-7 items-center rounded-lg bg-slate-100 dark:bg-slate-800 px-3 text-[10px] font-semibold text-slate-600 dark:text-slate-400 uppercase">
                                     {p.nivel}
                                   </span>
                                 </td>
                                 <td className="px-6 py-5 text-center">
-                                  <span className="text-xs font-black text-slate-500 dark:text-slate-400 transition-colors">{p.profundidade}</span>
+                                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 transition-colors">{p.profundidade}</span>
                                 </td>
                                 <td className="px-6 py-5 text-right">
-                                  <span className="text-sm font-black text-slate-900 dark:text-slate-100 transition-colors">{Math.round(p.quantidade).toLocaleString('pt-BR')}</span>
+                                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100 transition-colors">{Math.round(p.quantidade).toLocaleString('pt-BR')}</span>
                                 </td>
                               </tr>
                             ))}
@@ -7217,7 +7217,7 @@ function DashboardPage() {
                           setSearch(selectedProduct)
                           setSelectedProduct(null)
                         }}
-                        className="group flex items-center gap-3 px-8 py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 hover:scale-105 active:scale-95 transition-all shadow-xl shadow-emerald-100 dark:shadow-none"
+                        className="group flex items-center gap-3 px-8 py-4 bg-emerald-600 text-white rounded-2xl font-semibold text-xs uppercase tracking-widest hover:bg-emerald-700 hover:scale-105 active:scale-95 transition-all shadow-xl shadow-emerald-100 dark:shadow-none"
                       >
                         Ver Localizações no Mapa
                         <motion.div
@@ -7245,16 +7245,16 @@ function DashboardPage() {
                         <Layers size={28} className="md:w-10 md:h-10" />
                       </div>
                       <div>
-                        <h3 className="text-2xl md:text-5xl font-black text-slate-900 dark:text-white tracking-tighter transition-colors">Palete {selectedPalletId}</h3>
+                        <h3 className="text-2xl md:text-5xl font-light text-slate-900 dark:text-white tracking-tighter transition-colors">Palete {selectedPalletId}</h3>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2">
                           <div className="flex items-center gap-1.5 transition-colors">
                             <Package size={12} className="text-slate-400 dark:text-slate-500" />
-                            <p className="text-[10px] md:text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{fmtNum(palletDetail.total_qty)} Peças</p>
+                            <p className="text-[10px] md:text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">{fmtNum(palletDetail.total_qty)} Peças</p>
                           </div>
                           <div className="h-1 w-1 rounded-full bg-slate-300 dark:bg-slate-700" />
                           <div className="flex items-center gap-1.5 transition-colors">
                             <MapPin size={12} className="text-orange-500" />
-                            <p className="text-[10px] md:text-xs font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest transition-colors">
+                            <p className="text-[10px] md:text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-widest transition-colors">
                               {palletDetail.locations.map((loc, idx) => (
                                 <span key={loc} className={cn(loc === "S/P" ? "text-amber-600" : "text-emerald-600 dark:text-emerald-400")}>
                                   {loc}{idx < palletDetail.locations.length - 1 ? " â€¢ " : ""}
@@ -7273,8 +7273,8 @@ function DashboardPage() {
                       <table className="w-full">
                         <thead className="sticky top-0 z-10 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-sm">
                           <tr className="border-b border-slate-100 dark:border-slate-800 text-left">
-                            <th className="px-8 py-6 text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Conteúdo / SKU</th>
-                            <th className="px-8 py-6 text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Quantidade</th>
+                            <th className="px-8 py-6 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Conteúdo / SKU</th>
+                            <th className="px-8 py-6 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Quantidade</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
@@ -7286,9 +7286,9 @@ function DashboardPage() {
                                     <Package size={18} />
                                   </div>
                                   <div className="flex flex-col">
-                                    <span className="text-base font-black text-slate-800 dark:text-slate-200 transition-colors">{item.produto}</span>
+                                    <span className="text-base font-semibold text-slate-800 dark:text-slate-200 transition-colors">{item.produto}</span>
                                     {item.descricao && item.descricao !== "-" && (
-                                      <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase truncate max-w-[300px]">
+                                      <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500 uppercase truncate max-w-[300px]">
                                         {item.descricao}
                                       </span>
                                     )}
@@ -7296,7 +7296,7 @@ function DashboardPage() {
                                 </div>
                               </td>
                               <td className="px-8 py-6 text-right">
-                                <span className="text-lg font-black text-slate-900 dark:text-slate-100 transition-colors">{fmtNum(item.quantidade_total)}</span>
+                                <span className="text-lg font-semibold text-slate-900 dark:text-slate-100 transition-colors">{fmtNum(item.quantidade_total)}</span>
                               </td>
                             </tr>
                           ))}
@@ -7312,9 +7312,9 @@ function DashboardPage() {
                       </div>
                       <div>
                         <p className="text-xs md:text-sm font-bold leading-relaxed text-slate-300">
-                          Este palete é classificado como <span className="text-orange-400 font-black">MISTO</span> por conter {palletDetail.items.length} registros distintos.
+                          Este palete é classificado como <span className="text-orange-400 font-semibold">MISTO</span> por conter {palletDetail.items.length} registros distintos.
                         </p>
-                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-1">SISTEMA AG-G300 â€¢ AUDITORIA DE PALETES</p>
+                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mt-1">SISTEMA AG-G300 â€¢ AUDITORIA DE PALETES</p>
                       </div>
                     </div>
                   </div>
@@ -7346,7 +7346,7 @@ function DashboardPage() {
                     <div className="grid grid-cols-2 gap-3">
                       <div className="flex flex-col items-center justify-center border border-slate-200 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-800/30 rounded-xl p-4 transition-colors shadow-sm">
                         <div className="flex items-center gap-1.5 mb-1.5">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Qtd Física</span>
+                          <span className="text-[10px] font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Qtd Física</span>
                           {selectedConfrontoItem.teve_ajuste && <span className="text-[9px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded-md font-bold leading-none">+ Ajuste</span>}
                         </div>
                         <span className="text-3xl font-semibold text-slate-800 dark:text-slate-100">{fmtNum(selectedConfrontoItem.qtd_fisica)}</span>
@@ -7355,7 +7355,7 @@ function DashboardPage() {
                         )}
                       </div>
                       <div className="flex flex-col items-center justify-center border border-slate-200 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-800/30 rounded-xl p-4 transition-colors shadow-sm">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Qtd Sistema</span>
+                        <span className="text-[10px] font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Qtd Sistema</span>
                         <span className="text-3xl font-semibold text-slate-800 dark:text-slate-100">{fmtNum(selectedConfrontoItem.qtd_sistema)}</span>
                       </div>
                     </div>
@@ -7365,7 +7365,7 @@ function DashboardPage() {
                         selectedConfrontoItem.diferenca < 0 ? "border-rose-200 dark:border-rose-500/30 bg-rose-50/50 dark:bg-rose-950/20" :
                           "border-slate-200 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-800/30"
                     )}>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Situação Atual</span>
+                      <span className="text-[10px] font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Situação Atual</span>
                       <span className={cn("text-4xl font-bold tracking-tight",
                         selectedConfrontoItem.diferenca > 0 ? "text-emerald-600 dark:text-emerald-400" :
                           selectedConfrontoItem.diferenca < 0 ? "text-rose-600 dark:text-rose-400" :
@@ -7391,7 +7391,7 @@ function DashboardPage() {
 
                       {selectedConfrontoItem.teve_ajuste && (
                         <div className="mt-4 p-3 rounded-lg bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30 text-left w-full">
-                          <h4 className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-blue-600 dark:text-blue-400 mb-1.5">
+                          <h4 className="flex items-center gap-1.5 text-[10px] font-medium uppercase text-blue-600 dark:text-blue-400 mb-1.5">
                             <Settings size={12} />
                             Ajuste de {selectedConfrontoItem.ajuste_quantidade > 0 ? "+" : ""}{selectedConfrontoItem.ajuste_quantidade} Aplicado
                           </h4>
@@ -7429,7 +7429,7 @@ function DashboardPage() {
                       return (
                         <div className="border border-slate-200 dark:border-slate-700/60 rounded-xl overflow-hidden bg-white dark:bg-slate-900 shadow-sm">
                           <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-800/30">
-                            <h4 className="text-[10px] font-bold tracking-wider text-slate-500 dark:text-slate-400 uppercase">Aba de posições ({posicoesAgrupadasLocal.length})</h4>
+                            <h4 className="text-[10px] font-medium tracking-wider text-slate-500 dark:text-slate-400 uppercase">Aba de posições ({posicoesAgrupadasLocal.length})</h4>
                           </div>
                           <div className="max-h-40 overflow-y-auto custom-scrollbar">
                             <table className="w-full text-left">
@@ -7471,8 +7471,8 @@ function DashboardPage() {
                         <TableIcon size={28} />
                       </div>
                       <div>
-                        <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Exportar Relatório</h3>
-                        <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mt-1">Configuração de Saída {exportFormat === "pdf" ? "PDF" : "EXCEL"}</p>
+                        <h3 className="text-2xl font-light text-slate-900 dark:text-white tracking-tight">Exportar Relatório</h3>
+                        <p className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mt-1">Configuração de Saída {exportFormat === "pdf" ? "PDF" : "EXCEL"}</p>
                       </div>
                     </div>
                     <button onClick={() => setShowExportConfigModal(false)} className="h-12 w-12 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-400 dark:text-slate-500 flex items-center justify-center hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-500 transition-colors border border-slate-100 dark:border-slate-800"><X size={24} /></button>
@@ -7482,7 +7482,7 @@ function DashboardPage() {
                     <button
                       onClick={() => setExportFormat("excel")}
                       className={cn(
-                        "flex-1 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all duration-500 flex items-center justify-center gap-2",
+                        "flex-1 py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all duration-500 flex items-center justify-center gap-2",
                         exportFormat === "excel"
                           ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/30 scale-105 z-10"
                           : "text-slate-400 dark:text-slate-500 hover:text-slate-600 hover:bg-slate-200/50"
@@ -7494,7 +7494,7 @@ function DashboardPage() {
                     <button
                       onClick={() => setExportFormat("pdf")}
                       className={cn(
-                        "flex-1 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all duration-500 flex items-center justify-center gap-2",
+                        "flex-1 py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all duration-500 flex items-center justify-center gap-2",
                         exportFormat === "pdf"
                           ? "bg-rose-700 text-white shadow-lg shadow-rose-700/20 scale-105 z-10"
                           : "text-slate-400 dark:text-slate-500 hover:text-slate-600 hover:bg-slate-200/50"
@@ -7510,7 +7510,7 @@ function DashboardPage() {
                     <button
                       onClick={() => setExportTab("simple")}
                       className={cn(
-                        "flex-1 py-3 text-[10px] font-bold uppercase tracking-widest transition-all relative",
+                        "flex-1 py-3 text-[10px] font-medium uppercase tracking-widest transition-all relative",
                         exportTab === "simple" ? "text-blue-600" : "text-slate-400 hover:text-slate-500"
                       )}
                     >
@@ -7520,7 +7520,7 @@ function DashboardPage() {
                     <button
                       onClick={() => setExportTab("advanced")}
                       className={cn(
-                        "flex-1 py-3 text-[10px] font-bold uppercase tracking-widest transition-all relative",
+                        "flex-1 py-3 text-[10px] font-medium uppercase tracking-widest transition-all relative",
                         exportTab === "advanced" ? "text-blue-600" : "text-slate-400 hover:text-slate-500"
                       )}
                     >
@@ -7541,7 +7541,7 @@ function DashboardPage() {
                           <Zap size={32} />
                         </div>
                         <div>
-                          <h4 className="text-lg font-black text-slate-900 dark:text-white mb-1">Exportação Completa</h4>
+                          <h4 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">Exportação Completa</h4>
                           <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-widest font-bold">Resumo rápido de todos os itens filtrados</p>
                         </div>
                         <p className="text-xs text-slate-400 dark:text-slate-500 max-w-[240px]">
@@ -7557,7 +7557,7 @@ function DashboardPage() {
                       >
                         {/* Grupo 1: Categorias de Carga */}
                         <div className="space-y-3 text-left">
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">1. Categorias de Carga</p>
+                          <p className="text-[10px] font-medium text-slate-400 uppercase tracking-widest px-1">1. Categorias de Carga</p>
                           <div className="grid grid-cols-1 gap-2">
                             {[
                               { id: "includeWet", label: "Produtos Molhados", icon: Droplet },
@@ -7576,7 +7576,7 @@ function DashboardPage() {
                               >
                                 <div className="flex items-center gap-3">
                                   <opt.icon size={14} className={cn(exportOptions[opt.id as keyof typeof exportOptions] ? "text-blue-600" : "text-slate-400")} />
-                                  <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-tight">{opt.label}</span>
+                                  <span className="text-[10px] font-medium text-slate-600 dark:text-slate-300 uppercase tracking-tight">{opt.label}</span>
                                 </div>
                                 <div className={cn("h-5 w-5 rounded border-2 flex items-center justify-center transition-colors", exportOptions[opt.id as keyof typeof exportOptions] ? "bg-blue-600 border-blue-600" : "border-slate-300 dark:border-slate-600")}>
                                   {exportOptions[opt.id as keyof typeof exportOptions] && <CheckSquare size={12} className="text-white" />}
@@ -7590,7 +7590,7 @@ function DashboardPage() {
 
                         {/* Grupo 2: Localização */}
                         <div className="space-y-3 text-left">
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">2. Localização</p>
+                          <p className="text-[10px] font-medium text-slate-400 uppercase tracking-widest px-1">2. Localização</p>
                           <div className="grid grid-cols-2 gap-2">
                             {[
                               { id: "includeAllocated", label: "Alocado (G300)" },
@@ -7606,7 +7606,7 @@ function DashboardPage() {
                                     : "bg-transparent border-transparent opacity-40 grayscale"
                                 )}
                               >
-                                <span className="text-[9px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-tight">{opt.label}</span>
+                                <span className="text-[9px] font-medium text-slate-600 dark:text-slate-300 uppercase tracking-tight">{opt.label}</span>
                                 <div className={cn("h-4 w-4 rounded border-2 flex items-center justify-center transition-colors shadow-sm", exportOptions[opt.id as keyof typeof exportOptions] ? "bg-emerald-600 border-emerald-600" : "border-slate-300 dark:border-slate-600")}>
                                   {exportOptions[opt.id as keyof typeof exportOptions] && <CheckSquare size={10} className="text-white" />}
                                 </div>
@@ -7619,7 +7619,7 @@ function DashboardPage() {
 
                         {/* Grupo 3: Status / Saldo */}
                         <div className="space-y-3 text-left">
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">3. Status do Saldo</p>
+                          <p className="text-[10px] font-medium text-slate-400 uppercase tracking-widest px-1">3. Status do Saldo</p>
                           <div className="grid grid-cols-3 gap-2">
                             {[
                               { id: "includeNormal", label: "Normal" },
@@ -7636,7 +7636,7 @@ function DashboardPage() {
                                     : "bg-transparent border-transparent opacity-40 grayscale"
                                 )}
                               >
-                                <span className="text-[9px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-tight">{opt.label}</span>
+                                <span className="text-[9px] font-medium text-slate-600 dark:text-slate-300 uppercase tracking-tight">{opt.label}</span>
                                 <div className={cn("h-4 w-4 rounded border-2 flex items-center justify-center transition-colors shadow-sm", exportOptions[opt.id as keyof typeof exportOptions] ? "bg-slate-900 dark:bg-slate-100 border-slate-900 dark:border-slate-100" : "border-slate-300 dark:border-slate-600")}>
                                   {exportOptions[opt.id as keyof typeof exportOptions] && <CheckSquare size={10} className={cn(opt.id === "includeNormal" ? "text-white" : "text-white dark:text-slate-900")} />}
                                 </div>
@@ -7649,7 +7649,7 @@ function DashboardPage() {
 
                         {/* Grupo 4: Detalhamento */}
                         <div className="space-y-3 text-left">
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">4. Detalhamento</p>
+                          <p className="text-[10px] font-medium text-slate-400 uppercase tracking-widest px-1">4. Detalhamento</p>
                           <div
                             onClick={() => setExportOptions(prev => ({ ...prev, includeObservations: !prev.includeObservations }))}
                             className={cn(
@@ -7661,7 +7661,7 @@ function DashboardPage() {
                           >
                             <div className="flex items-center gap-3">
                               <MessageSquare size={14} className={cn(exportOptions.includeObservations ? "text-blue-600" : "text-slate-400")} />
-                              <span className="text-[9px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-tight">Incluir Observações</span>
+                              <span className="text-[9px] font-medium text-slate-600 dark:text-slate-300 uppercase tracking-tight">Incluir Observações</span>
                             </div>
                             <div className={cn("h-4 w-4 rounded border-2 flex items-center justify-center transition-colors shadow-sm", exportOptions.includeObservations ? "bg-blue-600 border-blue-600" : "border-slate-300 dark:border-slate-600")}>
                               {exportOptions.includeObservations && <CheckSquare size={10} className="text-white" />}
@@ -7674,8 +7674,8 @@ function DashboardPage() {
 
                   {/* Footer Action */}
                   <div className="mt-6 flex gap-4">
-                    <button onClick={() => setShowExportConfigModal(false)} className="flex-1 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-xs font-black uppercase tracking-widest hover:bg-slate-200 dark:hover:bg-slate-700 transition-all active:scale-95">Cancelar</button>
-                    <button onClick={executeProductExport} className="flex-[2] py-3 rounded-2xl bg-blue-600 text-white text-xs font-black uppercase tracking-widest shadow-xl shadow-blue-500/30 hover:bg-blue-500 transition-all active:scale-95 flex items-center justify-center gap-2">
+                    <button onClick={() => setShowExportConfigModal(false)} className="flex-1 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-widest hover:bg-slate-200 dark:hover:bg-slate-700 transition-all active:scale-95">Cancelar</button>
+                    <button onClick={executeProductExport} className="flex-[2] py-3 rounded-2xl bg-blue-600 text-white text-xs font-semibold uppercase tracking-widest shadow-xl shadow-blue-500/30 hover:bg-blue-500 transition-all active:scale-95 flex items-center justify-center gap-2">
                       <Download size={16} /> Gerar {exportFormat === "pdf" ? "PDF" : "Planilha"}
                     </button>
                   </div>
@@ -7695,10 +7695,10 @@ function DashboardPage() {
               >
                 <div className="bg-slate-900/95 dark:bg-slate-800/95 backdrop-blur-2xl px-6 py-4 rounded-[2rem] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.3)] flex items-center gap-8 min-w-[320px] md:min-w-[450px]">
                   <div className="flex flex-col text-left">
-                    <span className="text-blue-400 text-[10px] font-black uppercase tracking-[0.2em]">Seleção Ativa</span>
+                    <span className="text-blue-400 text-[10px] font-semibold uppercase tracking-[0.2em]">Seleção Ativa</span>
                     <div className="flex items-baseline gap-2">
-                      <span className="text-white text-2xl font-black">{selectedPositions.size}</span>
-                      <span className="text-slate-400 text-xs font-bold uppercase">{selectedPositions.size === 1 ? "Posição Escolhida" : "Posições Escolhidas"}</span>
+                      <span className="text-white text-2xl font-light">{selectedPositions.size}</span>
+                      <span className="text-slate-400 text-xs font-medium uppercase">{selectedPositions.size === 1 ? "Posição Escolhida" : "Posições Escolhidas"}</span>
                     </div>
                   </div>
 
@@ -7710,7 +7710,7 @@ function DashboardPage() {
                         setSelectionModeActive(false);
                         setSelectedPositions(new Set());
                       }}
-                      className="px-6 py-3 rounded-2xl bg-white/5 hover:bg-white/10 text-white text-[11px] font-black uppercase tracking-wider transition-all active:scale-95"
+                      className="px-6 py-3 rounded-2xl bg-white/5 hover:bg-white/10 text-white text-[11px] font-semibold uppercase tracking-wider transition-all active:scale-95"
                     >
                       Sair
                     </button>
@@ -7718,7 +7718,7 @@ function DashboardPage() {
                       disabled={selectedPositions.size === 0}
                       onClick={() => handleExportSelection()}
                       className={cn(
-                        "px-8 py-3 rounded-2xl text-white text-[11px] font-black uppercase tracking-wider transition-all flex items-center gap-2 active:scale-95",
+                        "px-8 py-3 rounded-2xl text-white text-[11px] font-semibold uppercase tracking-wider transition-all flex items-center gap-2 active:scale-95",
                         selectedPositions.size > 0
                           ? "bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-500/25 cursor-pointer"
                           : "bg-slate-700 opacity-50 cursor-not-allowed"
@@ -7742,13 +7742,13 @@ function DashboardPage() {
                     <div className="flex items-center gap-3 md:gap-4">
                       <div className="h-10 w-10 md:h-14 md:w-14 rounded-2xl md:rounded-3xl bg-blue-600 flex items-center justify-center text-white shadow-xl shadow-blue-200 dark:shadow-blue-900/20 transition-all"><MapPin size={20} className="md:w-6 md:h-6" /></div>
                       <div className="text-left">
-                        <h3 className="text-xl md:text-3xl font-black text-slate-900 dark:text-white transition-colors">{selectedPosition}</h3>
+                        <h3 className="text-xl md:text-3xl font-light text-slate-900 dark:text-white transition-colors">{selectedPosition}</h3>
                         <div className="flex items-center gap-2 mt-0.5 md:mt-1">
-                          <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em] animate-in fade-in slide-in-from-left duration-700">
+                          <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.2em] animate-in fade-in slide-in-from-left duration-700">
                             {fmtNum(positionDetail.occupied)} / {positionDetail.capacidade} Paletes • {Math.round(positionDetail.level_count)} Níveis (0-{Math.round(positionDetail.level_count) - 1})
                           </span>
                           {positionDetail.isOverflow && (
-                            <span className="flex items-center gap-1 rounded-full bg-red-100 dark:bg-red-900/30 px-2 py-0.5 text-[8px] font-black uppercase text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50">
+                            <span className="flex items-center gap-1 rounded-full bg-red-100 dark:bg-red-900/30 px-2 py-0.5 text-[8px] font-semibold uppercase text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50">
                               <AlertCircle size={8} /> Excesso
                             </span>
                           )}
@@ -7764,7 +7764,7 @@ function DashboardPage() {
                         className="h-10 px-4 md:h-12 md:px-5 rounded-xl md:rounded-2xl flex items-center justify-center gap-2 transition-all border bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
                       >
                         <Printer size={16} />
-                        <span className="text-[10px] md:text-xs font-black uppercase tracking-widest hidden sm:inline">Imprimir Mapa</span>
+                        <span className="text-[10px] md:text-xs font-semibold uppercase tracking-widest hidden sm:inline">Imprimir Mapa</span>
                       </button>
 
                       {!!user && (
@@ -7776,7 +7776,7 @@ function DashboardPage() {
                           title="Editar Posição"
                           className="h-10 px-4 md:h-12 md:px-5 rounded-xl md:rounded-2xl flex items-center justify-center gap-2 transition-all border bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900/50 hover:bg-blue-200 dark:hover:bg-blue-800 cursor-pointer"
                         >
-                          <span className="text-[10px] md:text-xs font-black uppercase tracking-widest">Editar</span>
+                          <span className="text-[10px] md:text-xs font-semibold uppercase tracking-widest">Editar</span>
                         </button>
                       )}
                       <button
@@ -7813,8 +7813,8 @@ function DashboardPage() {
                       <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
                       <AlertCircle size={24} className="animate-pulse shrink-0" />
                       <div className="text-left">
-                        <p className="text-[11px] font-black uppercase tracking-tight">ALERTA DE CAPACIDADE EXCEDIDA</p>
-                        <p className="text-[10px] font-bold text-red-100 leading-tight">
+                        <p className="text-[11px] font-semibold uppercase tracking-tight">ALERTA DE CAPACIDADE EXCEDIDA</p>
+                        <p className="text-[10px] font-medium text-red-100 leading-tight">
                           Esta posição contém {fmtNum(positionDetail.occupied)} paletes, ultrapassando o limite de {positionDetail.capacidade}. Verifique o mapeamento logístico na planilha.
                         </p>
                       </div>
@@ -7891,10 +7891,10 @@ function DashboardPage() {
                         <Search size={22} strokeWidth={2.5} />
                       </div>
                       <div>
-                        <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight leading-none mb-1">
+                        <h3 className="text-xl font-semibold text-slate-900 dark:text-white uppercase tracking-tight leading-none mb-1">
                           Produtos em Sobra
                         </h3>
-                        <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                        <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-widest">
                           Mapeamento &gt; Registro do Sistema
                         </p>
                       </div>
@@ -7911,7 +7911,7 @@ function DashboardPage() {
                   <div className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800 cursor-default">
                     {stats?.divergenciasLupa && stats.divergenciasLupa.length > 0 ? (
                       <div className="space-y-3">
-                        <div className="grid grid-cols-[1fr_repeat(3,_auto)] gap-4 px-4 py-2 text-[9px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-50 dark:border-slate-800/50">
+                        <div className="grid grid-cols-[1fr_repeat(3,_auto)] gap-4 px-4 py-2 text-[9px] font-semibold uppercase text-slate-400 tracking-widest border-b border-slate-50 dark:border-slate-800/50">
                           <span>Produto / SKU</span>
                           <span className="text-right w-16">Mapped.</span>
                           <span className="text-right w-16">Regis.</span>
@@ -7925,17 +7925,17 @@ function DashboardPage() {
                             transition={{ delay: i * 0.05 }}
                             className="group grid grid-cols-[1fr_repeat(3,_auto)] gap-4 items-center px-4 py-3 rounded-2xl bg-slate-50/50 dark:bg-slate-800/30 hover:bg-slate-100 dark:hover:bg-slate-800/50 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-all"
                           >
-                            <span className="text-sm font-black text-slate-800 dark:text-slate-200 truncate pr-2">
+                            <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate pr-2">
                               {item.sku}
                             </span>
-                            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 text-right w-16">
+                            <span className="text-xs font-normal text-slate-500 dark:text-slate-400 text-right w-16">
                               {fmtNum(item.mapQty)}
                             </span>
-                            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 text-right w-16">
+                            <span className="text-xs font-normal text-slate-500 dark:text-slate-400 text-right w-16">
                               {fmtNum(item.regQty)}
                             </span>
                             <div className="flex flex-col items-end w-16">
-                              <span className="text-sm font-black text-amber-600 dark:text-amber-400">
+                              <span className="text-sm font-semibold text-amber-600 dark:text-amber-400">
                                 +{fmtNum(item.diff)}
                               </span>
                             </div>
@@ -7977,7 +7977,7 @@ function DashboardPage() {
                 <div className="border-b-[1.5px] border-black pb-2 mb-4 flex justify-between items-end">
                   <div>
                     <p className="text-[7px] font-bold uppercase tracking-[0.2em] text-black/50 mb-0.5">Auditoria Logística G300</p>
-                    <h1 className="text-xl font-black uppercase tracking-tight leading-none mb-1">Relação de Produtos e Divergências</h1>
+                    <h1 className="text-xl font-semibold uppercase tracking-tight leading-none mb-1">Relação de Produtos e Divergências</h1>
                     <div className="flex gap-3 text-[6px] font-bold uppercase">
                       <span>Status: {exportTab === "simple" || (exportOptions.includeWet && exportOptions.includeTilted && exportOptions.includeTraditional) ? 'Todas' : [exportOptions.includeWet && 'Molhados', exportOptions.includeTilted && 'Tombados', exportOptions.includeTraditional && 'Tradicional'].filter(Boolean).join(' + ')}</span>
                       <span className="text-black/20">|</span>
@@ -8001,11 +8001,11 @@ function DashboardPage() {
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   <div className="px-3 py-2 border border-black flex items-center justify-between">
                     <span className="text-[7px] font-bold uppercase text-black/60 tracking-wider">SKUs Auditados:</span>
-                    <span className="text-sm font-black">{printData.length}</span>
+                    <span className="text-sm font-semibold">{printData.length}</span>
                   </div>
                   <div className="px-3 py-2 border border-black flex items-center justify-between">
                     <span className="text-[7px] font-bold uppercase text-black/60 tracking-wider">Peças Físicas G300:</span>
-                    <span className="text-sm font-black">{printData.reduce((acc, curr) => acc + curr.quantidade_total, 0).toLocaleString('pt-BR')}</span>
+                    <span className="text-sm font-semibold">{printData.reduce((acc, curr) => acc + curr.quantidade_total, 0).toLocaleString('pt-BR')}</span>
                   </div>
                 </div>
 
@@ -8028,7 +8028,7 @@ function DashboardPage() {
                       <tr key={idx} className="border-b border-black/10 break-inside-avoid">
                         <td className="px-3 py-1.5 font-bold">{item.produto}</td>
                         <td className="px-3 py-1.5 font-medium">{item.descricao}</td>
-                        <td className="px-3 py-1.5 text-right font-black">{item.quantidade_total.toLocaleString('pt-BR')}</td>
+                        <td className="px-3 py-1.5 text-right font-semibold">{item.quantidade_total.toLocaleString('pt-BR')}</td>
                         <td className="px-3 py-1.5 text-right font-bold">{item.total_paletes}</td>
                         <td className="px-3 py-1.5 text-right font-bold">{item.total_posicoes}</td>
                         {exportOptions.includeWet && <td className="px-3 py-1.5 text-right font-bold">{item.dmg_molhado.toLocaleString('pt-BR')}</td>}
@@ -8056,8 +8056,8 @@ function DashboardPage() {
               className="fixed bottom-10 left-1/2 z-50 flex items-center gap-6 bg-slate-900/90 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-700/50 shadow-[0_20px_50px_rgba(0,0,0,0.5)] rounded-3xl px-8 py-4 px-10 ring-1 ring-white/10"
             >
               <div className="flex flex-col">
-                <span className="text-white text-base font-black tracking-tight">{selectedNaoAlocados.size} selecionado{selectedNaoAlocados.size > 1 ? "s" : ""}</span>
-                <span className="text-slate-400 text-[9px] font-black uppercase tracking-widest leading-none mt-0.5">Gestão de Chão</span>
+                <span className="text-white text-base font-semibold tracking-tight">{selectedNaoAlocados.size} selecionado{selectedNaoAlocados.size > 1 ? "s" : ""}</span>
+                <span className="text-slate-400 text-[9px] font-semibold uppercase tracking-widest leading-none mt-0.5">Gestão de Chão</span>
               </div>
               
               <div className="h-8 w-px bg-slate-700/50 mx-2"></div>
@@ -8071,7 +8071,7 @@ function DashboardPage() {
                   <div className="h-6 w-6 rounded-lg bg-white/20 flex items-center justify-center group-hover/btn:rotate-12 transition-transform">
                     <Layers size={14}/>
                   </div>
-                  <span className="text-sm font-black uppercase tracking-[0.1em]">Agrupar Mix</span>
+                  <span className="text-sm font-semibold uppercase tracking-[0.1em]">Agrupar Mix</span>
                 </button>
                 
                 <button 
@@ -8084,7 +8084,7 @@ function DashboardPage() {
                   className="h-12 px-6 bg-slate-800 hover:bg-rose-900/40 text-rose-400 border border-slate-700 hover:border-rose-700/50 rounded-2xl flex items-center gap-3 transition-all active:scale-95 disabled:opacity-50 group/btn"
                 >
                   <X size={18}/>
-                  <span className="text-sm font-black uppercase tracking-[0.1em]">Limpar ID</span>
+                  <span className="text-sm font-semibold uppercase tracking-[0.1em]">Limpar ID</span>
                 </button>
               </div>
             </motion.div>
@@ -8116,8 +8116,8 @@ function DashboardPage() {
                         <Layers size={28} />
                       </div>
                       <div>
-                        <h2 className="text-2xl font-black dark:text-slate-100 text-slate-800 tracking-tight">Criar Palete Misto</h2>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Consolidação de {selectedNaoAlocados.size} Itens</p>
+                        <h2 className="text-2xl font-light dark:text-slate-100 text-slate-800 tracking-tight">Criar Palete Misto</h2>
+                        <p className="text-[10px] font-medium text-slate-400 uppercase tracking-widest mt-1">Consolidação de {selectedNaoAlocados.size} Itens</p>
                       </div>
                     </div>
                     <button 
@@ -8130,7 +8130,7 @@ function DashboardPage() {
                   
                   <form onSubmit={handleGroupSelected} className="space-y-8">
                     <div className="space-y-3">
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Identificação do Palete</label>
+                      <label className="text-[10px] font-medium uppercase tracking-widest text-slate-500 ml-1">Identificação do Palete</label>
                       <div className="relative">
                         <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400">
                           <span className="font-bold text-xs uppercase tracking-tighter">ID:</span>
@@ -8141,19 +8141,19 @@ function DashboardPage() {
                           value={palletIdInput}
                           onChange={(e) => setPalletIdInput(e.target.value.toUpperCase())}
                           placeholder="EX: P.001 OU DEIXE EM BRANCO"
-                          className="w-full h-16 pl-14 pr-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-900 dark:text-white font-black placeholder:font-bold placeholder:text-slate-300 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all uppercase"
+                          className="w-full h-16 pl-14 pr-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-900 dark:text-white font-semibold placeholder:font-bold placeholder:text-slate-300 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all uppercase"
                         />
                       </div>
                       <div className="flex items-center gap-2 px-1">
                         <div className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Sistema gera ID sequencial (P.001) automático se vazio</p>
+                        <p className="text-[9px] font-medium text-slate-400 uppercase tracking-widest">Sistema gera ID sequencial (P.001) automático se vazio</p>
                       </div>
                     </div>
                     
                     <button 
                       type="submit"
                       disabled={isProcessingGroup || selectedNaoAlocados.size === 0}
-                      className="w-full h-16 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-black rounded-2xl shadow-xl shadow-blue-500/20 flex items-center justify-center gap-3 transition-all disabled:opacity-50 disabled:cursor-not-allowed group/btn"
+                      className="w-full h-16 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-semibold rounded-2xl shadow-xl shadow-blue-500/20 flex items-center justify-center gap-3 transition-all disabled:opacity-50 disabled:cursor-not-allowed group/btn"
                     >
                       {isProcessingGroup ? (
                         <RefreshCw size={24} className="animate-spin" />
@@ -8194,7 +8194,7 @@ function DashboardPage() {
                     <Trash2 className="text-rose-500" size={32} />
                   </div>
                   
-                  <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-3">Desagrupar Palete?</h3>
+                  <h3 className="text-2xl font-light text-slate-900 dark:text-white mb-3">Desagrupar Palete?</h3>
                   <p className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-8 leading-relaxed">
                     Você tem certeza que deseja desagrupar o palete <span className="text-rose-500">{ungroupTargetData.id}</span>?<br/>
                     Todos os itens voltarão a ser unitários no sistema.
@@ -8207,14 +8207,14 @@ function DashboardPage() {
                         await handleUngroupSelected(ungroupTargetData.itemIds);
                       }}
                       disabled={isProcessingGroup}
-                      className="w-full h-14 bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white font-black rounded-2xl shadow-xl shadow-rose-500/20 flex items-center justify-center gap-3 transition-all disabled:opacity-50"
+                      className="w-full h-14 bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white font-semibold rounded-2xl shadow-xl shadow-rose-500/20 flex items-center justify-center gap-3 transition-all disabled:opacity-50"
                     >
                       Sim, Desagrupar
                     </button>
                     
                     <button 
                       onClick={() => setShowUngroupConfirm(false)}
-                      className="w-full h-14 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-[0.98] text-slate-600 dark:text-slate-300 font-black rounded-2xl transition-all"
+                      className="w-full h-14 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-[0.98] text-slate-600 dark:text-slate-300 font-semibold rounded-2xl transition-all"
                     >
                       Cancelar
                     </button>
@@ -8251,7 +8251,7 @@ function DashboardPage() {
                     <div className="h-12 w-12 rounded-2xl bg-blue-600/10 flex items-center justify-center text-blue-600 mb-4">
                       <Lock size={24} />
                     </div>
-                    <h3 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">Área Restrita</h3>
+                    <h3 className="text-2xl font-light text-slate-800 dark:text-white tracking-tight">Área Restrita</h3>
                     <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Identifique-se para gerenciar ajustes.</p>
                   </div>
                   <button
@@ -8264,7 +8264,7 @@ function DashboardPage() {
 
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">E-mail Corporativo</label>
+                    <label className="text-[10px] font-medium uppercase tracking-widest text-slate-500 ml-1">E-mail Corporativo</label>
                     <div className="relative">
                       <AtSign className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                       <input
@@ -8279,7 +8279,7 @@ function DashboardPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Senha de Acesso</label>
+                    <label className="text-[10px] font-medium uppercase tracking-widest text-slate-500 ml-1">Senha de Acesso</label>
                     <div className="relative">
                       <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                       <input
@@ -8301,7 +8301,7 @@ function DashboardPage() {
                       onChange={(e) => setRememberMe(e.target.checked)}
                       className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                     />
-                    <label htmlFor="rememberMe" className="text-xs font-bold text-slate-500 uppercase tracking-widest cursor-pointer select-none">
+                    <label htmlFor="rememberMe" className="text-xs font-normal text-slate-500 uppercase tracking-widest cursor-pointer select-none">
                       Lembrar meu e-mail
                     </label>
                   </div>
@@ -8350,7 +8350,7 @@ function DashboardPage() {
             <div className="text-red-500 mb-2">
               <Layers size={28} />
             </div>
-            <p className="text-sm font-black text-red-600 dark:text-red-400 uppercase tracking-widest">
+            <p className="text-sm font-semibold text-red-600 dark:text-red-400 uppercase tracking-widest">
               Solte aqui para Desagrupar
             </p>
           </motion.div>
@@ -8387,7 +8387,7 @@ function DashboardPage() {
                   <LayoutGrid size={24} />
                 </div>
                 
-                <h3 className="text-lg font-black text-slate-800 dark:text-slate-200 text-center uppercase tracking-tight mb-2">
+                <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 text-center uppercase tracking-tight mb-2">
                   {transferPayload.targetType === 'mix' 
                     ? `Mover para Mix` 
                     : (transferPayload.targetType === 'new_mix' || transferPayload.targetType === 'new_standalone_mix') 
@@ -8404,11 +8404,11 @@ function DashboardPage() {
 
                 <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-4 mb-6">
                   <div className="flex justify-between items-center mb-1">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Produto</span>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Max</span>
+                    <span className="text-[10px] font-medium text-slate-400 uppercase tracking-widest">Produto</span>
+                    <span className="text-[10px] font-medium text-slate-400 uppercase tracking-widest text-right">Max</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm font-black text-slate-700 dark:text-line-200 truncate pr-4">{transferPayload.sourceItem.produto || "Desconhecido"}</span>
+                    <span className="text-sm font-semibold text-slate-700 dark:text-line-200 truncate pr-4">{transferPayload.sourceItem.produto || "Desconhecido"}</span>
                     <span className="text-sm font-bold text-blue-600 dark:text-blue-400">
                       {transferPayload.sourceItem.quantidade_total}
                     </span>
@@ -8416,13 +8416,13 @@ function DashboardPage() {
                 </div>
 
                 <div className="space-y-2 mb-8">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Quantidade a Mover</label>
+                  <label className="text-[10px] font-medium text-slate-500 uppercase tracking-widest ml-1">Quantidade a Mover</label>
                   <input
                     type="number"
                     value={transferQuantity}
                     onChange={(e) => setTransferQuantity(e.target.value)}
                     max={transferPayload.sourceItem.quantidade_total}
-                    className="w-full h-14 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-center text-xl font-black text-slate-800 dark:text-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 outline-none transition-all"
+                    className="w-full h-14 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-center text-xl font-semibold text-slate-800 dark:text-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 outline-none transition-all"
                   />
                 </div>
 
@@ -8430,14 +8430,14 @@ function DashboardPage() {
                   <button
                     disabled={isTransferring}
                     onClick={() => { setTransferModalOpen(false); setTransferPayload(null); setDraggedItem(null); }}
-                    className="flex-1 py-4 text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                    className="flex-1 py-4 text-xs font-normal text-slate-500 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                   >
                     CANCELAR
                   </button>
                   <button
                     disabled={isTransferring}
                     onClick={handleConfirmTransfer}
-                    className="flex-[2] py-4 text-xs font-black text-white bg-blue-600 dark:bg-blue-500 rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/20 disabled:opacity-50"
+                    className="flex-[2] py-4 text-xs font-semibold text-white bg-blue-600 dark:bg-blue-500 rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/20 disabled:opacity-50"
                   >
                     {isTransferring ? 'PROCESSANDO...' : 'CONFIRMAR MOVER'}
                   </button>
@@ -8468,20 +8468,20 @@ function DashboardPage() {
                   <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 mb-4 mx-auto">
                     <Scissors size={24} />
                   </div>
-                  <h3 className="text-lg font-black text-slate-800 dark:text-slate-200 text-center uppercase tracking-tight mb-1">Retirar peças</h3>
+                  <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 text-center uppercase tracking-tight mb-1">Retirar peças</h3>
                   <p className="text-[11px] text-center text-slate-500 dark:text-slate-400 mb-5">
-                    Retirar peças de <span className="font-black text-slate-700 dark:text-slate-200">{splitTarget.produto}</span> ({total} un.) para enviar pro chão.
+                    Retirar peças de <span className="font-semibold text-slate-700 dark:text-slate-200">{splitTarget.produto}</span> ({total} un.) para enviar pro chão.
                   </p>
 
                   <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-4 mb-4 space-y-2">
-                    <div className="flex justify-between text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                    <div className="flex justify-between text-[10px] font-medium text-slate-500 uppercase tracking-widest">
                       <span>Total do palete</span>
                       <span className="text-slate-700 dark:text-slate-300">{total} un.</span>
                     </div>
                   </div>
 
                   <div className="space-y-2 mb-4">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Quantidade a retirar</label>
+                    <label className="text-[10px] font-medium text-slate-500 uppercase tracking-widest ml-1">Quantidade a retirar</label>
                     <input
                       type="number"
                       min={1}
@@ -8489,21 +8489,21 @@ function DashboardPage() {
                       value={splitQtyPerPallet}
                       onChange={e => setSplitQtyPerPallet(e.target.value)}
                       placeholder="ex: 10"
-                      className="w-full h-14 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-center text-xl font-black text-slate-800 dark:text-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 outline-none transition-all"
+                      className="w-full h-14 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-center text-xl font-semibold text-slate-800 dark:text-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 outline-none transition-all"
                     />
                   </div>
 
                   {isValid && (
                     <div className="bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 rounded-2xl p-3 mb-5">
-                      <p className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest mb-2">Resultado</p>
+                      <p className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-widest mb-2">Resultado</p>
                       <div className="flex flex-col gap-2">
                         <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-700 rounded-xl px-3 py-2">
-                          <span className="text-[11px] font-black text-slate-700 dark:text-slate-300">Nova Quantidade (Palete):</span>
-                          <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 ml-auto">{remaining} un.</span>
+                          <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Nova Quantidade (Palete):</span>
+                          <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400 ml-auto">{remaining} un.</span>
                         </div>
                         <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-700 rounded-xl px-3 py-2">
-                          <span className="text-[11px] font-black text-slate-700 dark:text-slate-300">1 Novo Palete criado com:</span>
-                          <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 ml-auto">{extractedQty} un.</span>
+                          <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">1 Novo Palete criado com:</span>
+                          <span className="text-[11px] font-medium text-blue-600 dark:text-blue-400 ml-auto">{extractedQty} un.</span>
                         </div>
                       </div>
                     </div>
@@ -8511,11 +8511,11 @@ function DashboardPage() {
 
                   <div className="flex gap-3">
                     <button disabled={isSplitting} onClick={() => { setSplitModalOpen(false); setSplitTarget(null); setSplitQtyPerPallet("") }}
-                      className="flex-1 py-4 text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                      className="flex-1 py-4 text-xs font-normal text-slate-500 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
                       CANCELAR
                     </button>
                     <button disabled={isSplitting || !isValid} onClick={handleSplitPallets}
-                      className="flex-[2] py-4 text-xs font-black text-white bg-blue-600 dark:bg-blue-500 rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/20 disabled:opacity-40 flex items-center justify-center gap-2">
+                      className="flex-[2] py-4 text-xs font-semibold text-white bg-blue-600 dark:bg-blue-500 rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/20 disabled:opacity-40 flex items-center justify-center gap-2">
                       {isSplitting ? <><RefreshCw size={14} className="animate-spin" /> RETIRANDO...</> : <><Scissors size={14} /> RETIRAR PEÇAS</>}
                     </button>
                   </div>
@@ -8558,9 +8558,9 @@ function DashboardPage() {
                   <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 mb-4 mx-auto">
                     <GitMerge size={24} />
                   </div>
-                  <h3 className="text-xl font-black text-slate-800 dark:text-slate-200 text-center uppercase tracking-tight mb-1">Mover Peças</h3>
+                  <h3 className="text-xl font-semibold text-slate-800 dark:text-slate-200 text-center uppercase tracking-tight mb-1">Mover Peças</h3>
                   <p className="text-[11px] text-center text-slate-500 dark:text-slate-400 mb-5 leading-tight">
-                    Os <span className="font-black text-slate-700 dark:text-slate-200">{itemsToRender.length} paletes</span> selecionados do <span className="font-black text-emerald-600 dark:text-emerald-400">{mergeTarget.sku}</span>.<br />
+                    Os <span className="font-semibold text-slate-700 dark:text-slate-200">{itemsToRender.length} paletes</span> selecionados do <span className="font-semibold text-emerald-600 dark:text-emerald-400">{mergeTarget.sku}</span>.<br />
                     Ajuste a quantidade <span className="underline">final</span> de cada palete. O total deve se manter o mesmo.
                   </p>
 
@@ -8578,12 +8578,12 @@ function DashboardPage() {
                             min="0"
                             value={val}
                             onChange={(e) => setMergeQuantities(prev => ({...prev, [item.id]: e.target.value === "" ? "" : Math.max(0, Number(e.target.value))}))}
-                            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 text-right font-black text-slate-700 dark:text-slate-300 w-24 outline-none focus:border-emerald-500 text-sm"
+                            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 text-right font-semibold text-slate-700 dark:text-slate-300 w-24 outline-none focus:border-emerald-500 text-sm"
                           />
                         </div>
                       )
                     })}
-                    <div className="flex justify-between items-center text-xs pt-3 mt-1 border-t border-slate-200 dark:border-slate-700 font-black">
+                    <div className="flex justify-between items-center text-xs pt-3 mt-1 border-t border-slate-200 dark:border-slate-700 font-semibold">
                       <span className={`uppercase tracking-widest gap-2 flex items-center ${isValidGroup ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 font-bold'}`}>
                         Total Resultante
                       </span>
@@ -8596,7 +8596,7 @@ function DashboardPage() {
                   <div className="flex flex-col gap-3">
                     {grade > 0 && (
                        <button disabled={isMerging || totalDisponivel <= 0} onClick={() => handleMergeBySku(true)}
-                         className="w-full py-4 text-sm font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-colors disabled:opacity-40 flex flex-col items-center justify-center gap-1.5 shadow-sm">
+                         className="w-full py-4 text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-colors disabled:opacity-40 flex flex-col items-center justify-center gap-1.5 shadow-sm">
                          <div className="flex items-center gap-2">
                            {isMerging ? <RefreshCw size={16} className="animate-spin" /> : <Layers size={16} />} 
                            AUTO FORMAR (Grade: {fmtNum(grade)})
@@ -8608,11 +8608,11 @@ function DashboardPage() {
                     )}
                     <div className="flex gap-3">
                       <button disabled={isMerging} onClick={() => { setMergeModalOpen(false); setMergeTarget(null); setMergeQuantities({}) }}
-                        className="flex-1 py-3 text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                        className="flex-1 py-3 text-xs font-normal text-slate-500 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
                         CANCELAR
                       </button>
                       <button disabled={isMerging || !isValidGroup} onClick={() => handleMergeBySku(false)}
-                        className="flex-[2] py-3 text-xs font-black text-white bg-emerald-600 dark:bg-emerald-500 rounded-xl hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-500/20 disabled:opacity-40 flex items-center justify-center gap-2">
+                        className="flex-[2] py-3 text-xs font-semibold text-white bg-emerald-600 dark:bg-emerald-500 rounded-xl hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-500/20 disabled:opacity-40 flex items-center justify-center gap-2">
                         {isMerging ? <><RefreshCw size={14} className="animate-spin" /> SALVANDO...</> : <><GitMerge size={14} /> CONFIRMAR</>}
                       </button>
                     </div>
@@ -8648,7 +8648,7 @@ function DashboardPage() {
                   <Trash2 size={24} />
                 </div>
                 
-                <h3 className="text-lg font-black text-slate-800 dark:text-slate-200 text-center uppercase tracking-tight mb-2">
+                <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 text-center uppercase tracking-tight mb-2">
                   Confirmar Exclusão
                 </h3>
                 
@@ -8658,11 +8658,11 @@ function DashboardPage() {
 
                 <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-4 mb-6">
                   <div className="flex justify-between items-center mb-1">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Produto</span>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Max</span>
+                    <span className="text-[10px] font-medium text-slate-400 uppercase tracking-widest">Produto</span>
+                    <span className="text-[10px] font-medium text-slate-400 uppercase tracking-widest text-right">Max</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm font-black text-slate-700 dark:text-slate-200 truncate pr-4">{deleteTarget.produto || "Desconhecido"}</span>
+                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate pr-4">{deleteTarget.produto || "Desconhecido"}</span>
                     <span className="text-sm font-bold text-red-600 dark:text-red-400">
                       {deleteTarget.quantidade_total}
                     </span>
@@ -8670,19 +8670,19 @@ function DashboardPage() {
                 </div>
 
                 <div className="space-y-2 mb-8">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Quantidade a Excluir</label>
+                  <label className="text-[10px] font-medium text-slate-500 uppercase tracking-widest ml-1">Quantidade a Excluir</label>
                   <input
                     type="number"
                     value={deleteQuantity}
                     onChange={(e) => setDeleteQuantity(e.target.value)}
                     max={deleteTarget.quantidade_total}
-                    className="w-full h-14 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-center text-xl font-black text-slate-800 dark:text-white focus:border-red-500 focus:ring-4 focus:ring-red-500/20 outline-none transition-all"
+                    className="w-full h-14 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-center text-xl font-semibold text-slate-800 dark:text-white focus:border-red-500 focus:ring-4 focus:ring-red-500/20 outline-none transition-all"
                   />
                   <div className="flex justify-between mt-2 px-1">
                      <span className="text-[10px] text-slate-400">Excluir tudo?</span>
                      <button
                         onClick={() => setDeleteQuantity(String(deleteTarget.quantidade_total || "0"))} 
-                        className="text-[10px] font-black text-red-500 uppercase tracking-widest hover:underline"
+                        className="text-[10px] font-semibold text-red-500 uppercase tracking-widest hover:underline"
                      >
                         Preencher ALL
                      </button>
@@ -8693,14 +8693,14 @@ function DashboardPage() {
                   <button
                     disabled={isDeleting}
                     onClick={() => setDeleteTarget(null)}
-                    className="flex-1 py-4 text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                    className="flex-1 py-4 text-xs font-normal text-slate-500 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                   >
                     CANCELAR
                   </button>
                   <button
                     disabled={isDeleting}
                     onClick={executeDeleteFromChao}
-                    className="flex-[2] py-4 text-xs font-black text-white bg-red-600 dark:bg-red-500 rounded-xl hover:bg-red-700 transition-colors shadow-lg shadow-red-500/20 disabled:opacity-50"
+                    className="flex-[2] py-4 text-xs font-semibold text-white bg-red-600 dark:bg-red-500 rounded-xl hover:bg-red-700 transition-colors shadow-lg shadow-red-500/20 disabled:opacity-50"
                   >
                     {isDeleting ? 'EXCLUINDO...' : 'SIM, EXCLUIR'}
                   </button>
@@ -8737,8 +8737,8 @@ function DashboardPage() {
                       <PlusSquare size={20} />
                     </div>
                     <div>
-                      <h3 className="text-lg font-black text-slate-800 dark:text-slate-200 uppercase tracking-tight">Novo Item</h3>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Adicionar ao Chão (Sem Alocação)</p>
+                      <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 uppercase tracking-tight">Novo Item</h3>
+                      <p className="text-[10px] font-medium text-slate-400 uppercase tracking-widest">Adicionar ao Chão (Sem Alocação)</p>
                     </div>
                   </div>
                   <button 
@@ -8752,7 +8752,7 @@ function DashboardPage() {
                 <div className="space-y-4">
                   {/* SKU */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">SKU (Código) *</label>
+                    <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest ml-1">SKU (Código) *</label>
                     <input
                       type="text"
                       placeholder="EX: 12345"
@@ -8764,7 +8764,7 @@ function DashboardPage() {
 
                   {/* Quantidade */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Quantidade (Inteira) *</label>
+                    <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest ml-1">Quantidade (Inteira) *</label>
                     <input
                       type="number"
                       step="1"
@@ -8777,7 +8777,7 @@ function DashboardPage() {
 
                   {/* Observação */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Observação</label>
+                    <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest ml-1">Observação</label>
                     <textarea
                       placeholder="Notas adicionais..."
                       value={newItemData.observacao}
@@ -8791,14 +8791,14 @@ function DashboardPage() {
                   <button
                     disabled={isCreatingItem}
                     onClick={() => setIsAddItemModalOpen(false)}
-                    className="flex-1 py-4 text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                    className="flex-1 py-4 text-xs font-normal text-slate-500 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                   >
                     CANCELAR
                   </button>
                   <button
                     disabled={isCreatingItem}
                     onClick={handleCreateNewItem}
-                    className="flex-[2] py-4 text-xs font-black text-white bg-blue-600 dark:bg-blue-500 rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="flex-[2] py-4 text-xs font-semibold text-white bg-blue-600 dark:bg-blue-500 rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     {isCreatingItem ? (
                       <>
@@ -8843,7 +8843,7 @@ function DashboardPage() {
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-slate-900 dark:text-white leading-none">Cadastrar Produto</h3>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1">Adicionar SKU à tabela base_codigos</p>
+                    <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mt-1">Adicionar SKU à tabela base_codigos</p>
                   </div>
                 </div>
                 <button
@@ -8887,7 +8887,7 @@ function DashboardPage() {
                 className="space-y-4 pt-4"
               >
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Código (SKU) *</label>
+                  <label className="text-[10px] font-medium text-slate-500 uppercase tracking-wider block mb-1">Código (SKU) *</label>
                   <input
                     type="text"
                     required
@@ -8899,7 +8899,7 @@ function DashboardPage() {
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Descrição *</label>
+                  <label className="text-[10px] font-medium text-slate-500 uppercase tracking-wider block mb-1">Descrição *</label>
                   <input
                     type="text"
                     required
@@ -8912,7 +8912,7 @@ function DashboardPage() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Grade (Opcional)</label>
+                    <label className="text-[10px] font-medium text-slate-500 uppercase tracking-wider block mb-1">Grade (Opcional)</label>
                     <input
                       type="text"
                       value={newBaseCodigoData.grade}
@@ -8922,7 +8922,7 @@ function DashboardPage() {
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Tipo (Opcional)</label>
+                    <label className="text-[10px] font-medium text-slate-500 uppercase tracking-wider block mb-1">Tipo (Opcional)</label>
                     <input
                       type="text"
                       value={newBaseCodigoData.tipo}
@@ -8938,14 +8938,14 @@ function DashboardPage() {
                     type="button"
                     disabled={isSavingBaseCodigo}
                     onClick={() => setShowAddBaseCodigoModal(false)}
-                    className="flex-1 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold uppercase transition"
+                    className="flex-1 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium uppercase transition"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
                     disabled={isSavingBaseCodigo}
-                    className="flex-2 py-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold uppercase shadow-sm transition flex items-center justify-center gap-2 disabled:opacity-50"
+                    className="flex-2 py-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium uppercase shadow-sm transition flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     {isSavingBaseCodigo ? "Salvando..." : "Cadastrar Produto"}
                   </button>
@@ -8970,8 +8970,8 @@ function DashboardPage() {
                   <RefreshCw className={cn("w-6 h-6", isCommitting && "animate-spin")} />
                 </div>
                 <div>
-                  <p className="text-sm font-black text-slate-900 dark:text-white uppercase leading-none mb-1">Alterações Pendentes</p>
-                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white uppercase leading-none mb-1">Alterações Pendentes</p>
+                  <p className="text-xs font-normal text-slate-500 uppercase tracking-wider">
                     {pendingChanges.length} {pendingChanges.length === 1 ? 'modificação a ser salva' : 'modificações a serem salvas'}
                   </p>
                 </div>
@@ -8984,7 +8984,7 @@ function DashboardPage() {
                       setPendingChanges([])
                     }
                   }}
-                  className="px-4 py-3 rounded-xl text-[10px] font-black uppercase text-slate-400 hover:text-rose-500 transition-colors"
+                  className="px-4 py-3 rounded-xl text-[10px] font-semibold uppercase text-slate-400 hover:text-rose-500 transition-colors"
                   disabled={isCommitting}
                 >
                   Descartar
@@ -8992,7 +8992,7 @@ function DashboardPage() {
                 <button
                   onClick={commitChanges}
                   disabled={isCommitting}
-                  className="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black uppercase shadow-lg shadow-blue-500/20 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-semibold uppercase shadow-lg shadow-blue-500/20 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isCommitting ? (
                     <>Salvando...</>
@@ -9033,7 +9033,7 @@ function DashboardPage() {
                 <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-white/5 border border-white/10 mb-4">
                   <Repeat2 size={22} className="text-white/70" />
                 </div>
-                <h2 className="text-lg font-black text-white tracking-tight">Selecionar Módulo</h2>
+                <h2 className="text-lg font-semibold text-white tracking-tight">Selecionar Módulo</h2>
                 <p className="text-[11px] text-slate-400 mt-1 uppercase tracking-widest">Avarias — Escolha o portal</p>
               </div>
 
@@ -9044,14 +9044,14 @@ function DashboardPage() {
                   className="relative rounded-2xl p-5 cursor-default flex flex-col items-center gap-3 border-2 border-blue-500/60 bg-blue-500/10"
                 >
                   <div className="absolute top-3 right-3">
-                    <span className="text-[9px] font-black text-blue-400 bg-blue-500/20 px-2 py-0.5 rounded-full uppercase tracking-wider">Ativo</span>
+                    <span className="text-[9px] font-semibold text-blue-400 bg-blue-500/20 px-2 py-0.5 rounded-full uppercase tracking-wider">Ativo</span>
                   </div>
                   <div className="flex h-14 w-14 items-center justify-center rounded-[1.2rem] bg-blue-600 shadow-xl shadow-blue-500/40">
                     <Package size={28} className="text-white" />
                   </div>
                   <div className="text-center">
-                    <p className="text-sm font-black text-white leading-tight">Portal <span className="text-blue-400">AG</span></p>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.18em] mt-0.5">G300 PAINEL<br/>OPERACIONAL</p>
+                    <p className="text-sm font-semibold text-white leading-tight">Portal <span className="text-blue-400">AG</span></p>
+                    <p className="text-[9px] font-medium text-slate-400 uppercase tracking-[0.18em] mt-0.5">G300 PAINEL<br/>OPERACIONAL</p>
                   </div>
                 </div>
 
@@ -9064,10 +9064,10 @@ function DashboardPage() {
                       <Fan size={28} className="text-white" />
                   </div>
                   <div className="text-center">
-                    <p className="text-sm font-black text-white leading-tight">Portal <span className="text-emerald-400">BR</span></p>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.18em] mt-0.5">MKBR E G300</p>
+                    <p className="text-sm font-semibold text-white leading-tight">Portal <span className="text-emerald-400">BR</span></p>
+                    <p className="text-[9px] font-medium text-slate-400 uppercase tracking-[0.18em] mt-0.5">MKBR E G300</p>
                   </div>
-                  <span className="absolute bottom-3 left-1/2 -translate-x-1/2 text-[9px] font-black text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity uppercase tracking-wider">Acessar →</span>
+                  <span className="absolute bottom-3 left-1/2 -translate-x-1/2 text-[9px] font-semibold text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity uppercase tracking-wider">Acessar →</span>
                 </button>
               </div>
 

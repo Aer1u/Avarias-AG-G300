@@ -195,7 +195,7 @@ function AvariasGrowthChart({ pedidas, allSkuRows }: GrowthChartProps) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1">
-            <span className="text-[9px] font-bold text-slate-400 px-1 uppercase font-mono hidden sm:inline">Agrupar:</span>
+            <span className="text-[9px] font-medium text-slate-400 px-1 uppercase font-mono hidden sm:inline">Agrupar:</span>
             <select value={groupMode} onChange={(e) => { setGroupMode(e.target.value as GroupModeType); setSelectedIdx(0) }}
               className="bg-slate-900/90 border border-slate-800 text-slate-300 text-[10px] font-mono font-bold rounded-lg px-2 py-1.5 outline-none focus:border-rose-500 transition-all min-w-[140px] cursor-pointer">
               <option value="solicitacao">Por Solicitação ({series.length})</option>
@@ -203,7 +203,7 @@ function AvariasGrowthChart({ pedidas, allSkuRows }: GrowthChartProps) {
             </select>
           </div>
           <div className="flex items-center gap-1">
-            <span className="text-[9px] font-bold text-slate-400 px-1 uppercase font-mono hidden sm:inline">Visão:</span>
+            <span className="text-[9px] font-medium text-slate-400 px-1 uppercase font-mono hidden sm:inline">Visão:</span>
             <select value={viewType} onChange={(e) => setViewType(e.target.value as ChartViewType)}
               className="bg-slate-900/90 border border-slate-800 text-slate-300 text-[10px] font-mono font-bold rounded-lg px-2 py-1.5 outline-none focus:border-sky-500 transition-all min-w-[130px] cursor-pointer">
               <option value="curva">Curva Total</option>
@@ -465,7 +465,7 @@ function CoverageWaterfall({
 
         {/* Coverage percentage label inside bar */}
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-[11px] font-bold text-white drop-shadow tracking-wider uppercase font-sans">
+          <span className="text-[11px] font-medium text-white drop-shadow tracking-wider uppercase font-sans">
             {Math.round(pctTotal)}% COBERTO
           </span>
         </div>
@@ -482,7 +482,7 @@ function CoverageWaterfall({
           <div key={seg.label} className="flex items-center gap-2">
             <div className={cn("w-2.5 h-2.5 rounded-sm flex-shrink-0", seg.color)} />
             <div className="min-w-0">
-              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider truncate">{seg.label}</p>
+              <p className="text-[9px] font-medium text-slate-400 uppercase tracking-wider truncate">{seg.label}</p>
               <p className={cn("text-xs font-bold ", seg.textColor)}>
                 {seg.value.toLocaleString("pt-BR")}
               </p>
@@ -1071,7 +1071,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                               <span className="text-[11px] text-slate-300 truncate font-semibold">{item.label}</span>
                             </div>
                             <div className="flex items-center gap-3 flex-shrink-0">
-                              <span className="text-[11px] font-bold text-white">{item.value.toLocaleString("pt-BR")}</span>
+                              <span className="text-[11px] font-medium text-white">{item.value.toLocaleString("pt-BR")}</span>
                               <span className="text-[10px] text-slate-400 w-8 text-right">
                                 {totalAvarias > 0 ? Math.round((item.value / totalAvarias) * 100) : 0}%
                               </span>
@@ -1121,7 +1121,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                               <span className="text-[11px] text-slate-300 truncate font-semibold">{item.label}</span>
                             </div>
                             <div className="flex items-center gap-3 flex-shrink-0">
-                              <span className="text-[11px] font-bold text-white">{item.value}</span>
+                              <span className="text-[11px] font-medium text-white">{item.value}</span>
                               <span className="text-[10px] text-slate-400 w-8 text-right">
                                 {solicStatusData.total > 0 ? Math.round((item.value / solicStatusData.total) * 100) : 0}%
                               </span>
@@ -1253,7 +1253,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                               </td>
                               <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-slate-400 text-center">{fakeDelivery}</td>
                               <td className="px-5 py-3.5 text-center">
-                                <span className={cn("px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border", statusCls)}>
+                                <span className={cn("px-2.5 py-1 rounded-full text-[9px] font-semibold uppercase tracking-wider border", statusCls)}>
                                   {status}
                                 </span>
                               </td>
@@ -1290,11 +1290,11 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
               <table className="w-full text-left border-collapse min-w-[800px] font-sans">
                 <thead>
                   <tr className="border-b border-slate-800 bg-[#0f172a]/30">
-                    <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-[160px]">Data</th>
-                    <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-[220px]">SKU</th>
-                    <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Descrição</th>
-                    <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center w-[140px]">Quantidade</th>
-                    <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-right w-[80px]">Ação</th>
+                    <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider w-[160px]">Data</th>
+                    <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider w-[220px]">SKU</th>
+                    <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider">Descrição</th>
+                    <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider text-center w-[140px]">Quantidade</th>
+                    <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider text-right w-[80px]">Ação</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60 bg-[#111827]">
@@ -1499,7 +1499,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                   <div className="p-4 bg-rose-500/5 border border-rose-500/10 rounded-2xl flex items-start gap-3">
                     <AlertTriangle className="text-rose-400 flex-shrink-0 mt-0.5" size={16} />
                     <p className="text-[10px] text-slate-400 leading-relaxed">
-                      <span className="font-black text-rose-300 uppercase">Atenção:</span> Esta operação irá{" "}
+                      <span className="font-semibold text-rose-300 uppercase">Atenção:</span> Esta operação irá{" "}
                       <span className="font-bold text-rose-400 underline decoration-wavy">SOBRESCREVER E LIMPAR</span> toda a tabela de{" "}
                       {subTab === "pedidas" ? "embalagens_pedidas" : subTab === "atuais" ? "embalagens_atuais" : "embalagens_chegando"}{" "}
                       no Supabase com o novo conteúdo colado acima.
@@ -1551,7 +1551,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                       setIsImporting(false)
                     }
                   }}
-                  className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-white py-4 rounded-2xl text-xs font-black uppercase tracking-wider transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-white py-4 rounded-2xl text-xs font-semibold uppercase tracking-wider transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
                 >
                   {isImporting ? <Loader2 className="animate-spin" size={16} /> : <Plus size={16} />}
                   Gravar e Atualizar Portal BR

@@ -136,7 +136,7 @@ export const OriginDonutChart: React.FC<OriginDonutChartProps> = ({ data, typeFi
                 setView('summary');
                 setHoveredIndex(null);
               }}
-              className="flex items-center gap-1.5 text-[9px] font-black text-blue-500 uppercase tracking-[0.2em] hover:text-blue-400 transition-colors group"
+              className="flex items-center gap-1.5 text-[9px] font-semibold text-blue-500 uppercase tracking-[0.2em] hover:text-blue-400 transition-colors group"
             >
               <ArrowLeft size={10} className="group-hover:-translate-x-0.5 transition-transform" />
               Voltar
@@ -221,10 +221,10 @@ export const OriginDonutChart: React.FC<OriginDonutChartProps> = ({ data, typeFi
                         exit={{ opacity: 0, y: -5 }}
                         className="flex flex-col items-center"
                       >
-                        <span className="text-[22px] font-black text-slate-900 dark:text-white leading-none tracking-tight">
+                        <span className="text-[22px] font-semibold text-slate-900 dark:text-white leading-none tracking-tight">
                           {activeItems[hoveredIndex].value}
                         </span>
-                        <span className="text-[10px] font-black text-blue-500 dark:text-blue-400 uppercase tracking-widest mt-0.5">
+                        <span className="text-[10px] font-semibold text-blue-500 dark:text-blue-400 uppercase tracking-widest mt-0.5">
                           {Math.round((activeItems[hoveredIndex].value / activeTotal) * 100)}%
                         </span>
                       </motion.div>
@@ -235,10 +235,10 @@ export const OriginDonutChart: React.FC<OriginDonutChartProps> = ({ data, typeFi
                         animate={{ opacity: 1 }}
                         className="flex flex-col items-center"
                       >
-                        <span className="text-[20px] font-black text-slate-900 dark:text-white leading-none tracking-tight">
+                        <span className="text-[20px] font-semibold text-slate-900 dark:text-white leading-none tracking-tight">
                           {activeTotal}
                         </span>
-                        <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-0.5">
+                        <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-0.5">
                           TOTAL
                         </span>
                       </motion.div>
@@ -273,13 +273,13 @@ export const OriginDonutChart: React.FC<OriginDonutChartProps> = ({ data, typeFi
                     </div>
                     <div className="flex flex-col min-w-0">
                       <span className={cn(
-                        "text-[10px] font-black uppercase tracking-tight truncate transition-colors",
+                        "text-[10px] font-semibold uppercase tracking-tight truncate transition-colors",
                         hoveredIndex === i ? "text-slate-900 dark:text-white" : "text-slate-500"
                       )}>
                         {d.name.toLowerCase()}
                       </span>
                       {d.isOthers ? (
-                        <span className="text-[7px] font-black text-blue-500/80 uppercase tracking-widest flex items-center gap-0.5 mt-0.5 group-hover/others:text-blue-500 transition-all">
+                        <span className="text-[7px] font-semibold text-blue-500/80 uppercase tracking-widest flex items-center gap-0.5 mt-0.5 group-hover/others:text-blue-500 transition-all">
                           Expandir <ChevronRight size={8} />
                         </span>
                       ) : (
@@ -289,11 +289,11 @@ export const OriginDonutChart: React.FC<OriginDonutChartProps> = ({ data, typeFi
                   </div>
                   <div className="flex flex-col items-end shrink-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-[12px] font-black text-slate-900 dark:text-white tabular-nums">
+                      <span className="text-[12px] font-semibold text-slate-900 dark:text-white tabular-nums">
                         {d.value}
                       </span>
                       <div className="w-[1px] h-2.5 bg-slate-200 dark:bg-slate-700/50" />
-                      <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 tabular-nums">
+                      <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500 tabular-nums">
                         {Math.round((d.value / activeTotal) * 100)}%
                       </span>
                     </div>
@@ -305,7 +305,7 @@ export const OriginDonutChart: React.FC<OriginDonutChartProps> = ({ data, typeFi
         ) : (
           <div className="flex flex-col items-center justify-center opacity-40 py-12">
             <PieChart size={40} className="text-slate-300 mb-4" />
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
               Sem dados disponíveis
             </p>
           </div>

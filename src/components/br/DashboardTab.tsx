@@ -44,7 +44,7 @@ export default function DashboardTab({ controleRaw, posicoesRaw }: DashboardTabP
 
         {/* Text */}
         <div className="space-y-2">
-          <h2 className="text-lg font-black text-slate-300 tracking-tight">
+          <h2 className="text-lg font-semibold text-slate-300 tracking-tight">
             Em Desenvolvimento
           </h2>
           <p className="text-sm text-slate-600 font-medium leading-relaxed">
@@ -56,7 +56,7 @@ export default function DashboardTab({ controleRaw, posicoesRaw }: DashboardTabP
         {/* Status pill */}
         <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-slate-800/60 border border-slate-700/50">
           <Clock size={12} className="text-slate-500" />
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Em breve</span>
+          <span className="text-[11px] font-medium text-slate-500 uppercase tracking-widest">Em breve</span>
         </div>
       </motion.div>
     </div>

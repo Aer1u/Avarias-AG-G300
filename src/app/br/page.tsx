@@ -939,7 +939,7 @@ ${autoPrint ? `<script>window.onload=()=>{window.print()}</script>` : ''}
       <div className="flex min-h-screen items-center justify-center bg-[#020617] text-white">
         <div className="flex flex-col items-center gap-3">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Carregando Portal...</span>
+          <span className="text-xs font-medium uppercase tracking-wider text-slate-400">Carregando Portal...</span>
         </div>
       </div>
     )
@@ -963,7 +963,7 @@ ${autoPrint ? `<script>window.onload=()=>{window.print()}</script>` : ''}
             <h2 className="text-base font-bold text-slate-900 dark:text-white leading-tight">
               Portal <span className="text-emerald-500">BR</span>
             </h2>
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em]">MKBR E G300</p>
+            <p className="text-[9px] font-medium text-slate-400 uppercase tracking-[0.2em]">MKBR E G300</p>
           </div>
         </div>
 
@@ -991,7 +991,7 @@ ${autoPrint ? `<script>window.onload=()=>{window.print()}</script>` : ''}
                 <tab.icon size={20} className={cn("transition-all duration-300", activeTab === tab.id ? "text-emerald-500" : "")} />
               </div>
               <span className={cn(
-                "text-[11px] font-bold uppercase tracking-wider opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300 whitespace-nowrap text-left",
+                "text-[11px] font-medium uppercase tracking-wider opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300 whitespace-nowrap text-left",
                 activeTab === tab.id ? "text-emerald-500" : ""
               )}>
                 {tab.label}
@@ -1012,7 +1012,7 @@ ${autoPrint ? `<script>window.onload=()=>{window.print()}</script>` : ''}
             <div className="flex min-w-[48px] h-12 items-center justify-center">
               <Repeat2 size={18} className="text-blue-500" />
             </div>
-            <span className="ml-1 text-[10px] font-bold uppercase tracking-wider opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300 whitespace-nowrap text-blue-600 dark:text-blue-400">
+            <span className="ml-1 text-[10px] font-medium uppercase tracking-wider opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300 whitespace-nowrap text-blue-600 dark:text-blue-400">
               Trocar Módulo
             </span>
           </button>
@@ -1025,7 +1025,7 @@ ${autoPrint ? `<script>window.onload=()=>{window.print()}</script>` : ''}
             <div className="flex min-w-[48px] h-12 items-center justify-center">
               {theme === "light" ? <Moon size={20} /> : <Sun size={20} />}
             </div>
-            <span className="ml-2 text-[10px] font-bold uppercase tracking-wider opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300 whitespace-nowrap">
+            <span className="ml-2 text-[10px] font-medium uppercase tracking-wider opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300 whitespace-nowrap">
               {theme === "light" ? "Escuro" : "Claro"}
             </span>
           </button>
@@ -1037,7 +1037,7 @@ ${autoPrint ? `<script>window.onload=()=>{window.print()}</script>` : ''}
             title={user ? `Sair (${user.email})` : "Fazer Login"}
           >
             {user ? (
-              <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">{user.email?.substring(0, 2).toUpperCase()}</span>
+              <span className="text-[10px] font-medium text-emerald-500 uppercase tracking-widest">{user.email?.substring(0, 2).toUpperCase()}</span>
             ) : (
               <User size={20} />
             )}
@@ -1150,7 +1150,7 @@ ${autoPrint ? `<script>window.onload=()=>{window.print()}</script>` : ''}
                 <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-white/5 border border-white/10 mb-4">
                   <Repeat2 size={22} className="text-white/70" />
                 </div>
-                <h2 className="text-lg font-black text-white tracking-tight">Selecionar Módulo</h2>
+                <h2 className="text-lg font-semibold text-white tracking-tight">Selecionar Módulo</h2>
                 <p className="text-[11px] text-slate-400 mt-1 uppercase tracking-widest">Avarias — Escolha o portal</p>
               </div>
 
@@ -1165,10 +1165,10 @@ ${autoPrint ? `<script>window.onload=()=>{window.print()}</script>` : ''}
                     <Package size={28} className="text-white" />
                   </div>
                   <div className="text-center">
-                    <p className="text-sm font-black text-white leading-tight">Portal <span className="text-blue-400">AG</span></p>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.18em] mt-0.5">G300 PAINEL<br/>OPERACIONAL</p>
+                    <p className="text-sm font-semibold text-white leading-tight">Portal <span className="text-blue-400">AG</span></p>
+                    <p className="text-[9px] font-medium text-slate-400 uppercase tracking-[0.18em] mt-0.5">G300 PAINEL<br/>OPERACIONAL</p>
                   </div>
-                  <span className="absolute bottom-3 left-1/2 -translate-x-1/2 text-[9px] font-black text-blue-450 opacity-0 group-hover:opacity-100 transition-opacity uppercase tracking-wider">Acessar →</span>
+                  <span className="absolute bottom-3 left-1/2 -translate-x-1/2 text-[9px] font-semibold text-blue-450 opacity-0 group-hover:opacity-100 transition-opacity uppercase tracking-wider">Acessar →</span>
                 </button>
 
                 {/* BR Card — active */}
@@ -1176,14 +1176,14 @@ ${autoPrint ? `<script>window.onload=()=>{window.print()}</script>` : ''}
                   className="relative rounded-2xl p-5 cursor-default flex flex-col items-center gap-3 border-2 border-emerald-500/60 bg-emerald-500/10"
                 >
                   <div className="absolute top-3 right-3">
-                    <span className="text-[9px] font-black text-emerald-450 bg-emerald-500/20 px-2 py-0.5 rounded-full uppercase tracking-wider">Ativo</span>
+                    <span className="text-[9px] font-semibold text-emerald-450 bg-emerald-500/20 px-2 py-0.5 rounded-full uppercase tracking-wider">Ativo</span>
                   </div>
                   <div className="flex h-14 w-14 items-center justify-center rounded-[1.2rem] bg-emerald-600 shadow-xl shadow-emerald-500/40">
                     <Fan size={28} className="text-white" />
                   </div>
                   <div className="text-center">
-                    <p className="text-sm font-black text-white leading-tight">Portal <span className="text-emerald-400">BR</span></p>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.18em] mt-0.5">MKBR E G300</p>
+                    <p className="text-sm font-semibold text-white leading-tight">Portal <span className="text-emerald-400">BR</span></p>
+                    <p className="text-[9px] font-medium text-slate-400 uppercase tracking-[0.18em] mt-0.5">MKBR E G300</p>
                   </div>
                 </div>
               </div>
@@ -1236,7 +1236,7 @@ ${autoPrint ? `<script>window.onload=()=>{window.print()}</script>` : ''}
 
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">E-mail corporativo</label>
+                    <label className="text-xs font-normal text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">E-mail corporativo</label>
                     <div className="relative">
                       <AtSign className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                       <input
@@ -1251,7 +1251,7 @@ ${autoPrint ? `<script>window.onload=()=>{window.print()}</script>` : ''}
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">Senha de acesso</label>
+                    <label className="text-xs font-normal text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">Senha de acesso</label>
                     <input
                       type="password"
                       required

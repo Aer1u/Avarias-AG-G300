@@ -655,7 +655,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                 >
                   <ChevronLeft size={16} />
                 </button>
-                <div className="px-2 flex items-center gap-2 text-xs font-bold text-slate-600 dark:text-slate-300 justify-center">
+                <div className="px-2 flex items-center gap-2 text-xs font-normal text-slate-600 dark:text-slate-300 justify-center">
                   <Calendar size={14} className="text-blue-500" />
                   {format(currentWeekStart, "dd/MM")} — {format(weekEnd, "dd/MM/yyyy")}
                 </div>
@@ -762,7 +762,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <Filter size={14} className="text-blue-500" />
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                <span className="text-xs font-medium uppercase tracking-wider text-slate-700 dark:text-slate-300">
                   Filtros por Coluna
                 </span>
               </div>
@@ -770,7 +770,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                 <button
                   type="button"
                   onClick={clearColumnFilters}
-                  className="flex items-center gap-1 text-xs font-bold text-rose-500 hover:text-rose-600 transition-colors"
+                  className="flex items-center gap-1 text-xs font-normal text-rose-500 hover:text-rose-600 transition-colors"
                 >
                   <FilterX size={14} />
                   Limpar Filtros
@@ -781,7 +781,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
               {/* NF */}
               <div>
-                <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Nota Fiscal (NF)</label>
+                <label className="text-[10px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Nota Fiscal (NF)</label>
                 <input
                   type="text"
                   placeholder="Ex: 5815..."
@@ -793,7 +793,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
 
               {/* Produto SKU */}
               <div>
-                <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Produto (SKU)</label>
+                <label className="text-[10px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Produto (SKU)</label>
                 <input
                   type="text"
                   placeholder="Ex: 9915-02..."
@@ -805,7 +805,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
 
               {/* Origem */}
               <div>
-                <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Origem</label>
+                <label className="text-[10px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Origem</label>
                 <select
                   value={colFilters.origem}
                   onChange={(e) => setColFilters(prev => ({ ...prev, origem: e.target.value }))}
@@ -820,7 +820,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
 
               {/* Tipo Avaria */}
               <div>
-                <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Tipo Avaria</label>
+                <label className="text-[10px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Tipo Avaria</label>
                 <select
                   value={colFilters.tipo_avaria}
                   onChange={(e) => setColFilters(prev => ({ ...prev, tipo_avaria: e.target.value }))}
@@ -835,7 +835,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
 
               {/* Transportadora */}
               <div>
-                <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Transportadora</label>
+                <label className="text-[10px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Transportadora</label>
                 <input
                   type="text"
                   placeholder="Ex: ALIANÇA..."
@@ -847,7 +847,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
 
               {/* Responsável */}
               <div>
-                <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Responsável</label>
+                <label className="text-[10px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Responsável</label>
                 <input
                   type="text"
                   placeholder="Nome..."
@@ -859,7 +859,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
 
               {/* Placa */}
               <div>
-                <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Placa</label>
+                <label className="text-[10px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Placa</label>
                 <input
                   type="text"
                   placeholder="Ex: ABC-1234..."
@@ -871,7 +871,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
 
               {/* Container */}
               <div>
-                <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Container</label>
+                <label className="text-[10px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Container</label>
                 <input
                   type="text"
                   placeholder="Container..."
@@ -883,7 +883,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
 
               {/* Lacre */}
               <div>
-                <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Lacre</label>
+                <label className="text-[10px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Lacre</label>
                 <input
                   type="text"
                   placeholder="Lacre..."
@@ -895,7 +895,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
 
               {/* Turno */}
               <div>
-                <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Turno</label>
+                <label className="text-[10px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Turno</label>
                 <select
                   value={colFilters.turno}
                   onChange={(e) => setColFilters(prev => ({ ...prev, turno: e.target.value }))}
@@ -917,21 +917,21 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
           <table className="w-full text-left min-w-[1600px] border-none">
             <thead className="sticky top-0 z-20 bg-slate-100/80 dark:bg-slate-900/80 border-none">
               <tr>
-                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[110px]">Data</th>
-                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[110px]">Produto</th>
-                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[150px]">Responsável</th>
-                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[150px]">Tipo Avaria</th>
-                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[80px]">Turno</th>
-                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[80px]">Entrada</th>
-                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[80px]">Saída</th>
-                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[90px]">Qtd Molh.</th>
-                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[130px]">Origem</th>
-                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[130px]">Transp.</th>
-                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[100px]">NF</th>
-                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[110px]">Placa</th>
-                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[130px]">Container</th>
-                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[110px]">Lacre</th>
-                <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[80px] text-center">Obs.</th>
+                <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[110px]">Data</th>
+                <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[110px]">Produto</th>
+                <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[150px]">Responsável</th>
+                <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[150px]">Tipo Avaria</th>
+                <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[80px]">Turno</th>
+                <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[80px]">Entrada</th>
+                <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[80px]">Saída</th>
+                <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[90px]">Qtd Molh.</th>
+                <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[130px]">Origem</th>
+                <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[130px]">Transp.</th>
+                <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[100px]">NF</th>
+                <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[110px]">Placa</th>
+                <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[130px]">Container</th>
+                <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[110px]">Lacre</th>
+                <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[80px] text-center">Obs.</th>
               </tr>
             </thead>
             <tbody className="border-none">
@@ -1241,14 +1241,14 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
             <table className="w-full text-left min-w-[1000px] border-none">
               <thead className="sticky top-0 z-20 bg-slate-100/80 dark:bg-slate-900/80 border-none">
                 <tr>
-                  <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest">Data/Hora</th>
-                  <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest">Usuário</th>
-                  <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest">Ação</th>
-                  <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest">SKU</th>
-                  <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest">Posição</th>
-                  <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest">Origem (N/P)</th>
-                  <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest">Destino (N/P)</th>
-                  <th className="px-5 py-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest">Qtd</th>
+                  <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest">Data/Hora</th>
+                  <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest">Usuário</th>
+                  <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest">Ação</th>
+                  <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest">SKU</th>
+                  <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest">Posição</th>
+                  <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest">Origem (N/P)</th>
+                  <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest">Destino (N/P)</th>
+                  <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest">Qtd</th>
                 </tr>
               </thead>
               <tbody className="border-none">
@@ -1278,7 +1278,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                       </td>
                       <td className="px-5 py-4">
                         <span className={cn(
-                          "px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider",
+                          "px-2 py-1 rounded-lg text-[10px] font-semibold uppercase tracking-wider",
                           h.tipo_acao === 'ENTRADA' ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500"
                         )}>
                           {h.tipo_acao}
@@ -1296,7 +1296,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                       <td className="px-5 py-4 text-sm text-slate-500">
                         {h.nivel_destino !== null ? `${h.nivel_destino}/${h.prof_destino}` : '—'}
                       </td>
-                      <td className="px-5 py-4 text-sm font-black text-slate-900 dark:text-white">
+                      <td className="px-5 py-4 text-sm font-semibold text-slate-900 dark:text-white">
                         {h.quantidade}
                       </td>
                     </tr>
@@ -1318,7 +1318,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
               className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800"
             >
               <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50">
-                <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 dark:text-white flex items-center gap-2">
+                <h3 className="text-sm font-semibold uppercase tracking-widest text-slate-800 dark:text-white flex items-center gap-2">
                   <MessageSquare size={18} className="text-blue-500" />
                   Observação do Registro
                 </h3>
@@ -1341,7 +1341,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                 <div className="mt-6 flex justify-end gap-3">
                   <button 
                     onClick={() => setObsModalTarget(null)}
-                    className="px-6 py-2.5 text-xs font-bold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-all"
+                    className="px-6 py-2.5 text-xs font-normal text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-all"
                   >
                     {obsModalTarget.isNew ? "Cancelar" : "Fechar"}
                   </button>
@@ -1351,7 +1351,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                         updateRow(obsModalTarget.index, 'Observação', obsModalTarget.value);
                         setObsModalTarget(null);
                       }}
-                      className="px-8 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-blue-500/20 transition-all active:scale-95"
+                      className="px-8 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold uppercase tracking-widest shadow-lg shadow-blue-500/20 transition-all active:scale-95"
                     >
                       Salvar Observação
                     </button>

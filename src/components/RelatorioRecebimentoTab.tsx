@@ -449,7 +449,7 @@ const RelatorioRecebimentoTab = React.forwardRef<HTMLDivElement, {}>(
                   RELATÓRIO DE RECEBIMENTO
                 </h2>
                 <div className="flex items-center gap-3 mt-0.5">
-                  <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md bg-blue-600 text-white">MENSAL</span>
+                  <span className="text-[10px] font-medium uppercase tracking-widest px-2 py-0.5 rounded-md bg-blue-600 text-white">MENSAL</span>
                   <span className="text-[10px] font-medium uppercase tracking-widest text-slate-400 dark:text-slate-500">FLUXO DE AVARIAS</span>
                 </div>
               </div>
@@ -476,7 +476,7 @@ const RelatorioRecebimentoTab = React.forwardRef<HTMLDivElement, {}>(
                 onClick={() => setIsTranspDropdownOpen(!isTranspDropdownOpen)}
                 className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900/50 p-2.5 px-4 rounded-xl border border-transparent hover:bg-slate-100 dark:hover:bg-slate-800 transition-all group"
               >
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">
                   {selectedTransportadora === "all" ? "TODAS TRANSPORTADORAS" : selectedTransportadora}
                 </span>
                 <ChevronDown size={14} className={cn("text-slate-400 transition-transform duration-300", isTranspDropdownOpen && "rotate-180")} />
@@ -497,7 +497,7 @@ const RelatorioRecebimentoTab = React.forwardRef<HTMLDivElement, {}>(
                             key={t}
                             onClick={() => { setSelectedTransportadora(t); setIsTranspDropdownOpen(false); }}
                             className={cn(
-                              "w-full text-left px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all",
+                              "w-full text-left px-4 py-2 rounded-lg text-[10px] font-medium uppercase tracking-widest transition-all",
                               selectedTransportadora === t ? "bg-blue-600 text-white" : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
                             )}
                           >
@@ -536,7 +536,7 @@ const RelatorioRecebimentoTab = React.forwardRef<HTMLDivElement, {}>(
             {/* Excel export button */}
             <button
               onClick={exportToExcel}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest hover:opacity-80 transition-opacity"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 text-white text-[10px] font-semibold uppercase tracking-widest hover:opacity-80 transition-opacity"
             >
               <Sheet size={15} />
               Excel
@@ -545,7 +545,7 @@ const RelatorioRecebimentoTab = React.forwardRef<HTMLDivElement, {}>(
             {/* Print button */}
             <button
               onClick={() => triggerPrint(currentDate)}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[10px] font-black uppercase tracking-widest hover:opacity-80 transition-opacity"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[10px] font-semibold uppercase tracking-widest hover:opacity-80 transition-opacity"
             >
               <Printer size={15} />
               Imprimir
@@ -582,7 +582,7 @@ const RelatorioRecebimentoTab = React.forwardRef<HTMLDivElement, {}>(
                   <div className="absolute inset-0 z-50 bg-white/60 dark:bg-slate-950/60 backdrop-blur-sm flex items-center justify-center rounded-2xl">
                     <div className="flex flex-col items-center gap-3">
                       <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Sincronizando...</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Sincronizando...</p>
                     </div>
                   </div>
                 )}
@@ -602,9 +602,9 @@ const RelatorioRecebimentoTab = React.forwardRef<HTMLDivElement, {}>(
                           <div className="flex items-center justify-between mb-2 px-1">
                             <div className="flex items-center gap-2">
                               <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
-                              <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">{item.name}</span>
+                              <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{item.name}</span>
                             </div>
-                            <span className="text-sm font-black text-slate-900 dark:text-white font-mono">{item.value}</span>
+                            <span className="text-sm font-semibold text-slate-900 dark:text-white font-mono">{item.value}</span>
                           </div>
                           <div className="h-2 w-full bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
                             <motion.div
@@ -625,8 +625,8 @@ const RelatorioRecebimentoTab = React.forwardRef<HTMLDivElement, {}>(
                     )}
                   </div>
                   <div className="bg-blue-500/5 border border-blue-500/10 rounded-2xl p-4 flex items-center justify-between mt-2">
-                    <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest">Total Geral</span>
-                    <span className="text-xl font-black text-slate-900 dark:text-white font-mono">
+                    <span className="text-[10px] font-semibold text-blue-500 uppercase tracking-widest">Total Geral</span>
+                    <span className="text-xl font-semibold text-slate-900 dark:text-white font-mono">
                       {donutData.reduce((acc, curr) => acc + curr.value, 0)}
                     </span>
                   </div>
@@ -635,8 +635,8 @@ const RelatorioRecebimentoTab = React.forwardRef<HTMLDivElement, {}>(
                 {/* Fluxo Diário */}
                 <section className="flex flex-col gap-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Fluxo Diário</h3>
-                    <span className="text-[9px] font-bold text-blue-500 uppercase">Pico: {topStats.maxDay.value}</span>
+                    <h3 className="text-[10px] font-medium text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Fluxo Diário</h3>
+                    <span className="text-[9px] font-medium text-blue-500 uppercase">Pico: {topStats.maxDay.value}</span>
                   </div>
                   <div className="h-[120px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
@@ -661,10 +661,10 @@ const RelatorioRecebimentoTab = React.forwardRef<HTMLDivElement, {}>(
                 {/* ── TODOS OS PRODUTOS RANKEADOS ── */}
                 <section className="flex flex-col gap-3">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">
+                    <h3 className="text-[10px] font-medium text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">
                       Produtos Afetados
                     </h3>
-                    <span className="text-[9px] font-bold text-blue-500 uppercase">
+                    <span className="text-[9px] font-medium text-blue-500 uppercase">
                       {allProductsRanked.length} produto{allProductsRanked.length !== 1 ? "s" : ""}
                     </span>
                   </div>
@@ -688,9 +688,9 @@ const RelatorioRecebimentoTab = React.forwardRef<HTMLDivElement, {}>(
                             />
                             <div className="flex items-center justify-between z-10">
                               <div className="flex items-center gap-2 min-w-0">
-                                <span className="text-[10px] font-bold text-blue-500/40 w-5 shrink-0 text-right">{i + 1}</span>
+                                <span className="text-[10px] font-medium text-blue-500/40 w-5 shrink-0 text-right">{i + 1}</span>
                                 <div className="flex flex-col min-w-0">
-                                  <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight leading-tight">
+                                  <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-tight leading-tight">
                                     {p.name}
                                   </span>
                                   <span className="text-[9px] text-slate-400 dark:text-slate-500 truncate max-w-[170px] leading-tight">
@@ -700,12 +700,12 @@ const RelatorioRecebimentoTab = React.forwardRef<HTMLDivElement, {}>(
                               </div>
                               <div className="flex items-center gap-3 z-10 shrink-0 ml-2">
                                 {p.molhada > 0 && (
-                                  <span className="text-[9px] font-bold text-cyan-500 flex items-center gap-0.5 bg-cyan-500/10 px-1.5 py-0.5 rounded-full">
+                                  <span className="text-[9px] font-medium text-cyan-500 flex items-center gap-0.5 bg-cyan-500/10 px-1.5 py-0.5 rounded-full">
                                     <Droplet size={8} fill="currentColor" />
                                     {p.molhada}
                                   </span>
                                 )}
-                                <span className="text-[12px] font-black text-slate-900 dark:text-white font-mono leading-none">
+                                <span className="text-[12px] font-semibold text-slate-900 dark:text-white font-mono leading-none">
                                   {p.total}
                                 </span>
                               </div>
@@ -719,23 +719,23 @@ const RelatorioRecebimentoTab = React.forwardRef<HTMLDivElement, {}>(
 
                 {/* Transportadoras */}
                 <section className="flex flex-col gap-4 border-t border-slate-100 dark:border-slate-800 pt-6">
-                  <h3 className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Maiores Ocorrências por Transp.</h3>
+                  <h3 className="text-[10px] font-medium text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Maiores Ocorrências por Transp.</h3>
                   <div className="space-y-3">
                     {topStats.carriers.map((c, i) => (
                       <div key={i} className="relative flex items-center justify-between p-1 group">
                         <div className="flex items-center gap-3 z-10">
                           <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                          <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">{c.name}</span>
+                          <span className="text-[10px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider">{c.name}</span>
                         </div>
                         <div className="flex flex-col items-end z-10">
-                          <span className="text-[11px] font-black text-slate-900 dark:text-white leading-none">{c.value}</span>
+                          <span className="text-[11px] font-semibold text-slate-900 dark:text-white leading-none">{c.value}</span>
                           <div className="flex items-center gap-2 mt-1">
                             {c.molhada > 0 && (
-                              <span className="text-[9px] font-bold text-blue-500 flex items-center gap-0.5">
+                              <span className="text-[9px] font-medium text-blue-500 flex items-center gap-0.5">
                                 <Droplet size={8} fill="currentColor" />{c.molhada}
                               </span>
                             )}
-                            <span className="text-[9px] font-bold text-slate-400 flex items-center gap-0.5">
+                            <span className="text-[9px] font-medium text-slate-400 flex items-center gap-0.5">
                               <FileText size={8} />{c.notaCount}
                             </span>
                           </div>
@@ -752,16 +752,16 @@ const RelatorioRecebimentoTab = React.forwardRef<HTMLDivElement, {}>(
                 {/* Footer stats */}
                 <div className="mt-auto bg-blue-600 dark:bg-blue-600/10 p-4 rounded-2xl flex items-center justify-between gap-2">
                   <div className="flex flex-col">
-                    <span className="text-[9px] font-bold text-blue-100 dark:text-blue-400 uppercase tracking-widest">Total de Notas</span>
-                    <span className="text-lg font-black text-white dark:text-blue-400">{topStats.totalNotas}</span>
+                    <span className="text-[9px] font-medium text-blue-100 dark:text-blue-400 uppercase tracking-widest">Total de Notas</span>
+                    <span className="text-lg font-semibold text-white dark:text-blue-400">{topStats.totalNotas}</span>
                   </div>
                   <div className="flex flex-col items-center border-l border-white/20 dark:border-blue-400/20 pl-4">
-                    <span className="text-[9px] font-bold text-blue-100 dark:text-blue-400 uppercase tracking-widest">Média Diária</span>
-                    <span className="text-lg font-black text-white dark:text-blue-400">{mediaDiaria}</span>
+                    <span className="text-[9px] font-medium text-blue-100 dark:text-blue-400 uppercase tracking-widest">Média Diária</span>
+                    <span className="text-lg font-semibold text-white dark:text-blue-400">{mediaDiaria}</span>
                   </div>
                   <div className="flex flex-col items-end border-l border-white/20 dark:border-blue-400/20 pl-4">
-                    <span className="text-[9px] font-bold text-blue-100 dark:text-blue-400 uppercase tracking-widest">Dia Crítico</span>
-                    <span className="text-lg font-black text-white dark:text-blue-400 uppercase">{topStats.maxDay.date}</span>
+                    <span className="text-[9px] font-medium text-blue-100 dark:text-blue-400 uppercase tracking-widest">Dia Crítico</span>
+                    <span className="text-lg font-semibold text-white dark:text-blue-400 uppercase">{topStats.maxDay.date}</span>
                   </div>
                 </div>
               </motion.div>
@@ -826,7 +826,7 @@ const RelatorioRecebimentoTab = React.forwardRef<HTMLDivElement, {}>(
                                     {format(day, "EEEE", { locale: ptBR })}
                                   </span>
                                   {dayMolhada > 0 && (
-                                    <span className="bg-blue-500/10 text-blue-500 border border-blue-500/20 text-[9px] font-black px-2.5 py-0.5 rounded-full flex items-center gap-1.5 uppercase tracking-[0.1em]">
+                                    <span className="bg-blue-500/10 text-blue-500 border border-blue-500/20 text-[9px] font-semibold px-2.5 py-0.5 rounded-full flex items-center gap-1.5 uppercase tracking-[0.1em]">
                                       <Droplet size={10} fill="currentColor" className="animate-pulse" /> Alerta: Avaria Molhada
                                     </span>
                                   )}
@@ -849,7 +849,7 @@ const RelatorioRecebimentoTab = React.forwardRef<HTMLDivElement, {}>(
                               {dayMolhada > 0 ? (
                                 <div className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-500/10">
                                   <Droplet size={12} className="text-blue-600 dark:text-blue-400 animate-pulse" />
-                                  <span className="font-black font-mono text-sm text-blue-600 dark:text-blue-400">{dayMolhada}</span>
+                                  <span className="font-semibold font-mono text-sm text-blue-600 dark:text-blue-400">{dayMolhada}</span>
                                 </div>
                               ) : (
                                 <span className="font-bold font-mono text-sm text-slate-300 dark:text-slate-700">0</span>
@@ -882,16 +882,16 @@ const RelatorioRecebimentoTab = React.forwardRef<HTMLDivElement, {}>(
                                     <table className="w-full text-left">
                                       <thead className="bg-slate-50 dark:bg-slate-800/50 sticky top-0 z-10">
                                         <tr>
-                                          <th className="px-5 py-3 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[120px]">Nota Fiscal</th>
-                                          <th className="px-5 py-3 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[110px]">Produto</th>
-                                          <th className="px-5 py-3 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest">Descrição</th>
-                                          <th className="px-5 py-3 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[80px]">Av Totais</th>
-                                          <th className="px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest w-[80px]">Outras Av</th>
-                                          <th className="px-5 py-3 text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest w-[80px]">Av Molh</th>
-                                          <th className="px-5 py-3 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[130px]">Transportadora</th>
-                                          <th className="px-5 py-3 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[110px]">Placa</th>
-                                          <th className="px-5 py-3 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[130px]">Container</th>
-                                          <th className="px-5 py-3 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[110px]">Lacre</th>
+                                          <th className="px-5 py-3 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[120px]">Nota Fiscal</th>
+                                          <th className="px-5 py-3 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[110px]">Produto</th>
+                                          <th className="px-5 py-3 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest">Descrição</th>
+                                          <th className="px-5 py-3 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[80px]">Av Totais</th>
+                                          <th className="px-5 py-3 text-[10px] font-medium text-slate-500 uppercase tracking-widest w-[80px]">Outras Av</th>
+                                          <th className="px-5 py-3 text-[10px] font-medium text-blue-600 dark:text-blue-400 uppercase tracking-widest w-[80px]">Av Molh</th>
+                                          <th className="px-5 py-3 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[130px]">Transportadora</th>
+                                          <th className="px-5 py-3 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[110px]">Placa</th>
+                                          <th className="px-5 py-3 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[130px]">Container</th>
+                                          <th className="px-5 py-3 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[110px]">Lacre</th>
                                         </tr>
                                       </thead>
                                       <tbody>
@@ -931,7 +931,7 @@ const RelatorioRecebimentoTab = React.forwardRef<HTMLDivElement, {}>(
                                                   </td>
                                                   <td className="px-5 py-3.5 text-sm font-mono text-slate-600 dark:text-slate-400">
                                                     {isMulti ? (
-                                                      <span className="text-[10px] font-black text-blue-500 uppercase tracking-tighter bg-blue-500/10 px-1.5 py-0.5 rounded-sm">
+                                                      <span className="text-[10px] font-semibold text-blue-500 uppercase tracking-tighter bg-blue-500/10 px-1.5 py-0.5 rounded-sm">
                                                         Múltiplos ({nfItems.length})
                                                       </span>
                                                     ) : nfItems[0].Produto}
@@ -963,7 +963,7 @@ const RelatorioRecebimentoTab = React.forwardRef<HTMLDivElement, {}>(
                                                       transition={{ delay: idx * 0.05 }}
                                                       className="bg-blue-50/20 dark:bg-blue-500/[0.02] border-l-4 border-blue-500/40 border-b border-slate-200/30 dark:border-slate-800/20"
                                                     >
-                                                      <td className="px-5 py-2.5 text-center text-[10px] font-bold text-blue-500/30">"</td>
+                                                      <td className="px-5 py-2.5 text-center text-[10px] font-medium text-blue-500/30">"</td>
                                                       <td className="px-5 py-2.5 text-sm font-mono text-slate-700 dark:text-slate-300 font-bold">{item.Produto}</td>
                                                       <td className="px-5 py-2.5 text-xs text-slate-500 dark:text-slate-400 truncate max-w-[200px]">{baseCodigos[item.Produto] || "—"}</td>
                                                       <td className="px-5 py-2.5 text-sm font-mono text-slate-700 dark:text-slate-300">{item.Entrada || 0}</td>
@@ -971,7 +971,7 @@ const RelatorioRecebimentoTab = React.forwardRef<HTMLDivElement, {}>(
                                                       <td className="px-5 py-2.5 text-sm font-mono font-bold text-blue-600 dark:text-blue-400">
                                                         {(item["Quantidade Molhada"] || 0) > 0 ? item["Quantidade Molhada"] : "—"}
                                                       </td>
-                                                      <td colSpan={4} className="px-5 py-2.5 text-center text-[10px] font-bold text-blue-500/30 italic">
+                                                      <td colSpan={4} className="px-5 py-2.5 text-center text-[10px] font-medium text-blue-500/30 italic">
                                                         Detalhes agrupados na nota fiscal
                                                       </td>
                                                     </motion.tr>

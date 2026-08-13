@@ -44,7 +44,7 @@ function renderPosicaoHighlight(posicao: string) {
     return (
       <span className="inline-flex items-center font-bold">
         <span className="text-[10px] text-slate-400/60 dark:text-slate-500/60 font-bold tracking-wider">{prefix}</span>
-        <span className="text-emerald-500 dark:text-emerald-400 text-sm font-black ml-0.5">{suffix}</span>
+        <span className="text-emerald-500 dark:text-emerald-400 text-sm font-semibold ml-0.5">{suffix}</span>
       </span>
     )
   }
@@ -692,7 +692,7 @@ export default function PaletesFormadosTab({
             <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
               Paletes Formados
             </h1>
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+            <p className="text-[11px] font-medium text-slate-400 uppercase tracking-widest mt-0.5">
               Histórico de Controle de Avarias · Portal BR
             </p>
           </div>
@@ -709,7 +709,7 @@ export default function PaletesFormadosTab({
             >
               <Settings2 size={15} />
             </button>
-            <div className="absolute right-0 top-full mt-2 whitespace-nowrap rounded-xl bg-slate-900 border border-slate-700 px-3 py-1.5 text-[10px] font-bold text-slate-300 opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-xl">
+            <div className="absolute right-0 top-full mt-2 whitespace-nowrap rounded-xl bg-slate-900 border border-slate-700 px-3 py-1.5 text-[10px] font-medium text-slate-300 opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-xl">
               Configurar Tipos
             </div>
           </div>
@@ -723,7 +723,7 @@ export default function PaletesFormadosTab({
             >
               <Plus size={16} />
             </button>
-            <div className="absolute right-0 top-full mt-2 whitespace-nowrap rounded-xl bg-slate-900 border border-slate-700 px-3 py-1.5 text-[10px] font-bold text-slate-300 opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-xl">
+            <div className="absolute right-0 top-full mt-2 whitespace-nowrap rounded-xl bg-slate-900 border border-slate-700 px-3 py-1.5 text-[10px] font-medium text-slate-300 opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-xl">
               Criar Palete Manual
             </div>
           </div>
@@ -737,7 +737,7 @@ export default function PaletesFormadosTab({
             >
               <UploadCloud size={16} />
             </button>
-            <div className="absolute right-0 top-full mt-2 whitespace-nowrap rounded-xl bg-slate-900 border border-slate-700 px-3 py-1.5 text-[10px] font-bold text-slate-300 opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-xl">
+            <div className="absolute right-0 top-full mt-2 whitespace-nowrap rounded-xl bg-slate-900 border border-slate-700 px-3 py-1.5 text-[10px] font-medium text-slate-300 opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-xl">
               Importar Status SAP
             </div>
           </div>
@@ -752,7 +752,7 @@ export default function PaletesFormadosTab({
             >
               <RefreshCw size={15} className={loadingControle ? 'animate-spin' : ''} />
             </button>
-            <div className="absolute right-0 top-full mt-2 whitespace-nowrap rounded-xl bg-slate-900 border border-slate-700 px-3 py-1.5 text-[10px] font-bold text-slate-300 opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-xl">
+            <div className="absolute right-0 top-full mt-2 whitespace-nowrap rounded-xl bg-slate-900 border border-slate-700 px-3 py-1.5 text-[10px] font-medium text-slate-300 opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-xl">
               Atualizar Dados
             </div>
           </div>
@@ -766,7 +766,7 @@ export default function PaletesFormadosTab({
             >
               <Download size={15} />
             </button>
-            <div className="absolute right-0 top-full mt-2 whitespace-nowrap rounded-xl bg-slate-900 border border-slate-700 px-3 py-1.5 text-[10px] font-bold text-slate-300 opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-xl">
+            <div className="absolute right-0 top-full mt-2 whitespace-nowrap rounded-xl bg-slate-900 border border-slate-700 px-3 py-1.5 text-[10px] font-medium text-slate-300 opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-xl">
               Exportar CSV
             </div>
           </div>
@@ -781,7 +781,7 @@ export default function PaletesFormadosTab({
             <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
           </span>
           <div>
-            <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.25em] leading-none">Monitoramento</p>
+            <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-[0.25em] leading-none">Monitoramento</p>
             <h2 className="text-sm font-extrabold text-white mt-1.5">
               {filterPeriod === 'hoje' ? 'Hoje'
               : filterPeriod === 'semanal' ? 'Esta Semana (Seg a Sáb)'
@@ -806,7 +806,7 @@ export default function PaletesFormadosTab({
                   fetchControleAvarias(opt.id as any)
                 }}
                 className={cn(
-                  "px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-250 cursor-pointer whitespace-nowrap border text-center",
+                  "px-4 py-2 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-all duration-250 cursor-pointer whitespace-nowrap border text-center",
                   active
                     ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-sm"
                     : "text-slate-400 hover:text-slate-200 border-transparent hover:bg-slate-900/40"
@@ -845,15 +845,15 @@ export default function PaletesFormadosTab({
                     <Box size={18} className="text-slate-500 dark:text-slate-400" />
                   </div>
                   <div>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Paletes Formados</p>
-                    <p className="text-2xl font-black text-slate-900 dark:text-white leading-tight">
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Paletes Formados</p>
+                    <p className="text-2xl font-light text-slate-900 dark:text-white leading-tight">
                       {loadingControle ? "..." : totalPallets}
                     </p>
                   </div>
                 </div>
                 <div className="text-[10px] text-slate-500 border-t border-slate-200 dark:border-slate-800/80 pt-2 flex justify-between">
                   <span>Total Peças:</span>
-                  <span className="font-black text-slate-600 dark:text-slate-300">{totalPieces.toLocaleString('pt-BR')} pcs</span>
+                  <span className="font-semibold text-slate-600 dark:text-slate-300">{totalPieces.toLocaleString('pt-BR')} pcs</span>
                 </div>
               </div>
 
@@ -864,15 +864,15 @@ export default function PaletesFormadosTab({
                     <Clock size={18} className="text-amber-500 dark:text-amber-450" />
                   </div>
                   <div>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Pendentes para Entrega</p>
-                    <p className="text-2xl font-black text-slate-900 dark:text-white leading-tight">
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Pendentes para Entrega</p>
+                    <p className="text-2xl font-light text-slate-900 dark:text-white leading-tight">
                       {loadingControle ? "..." : pendentePallets}
                     </p>
                   </div>
                 </div>
                 <div className="text-[10px] text-slate-500 border-t border-slate-200 dark:border-slate-800/80 pt-2 flex justify-between">
                   <span>Peças Pendentes:</span>
-                  <span className="font-black text-amber-500">{pendentePieces.toLocaleString('pt-BR')} pcs</span>
+                  <span className="font-semibold text-amber-500">{pendentePieces.toLocaleString('pt-BR')} pcs</span>
                 </div>
               </div>
 
@@ -883,15 +883,15 @@ export default function PaletesFormadosTab({
                     <CheckCircle2 size={18} className="text-emerald-500" />
                   </div>
                   <div>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Entregues ao Conserto</p>
-                    <p className="text-2xl font-black text-slate-900 dark:text-white leading-tight">
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Entregues ao Conserto</p>
+                    <p className="text-2xl font-light text-slate-900 dark:text-white leading-tight">
                       {loadingControle ? "..." : entreguePallets}
                     </p>
                   </div>
                 </div>
                 <div className="text-[10px] text-slate-500 border-t border-slate-200 dark:border-slate-800/80 pt-2 flex justify-between">
                   <span>Peças Entregues:</span>
-                  <span className="font-black text-emerald-500 dark:text-emerald-400">{entreguePieces.toLocaleString('pt-BR')} pcs</span>
+                  <span className="font-semibold text-emerald-500 dark:text-emerald-400">{entreguePieces.toLocaleString('pt-BR')} pcs</span>
                 </div>
               </div>
 
@@ -905,15 +905,15 @@ export default function PaletesFormadosTab({
                       <AlertTriangle size={18} className="text-violet-400" />
                     </div>
                     <div>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Pendentes para Formar</p>
-                      <p className="text-2xl font-black text-violet-400 leading-tight">
+                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Pendentes para Formar</p>
+                      <p className="text-2xl font-light text-violet-400 leading-tight">
                         {loadingControle ? "..." : pendentesFormar}
                       </p>
                     </div>
                   </div>
                   <div className="text-[10px] text-slate-500 border-t border-violet-500/15 pt-2 flex justify-between">
                     <span>Peças na Fila:</span>
-                    <span className="font-black text-violet-400">{pendentesFormarPieces.toLocaleString('pt-BR')} pcs</span>
+                    <span className="font-semibold text-violet-400">{pendentesFormarPieces.toLocaleString('pt-BR')} pcs</span>
                   </div>
                 </div>
               )}
@@ -1108,13 +1108,13 @@ items.forEach(c => {
                   {/* Header */}
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em]">Meta do Dia</p>
-                      <p className="text-[10px] font-bold text-slate-400 mt-0.5">
+                      <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-[0.2em]">Meta do Dia</p>
+                      <p className="text-[10px] font-medium text-slate-400 mt-0.5">
                         {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
                       </p>
                     </div>
                     <div className={cn(
-                      "px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider border",
+                      "px-3 py-1 rounded-xl text-[10px] font-semibold uppercase tracking-wider border",
                       todayMet
                         ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/25"
                         : todayPct > 50
@@ -1128,13 +1128,13 @@ items.forEach(c => {
                   {/* Big number */}
                   <div>
                     <div className="flex items-end gap-2 mb-3">
-                      <span className="text-5xl font-black text-white leading-none">{todayData.total}</span>
+                      <span className="text-5xl font-light text-white leading-none">{todayData.total}</span>
                       <div className="pb-1">
                         <span className="text-sm font-bold text-slate-400">/ {DAILY_GOAL}</span>
                         <p className="text-[10px] text-slate-500 font-bold">Paletes Entregues</p>
                       </div>
                       <div className="ml-auto pb-1 text-right">
-                        <span className="text-lg font-black text-slate-300">{todayData.totalPieces.toLocaleString('pt-BR')}</span>
+                        <span className="text-lg font-semibold text-slate-300">{todayData.totalPieces.toLocaleString('pt-BR')}</span>
                         <p className="text-[10px] text-slate-500 font-bold">Peças Entregues</p>
                       </div>
                     </div>
@@ -1169,10 +1169,10 @@ items.forEach(c => {
                     <div className="mt-2 flex justify-between items-center text-[10px]">
                       {!todayMet ? (
                         <span className="text-slate-300 font-bold">
-                          Faltam <span className="text-amber-400 font-black">{DAILY_GOAL - todayData.total}</span> paletes para a meta
+                          Faltam <span className="text-amber-400 font-semibold">{DAILY_GOAL - todayData.total}</span> paletes para a meta
                         </span>
                       ) : (
-                        <span className="text-emerald-400 font-black flex items-center gap-1">✓ Meta atingida hoje!</span>
+                        <span className="text-emerald-400 font-semibold flex items-center gap-1">✓ Meta atingida hoje!</span>
                       )}
                       <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Meta: {DAILY_GOAL} pal.</span>
                     </div>
@@ -1181,7 +1181,7 @@ items.forEach(c => {
                   {/* Type breakdown */}
                   <div className="border-t border-slate-800 pt-4 space-y-2.5">
                     <div className="flex justify-between items-center mb-1">
-                      <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.15em]">Detalhes por Tipo — Hoje</span>
+                      <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-[0.15em]">Detalhes por Tipo — Hoje</span>
                     </div>
 
                     {todayTypes.length === 0 ? (
@@ -1226,8 +1226,8 @@ items.forEach(c => {
                 <div className="flex flex-col justify-between h-full space-y-4">
                   {/* Header */}
                   <div>
-                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em]">Entregas por Tipo</p>
-                    <p className="text-sm font-black text-white mt-0.5">
+                    <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-[0.2em]">Entregas por Tipo</p>
+                    <p className="text-sm font-semibold text-white mt-0.5">
                       {filterPeriod === 'semanal' ? 'Esta Semana (Últimos 7 dias)' : filterPeriod === 'mensal' ? 'Este Mês' : 'Histórico Completo'}
                     </p>
                   </div>
@@ -1235,8 +1235,8 @@ items.forEach(c => {
                   {/* Summary metrics for Left Panel */}
                   <div className="grid grid-cols-3 gap-3">
                     <div className="bg-slate-800/40 rounded-xl px-3 py-2.5 border border-slate-800/60 shadow-inner flex flex-col justify-between min-h-[64px]">
-                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none">Líder</p>
-                      <p className="text-[13px] font-black text-white truncate mt-1">
+                      <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest leading-none">Líder</p>
+                      <p className="text-[13px] font-semibold text-white truncate mt-1">
                         {(() => {
                           const sorted = [...periodTypeData].sort((a,b) => b.total - a.total)
                           return sorted[0]?.total > 0 ? (sorted[0].label || 'Sem Tipo') : '—'
@@ -1244,12 +1244,12 @@ items.forEach(c => {
                       </p>
                     </div>
                     <div className="bg-slate-800/40 rounded-xl px-3 py-2.5 border border-slate-800/60 shadow-inner flex flex-col justify-between min-h-[64px]">
-                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none">Paletes</p>
-                      <p className="text-[14px] font-black text-slate-200 mt-1">{periodTotal}</p>
+                      <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest leading-none">Paletes</p>
+                      <p className="text-[14px] font-semibold text-slate-200 mt-1">{periodTotal}</p>
                     </div>
                     <div className="bg-slate-800/40 rounded-xl px-3 py-2.5 border border-slate-800/60 shadow-inner flex flex-col justify-between min-h-[64px]">
-                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none">Peças</p>
-                      <p className="text-[14px] font-black text-emerald-400 mt-1">{periodTotalPieces.toLocaleString('pt-BR')}</p>
+                      <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest leading-none">Peças</p>
+                      <p className="text-[14px] font-semibold text-emerald-400 mt-1">{periodTotalPieces.toLocaleString('pt-BR')}</p>
                     </div>
                   </div>
 
@@ -1305,10 +1305,10 @@ items.forEach(c => {
                       </svg>
                       {/* Central label */}
                       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                        <span className="text-4xl font-black text-white tracking-tight leading-none">
+                        <span className="text-4xl font-light text-white tracking-tight leading-none">
                           {periodTotal}
                         </span>
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1.5">
+                        <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-widest mt-1.5">
                           TOTAL
                         </span>
                       </div>
@@ -1338,11 +1338,11 @@ items.forEach(c => {
                                 <div className="h-6.5 w-6.5 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${d.cfg.hex}22` }}>
                                   <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: d.cfg.hex }} />
                                 </div>
-                                <span className="text-xs font-black text-slate-200 uppercase tracking-wider">{d.label || d.type}</span>
+                                <span className="text-xs font-semibold text-slate-200 uppercase tracking-wider">{d.label || d.type}</span>
                               </div>
                               <div className="flex items-center gap-3 text-right">
-                                <span className="text-xs font-black text-white bg-slate-950/80 border border-slate-800/60 px-2.5 py-0.5 rounded-lg">{d.total}</span>
-                                <span className="text-xs font-black text-cyan-400 border-l border-slate-800/80 pl-3 min-w-[40px] text-right">{pct}%</span>
+                                <span className="text-xs font-semibold text-white bg-slate-950/80 border border-slate-800/60 px-2.5 py-0.5 rounded-lg">{d.total}</span>
+                                <span className="text-xs font-semibold text-cyan-400 border-l border-slate-800/80 pl-3 min-w-[40px] text-right">{pct}%</span>
                               </div>
                             </div>
                           )
@@ -1362,11 +1362,11 @@ items.forEach(c => {
                   {/* Header */}
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em]">Pendentes por Tipo</p>
-                      <p className="text-sm font-black text-white mt-0.5">Fila de Aguardando Entrega</p>
+                      <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-[0.2em]">Pendentes por Tipo</p>
+                      <p className="text-sm font-semibold text-white mt-0.5">Fila de Aguardando Entrega</p>
                     </div>
                     {pendingPalletsList.length > 0 && (
-                      <div className="px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/25">
+                      <div className="px-3 py-1 rounded-xl text-[10px] font-semibold uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/25">
                         {pendingPalletsList.length} paletes
                       </div>
                     )}
@@ -1384,7 +1384,7 @@ items.forEach(c => {
                           <CheckCircle2 className="text-emerald-500" size={20} />
                         </div>
                         <div className="space-y-1">
-                          <p className="text-xs font-black text-slate-200">Nenhum palete pendente</p>
+                          <p className="text-xs font-semibold text-slate-200">Nenhum palete pendente</p>
                           <p className="text-[10px] text-slate-500 font-bold max-w-[240px] mx-auto leading-relaxed">
                             Todos os paletes formados foram entregues. Bom trabalho!
                           </p>
@@ -1411,14 +1411,14 @@ items.forEach(c => {
                                         boxShadow: `0 0 8px ${cfg.hex}`
                                       }} 
                                     />
-                                    <span className="text-slate-100 uppercase tracking-widest text-[11px] font-black">{cfg.label || type}</span>
+                                    <span className="text-slate-100 uppercase tracking-widest text-[11px] font-semibold">{cfg.label || type}</span>
                                   </div>
                                   <div className="flex items-center gap-2">
-                                    <span className="text-slate-200 text-[11px] font-black bg-slate-900/80 px-2 py-0.5 rounded border border-slate-800/80">
+                                    <span className="text-slate-200 text-[11px] font-semibold bg-slate-900/80 px-2 py-0.5 rounded border border-slate-800/80">
                                       {data.count} <span className="text-[8px] text-slate-500 font-bold ml-0.5">PAL</span>
                                     </span>
                                     <span 
-                                      className="text-[11px] font-black bg-slate-950/50 px-2 py-0.5 rounded border border-slate-800/40"
+                                      className="text-[11px] font-semibold bg-slate-950/50 px-2 py-0.5 rounded border border-slate-800/40"
                                       style={{ color: cfg.hex }}
                                     >
                                       {data.pieces.toLocaleString('pt-BR')} <span className="text-[8px] opacity-60 font-bold ml-0.5">PCS</span>
@@ -1462,13 +1462,13 @@ items.forEach(c => {
                     return (
                       <div className="flex items-center justify-between mb-4">
                         <div>
-                          <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em]">{chartTitle}</p>
-                          <p className="text-sm font-black text-white mt-0.5">{chartSubtitle}</p>
+                          <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-[0.2em]">{chartTitle}</p>
+                          <p className="text-sm font-semibold text-white mt-0.5">{chartSubtitle}</p>
                         </div>
 
                         <div className="flex flex-col items-end">
-                          <p className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Média/Dia</p>
-                          <p className="text-lg font-black text-cyan-400">
+                          <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider">Média/Dia</p>
+                          <p className="text-lg font-semibold text-cyan-400">
                             {activeDays > 0 ? Math.round(totalP / activeDays) : 0}
                           </p>
                           <p className="text-[9px] text-slate-600 font-bold">pal/dia ativo</p>
@@ -1491,12 +1491,12 @@ items.forEach(c => {
                             "bg-slate-800 border border-slate-700 rounded-xl shadow-2xl p-2.5 w-max max-w-[160px]",
                             "opacity-0 group-hover/bar:opacity-100 pointer-events-none transition-opacity duration-150"
                           )}>
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1.5">
+                            <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
                               {day.tooltipTitle}{day.isToday && !isTodayMode ? ' · HOJE' : ''}
                             </p>
                             <div className="flex items-center justify-between gap-4 mb-1">
-                              <span className="text-[11px] font-black text-white">{day.total} paletes</span>
-                              <span className="text-[10px] font-bold text-emerald-400">{day.totalPieces.toLocaleString('pt-BR')} pcs</span>
+                              <span className="text-[11px] font-semibold text-white">{day.total} paletes</span>
+                              <span className="text-[10px] font-medium text-emerald-400">{day.totalPieces.toLocaleString('pt-BR')} pcs</span>
                             </div>
                             {typeEntries.length > 0 && (
                               <div className="border-t border-slate-700 pt-1.5 space-y-1 mt-1">
@@ -1508,7 +1508,7 @@ items.forEach(c => {
                                         <div className='h-1.5 w-1.5 rounded-full shrink-0' style={{ backgroundColor: cfg.hex }} />
                                         <span className="text-[9px] text-slate-300 font-bold">{cfg.label || 'Sem Tipo'}</span>
                                       </div>
-                                      <span className='text-[9px] font-black' style={{ color: cfg.hex }}>{cnt}</span>
+                                      <span className='text-[9px] font-semibold' style={{ color: cfg.hex }}>{cnt}</span>
                                     </div>
                                   )
                                 })}
@@ -1527,7 +1527,7 @@ items.forEach(c => {
                                 initial={{ opacity: 0, y: 4 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.35, ease: 'easeOut', delay: i * 0.03 + 0.25 }}
-                                className="text-[14px] font-black text-emerald-400 leading-none whitespace-nowrap"
+                                className="text-[14px] font-semibold text-emerald-400 leading-none whitespace-nowrap"
                               >
                                 +{day.total}
                               </motion.span>
@@ -1571,14 +1571,14 @@ items.forEach(c => {
                           <div className={cn("text-center leading-tight mt-2 shrink-0 flex flex-col gap-0.5", day.isToday && !isTodayMode ? "text-emerald-400" : "text-slate-400")}>
                             {isTodayMode ? (
                               <>
-                                <span className="text-[10px] font-black uppercase tracking-wider text-white">{day.label}</span>
+                                <span className="text-[10px] font-semibold uppercase tracking-wider text-white">{day.label}</span>
                                 <span className="text-[8px] text-slate-500 font-bold">HOJE</span>
                               </>
                             ) : (
                               <>
-                                <span className="text-[11px] font-black uppercase text-white tracking-wide">{day.label}</span>
+                                <span className="text-[11px] font-semibold uppercase text-white tracking-wide">{day.label}</span>
                                 <span className="text-[9px] text-cyan-400 font-bold">{day.subLabel}</span>
-                                <span className="text-[7px] text-slate-500 font-black uppercase tracking-wider">DIAS</span>
+                                <span className="text-[7px] text-slate-500 font-semibold uppercase tracking-wider">DIAS</span>
                               </>
                             )}
                           </div>
@@ -1600,7 +1600,7 @@ items.forEach(c => {
                       return chartActiveTipos.map((tipo) => (
                         <div key={tipo.nome} className="flex items-center gap-1.5">
                           <div className='h-2 w-2 rounded-full' style={{ backgroundColor: tipo.cor_hex }} />
-                          <span className="text-[9px] font-bold text-slate-500">{tipo.label || tipo.nome}</span>
+                          <span className="text-[9px] font-medium text-slate-500">{tipo.label || tipo.nome}</span>
                         </div>
                       ))
                     })()}
@@ -1628,7 +1628,7 @@ items.forEach(c => {
             />
           </div>
         </div>
-        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest px-2">
+        <span className="text-[11px] font-medium text-slate-400 uppercase tracking-widest px-2">
           {filteredControle.length} {filteredControle.length === 1 ? "palete filtrado" : "paletes filtrados"}
         </span>
       </div>
@@ -1647,14 +1647,14 @@ items.forEach(c => {
             className={cn(
               "flex items-center gap-2 px-6 py-3 border-b-2 font-bold text-xs uppercase tracking-wider transition-all duration-300 relative cursor-pointer whitespace-nowrap",
               activeStatusTab === tab.id
-                ? "border-emerald-500 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5 font-black"
+                ? "border-emerald-500 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5 font-semibold"
                 : "border-transparent text-slate-400 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50/50 dark:hover:bg-slate-800/40"
             )}
           >
             <tab.icon size={14} className={cn(activeStatusTab === tab.id ? "text-emerald-500" : "text-slate-400")} />
             <span>{tab.label}</span>
             <span className={cn(
-              "ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-black leading-none transition-colors",
+              "ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold leading-none transition-colors",
               activeStatusTab === tab.id
                 ? "bg-emerald-500 text-white"
                 : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
@@ -1669,7 +1669,7 @@ items.forEach(c => {
       {loadingControle ? (
         <div className="flex flex-col items-center justify-center py-20 space-y-4">
           <RefreshCw className="animate-spin text-emerald-500" size={32} />
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest animate-pulse">Carregando Histórico...</p>
+          <p className="text-xs font-normal text-slate-400 uppercase tracking-widest animate-pulse">Carregando Histórico...</p>
         </div>
       ) : (
         <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm">
@@ -1681,7 +1681,7 @@ items.forEach(c => {
                     <th 
                       key={col} 
                       className={cn(
-                        "px-6 py-4 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap",
+                        "px-6 py-4 text-left text-[10px] font-medium text-slate-400 uppercase tracking-widest whitespace-nowrap",
                         col === "Posição" && "pl-8",
                         col === "Qtd Total" && "text-right",
                         col === "Ações" && "text-center pl-8"
@@ -1727,7 +1727,7 @@ items.forEach(c => {
                         </td>
 
                         <td className="px-6 py-4 whitespace-nowrap text-right">
-                          <span className="text-xs font-bold text-slate-900 dark:text-white">{c.quantidade}</span>
+                          <span className="text-xs font-normal text-slate-900 dark:text-white">{c.quantidade}</span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           {c.reserva ? (
@@ -1749,7 +1749,7 @@ items.forEach(c => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           {c.documento ? (
-                            <span className="text-xs font-mono font-black text-emerald-600 dark:text-emerald-400">
+                            <span className="text-xs font-mono font-semibold text-emerald-600 dark:text-emerald-400">
                               {c.documento}
                             </span>
                           ) : (
@@ -1889,11 +1889,11 @@ items.forEach(c => {
                                 <table className="w-full text-left">
                                   <thead>
                                     <tr className="bg-slate-100 dark:bg-slate-800/60">
-                                      <th className="px-4 py-2 text-[9px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Código SKU</th>
-                                      <th className="px-4 py-2 text-[9px] font-bold text-slate-400 uppercase tracking-widest">Descrição</th>
-                                      <th className="px-4 py-2 text-[9px] font-bold text-slate-400 uppercase tracking-widest text-center whitespace-nowrap">Qtd Orig.</th>
-                                      <th className="px-4 py-2 text-[9px] font-bold text-slate-400 uppercase tracking-widest text-center whitespace-nowrap">Qtd Final</th>
-                                      <th className="px-4 py-2 text-[9px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Status</th>
+                                      <th className="px-4 py-2 text-[9px] font-medium text-slate-400 uppercase tracking-widest whitespace-nowrap">Código SKU</th>
+                                      <th className="px-4 py-2 text-[9px] font-medium text-slate-400 uppercase tracking-widest">Descrição</th>
+                                      <th className="px-4 py-2 text-[9px] font-medium text-slate-400 uppercase tracking-widest text-center whitespace-nowrap">Qtd Orig.</th>
+                                      <th className="px-4 py-2 text-[9px] font-medium text-slate-400 uppercase tracking-widest text-center whitespace-nowrap">Qtd Final</th>
+                                      <th className="px-4 py-2 text-[9px] font-medium text-slate-400 uppercase tracking-widest whitespace-nowrap">Status</th>
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40">
@@ -1927,11 +1927,11 @@ items.forEach(c => {
                                         </td>
                                         <td className="px-4 py-2 whitespace-nowrap">
                                           {!item.incluido ? (
-                                            <span className="text-[9px] font-black text-rose-600 bg-rose-100 dark:bg-rose-500/10 px-2 py-0.5 rounded-md uppercase tracking-wider">Retirar</span>
+                                            <span className="text-[9px] font-semibold text-rose-600 bg-rose-100 dark:bg-rose-500/10 px-2 py-0.5 rounded-md uppercase tracking-wider">Retirar</span>
                                           ) : item.qtdFinal < item.qtdOriginal ? (
-                                            <span className="text-[9px] font-black text-amber-600 bg-amber-100 dark:bg-amber-500/10 px-2 py-0.5 rounded-md uppercase tracking-wider">Qtd Alt.</span>
+                                            <span className="text-[9px] font-semibold text-amber-600 bg-amber-100 dark:bg-amber-500/10 px-2 py-0.5 rounded-md uppercase tracking-wider">Qtd Alt.</span>
                                           ) : (
-                                            <span className="text-[9px] font-black text-emerald-600 bg-emerald-100 dark:bg-emerald-500/10 px-2 py-0.5 rounded-md uppercase tracking-wider">OK</span>
+                                            <span className="text-[9px] font-semibold text-emerald-600 bg-emerald-100 dark:bg-emerald-500/10 px-2 py-0.5 rounded-md uppercase tracking-wider">OK</span>
                                           )}
                                         </td>
                                       </tr>
@@ -1992,7 +1992,7 @@ items.forEach(c => {
                   <div className="text-xl font-bold mb-1">
                     {renderPosicaoHighlight(editingControle.posicao)}
                   </div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Alterar Registro de Palete</p>
+                  <p className="text-[10px] font-medium text-slate-400 uppercase tracking-widest">Alterar Registro de Palete</p>
                 </div>
                 <button
                   onClick={() => setEditingControle(null)}
@@ -2004,7 +2004,7 @@ items.forEach(c => {
 
               <div className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">
+                  <label className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500 uppercase tracking-wider ml-1">
                     Reserva SAP
                     <span className="text-[9px] font-normal text-slate-300 dark:text-slate-600 normal-case tracking-normal">(opcional — somente MB21)</span>
                   </label>
@@ -2019,8 +2019,8 @@ items.forEach(c => {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">
-                      Remessa MIGO <span className="text-[9px] font-bold text-rose-400">*</span>
+                    <label className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500 uppercase tracking-wider ml-1">
+                      Remessa MIGO <span className="text-[9px] font-medium text-rose-400">*</span>
                     </label>
                     <input
                       type="text"
@@ -2035,8 +2035,8 @@ items.forEach(c => {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">
-                      Documento SAP <span className="text-[9px] font-bold text-rose-400">*</span>
+                    <label className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500 uppercase tracking-wider ml-1">
+                      Documento SAP <span className="text-[9px] font-medium text-rose-400">*</span>
                     </label>
                     <input
                       type="text"
@@ -2053,7 +2053,7 @@ items.forEach(c => {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Códigos SKUs</label>
+                  <label className="text-[10px] font-medium text-slate-500 uppercase tracking-wider ml-1">Códigos SKUs</label>
                   <textarea
                     rows={2}
                     placeholder="Códigos separados por vírgula..."
@@ -2064,7 +2064,7 @@ items.forEach(c => {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Tipo de Avaria</label>
+                  <label className="text-[10px] font-medium text-slate-500 uppercase tracking-wider ml-1">Tipo de Avaria</label>
                   <div className="flex flex-wrap gap-2">
                     {avariaTipos.map(t => ({ value: t.nome, cor_hex: t.cor_hex })).map((t) => {
                       const active = editType === t.value
@@ -2090,7 +2090,7 @@ items.forEach(c => {
 
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Status do Palete</label>
+                  <label className="text-[10px] font-medium text-slate-500 uppercase tracking-wider ml-1">Status do Palete</label>
                   <div className="flex gap-2">
                     {[
                       { value: "Pendente", label: "Pendente", colorClass: "hover:text-amber-500 dark:hover:bg-amber-500/10", activeClass: "bg-amber-500 border-amber-500 text-slate-950 shadow-lg shadow-amber-500/20" },
@@ -2187,7 +2187,7 @@ items.forEach(c => {
                     <h2 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">
                       Importar Atualização de Status SAP
                     </h2>
-                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                    <p className="text-[11px] font-medium text-slate-400 uppercase tracking-widest mt-0.5">
                       Confronto automático por Documento · Portal BR
                     </p>
                   </div>
@@ -2204,7 +2204,7 @@ items.forEach(c => {
                   <div className="rounded-2xl bg-blue-500/5 border border-blue-500/15 p-4 space-y-3">
                     <div className="flex items-center gap-2">
                       <FileCheck2 size={14} className="text-blue-400 shrink-0" />
-                      <span className="text-[11px] font-black text-blue-400 uppercase tracking-widest">Como usar</span>
+                      <span className="text-[11px] font-semibold text-blue-400 uppercase tracking-widest">Como usar</span>
                     </div>
                     <ol className="space-y-1.5 pl-1">
                       {[
@@ -2214,7 +2214,7 @@ items.forEach(c => {
                         'Revise o preview e confirme a atualização'
                       ].map((step, i) => (
                         <li key={i} className="flex items-start gap-2">
-                          <span className="shrink-0 mt-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-blue-500/20 text-[9px] font-black text-blue-400">{i+1}</span>
+                          <span className="shrink-0 mt-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-blue-500/20 text-[9px] font-semibold text-blue-400">{i+1}</span>
                           <span className="text-xs text-slate-500 dark:text-slate-400">{step}</span>
                         </li>
                       ))}
@@ -2270,12 +2270,12 @@ items.forEach(c => {
 
                     <div className="flex items-center gap-3">
                       <div className="flex-1 h-px bg-slate-800" />
-                      <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">ou cole aqui</span>
+                      <span className="text-[10px] font-semibold text-slate-600 uppercase tracking-widest">ou cole aqui</span>
                       <div className="flex-1 h-px bg-slate-800" />
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Dados do Portal SAP</label>
+                      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">Dados do Portal SAP</label>
                       <textarea
                         rows={7}
                         placeholder={`Material\tDescrição\tQtd\tDocumento\tDt.Migo 313\tMigo 313\tDt.Migo 315\tMigo 315\tStatus\n4916757015\tPROD XYZ\t30\t...`}
@@ -2295,16 +2295,16 @@ items.forEach(c => {
                   <div className="space-y-4">
                     {/* Summary badges */}
                     <div className="flex flex-wrap gap-2">
-                      <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[11px] font-bold text-emerald-400">
+                      <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[11px] font-medium text-emerald-400">
                         <Check size={12} /> {importPreview.filter(r => r.matched && r.willChange).length} para atualizar
                       </span>
-                      <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-[11px] font-bold text-blue-400">
+                      <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-[11px] font-medium text-blue-400">
                         <Plus size={12} /> {importPreview.filter(r => r.willInsert).length} para adicionar
                       </span>
-                      <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-500/10 border border-slate-500/20 text-[11px] font-bold text-slate-400">
+                      <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-500/10 border border-slate-500/20 text-[11px] font-medium text-slate-400">
                         <Check size={12} /> {importPreview.filter(r => r.matched && !r.willChange).length} sem alteração
                       </span>
-                      <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-[11px] font-bold text-rose-400">
+                      <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-[11px] font-medium text-rose-400">
                         <AlertTriangle size={12} /> {importPreview.filter(r => !r.matched && !r.willInsert).length} não mapeados/ignorados
                       </span>
                     </div>
@@ -2321,7 +2321,7 @@ items.forEach(c => {
                           <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10">
                             <tr className="border-b border-slate-200 dark:border-slate-800">
                               {['Documento','Status SAP','→ Novo Status','Dt. Criação','Dt. Entrega','Situação'].map(col => (
-                                <th key={col} className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">{col}</th>
+                                <th key={col} className="px-4 py-3 text-[10px] font-semibold text-slate-400 uppercase tracking-widest whitespace-nowrap">{col}</th>
                               ))}
                             </tr>
                           </thead>
@@ -2333,12 +2333,12 @@ items.forEach(c => {
                                 row.willInsert ? 'bg-blue-500/5' :
                                 row.willChange ? 'bg-emerald-500/3' : ''
                               )}>
-                                <td className="px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 font-mono whitespace-nowrap">{row.documento}</td>
+                                <td className="px-4 py-2.5 text-xs font-normal text-slate-700 dark:text-slate-200 font-mono whitespace-nowrap">{row.documento}</td>
                                 <td className="px-4 py-2.5 text-[11px] text-slate-500 whitespace-nowrap">{row.sapStatus || '—'}</td>
                                 <td className="px-4 py-2.5 whitespace-nowrap">
                                   {row.newStatus ? (
                                     <span className={cn(
-                                      'px-2 py-0.5 rounded-lg text-[10px] font-black',
+                                      'px-2 py-0.5 rounded-lg text-[10px] font-semibold',
                                       row.newStatus === 'Entregue'  ? 'bg-emerald-500/15 text-emerald-400' :
                                       row.newStatus === 'Estornado' ? 'bg-rose-500/15 text-rose-400' :
                                       'bg-amber-500/15 text-amber-400'
@@ -2349,11 +2349,11 @@ items.forEach(c => {
                                 <td className="px-4 py-2.5 text-[11px] text-slate-500 font-mono whitespace-nowrap">{row.newDataEntrega || row.dt315Raw || '—'}</td>
                                 <td className="px-4 py-2.5 whitespace-nowrap">
                                   {row.willInsert ? (
-                                    <span className="text-[10px] font-bold text-blue-400 font-bold">✓ Adicionar</span>
+                                    <span className="text-[10px] font-medium text-blue-400 font-bold">✓ Adicionar</span>
                                   ) : !row.matched ? (
-                                    <span className="text-[10px] font-bold text-slate-500">Ignorado</span>
+                                    <span className="text-[10px] font-medium text-slate-500">Ignorado</span>
                                   ) : row.willChange ? (
-                                    <span className="text-[10px] font-bold text-emerald-400">✓ Atualizar</span>
+                                    <span className="text-[10px] font-medium text-emerald-400">✓ Atualizar</span>
                                   ) : (
                                     <span className="text-[10px] text-slate-500">Sem mudança</span>
                                   )}
@@ -2376,21 +2376,21 @@ items.forEach(c => {
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white">Importação Concluída!</h3>
                     <div className="flex flex-wrap justify-center gap-4 max-w-md mx-auto pt-2">
                       <div className="p-3 rounded-2xl bg-emerald-500/5 border border-emerald-500/10 w-24">
-                        <div className="text-2xl font-black text-emerald-400">{importResult.updated}</div>
-                        <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-1">Atualizados</div>
+                        <div className="text-2xl font-light text-emerald-400">{importResult.updated}</div>
+                        <div className="text-[9px] font-medium text-slate-500 uppercase tracking-wider mt-1">Atualizados</div>
                       </div>
                       <div className="p-3 rounded-2xl bg-blue-500/5 border border-blue-500/10 w-24">
-                        <div className="text-2xl font-black text-blue-400">{importResult.inserted || 0}</div>
-                        <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-1">Criados</div>
+                        <div className="text-2xl font-light text-blue-400">{importResult.inserted || 0}</div>
+                        <div className="text-[9px] font-medium text-slate-500 uppercase tracking-wider mt-1">Criados</div>
                       </div>
                       <div className="p-3 rounded-2xl bg-rose-500/5 border border-rose-500/10 w-24">
-                        <div className="text-2xl font-black text-rose-400">{importResult.notFound}</div>
-                        <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-1">Ignorados</div>
+                        <div className="text-2xl font-light text-rose-400">{importResult.notFound}</div>
+                        <div className="text-[9px] font-medium text-slate-500 uppercase tracking-wider mt-1">Ignorados</div>
                       </div>
                       {importResult.errors > 0 && (
                         <div className="p-3 rounded-2xl bg-amber-500/5 border border-amber-500/10 w-24">
-                          <div className="text-2xl font-black text-amber-400">{importResult.errors}</div>
-                          <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-1">Erros</div>
+                          <div className="text-2xl font-light text-amber-400">{importResult.errors}</div>
+                          <div className="text-[9px] font-medium text-slate-500 uppercase tracking-wider mt-1">Erros</div>
                         </div>
                       )}
                     </div>
@@ -2479,31 +2479,31 @@ items.forEach(c => {
               <div className="relative mb-8 pb-6 border-b border-slate-100 dark:border-slate-800 shrink-0">
                 <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-blue-500/10 rounded-2xl blur-2xl" />
                 <div className="relative">
-                  <h3 className="text-xl font-black text-slate-900 dark:text-white">Criar Palete Manual</h3>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Preencha os dados abaixo</p>
+                  <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Criar Palete Manual</h3>
+                  <p className="text-[10px] font-medium text-slate-400 uppercase tracking-widest mt-1">Preencha os dados abaixo</p>
                 </div>
               </div>
 
               {/* Body */}
               <div className="flex-1 overflow-y-auto space-y-6 pr-2">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase">Reserva SAP (opcional — somente MB21)</label>
+                  <label className="text-[10px] font-semibold text-slate-400 uppercase">Reserva SAP (opcional — somente MB21)</label>
                   <input type="text" value={manualReserva} onChange={(e) => setManualReserva(e.target.value)} className="w-full h-11 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 text-xs font-medium text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10" placeholder="Ex: 100028945" />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase">Remessa MIGO</label>
+                    <label className="text-[10px] font-semibold text-slate-400 uppercase">Remessa MIGO</label>
                     <input type="text" value={manualRemessa} onChange={(e) => setManualRemessa(e.target.value)} className="w-full h-11 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 text-xs font-medium text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10" placeholder="Ex: 83384647" />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase">Doc. SAP</label>
+                    <label className="text-[10px] font-semibold text-slate-400 uppercase">Doc. SAP</label>
                     <input type="text" value={manualDocumento} onChange={(e) => setManualDocumento(e.target.value)} className="w-full h-11 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 text-xs font-medium text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10" placeholder="Ex: 4916837702" />
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase">Tipo de Avaria</label>
+                  <label className="text-[10px] font-semibold text-slate-400 uppercase">Tipo de Avaria</label>
                   <div className="flex flex-wrap gap-2">
                     {avariaTipos.map(t => ({ value: t.nome, cor_hex: t.cor_hex })).map((t) => {
                       const active = manualType === t.value
@@ -2531,8 +2531,8 @@ items.forEach(c => {
                 {/* Items */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <label className="text-[10px] font-black text-slate-400 uppercase">Itens</label>
-                    <button onClick={() => setManualItems([...manualItems, { codigo: "", quantidade: 1 }])} className="text-[10px] font-bold text-emerald-500 flex items-center gap-1"><Plus size={12} /> Adicionar</button>
+                    <label className="text-[10px] font-semibold text-slate-400 uppercase">Itens</label>
+                    <button onClick={() => setManualItems([...manualItems, { codigo: "", quantidade: 1 }])} className="text-[10px] font-medium text-emerald-500 flex items-center gap-1"><Plus size={12} /> Adicionar</button>
                   </div>
                   <div className="space-y-2">
                     {manualItems.map((item, idx) => (

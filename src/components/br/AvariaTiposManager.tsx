@@ -147,7 +147,7 @@ export default function AvariaTiposManager({ open, onClose }: Props) {
                   <Settings2 size={16} className="text-amber-500" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-black text-slate-900 dark:text-white">Tipos de Avaria</h3>
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Tipos de Avaria</h3>
                 </div>
               </div>
               <button onClick={onClose} className="h-8 w-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-400 transition-colors cursor-pointer">
@@ -177,7 +177,7 @@ export default function AvariaTiposManager({ open, onClose }: Props) {
                               value={editNome}
                               onChange={e => setEditNome(e.target.value)}
                               placeholder="Nome (ex: AG)"
-                              className="flex-1 h-9 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
+                              className="flex-1 h-9 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 text-xs font-normal text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
                             />
                             <input
                               value={editLabel}
@@ -187,7 +187,7 @@ export default function AvariaTiposManager({ open, onClose }: Props) {
                             />
                           </div>
                           <div>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Cor</p>
+                            <p className="text-[10px] font-medium text-slate-400 uppercase mb-2">Cor</p>
                             <div className="flex flex-wrap gap-2">
                               {PRESET_COLORS.map(c => (
                                 <button key={c} onClick={() => setEditCor(c)}
@@ -199,7 +199,7 @@ export default function AvariaTiposManager({ open, onClose }: Props) {
                             </div>
                           </div>
                           <div className="flex gap-2 justify-end">
-                            <button onClick={cancelEdit} className="px-3 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-200 cursor-pointer">Cancelar</button>
+                            <button onClick={cancelEdit} className="px-3 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-normal text-slate-600 dark:text-slate-400 hover:bg-slate-200 cursor-pointer">Cancelar</button>
                             <button onClick={applyEdit} className="px-4 h-8 rounded-lg bg-amber-500 hover:bg-amber-400 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer">
                               <Check size={12} /> Aplicar
                             </button>
@@ -210,7 +210,7 @@ export default function AvariaTiposManager({ open, onClose }: Props) {
                           <GripVertical size={14} className="text-slate-300 dark:text-slate-700 shrink-0" />
                           <div className="h-5 w-5 rounded-full shrink-0" style={{ backgroundColor: tipo.cor_hex }} />
                           <div className="flex-1 min-w-0">
-                            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-black border uppercase tracking-wider" style={hexToStyle(tipo.cor_hex)}>
+                            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold border uppercase tracking-wider" style={hexToStyle(tipo.cor_hex)}>
                               {tipo.nome}
                             </span>
                             {tipo.label && <span className="ml-2 text-[10px] text-slate-400">{tipo.label}</span>}
@@ -240,12 +240,12 @@ export default function AvariaTiposManager({ open, onClose }: Props) {
                         <div className="p-3 space-y-3">
                           <div className="flex gap-2">
                             <input autoFocus value={newNome} onChange={e => setNewNome(e.target.value)} onKeyDown={e => e.key === "Enter" && handleAdd()}
-                              placeholder="Nome do tipo (ex: NOVO)" className="flex-1 h-9 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-amber-500" />
+                              placeholder="Nome do tipo (ex: NOVO)" className="flex-1 h-9 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 text-xs font-normal text-slate-900 dark:text-white focus:outline-none focus:border-amber-500" />
                             <input value={newLabel} onChange={e => setNewLabel(e.target.value)}
                               placeholder="Label curto" className="w-32 h-9 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500" />
                           </div>
                           <div>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Cor</p>
+                            <p className="text-[10px] font-medium text-slate-400 uppercase mb-2">Cor</p>
                             <div className="flex flex-wrap gap-2">
                               {PRESET_COLORS.map(c => (
                                 <button key={c} onClick={() => setNewCor(c)}
@@ -256,7 +256,7 @@ export default function AvariaTiposManager({ open, onClose }: Props) {
                             </div>
                           </div>
                           <div className="flex gap-2 justify-end">
-                            <button onClick={() => setShowAdd(false)} className="px-3 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-400 cursor-pointer">Cancelar</button>
+                            <button onClick={() => setShowAdd(false)} className="px-3 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-normal text-slate-600 dark:text-slate-400 cursor-pointer">Cancelar</button>
                             <button onClick={handleAdd} disabled={!newNome.trim()} className="px-4 h-8 rounded-lg bg-amber-500 hover:bg-amber-400 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50">
                               <Plus size={12} /> Adicionar
                             </button>
@@ -265,7 +265,7 @@ export default function AvariaTiposManager({ open, onClose }: Props) {
                       </motion.div>
                     ) : (
                       <button onClick={() => setShowAdd(true)}
-                        className="w-full h-10 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-400 hover:border-amber-300 hover:text-amber-500 dark:hover:border-amber-800 transition-colors flex items-center justify-center gap-2 cursor-pointer">
+                        className="w-full h-10 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-800 text-[11px] font-medium text-slate-400 hover:border-amber-300 hover:text-amber-500 dark:hover:border-amber-800 transition-colors flex items-center justify-center gap-2 cursor-pointer">
                         <Plus size={14} /> Novo tipo
                       </button>
                     )}
@@ -277,7 +277,7 @@ export default function AvariaTiposManager({ open, onClose }: Props) {
             {/* Footer */}
             <div className="px-6 pb-5 pt-4 border-t border-slate-100 dark:border-slate-800 shrink-0 flex items-center justify-end gap-3">
               <div className="flex gap-2">
-                <button onClick={onClose} className="px-4 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer">
+                <button onClick={onClose} className="px-4 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-normal text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer">
                   Fechar
                 </button>
                 <button

@@ -75,7 +75,7 @@ function ConfirmationContent() {
             className="text-center space-y-4"
           >
             <Loader2 className="w-16 h-16 text-blue-500 animate-spin mx-auto" />
-            <p className="text-slate-400 font-black uppercase tracking-widest text-sm">Validando ID: {id}</p>
+            <p className="text-slate-400 font-semibold uppercase tracking-widest text-sm">Validando ID: {id}</p>
           </motion.div>
         )}
 
@@ -92,11 +92,11 @@ function ConfirmationContent() {
                 <div className="w-24 h-24 bg-emerald-500 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-emerald-500/40 transform -rotate-3">
                   <CheckCircle2 size={48} className="text-white" />
                 </div>
-                <h1 className="text-3xl font-black text-white uppercase tracking-tighter mb-2">Confirmado!</h1>
+                <h1 className="text-3xl font-light text-white uppercase tracking-tighter mb-2">Confirmado!</h1>
                 <p className="text-emerald-400/80 font-bold uppercase tracking-widest text-[10px] mb-6">Status: Entregue ao Conserto</p>
                 
                 <div className="bg-black/20 rounded-2xl py-4 px-6 border border-white/5 inline-block mb-8">
-                   <span className="text-white font-mono font-black text-xl">ITEM #{id}</span>
+                   <span className="text-white font-mono font-semibold text-xl">ITEM #{id}</span>
                 </div>
 
                 <button 
@@ -106,7 +106,7 @@ function ConfirmationContent() {
                     // Se estiver em um dispositivo que permite, podemos limpar o ID da URL
                     window.history.replaceState({}, '', window.location.pathname);
                   }}
-                  className="w-full py-4 bg-white/5 hover:bg-white/10 rounded-2xl text-white/40 hover:text-white font-black uppercase tracking-widest text-[9px] transition-all border border-white/5 flex items-center justify-center gap-3"
+                  className="w-full py-4 bg-white/5 hover:bg-white/10 rounded-2xl text-white/40 hover:text-white font-semibold uppercase tracking-widest text-[9px] transition-all border border-white/5 flex items-center justify-center gap-3"
                 >
                   <Loader2 size={14} className="animate-spin-slow" />
                   Reiniciar Scanner
@@ -115,7 +115,7 @@ function ConfirmationContent() {
                 <div className="mt-8 pt-8 border-t border-emerald-500/10">
                   <div className="flex items-center justify-center gap-2 text-emerald-500/40">
                     <PackageCheck size={16} />
-                    <span className="text-[9px] font-black uppercase tracking-widest">Sincronizado com G300</span>
+                    <span className="text-[9px] font-semibold uppercase tracking-widest">Sincronizado com G300</span>
                   </div>
                 </div>
               </div>
@@ -134,12 +134,12 @@ function ConfirmationContent() {
               <div className="w-24 h-24 bg-rose-500 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-rose-500/40 transform rotate-3">
                 <AlertCircle size={48} className="text-white" />
               </div>
-              <h1 className="text-3xl font-black text-white uppercase tracking-tighter mb-2">Erro</h1>
+              <h1 className="text-3xl font-light text-white uppercase tracking-tighter mb-2">Erro</h1>
               <p className="text-rose-400 font-bold text-sm mb-6">{message}</p>
               
               <button 
                 onClick={() => window.location.reload()}
-                className="w-full py-4 bg-white/5 hover:bg-white/10 rounded-2xl text-white font-black uppercase tracking-widest text-[10px] transition-all border border-white/10"
+                className="w-full py-4 bg-white/5 hover:bg-white/10 rounded-2xl text-white font-semibold uppercase tracking-widest text-[10px] transition-all border border-white/10"
               >
                 Tentar Novamente
               </button>

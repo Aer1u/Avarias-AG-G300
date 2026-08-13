@@ -641,8 +641,8 @@ export function DriveInGrid({
         <div className="h-16 w-16 rounded-full bg-slate-100 dark:bg-slate-800/80 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-4">
           <Lock size={32} />
         </div>
-        <h3 className="text-lg font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">Drive Bloqueado</h3>
-        <p className="text-xs font-bold text-slate-400 uppercase mt-2">{observation || "Sem observações"}</p>
+        <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 uppercase tracking-widest">Drive Bloqueado</h3>
+        <p className="text-xs font-normal text-slate-400 uppercase mt-2">{observation || "Sem observações"}</p>
       </div>
     )
   }
@@ -702,7 +702,7 @@ export function DriveInGrid({
           >
             <div className="bg-white dark:bg-slate-900 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 dark:border-slate-800 rounded-2xl p-6 shadow-2xl flex flex-col items-center gap-4">
               <RefreshCw className="animate-spin text-blue-600" size={32} />
-              <p className="text-xs font-black uppercase tracking-widest text-slate-900 dark:text-white dark:text-white">Efetuando Troca...</p>
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-900 dark:text-white dark:text-white">Efetuando Troca...</p>
             </div>
           </motion.div>
         )}
@@ -716,7 +716,7 @@ export function DriveInGrid({
             {/* Axis Labels Header Row (Levels Only) */}
             <div className="flex mb-4">
                <div className="w-14 shrink-0 pr-4 text-right">
-                  <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                  <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
                     NÍVEL
                   </span>
                </div>
@@ -734,7 +734,7 @@ export function DriveInGrid({
                     <div key={`row-${lvl}`} className="flex items-center">
                       {/* Level Label (Y-Axis) */}
                       <div className="w-14 shrink-0 pr-4 text-right">
-                        <span className="text-[13px] font-black text-slate-900 dark:text-white dark:text-white uppercase tracking-tighter">
+                        <span className="text-[13px] font-semibold text-slate-900 dark:text-white dark:text-white uppercase tracking-tighter">
                           {displayLvl}
                         </span>
                       </div>
@@ -898,7 +898,7 @@ export function DriveInGrid({
                                       )}
                                       {isMixedCell && !hasWet && !hasTilted && (
                                           <div className="px-1.5 h-3.5 rounded-full bg-amber-500 flex items-center justify-center shadow-lg">
-                                              <span className="text-[8px] font-black text-white uppercase">Mix</span>
+                                              <span className="text-[8px] font-semibold text-white uppercase">Mix</span>
                                           </div>
                                       )}
                                   </div>
@@ -936,7 +936,7 @@ export function DriveInGrid({
                                       <span className="text-2xl font-light mb-1">+</span>
                                     </button>
                                   ) : (
-                                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest group-hover:opacity-20 text-center px-1">VAZIO</span>
+                                    <span className="text-[8px] font-medium text-slate-400 uppercase tracking-widest group-hover:opacity-20 text-center px-1">VAZIO</span>
                                   )}
                                 </div>
                               )}
@@ -953,7 +953,7 @@ export function DriveInGrid({
               <div className="self-stretch flex flex-col items-center justify-center pl-4 mb-8">
                  <div className="flex flex-col items-center gap-1 opacity-40 hover:opacity-100 transition-opacity">
                     <ArrowLeft size={16} className="text-slate-900 dark:text-white dark:text-white" />
-                    <span className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-900 dark:text-white dark:text-white">FRENTE</span>
+                    <span className="text-[9px] font-semibold uppercase tracking-[0.3em] text-slate-900 dark:text-white dark:text-white">FRENTE</span>
                  </div>
               </div>
             </div>
@@ -962,7 +962,7 @@ export function DriveInGrid({
             <div className="flex gap-4 ml-14 mb-4">
               {depths.map(d => (
                 <div key={`head-${d}`} className="w-28 shrink-0 text-center">
-                  <span className="text-[11px] font-black text-slate-900 dark:text-white dark:text-white uppercase tracking-tighter">
+                  <span className="text-[11px] font-semibold text-slate-900 dark:text-white dark:text-white uppercase tracking-tighter">
                     {d}
                   </span>
                 </div>
@@ -972,7 +972,7 @@ export function DriveInGrid({
             {/* Footer Axis Label Header */}
             <div className="flex ml-14 pt-2 border-t border-slate-100 dark:border-slate-800/50">
                <div className="flex-1 flex justify-center">
-                  <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                  <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
                     PROFUNDIDADE
                   </span>
                </div>
@@ -992,10 +992,10 @@ export function DriveInGrid({
             <div className="space-y-5">
               <div className="flex justify-between items-start">
                 <div>
-                  <span className="text-[10px] font-bold text-blue-500/80 uppercase tracking-widest mb-0.5 block">
+                  <span className="text-[10px] font-medium text-blue-500/80 uppercase tracking-widest mb-0.5 block">
                     Célula
                   </span>
-                  <h3 className="text-xl font-black text-slate-900 dark:text-white dark:text-white uppercase tracking-tighter">
+                  <h3 className="text-xl font-semibold text-slate-900 dark:text-white dark:text-white uppercase tracking-tighter">
                     N{selectedCoords ? selectedCoords.lvl : ""} • P{selectedCoords ? selectedCoords.d : ""}
                   </h3>
                 </div>
@@ -1003,7 +1003,7 @@ export function DriveInGrid({
                   {isEditModeActive && (
                     <button 
                       onClick={() => handleMoveCellToFloor(selectedProduct?.id ? [selectedProduct] : grid[selectedCoords!.lvl][selectedCoords!.d])}
-                      className="px-3 py-1 bg-rose-50 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400 text-[10px] font-black rounded-lg border border-rose-200 dark:border-rose-800/50 hover:bg-rose-100 transition-colors uppercase tracking-tight"
+                      className="px-3 py-1 bg-rose-50 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400 text-[10px] font-semibold rounded-lg border border-rose-200 dark:border-rose-800/50 hover:bg-rose-100 transition-colors uppercase tracking-tight"
                       title="Mover tudo para o Chão"
                     >
                       Esvaziar
@@ -1022,8 +1022,8 @@ export function DriveInGrid({
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-slate-200 dark:border-slate-700 dark:border-slate-700/50">
-                      <th className="py-2 text-[9px] font-black text-slate-400 uppercase tracking-widest w-[45%]">Produto</th>
-                      <th className="py-2 text-center text-[9px] font-black text-slate-400 uppercase tracking-widest">Qtd / Palete</th>
+                      <th className="py-2 text-[9px] font-semibold text-slate-400 uppercase tracking-widest w-[45%]">Produto</th>
+                      <th className="py-2 text-center text-[9px] font-semibold text-slate-400 uppercase tracking-widest">Qtd / Palete</th>
                       <th className="py-2 text-right"></th>
                     </tr>
                   </thead>
@@ -1032,16 +1032,16 @@ export function DriveInGrid({
                       <tr key={idx} className="group hover:bg-slate-50 dark:bg-slate-900/50 dark:hover:bg-slate-800/30 transition-colors">
                         <td className="py-3 pr-2">
                           <div className="flex flex-col">
-                            <span className="text-xs font-black text-slate-900 dark:text-white dark:text-white leading-none mb-1">{p.sku}</span>
+                            <span className="text-xs font-semibold text-slate-900 dark:text-white dark:text-white leading-none mb-1">{p.sku}</span>
                             <span className="text-[9px] text-slate-500 font-medium line-clamp-1 italic">{p.descricao}</span>
                           </div>
                         </td>
                         <td className="py-3 text-center">
                           <div className="flex flex-col items-center">
-                            <span className="text-[10px] font-black text-slate-700 dark:text-slate-300">
+                            <span className="text-[10px] font-semibold text-slate-700 dark:text-slate-300">
                               {Math.round(p.quantidade)} <span className="text-[8px] opacity-40 font-bold uppercase">Un</span>
                             </span>
-                            <span className="text-[8px] font-bold text-slate-400 uppercase">
+                            <span className="text-[8px] font-medium text-slate-400 uppercase">
                               {Number(p.fracao_paletes !== undefined ? p.fracao_paletes : p.paletes).toFixed(2).replace(/\.?0+$/, '')} PT
                             </span>
                           </div>
@@ -1075,7 +1075,7 @@ export function DriveInGrid({
               </div>
                 <button 
                   onClick={() => setSelectedCoords(null)}
-                  className="w-full bg-slate-100 dark:bg-slate-800/80 dark:bg-slate-800 text-slate-600 dark:text-slate-400 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-200 dark:hover:bg-slate-700 transition-all active:scale-95 mt-4"
+                  className="w-full bg-slate-100 dark:bg-slate-800/80 dark:bg-slate-800 text-slate-600 dark:text-slate-400 py-3 rounded-xl font-semibold uppercase text-[10px] tracking-widest hover:bg-slate-200 dark:hover:bg-slate-700 transition-all active:scale-95 mt-4"
                 >
                   Fechar Detalhes
                 </button>
@@ -1083,10 +1083,10 @@ export function DriveInGrid({
           ) : (
             <div className="space-y-6">
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5 block">
+                <span className="text-[10px] font-medium text-slate-400 uppercase tracking-widest mb-0.5 block">
                   Dashboard de Posição
                 </span>
-                <h3 className="text-xl font-black text-slate-900 dark:text-white dark:text-white uppercase tracking-tighter">
+                <h3 className="text-xl font-semibold text-slate-900 dark:text-white dark:text-white uppercase tracking-tighter">
                   {positionId || "Drive-In"}
                 </h3>
               </div>
@@ -1096,8 +1096,8 @@ export function DriveInGrid({
                 {/* Integrated Occupation */}
                 <div>
                   <div className="flex justify-between items-end mb-2">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ocupação</span>
-                    <span className="text-lg font-black text-slate-900 dark:text-white dark:text-white">
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Ocupação</span>
+                    <span className="text-lg font-semibold text-slate-900 dark:text-white dark:text-white">
                       {totalPallets} <span className="text-[11px] text-slate-400 font-bold">/ {capacity} PTs</span>
                     </span>
                   </div>
@@ -1116,20 +1116,20 @@ export function DriveInGrid({
                 <div className="grid grid-cols-1 gap-3">
                   <div className="bg-slate-50/50 dark:bg-slate-800/30 rounded-2xl p-4 border border-slate-100 dark:border-slate-800/50">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total SKUs</span>
+                      <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-widest">Total SKUs</span>
                       <span className={cn(
-                        "text-[8px] font-black px-1.5 py-0.5 rounded uppercase",
+                        "text-[8px] font-semibold px-1.5 py-0.5 rounded uppercase",
                         isMixed ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
                       )}>
                         {isMixed ? "Misturado" : "Mono"}
                       </span>
                     </div>
-                    <p className="text-2xl font-black text-slate-900 dark:text-white dark:text-white">{uniqueSkus}</p>
+                    <p className="text-2xl font-light text-slate-900 dark:text-white dark:text-white">{uniqueSkus}</p>
                   </div>
 
                   <div className="bg-slate-50/50 dark:bg-slate-800/30 rounded-2xl p-4 border border-slate-100 dark:border-slate-800/50">
-                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Unidades Físicas</span>
-                    <p className="text-2xl font-black text-slate-900 dark:text-white dark:text-white">{totalQty.toLocaleString('pt-BR')}</p>
+                    <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-widest block mb-1">Unidades Físicas</span>
+                    <p className="text-2xl font-light text-slate-900 dark:text-white dark:text-white">{totalQty.toLocaleString('pt-BR')}</p>
                   </div>
                 </div>
 
@@ -1153,12 +1153,12 @@ export function DriveInGrid({
           >
             <div className="bg-slate-900 shadow-2xl rounded-2xl p-3 border border-white/10 flex items-center justify-between gap-4 backdrop-blur-md">
               <div className="flex items-center gap-4 pl-4 border-r border-white/10 pr-6">
-                <div className="h-10 w-10 rounded-xl bg-orange-600 flex items-center justify-center text-white font-black shadow-lg shadow-orange-500/30">
+                <div className="h-10 w-10 rounded-xl bg-orange-600 flex items-center justify-center text-white font-semibold shadow-lg shadow-orange-500/30">
                   {selectedGaps.size}
                 </div>
                 <div>
-                  <h4 className="text-xs font-black text-white tracking-tight leading-none">Grades Selecionadas</h4>
-                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1">Ação em lote</p>
+                  <h4 className="text-xs font-semibold text-white tracking-tight leading-none">Grades Selecionadas</h4>
+                  <p className="text-[8px] font-semibold text-slate-400 uppercase tracking-widest mt-1">Ação em lote</p>
                 </div>
               </div>
 
@@ -1169,13 +1169,13 @@ export function DriveInGrid({
                     const [lvl, d] = first.split('-').map(Number);
                     setAddingCoords({ lvl, d });
                   }}
-                  className="h-10 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/20 flex items-center gap-2"
+                  className="h-10 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-semibold uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/20 flex items-center gap-2"
                 >
                   <PlusSquare size={16} /> Adicionar em Lote
                 </button>
                 <button
                   onClick={handleBatchMoveToFloor}
-                  className="h-10 px-4 rounded-xl bg-white/10 hover:bg-rose-600 text-white text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border border-white/10"
+                  className="h-10 px-4 rounded-xl bg-white/10 hover:bg-rose-600 text-white text-[10px] font-semibold uppercase tracking-widest transition-all flex items-center gap-2 border border-white/10"
                 >
                   <Trash2 size={16} /> Esvaziar
                 </button>
@@ -1199,8 +1199,8 @@ export function DriveInGrid({
             {isSelectingProductToEdit && !editingProduct ? (
               <div className="space-y-4">
                 <div className="flex justify-between items-center mb-2">
-                  <h3 className="text-lg font-black text-slate-900 dark:text-white dark:text-white uppercase leading-none">Qual Item Editar?</h3>
-                  <button type="button" onClick={() => setIsSelectingProductToEdit(false)} className="text-slate-400 hover:text-slate-900 dark:text-white dark:hover:text-white font-black text-[10px] uppercase">X Fechar</button>
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white dark:text-white uppercase leading-none">Qual Item Editar?</h3>
+                  <button type="button" onClick={() => setIsSelectingProductToEdit(false)} className="text-slate-400 hover:text-slate-900 dark:text-white dark:hover:text-white font-semibold text-[10px] uppercase">X Fechar</button>
                 </div>
                 <div className="max-h-[60vh] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
                   {products.map((p, idx) => (
@@ -1218,31 +1218,31 @@ export function DriveInGrid({
             ) : editingProduct ? (
               <form onSubmit={handleSaveEdit} className="space-y-4">
                 <div className="flex justify-between items-center mb-2">
-                  <h3 className="text-lg font-black text-slate-900 dark:text-white dark:text-white uppercase leading-none">Editar Item</h3>
-                  <button type="button" onClick={() => setEditingProduct(null)} className="text-slate-400 hover:text-slate-900 dark:text-white dark:hover:text-white font-black text-[10px] uppercase">X Fechar</button>
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white dark:text-white uppercase leading-none">Editar Item</h3>
+                  <button type="button" onClick={() => setEditingProduct(null)} className="text-slate-400 hover:text-slate-900 dark:text-white dark:hover:text-white font-semibold text-[10px] uppercase">X Fechar</button>
                 </div>
                 <div className="bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800 mb-4">
-                  <p className="text-xs font-black text-slate-500 uppercase">Item atual</p>
+                  <p className="text-xs font-semibold text-slate-500 uppercase">Item atual</p>
                   <p className="font-bold text-slate-900 dark:text-white dark:text-white">{editingProduct.sku}</p>
                 </div>
                 <div className="space-y-3">
                    <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
-                        <label className="text-[9px] font-black text-slate-400 uppercase">Nível Anterior</label>
+                        <label className="text-[9px] font-semibold text-slate-400 uppercase">Nível Anterior</label>
                         <input type="text" value={editingProduct._original_nivel} disabled className="w-full text-sm bg-slate-100 dark:bg-slate-800/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 dark:border-slate-700 p-2 rounded-lg text-slate-500" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[9px] font-black text-slate-400 uppercase">Profundidade Anter.</label>
+                        <label className="text-[9px] font-semibold text-slate-400 uppercase">Profundidade Anter.</label>
                         <input type="text" value={editingProduct._original_profundidade} disabled className="w-full text-sm bg-slate-100 dark:bg-slate-800/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 dark:border-slate-700 p-2 rounded-lg text-slate-500" />
                       </div>
                     </div>
 
                     <div className="space-y-1">
                       <div className="flex justify-between items-center">
-                        <label className="text-[9px] font-black text-slate-400 uppercase">Quantidade Total *</label>
+                        <label className="text-[9px] font-semibold text-slate-400 uppercase">Quantidade Total *</label>
                         {editingProduct && (
                           <span className={cn(
-                            "text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded",
+                            "text-[9px] font-semibold uppercase tracking-widest px-1.5 py-0.5 rounded",
                             (availableStocks.find(s => s.produto === editingProduct.sku)?.available || 0) > 0 
                               ? "bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400" 
                               : "bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:bg-slate-800"
@@ -1262,27 +1262,27 @@ export function DriveInGrid({
 
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
-                        <label className="text-[9px] font-black text-slate-400 uppercase">Qtd Tombada</label>
+                        <label className="text-[9px] font-semibold text-slate-400 uppercase">Qtd Tombada</label>
                         <input type="number" value={editingProduct.qtd_tombada || ""} onChange={e => setEditingProduct({...editingProduct, qtd_tombada: Math.floor(Number(e.target.value))})} className="w-full text-sm bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 dark:border-slate-700 p-2 rounded-lg text-slate-900 dark:text-white dark:text-white" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[9px] font-black text-slate-400 uppercase">Qtd Molhado</label>
+                        <label className="text-[9px] font-semibold text-slate-400 uppercase">Qtd Molhado</label>
                         <input type="number" value={editingProduct.qtd_molhado || ""} onChange={e => setEditingProduct({...editingProduct, qtd_molhado: Math.floor(Number(e.target.value))})} className="w-full text-sm bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 dark:border-slate-700 p-2 rounded-lg text-slate-900 dark:text-white dark:text-white" />
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
-                        <label className="text-[9px] font-black text-slate-400 uppercase">Novo Nível *</label>
+                        <label className="text-[9px] font-semibold text-slate-400 uppercase">Novo Nível *</label>
                         <input type="number" value={editingProduct.nivel ?? ""} onChange={e => setEditingProduct({...editingProduct, nivel: Number(e.target.value)})} className="w-full text-sm bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-800 border border-blue-500 p-2 rounded-lg text-slate-900 dark:text-white dark:text-white font-bold" required />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[9px] font-black text-slate-400 uppercase">Nova Profundidade *</label>
+                        <label className="text-[9px] font-semibold text-slate-400 uppercase">Nova Profundidade *</label>
                         <input type="number" value={editingProduct.profundidade ?? ""} onChange={e => setEditingProduct({...editingProduct, profundidade: Number(e.target.value)})} className="w-full text-sm bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-800 border border-blue-500 p-2 rounded-lg text-slate-900 dark:text-white dark:text-white font-bold" required />
                       </div>
                     </div>
                 </div>
-                <button type="submit" disabled={isSubmitting} className="w-full mt-4 p-3 rounded-xl bg-blue-600 text-white font-black text-xs uppercase hover:bg-blue-700 shadow-lg shadow-blue-500/20 disabled:opacity-50">
+                <button type="submit" disabled={isSubmitting} className="w-full mt-4 p-3 rounded-xl bg-blue-600 text-white font-semibold text-xs uppercase hover:bg-blue-700 shadow-lg shadow-blue-500/20 disabled:opacity-50">
                   {isSubmitting ? "Salvando..." : "Salvar Alterações"}
                 </button>
               </form>

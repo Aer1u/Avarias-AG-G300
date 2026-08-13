@@ -57,7 +57,7 @@ export function MetricCard({
         >
             <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                    <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    <div className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         {title}
                     </div>
                     <h3 className="text-xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100">

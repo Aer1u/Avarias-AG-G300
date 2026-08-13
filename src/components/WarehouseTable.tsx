@@ -73,7 +73,7 @@ export function WarehouseTable({
         >
             <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm text-slate-600 dark:text-slate-400">
-                    <thead className="bg-slate-50/80 dark:bg-slate-800/40 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
+                    <thead className="bg-slate-50/80 dark:bg-slate-800/40 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
                         <tr>
                             {selectable && (
                                 <th className="px-6 py-4 w-12 text-center">

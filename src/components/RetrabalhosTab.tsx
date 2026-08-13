@@ -223,7 +223,7 @@ const CompactList = ({ text, colorClass = "text-white" }: { text: string | null 
         onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
         onMouseEnter={handleMouseEnter}
       >
-        <span className="text-[9px] font-black tracking-widest">{items.length} ITENS</span>
+        <span className="text-[9px] font-semibold tracking-widest">{items.length} ITENS</span>
       </div>
 
       {typeof window !== 'undefined' && expanded && 
@@ -902,7 +902,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
           <div 
             key={`${item}-${idx}`} 
             className={cn(
-              "px-3 py-1 rounded-md bg-white/[0.03] border border-white/5 text-[10px] font-mono font-black transition-all hover:bg-white/10 select-all cursor-text",
+              "px-3 py-1 rounded-md bg-white/[0.03] border border-white/5 text-[10px] font-mono font-semibold transition-all hover:bg-white/10 select-all cursor-text",
               colorClass
             )}
           >
@@ -963,8 +963,8 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
           <motion.div key={stat.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm flex items-center gap-4">
             <div className={cn("p-2 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10", stat.color)}><stat.icon size={16} /></div>
             <div>
-              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">{stat.label}</span>
-              <span className="text-xl font-black text-slate-900 dark:text-white font-mono">{stat.value}</span>
+              <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest block">{stat.label}</span>
+              <span className="text-xl font-semibold text-slate-900 dark:text-white font-mono">{stat.value}</span>
             </div>
           </motion.div>
         ))}
@@ -973,7 +973,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
       <div className="flex flex-col lg:flex-row items-center gap-3">
         <div className="flex-1 flex flex-wrap items-center gap-2 bg-slate-50/50 dark:bg-[#0F172A]/50 p-1.5 rounded-2xl border border-slate-200 dark:border-white/5 backdrop-blur-sm">
           {STATUS_OPTIONS.map((status) => (
-            <button key={status.id} onClick={() => setActiveStatus(status.id)} className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all duration-200", activeStatus === status.id ? "bg-blue-600 text-white shadow-md scale-105" : "text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5")}>
+            <button key={status.id} onClick={() => setActiveStatus(status.id)} className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-semibold uppercase tracking-wider transition-all duration-200", activeStatus === status.id ? "bg-blue-600 text-white shadow-md scale-105" : "text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5")}>
               <status.icon size={12} className={cn(activeStatus === status.id ? "text-white" : status.color)} />
               {status.label}
             </button>
@@ -989,7 +989,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
           <div className="flex items-center gap-1 bg-slate-50/50 dark:bg-[#0F172A]/50 p-1 rounded-2xl border border-slate-200 dark:border-white/5">
             <button
               onClick={() => setViewMode("list")}
-              className={cn("p-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer", viewMode === "list" ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:text-slate-200")}
+              className={cn("p-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer", viewMode === "list" ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:text-slate-200")}
               title="Visualização em Lista Hierárquica"
             >
               <List size={14} />
@@ -997,7 +997,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
             </button>
             <button
               onClick={() => setViewMode("grid")}
-              className={cn("p-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer", viewMode === "grid" ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:text-slate-200")}
+              className={cn("p-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer", viewMode === "grid" ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:text-slate-200")}
               title="Visualização em Cards"
             >
               <LayoutGrid size={14} />
@@ -1008,7 +1008,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
           {user && (
             <button 
               onClick={() => setIsNewLoteModalOpen(true)}
-              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl shadow-lg shadow-blue-600/20 transition-all font-black text-[10px] uppercase shrink-0 cursor-pointer"
+              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl shadow-lg shadow-blue-600/20 transition-all font-semibold text-[10px] uppercase shrink-0 cursor-pointer"
             >
               <Plus size={14} />
               Novo Lote
@@ -1267,7 +1267,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                     <div className="space-y-2.5">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Progresso Total</span>
-                        <span className="text-[11px] font-black text-blue-400 font-mono">{Math.round(lote.progresso)}%</span>
+                        <span className="text-[11px] font-semibold text-blue-400 font-mono">{Math.round(lote.progresso)}%</span>
                       </div>
                       <div className="h-2 w-full bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
                         <motion.div 
@@ -1291,7 +1291,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
           ) : (
             <div className="flex flex-col items-center justify-center py-20 bg-slate-50 dark:bg-white/5 rounded-[3rem] border border-dashed border-slate-300 dark:border-white/10">
               <Package size={48} className="text-slate-300 dark:text-white/10 mb-4" />
-              <p className="text-slate-500 font-black text-[10px] uppercase tracking-[0.2em]">Nenhum lote encontrado</p>
+              <p className="text-slate-500 font-semibold text-[10px] uppercase tracking-[0.2em]">Nenhum lote encontrado</p>
             </div>
           )}
         </AnimatePresence>
@@ -1328,7 +1328,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                           initial={{ opacity: 0, scale: 0.9 }}
                           animate={{ opacity: 1, scale: 1 }}
                           onClick={handlePrintQR}
-                          className="flex items-center gap-3 px-6 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-600/30 active:scale-95"
+                          className="flex items-center gap-3 px-6 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-semibold uppercase tracking-widest transition-all shadow-lg shadow-emerald-600/30 active:scale-95"
                         >
                           <Printer size={14} />
                           Imprimir ({selectedReservas.size})
@@ -1346,7 +1346,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                           setEditingViagemGroup({ number: "", items: itemsToGroup });
                           setIsViagemModalOpen(true);
                         }}
-                        className="flex items-center gap-3 px-6 py-3.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-black uppercase tracking-widest transition-all shadow-lg shadow-amber-600/30 active:scale-95"
+                        className="flex items-center gap-3 px-6 py-3.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-semibold uppercase tracking-widest transition-all shadow-lg shadow-amber-600/30 active:scale-95"
                       >
                         <Truck size={14} />
                         Nova Viagem
@@ -1408,10 +1408,10 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                     >
                       {stat.active && <div className="absolute top-0 left-0 w-full h-[1px] bg-blue-500/50" />}
                       <div>
-                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-0.5">{stat.label}</p>
+                        <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest mb-0.5">{stat.label}</p>
                         <div className="flex items-baseline gap-1">
-                          <span className={`text-2xl font-black ${stat.color} font-mono tracking-tighter`}>{stat.value}</span>
-                          <span className="text-[10px] font-black text-slate-400 uppercase font-mono">{stat.unit}</span>
+                          <span className={`text-2xl font-light ${stat.color} font-mono tracking-tighter`}>{stat.value}</span>
+                          <span className="text-[10px] font-semibold text-slate-400 uppercase font-mono">{stat.unit}</span>
                         </div>
                         {stat.unit !== 'emb' && formatPallets(stat.value, selectedLoteDetail.grade) && (
                           <span className={`text-[12px] font-light uppercase tracking-widest ${stat.color} opacity-90`}>
@@ -1459,7 +1459,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                       if (selectionMode) setSelectedReservas(new Set());
                     }}
                     className={cn(
-                      "flex items-center gap-2 px-4 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all",
+                      "flex items-center gap-2 px-4 py-1.5 rounded-xl border text-[9px] font-semibold uppercase tracking-widest transition-all",
                       selectionMode 
                         ? "bg-emerald-600 border-emerald-600 text-white shadow-lg shadow-emerald-600/30" 
                         : "bg-white/5 border-white/10 text-slate-400 hover:text-white hover:bg-white/10"
@@ -1477,7 +1477,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                           .map(i => i.id);
                         setSelectedReservas(new Set(preparedIds));
                       }}
-                      className="flex items-center gap-2 px-4 py-1.5 rounded-xl bg-white/5 border border-white/10 text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-white hover:bg-white/10 transition-all"
+                      className="flex items-center gap-2 px-4 py-1.5 rounded-xl bg-white/5 border border-white/10 text-[9px] font-semibold text-slate-400 uppercase tracking-widest hover:text-white hover:bg-white/10 transition-all"
                     >
                       <QrCode size={12} />
                       Selecionar Preparados
@@ -1491,7 +1491,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                         setEditingViagemGroup({ number: "", items: selectedItems });
                         setIsViagemModalOpen(true);
                       }}
-                      className="flex items-center gap-2 px-4 py-1.5 rounded-xl bg-blue-600 text-[9px] font-black text-white uppercase tracking-widest hover:bg-blue-500 transition-all shadow-lg shadow-blue-600/20"
+                      className="flex items-center gap-2 px-4 py-1.5 rounded-xl bg-blue-600 text-[9px] font-semibold text-white uppercase tracking-widest hover:bg-blue-500 transition-all shadow-lg shadow-blue-600/20"
                     >
                       <Truck size={12} />
                       Vincular à Viagem
@@ -1524,12 +1524,12 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                           <Filter size={20} className="text-slate-600" />
                                         </div>
                                         <div>
-                                          <p className="text-[13px] font-black text-slate-400 uppercase tracking-widest">Nenhuma reserva encontrada</p>
+                                          <p className="text-[13px] font-semibold text-slate-400 uppercase tracking-widest">Nenhuma reserva encontrada</p>
                                           <p className="text-[11px] text-slate-600 mt-1">Não há registros com a situação selecionada.</p>
                                         </div>
                                         <button
                                           onClick={() => setModalSituacaoFilter('all')}
-                                          className="text-[10px] font-black text-blue-400 uppercase tracking-widest hover:text-blue-300 transition-colors"
+                                          className="text-[10px] font-semibold text-blue-400 uppercase tracking-widest hover:text-blue-300 transition-colors"
                                         >
                                           Limpar filtro
                                         </button>
@@ -1569,14 +1569,14 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                         >
                                           <div className="flex items-center gap-8">
                                             <div className="flex flex-col">
-                                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Viagem</span>
+                                              <span className="text-[10px] font-medium text-slate-500 uppercase tracking-widest mb-1">Viagem</span>
                                               <span className="text-lg font-mono font-bold text-white tracking-wider">
                                                 {viagemKey === 'SEM_VIAGEM' ? 'NÃO ATRIBUÍDA' : `#${viagemKey}`}
                                               </span>
                                             </div>
                                             
                                             <div className="flex flex-col">
-                                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Data de Envio</span>
+                                              <span className="text-[10px] font-medium text-slate-500 uppercase tracking-widest mb-1">Data de Envio</span>
                                               <div className="flex items-center gap-2">
                                                 <Calendar size={14} className="text-blue-400 opacity-70" />
                                                 <span className="text-sm font-medium text-slate-300">
@@ -1586,7 +1586,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                             </div>
 
                                             <div className="flex flex-col">
-                                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Turno</span>
+                                              <span className="text-[10px] font-medium text-slate-500 uppercase tracking-widest mb-1">Turno</span>
                                               <div className="flex items-center gap-2">
                                                 <Clock size={14} className="text-amber-400 opacity-70" />
                                                 <span className="text-sm font-bold text-white tracking-wider uppercase">
@@ -1596,7 +1596,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                             </div>
 
                                             <div className="flex flex-col">
-                                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Volume Total</span>
+                                              <span className="text-[10px] font-medium text-slate-500 uppercase tracking-widest mb-1">Volume Total</span>
                                               <div className="flex items-baseline gap-1">
                                                 <span className="text-sm font-bold text-emerald-400">
                                                   {items.reduce((acc, curr) => acc + (curr.quantidade_enviada || 0), 0)}
@@ -1606,9 +1606,9 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                             </div>
 
                                             <div className="flex flex-col">
-                                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Situação</span>
+                                              <span className="text-[10px] font-medium text-slate-500 uppercase tracking-widest mb-1">Situação</span>
                                               <div className={cn(
-                                                "px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest border",
+                                                "px-2 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-widest border",
                                                 items.every(i => (i.situacao || '').toLowerCase() === 'armazenado')
                                                   ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500"
                                                   : "bg-blue-600/10 border-blue-500/20 text-blue-400"
@@ -1853,7 +1853,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsNewLoteModalOpen(false)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
             <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="relative w-full max-w-md bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-white/10 rounded-[2.5rem] p-8 shadow-2xl overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-600 to-indigo-600" />
-              <h2 className="text-xl font-black text-slate-900 dark:text-white mb-6 flex items-center gap-3">
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-6 flex items-center gap-3">
                 <Plus className="text-blue-600 dark:text-blue-500" /> Novo Lote de Retrabalho
               </h2>
               <form onSubmit={async (e) => {
@@ -1875,7 +1875,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                 }
               }} className="space-y-4">
                 <div>
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Número do Lote</label>
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5 block">Número do Lote</label>
                   <input 
                     name="lote" 
                     required 
@@ -1886,16 +1886,16 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Código do Produto (SKU)</label>
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5 block">Código do Produto (SKU)</label>
                   <input name="codigo" required type="text" className="w-full bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-blue-500/50 transition-all" placeholder="Ex: 0685-04" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Embalagens</label>
+                    <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5 block">Embalagens</label>
                     <input name="embalagens" required type="number" className="w-full bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-blue-500/50 transition-all" placeholder="Qtd" />
                   </div>
                   <div>
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Status Inicial</label>
+                    <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5 block">Status Inicial</label>
                     <select name="status" className="w-full bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white text-xs focus:outline-none focus:border-blue-500/50 transition-all appearance-none">
                       <option value="Em fila">Em fila</option>
                       <option value="Aguardando">Aguardando</option>
@@ -1904,8 +1904,8 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                   </div>
                 </div>
                 <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setIsNewLoteModalOpen(false)} className="flex-1 px-4 py-3 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-900 dark:text-white text-[11px] font-black uppercase transition-all">Cancelar</button>
-                  <button type="submit" className="flex-2 px-8 py-3 rounded-xl bg-blue-600 text-white text-[11px] font-black uppercase shadow-lg shadow-blue-500/20 transition-all">Criar Lote</button>
+                  <button type="button" onClick={() => setIsNewLoteModalOpen(false)} className="flex-1 px-4 py-3 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-900 dark:text-white text-[11px] font-semibold uppercase transition-all">Cancelar</button>
+                  <button type="submit" className="flex-2 px-8 py-3 rounded-xl bg-blue-600 text-white text-[11px] font-semibold uppercase shadow-lg shadow-blue-500/20 transition-all">Criar Lote</button>
                 </div>
               </form>
             </motion.div>
@@ -1917,10 +1917,10 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsNewReservaModalOpen(false)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
             <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="relative w-full max-w-md bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-white/10 rounded-[2.5rem] p-8 shadow-2xl overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-600 to-teal-600" />
-              <h2 className="text-xl font-black text-slate-900 dark:text-white mb-2 flex items-center gap-3">
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-2 flex items-center gap-3">
                 <Plus className="text-emerald-500" /> Nova Reserva
               </h2>
-              <p className="text-[10px] text-slate-500 uppercase tracking-widest font-black mb-6">Lote: {selectedLoteForReserva}</p>
+              <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold mb-6">Lote: {selectedLoteForReserva}</p>
               
               <form onSubmit={async (e) => {
                 e.preventDefault();
@@ -1958,22 +1958,22 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                 }
               }} className="space-y-4">
                 <div>
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Quantidade Enviada</label>
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5 block">Quantidade Enviada</label>
                   <input name="quantidade_enviada" required type="number" className="w-full bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-emerald-500/50 transition-all" placeholder="Ex: 500" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Reserva A501</label>
+                    <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5 block">Reserva A501</label>
                     <input name="reserva_a501" className="w-full bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-emerald-500/50 transition-all" placeholder="OP" />
                   </div>
                   <div>
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Reserva G501</label>
+                    <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5 block">Reserva G501</label>
                     <input name="reserva_g501" className="w-full bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-emerald-500/50 transition-all" placeholder="OP" />
                   </div>
                 </div>
                 <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setIsNewReservaModalOpen(false)} className="flex-1 px-4 py-3 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-900 dark:text-white text-[11px] font-black uppercase transition-all">Cancelar</button>
-                  <button type="submit" className="flex-2 px-8 py-3 rounded-xl bg-emerald-600 text-white text-[11px] font-black uppercase shadow-lg shadow-emerald-500/20 transition-all">Adicionar</button>
+                  <button type="button" onClick={() => setIsNewReservaModalOpen(false)} className="flex-1 px-4 py-3 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-900 dark:text-white text-[11px] font-semibold uppercase transition-all">Cancelar</button>
+                  <button type="submit" className="flex-2 px-8 py-3 rounded-xl bg-emerald-600 text-white text-[11px] font-semibold uppercase shadow-lg shadow-emerald-500/20 transition-all">Adicionar</button>
                 </div>
               </form>
             </motion.div>
@@ -1987,10 +1987,10 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setEditingLote(null)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
             <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="relative w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 shadow-xl overflow-hidden">
-              <h2 className="text-xl font-black text-slate-900 dark:text-white mb-2 flex items-center gap-3">
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-2 flex items-center gap-3">
                 <Edit3 className="text-blue-600 dark:text-blue-500" /> Editar Lote
               </h2>
-              <p className="text-[10px] text-slate-500 uppercase tracking-widest font-black mb-6">Lote: {editingLote.lote}</p>
+              <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold mb-6">Lote: {editingLote.lote}</p>
               
               <form onSubmit={async (e) => {
                 e.preventDefault();
@@ -2010,18 +2010,18 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
               }} className="space-y-6">
                 <div className="space-y-4">
                   <div>
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block ml-1">Quantidade de Embalagens</label>
+                    <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5 block ml-1">Quantidade de Embalagens</label>
                     <input 
                       name="embalagens" 
                       type="number" 
                       defaultValue={editingLote.totalEmbalagens} 
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-black text-slate-900 dark:text-white font-mono focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-slate-400" 
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-semibold text-slate-900 dark:text-white font-mono focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-slate-400" 
                       placeholder="Qtd total do lote" 
                     />
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block ml-1">Status do Lote</label>
+                    <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1 block ml-1">Status do Lote</label>
                 <div className="grid grid-cols-2 gap-2">
   {[
     { id: 'Aguardando', label: 'Aguardando', icon: Hourglass, color: 'amber' },
@@ -2035,7 +2035,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
       type="button"
       onClick={() => setTempStatus(status.id)}
       className={cn(
-        "flex items-center gap-3 px-4 py-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all",
+        "flex items-center gap-3 px-4 py-3 rounded-xl border text-[10px] font-semibold uppercase tracking-widest transition-all",
         status.id === 'Em fila' && "col-span-2",
         tempStatus === status.id ? `bg-${status.color}-600 text-white border-${status.color}-400 shadow-lg` : "bg-white/5 border-white/10 text-slate-500 hover:bg-white/10"
       )}
@@ -2049,8 +2049,8 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                   </div>
                 </div>
                 <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setEditingLote(null)} className="flex-1 px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-white text-[11px] font-black uppercase transition-all">Cancelar</button>
-                  <button type="submit" className="flex-2 px-8 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-black uppercase shadow-sm transition-all">Salvar</button>
+                  <button type="button" onClick={() => setEditingLote(null)} className="flex-1 px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-white text-[11px] font-semibold uppercase transition-all">Cancelar</button>
+                  <button type="submit" className="flex-2 px-8 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-semibold uppercase shadow-sm transition-all">Salvar</button>
                 </div>
               </form>
             </motion.div>
@@ -2083,7 +2083,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                       <Truck size={24} />
                     </div>
                     <div>
-                      <h2 className="text-xl font-black text-white uppercase tracking-tight">
+                      <h2 className="text-xl font-semibold text-white uppercase tracking-tight">
                         {editingViagemGroup.number && editingViagemGroup.number !== 'SEM_VIAGEM' ? 'Editar Viagem' : 'Nova Viagem'}
                       </h2>
                     </div>
@@ -2172,7 +2172,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                   {/* Common Header Fields */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">Nº da Viagem</label>
+                      <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest ml-1 block">Nº da Viagem</label>
                       <div className="relative group">
                         <Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 group-focus-within:text-amber-500 transition-colors" />
                         <input 
@@ -2182,26 +2182,26 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                           autoFocus
                           defaultValue={editingViagemGroup.number && editingViagemGroup.number !== "SEM_VIAGEM" ? editingViagemGroup.number : ""}
                           placeholder="Ex: 12345"
-                          className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-sm font-black text-white font-mono focus:outline-none focus:border-amber-500/50 focus:bg-amber-500/5 transition-all no-spinner"
+                          className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-sm font-semibold text-white font-mono focus:outline-none focus:border-amber-500/50 focus:bg-amber-500/5 transition-all no-spinner"
                         />
                       </div>
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">Data de Envio</label>
+                      <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest ml-1 block">Data de Envio</label>
                       <div className="relative group">
                         <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 group-focus-within:text-blue-500 transition-colors" />
                         <input 
                           name="viagem_date"
                           type="date"
                           defaultValue={editingViagemGroup.items[0]?.enviado_ao_cd?.split('T')[0] || ""}
-                          className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-sm font-black text-white font-mono focus:outline-none focus:border-blue-500/50 focus:bg-blue-500/5 transition-all [color-scheme:dark]"
+                          className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-sm font-semibold text-white font-mono focus:outline-none focus:border-blue-500/50 focus:bg-blue-500/5 transition-all [color-scheme:dark]"
                         />
                       </div>
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">Turno da Viagem</label>
+                      <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest ml-1 block">Turno da Viagem</label>
                       <div className="grid grid-cols-3 gap-2">
                         {[1, 2, 3].map((t) => (
                           <label key={t} className="relative group cursor-pointer">
@@ -2212,7 +2212,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                               defaultChecked={editingViagemGroup.items[0]?.turno_da_viagem === t}
                               className="peer sr-only" 
                             />
-                            <div className="flex items-center justify-center py-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-500 peer-checked:bg-amber-600 peer-checked:text-white peer-checked:border-amber-400 transition-all font-black text-xs">
+                            <div className="flex items-center justify-center py-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-500 peer-checked:bg-amber-600 peer-checked:text-white peer-checked:border-amber-400 transition-all font-semibold text-xs">
                               TURNO {t}
                             </div>
                           </label>
@@ -2225,13 +2225,13 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                   {!editingViagemGroup.number || editingViagemGroup.number === 'SEM_VIAGEM' ? (
                     <div className="space-y-4">
                       <div className="flex items-center justify-between px-2">
-                        <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                        <h3 className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest flex items-center gap-2">
                           <Table size={12} /> Tabela de Lançamento
                         </h3>
                         <button 
                           type="button" 
                           onClick={() => setExcelRows(Array.from({ length: 20 }, () => ({ a501: '', g501: '', qtd: '' })))}
-                          className="text-[9px] font-black text-rose-400 hover:text-rose-300 uppercase tracking-widest flex items-center gap-1.5 transition-colors"
+                          className="text-[9px] font-semibold text-rose-400 hover:text-rose-300 uppercase tracking-widest flex items-center gap-1.5 transition-colors"
                         >
                           <Trash2 size={12} /> Limpar
                         </button>
@@ -2243,10 +2243,10 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                         <table className="w-full text-left border-collapse">
                           <thead>
                             <tr className="bg-white/5">
-                              <th className="px-4 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest border-r border-white/5 w-12 text-center">#</th>
-                              <th className="px-4 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest border-r border-white/5">Reserva A501</th>
-                              <th className="px-4 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest border-r border-white/5">Reserva G501</th>
-                              <th className="px-4 py-3 text-[9px] font-black text-slate-500 uppercase tracking-widest">Quantidade</th>
+                              <th className="px-4 py-3 text-[9px] font-semibold text-slate-500 uppercase tracking-widest border-r border-white/5 w-12 text-center">#</th>
+                              <th className="px-4 py-3 text-[9px] font-semibold text-slate-500 uppercase tracking-widest border-r border-white/5">Reserva A501</th>
+                              <th className="px-4 py-3 text-[9px] font-semibold text-slate-500 uppercase tracking-widest border-r border-white/5">Reserva G501</th>
+                              <th className="px-4 py-3 text-[9px] font-semibold text-slate-500 uppercase tracking-widest">Quantidade</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -2301,7 +2301,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                       }}
                                       onPaste={(e) => handleSmartPaste(e, 0)}
                                       placeholder="Digitar..."
-                                      className="w-full bg-transparent px-3 py-2 text-[11px] font-mono font-black text-white focus:outline-none placeholder:text-slate-700"
+                                      className="w-full bg-transparent px-3 py-2 text-[11px] font-mono font-semibold text-white focus:outline-none placeholder:text-slate-700"
                                     />
                                   </td>
                                   <td className="px-1 py-1 border-r border-white/5">
@@ -2314,7 +2314,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                       }}
                                       onPaste={(e) => handleSmartPaste(e, 1)}
                                       placeholder="Digitar..."
-                                      className="w-full bg-transparent px-3 py-2 text-[11px] font-mono font-black text-white focus:outline-none placeholder:text-slate-700"
+                                      className="w-full bg-transparent px-3 py-2 text-[11px] font-mono font-semibold text-white focus:outline-none placeholder:text-slate-700"
                                     />
                                   </td>
                                   <td className="px-1 py-1">
@@ -2327,7 +2327,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                       }}
                                       onPaste={(e) => handleSmartPaste(e, 2)}
                                       placeholder="Qtd..."
-                                      className="w-full bg-transparent px-3 py-2 text-[11px] font-mono font-black text-white focus:outline-none placeholder:text-slate-700"
+                                      className="w-full bg-transparent px-3 py-2 text-[11px] font-mono font-semibold text-white focus:outline-none placeholder:text-slate-700"
                                     />
                                   </td>
                                 </tr>
@@ -2339,7 +2339,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                       <button 
                         type="button"
                         onClick={() => setExcelRows([...excelRows, { a501: '', g501: '', qtd: '' }])}
-                        className="w-full py-2 border border-dashed border-white/10 rounded-xl text-[9px] font-black text-slate-500 uppercase tracking-widest hover:bg-white/5 hover:text-slate-300 transition-all"
+                        className="w-full py-2 border border-dashed border-white/10 rounded-xl text-[9px] font-semibold text-slate-500 uppercase tracking-widest hover:bg-white/5 hover:text-slate-300 transition-all"
                       >
                         + Adicionar Linha
                       </button>
@@ -2357,15 +2357,15 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                   </button>
                                 </th>
                               )}
-                              <th className="w-10 px-2 py-2 text-[10px] font-bold text-slate-400 text-center border-r border-b border-slate-700/60">#</th>
-                              <th className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-r border-b border-slate-700/60">Reserva A</th>
-                              <th className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-r border-b border-slate-700/60">Reserva G</th>
-                              <th className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center border-r border-b border-slate-700/60">Volume</th>
-                              <th className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center border-r border-b border-slate-700/60">Criado Em</th>
-                              <th className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-r border-b border-slate-700/60">Estorno A</th>
-                              <th className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-r border-b border-slate-700/60">Estorno G</th>
-                              <th className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center border-r border-b border-slate-700/60">Retornado</th>
-                              <th className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-r border-b border-slate-700/60">Situação</th>
+                              <th className="w-10 px-2 py-2 text-[10px] font-medium text-slate-400 text-center border-r border-b border-slate-700/60">#</th>
+                              <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider border-r border-b border-slate-700/60">Reserva A</th>
+                              <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider border-r border-b border-slate-700/60">Reserva G</th>
+                              <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider text-center border-r border-b border-slate-700/60">Volume</th>
+                              <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider text-center border-r border-b border-slate-700/60">Criado Em</th>
+                              <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider border-r border-b border-slate-700/60">Estorno A</th>
+                              <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider border-r border-b border-slate-700/60">Estorno G</th>
+                              <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider text-center border-r border-b border-slate-700/60">Retornado</th>
+                              <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider border-r border-b border-slate-700/60">Situação</th>
                               <th className="w-9 border-b border-slate-700/60"></th>
                             </tr>
                           </thead>
@@ -2511,13 +2511,13 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                     <button 
                       type="button"
                       onClick={() => setIsViagemModalOpen(false)}
-                      className="flex-1 py-4 rounded-2xl bg-white/5 border border-white/10 text-slate-400 font-black text-[10px] uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all"
+                      className="flex-1 py-4 rounded-2xl bg-white/5 border border-white/10 text-slate-400 font-semibold text-[10px] uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all"
                     >
                       Cancelar
                     </button>
                     <button 
                       type="submit"
-                      className="flex-[2] py-4 rounded-2xl bg-amber-600 hover:bg-amber-500 text-white font-black text-[11px] uppercase tracking-[0.2em] shadow-xl shadow-amber-600/20 transition-all flex items-center justify-center gap-3"
+                      className="flex-[2] py-4 rounded-2xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-[11px] uppercase tracking-[0.2em] shadow-xl shadow-amber-600/20 transition-all flex items-center justify-center gap-3"
                     >
                       <Save size={16} />
                       Confirmar Viagem
@@ -2553,8 +2553,8 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                 {scanToast.type === 'success' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
               </div>
               <div>
-                <div className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">Scanner Automático</div>
-                <div className="text-sm font-black uppercase tracking-tight">{scanToast.message}</div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.2em] opacity-50">Scanner Automático</div>
+                <div className="text-sm font-semibold uppercase tracking-tight">{scanToast.message}</div>
               </div>
               <div className="ml-4 w-1 h-8 rounded-full bg-current opacity-20 animate-pulse" />
             </div>

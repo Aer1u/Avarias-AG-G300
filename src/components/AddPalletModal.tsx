@@ -147,10 +147,10 @@ export function AddPalletModal({
                 <Box size={16} strokeWidth={2.5} />
               </div>
               <div>
-                <h2 className="text-sm font-black text-slate-900 dark:text-white tracking-tight">Adicionar Palete</h2>
-                <span className="text-[10px] font-bold text-slate-400">
+                <h2 className="text-sm font-semibold text-slate-900 dark:text-white tracking-tight">Adicionar Palete</h2>
+                <span className="text-[10px] font-medium text-slate-400">
                   Nível {destinationLevel} · Prof. {destinationDepth}
-                  {isMix && <span className="ml-2 text-blue-500 font-black">· MIX {nextId}</span>}
+                  {isMix && <span className="ml-2 text-blue-500 font-semibold">· MIX {nextId}</span>}
                 </span>
               </div>
             </div>
@@ -167,13 +167,13 @@ export function AddPalletModal({
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-700/50">
-                  <th className="text-left px-4 py-2.5 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[40%]">Código</th>
-                  <th className="text-center px-2 py-2.5 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[10%]">Disp.</th>
-                  <th className="text-center px-2 py-2.5 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[16%]">Total</th>
-                  <th className="text-center px-2 py-2.5 text-[10px] font-black text-blue-400 uppercase tracking-widest w-[14%]">
+                  <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-400 uppercase tracking-widest w-[40%]">Código</th>
+                  <th className="text-center px-2 py-2.5 text-[10px] font-semibold text-slate-400 uppercase tracking-widest w-[10%]">Disp.</th>
+                  <th className="text-center px-2 py-2.5 text-[10px] font-semibold text-slate-400 uppercase tracking-widest w-[16%]">Total</th>
+                  <th className="text-center px-2 py-2.5 text-[10px] font-semibold text-blue-400 uppercase tracking-widest w-[14%]">
                     <span className="flex items-center justify-center gap-1"><Droplet size={9} />Molhado</span>
                   </th>
-                  <th className="text-center px-2 py-2.5 text-[10px] font-black text-rose-400 uppercase tracking-widest w-[14%]">
+                  <th className="text-center px-2 py-2.5 text-[10px] font-semibold text-rose-400 uppercase tracking-widest w-[14%]">
                     <span className="flex items-center justify-center gap-1"><AlertCircle size={9} />Tombado</span>
                   </th>
                   <th className="w-8" />
@@ -214,7 +214,7 @@ export function AddPalletModal({
                             }}
                             placeholder="Buscar código..."
                             className={cn(
-                             "w-full h-9 px-3 pr-8 rounded-lg outline-none text-xs font-black font-mono transition-all border",
+                             "w-full h-9 px-3 pr-8 rounded-lg outline-none text-xs font-semibold font-mono transition-all border",
                               "bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700",
                               "text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500",
                               "focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15",
@@ -245,14 +245,14 @@ export function AddPalletModal({
                                           selectedIndex === idx ? "bg-blue-50 dark:bg-blue-500/10" : "hover:bg-slate-50 dark:hover:bg-slate-800/50"
                                         )}
                                       >
-                                        <span className="text-xs font-black font-mono text-slate-900 dark:text-white">{stock.produto}</span>
+                                        <span className="text-xs font-semibold font-mono text-slate-900 dark:text-white">{stock.produto}</span>
                                         <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded", stock.available > 0 ? "bg-slate-100 dark:bg-slate-800 text-slate-500" : "bg-red-100 text-red-600")}>
                                           {stock.available} un
                                         </span>
                                       </button>
                                     ))}
                                   {availableStocks.filter(s => s.produto.toUpperCase().includes(item.sku.toUpperCase())).length === 0 && (
-                                    <div className="py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nenhum encontrado</div>
+                                    <div className="py-4 text-center text-[10px] font-medium text-slate-400 uppercase tracking-widest">Nenhum encontrado</div>
                                   )}
                                 </div>
                               </motion.div>
@@ -264,7 +264,7 @@ export function AddPalletModal({
                       {/* DISP. */}
                       <td className="px-2 py-2 text-center">
                         <span className={cn(
-                          "text-xs font-black tabular-nums",
+                          "text-xs font-semibold tabular-nums",
                           !stockInfo ? "text-slate-300 dark:text-slate-700" :
                           stockInfo.available > 0 ? "text-slate-600 dark:text-slate-300" : "text-red-500"
                         )}>
@@ -278,7 +278,7 @@ export function AddPalletModal({
                           onChange={(e) => handleChangeQtyRaw(item.id, 'qty', e.target.value)}
                           min={0} placeholder="0"
                           className={cn(
-                            "w-full h-9 px-1 rounded-lg border outline-none text-sm font-black text-center transition-all",
+                            "w-full h-9 px-1 rounded-lg border outline-none text-sm font-semibold text-center transition-all",
                             "bg-white dark:bg-slate-800/80",
                             !item.sku ? "opacity-30 cursor-not-allowed border-slate-200 dark:border-slate-700" :
                             isMaxedOut ? "border-amber-400 text-amber-600 bg-amber-50/30" : "border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
@@ -292,7 +292,7 @@ export function AddPalletModal({
                           onChange={(e) => handleChangeQtyRaw(item.id, 'qtyWet', e.target.value)}
                           min={0} placeholder="0"
                           className={cn(
-                            "w-full h-9 px-1 rounded-lg border outline-none text-sm font-black text-center transition-all bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-600",
+                            "w-full h-9 px-1 rounded-lg border outline-none text-sm font-semibold text-center transition-all bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-600",
                             (!item.sku || !item.qty) ? "opacity-30 cursor-not-allowed" : "text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/40"
                           )}
                         />
@@ -304,7 +304,7 @@ export function AddPalletModal({
                           onChange={(e) => handleChangeQtyRaw(item.id, 'qtyTilted', e.target.value)}
                           min={0} placeholder="0"
                           className={cn(
-                            "w-full h-9 px-1 rounded-lg border outline-none text-sm font-black text-center transition-all bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-600",
+                            "w-full h-9 px-1 rounded-lg border outline-none text-sm font-semibold text-center transition-all bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-600",
                             (!item.sku || !item.qty) ? "opacity-30 cursor-not-allowed" : "text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-500/40"
                           )}
                         />
@@ -343,7 +343,7 @@ export function AddPalletModal({
             </button>
             <button onClick={handleSave} disabled={!hasAtLeastOneValid}
               className={cn(
-                "px-6 py-2 rounded-xl text-sm font-black text-white flex items-center gap-2 transition-all",
+                "px-6 py-2 rounded-xl text-sm font-semibold text-white flex items-center gap-2 transition-all",
                 hasAtLeastOneValid ? "bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-500/20" : "bg-slate-300 dark:bg-slate-700 text-slate-400 cursor-not-allowed"
               )}
             >
