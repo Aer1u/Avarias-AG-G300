@@ -747,10 +747,10 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
     const m: Record<string, number> = {}
     const parseBrNum = (val: any): number => {
       if (val === null || val === undefined || val === '') return 0
-      if (typeof val === 'number') return val
+      if (typeof val === 'number') return Math.round(val)
       const clean = String(val).replace(/\s/g, '').replace(/\./g, '').replace(',', '.')
       const parsed = parseFloat(clean)
-      return isNaN(parsed) ? 0 : parsed
+      return isNaN(parsed) ? 0 : Math.round(parsed)
     }
 
     historicoData.forEach(r => {
@@ -769,7 +769,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
     const m: Record<string, number> = {}
     pedidas.filter(r => !r.isNew).forEach(r => {
       const c = String(r.codigo || "").trim().toUpperCase()
-      if (c) m[c] = (m[c] || 0) + (Number(r.quantidade) || 0)
+      if (c) m[c] = (m[c] || 0) + Math.round(Number(r.quantidade) || 0)
     })
     return m
   }, [pedidas])
@@ -778,7 +778,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
     const m: Record<string, number> = {}
     atuais.filter(r => !r.isNew).forEach(r => {
       const c = String(r.codigo || "").trim().toUpperCase()
-      if (c) m[c] = (m[c] || 0) + (Number(r.quantidade) || 0)
+      if (c) m[c] = (m[c] || 0) + Math.round(Number(r.quantidade) || 0)
     })
     return m
   }, [atuais])
@@ -787,7 +787,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
     const m: Record<string, number> = {}
     chegando.filter(r => !r.isNew).forEach(r => {
       const c = String(r.codigo || "").trim().toUpperCase()
-      if (c) m[c] = (m[c] || 0) + (Number(r.quantidade) || 0)
+      if (c) m[c] = (m[c] || 0) + Math.round(Number(r.quantidade) || 0)
     })
     return m
   }, [chegando])
@@ -799,10 +799,10 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
 
     return Array.from(skusSet).map(code => {
       const base = baseCodigos.find(b => String(b["Código"]).trim().toUpperCase() === code)
-      const avarias = avariasPerSku[code] || 0
-      const estoque = atuaisPerSku[code] || 0
-      const p = pedidasPerSku[code] || 0
-      const c = chegandoPerSku[code] || 0
+      const avarias = Math.round(avariasPerSku[code] || 0)
+      const estoque = Math.round(atuaisPerSku[code] || 0)
+      const p = Math.round(pedidasPerSku[code] || 0)
+      const c = Math.round(chegandoPerSku[code] || 0)
       const totalCoberto = estoque + p + c
       const deficit = Math.max(0, avarias - totalCoberto)
       const saldo = totalCoberto - avarias
