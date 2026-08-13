@@ -24,6 +24,7 @@ import {
   Boxes,
   ArrowUpRight,
   ArrowDownRight,
+  Wrench,
 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { supabase } from "@/lib/supabase"
@@ -336,70 +337,7 @@ function AvariasGrowthChart({ pedidas, allSkuRows }: GrowthChartProps) {
         </div>
       </div>
 
-      {/* Detail panel for selected point */}
-      {activePoint && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="sm:col-span-1 bg-slate-900/60 border border-slate-800/60 rounded-xl p-4 flex flex-col gap-2">
-            <p className="text-[9px] font-medium uppercase tracking-widest text-slate-400 font-mono mb-1">{activePoint.label}</p>
-            <div className="flex flex-col gap-1.5">
-              {[
-                { label: 'Total Avarias', val: activePoint.totalAvarias.toLocaleString('pt-BR'), cls: 'text-rose-400' },
-                { label: 'Solicitado', val: activePoint.totalSolicitado.toLocaleString('pt-BR'), cls: 'text-sky-400' },
-                { label: 'Déficit', val: activePoint.totalDeficit.toLocaleString('pt-BR'), cls: 'text-amber-400' },
-                { label: 'SKUs', val: String(activePoint.produtos.length), cls: 'text-white' },
-              ].map((row) => (
-                <div key={row.label} className="flex justify-between items-center border-b border-slate-800/40 pb-1 last:border-0 last:pb-0">
-                  <span className="text-[10px] text-slate-400 font-mono">{row.label}</span>
-                  <span className={cn("font-mono text-[11px] font-normal", row.cls)}>{row.val}</span>
-                </div>
-              ))}
-            </div>
-          </div>
 
-          <div className="sm:col-span-2 bg-slate-900/60 border border-slate-800/60 rounded-xl overflow-hidden">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-slate-800 bg-[#0f172a]/40">
-                  <th className="px-4 py-2.5 font-mono text-[9px] font-medium text-slate-500 uppercase tracking-wider">SKU</th>
-                  <th className="px-4 py-2.5 font-mono text-[9px] font-medium text-slate-500 uppercase tracking-wider text-right">Solicitado</th>
-                  <th className="px-4 py-2.5 font-mono text-[9px] font-medium text-rose-400/80 uppercase tracking-wider text-right">Avarias</th>
-                  <th className="px-4 py-2.5 font-mono text-[9px] font-medium text-amber-400/80 uppercase tracking-wider text-right">Déficit</th>
-                  <th className="px-4 py-2.5 font-mono text-[9px] font-medium text-slate-500 uppercase tracking-wider text-right">Share</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/50">
-                {activePoint.produtos.map((prod, pi) => {
-                  const pct = activePoint.totalSolicitado > 0 ? Math.round((prod.solicitado / activePoint.totalSolicitado) * 100) : 0
-                  return (
-                    <tr key={pi} className={cn("hover:bg-slate-700/20 transition-colors", pi % 2 === 0 ? "bg-transparent" : "bg-slate-800/20")}>
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-4 rounded-sm flex-shrink-0" style={{ background: prod.color.fill }} />
-                          <div>
-                            <p className="font-mono text-[11px] font-normal text-white">{prod.codigo}</p>
-                            <p className="font-mono text-[9px] text-slate-500 truncate max-w-[100px]">{prod.descricao}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-2.5 font-mono text-[11px] font-normal text-sky-400 text-right">{prod.solicitado.toLocaleString('pt-BR')}</td>
-                      <td className="px-4 py-2.5 font-mono text-[11px] font-normal text-rose-400 text-right">{prod.avarias.toLocaleString('pt-BR')}</td>
-                      <td className="px-4 py-2.5 font-mono text-[11px] font-normal text-amber-400 text-right">{prod.deficit.toLocaleString('pt-BR')}</td>
-                      <td className="px-4 py-2.5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <div className="w-12 h-1.5 rounded-full bg-slate-800 overflow-hidden">
-                            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: prod.color.fill }} />
-                          </div>
-                          <span className="font-mono text-[10px] text-slate-400">{pct}%</span>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
@@ -557,8 +495,12 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
   const [pedidas, setPedidas] = useState<EmbalagemRegistro[]>([])
   const [atuais, setAtuais] = useState<EmbalagemRegistro[]>([])
   const [chegando, setChegando] = useState<EmbalagemRegistro[]>([])
+  const [estoqueG300, setEstoqueG300] = useState<any[]>([])
+  const [estoqueConserto, setEstoqueConserto] = useState<any[]>([])
+  const [pedidosBa, setPedidosBa] = useState<any[]>([])
+  const [togglingBa, setTogglingBa] = useState(false)
   
-  const [subTab, setSubTab] = useState<"comparativo" | "pedidas" | "atuais" | "chegando">("comparativo")
+  const [subTab, setSubTab] = useState<"comparativo" | "pedidas" | "atuais" | "chegando" | "estoque_g300" | "conserto">("comparativo")
   const [search, setSearch] = useState("")
   const [user, setUser] = useState<any>(null)
   const [activeSkuDropdown, setActiveSkuDropdown] = useState<{ type: string, index: number } | null>(null)
@@ -577,6 +519,53 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
   const [parsedRows, setParsedRows] = useState<any[]>([])
   const [selectedSolicitantes, setSelectedSolicitantes] = useState<string[]>([])
   const uniqueSolicitantes = useMemo(() => Array.from(new Set(parsedRows.map(r => r.solicitante).filter(Boolean))) as string[], [parsedRows])
+
+  const toggleBaixado = async (solicitacao: string, codigoProduto: string, codigoEmbalagem: string) => {
+    if (!user) {
+      alert("Faça login para alterar o Status BA.");
+      return;
+    }
+    const sol = String(solicitacao || "").trim();
+    const prod = String(codigoProduto || "").trim().toUpperCase();
+    const emb = String(codigoEmbalagem || "").trim().toUpperCase();
+    
+    if (!sol || !prod || !emb) {
+      alert("Erro: Informações do pedido incompletas.");
+      return;
+    }
+
+    setTogglingBa(true);
+    try {
+      const exists = pedidosBa.find(
+        r => String(r.solicitacao).trim() === sol &&
+             String(r.codigo_produto).trim().toUpperCase() === prod &&
+             String(r.codigo_embalagem).trim().toUpperCase() === emb
+      );
+
+      if (exists) {
+        // Remove BA
+        const { error } = await supabase
+          .from("pedidos_ba")
+          .delete()
+          .eq("id", exists.id);
+        if (error) throw error;
+      } else {
+        // Add BA
+        const { error } = await supabase
+          .from("pedidos_ba")
+          .insert([{ solicitacao: sol, codigo_produto: prod, codigo_embalagem: emb }]);
+        if (error) throw error;
+      }
+      
+      // Refresh only the BA list
+      const res = await supabase.from("pedidos_ba").select("*");
+      setPedidosBa(res.data || []);
+    } catch (err: any) {
+      alert("Erro ao salvar Status BA: " + err.message);
+    } finally {
+      setTogglingBa(false);
+    }
+  };
 
   const handleExcelUpload = (file: File) => {
     setImportedFileName(file.name)
@@ -733,6 +722,25 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
       setPedidas(pRes.data || [])
       setAtuais(aRes.data || [])
       setChegando(cRes.data || [])
+
+      try {
+        const gRes = await supabase.from("estoque_g300").select("*").order("id", { ascending: true })
+        if (gRes.data) setEstoqueG300(gRes.data)
+      } catch (g300Err) {
+        console.error("Failed to load estoque_g300:", g300Err)
+      }
+      try {
+        const cRes = await supabase.from("estoque_conserto").select("*").order("id", { ascending: true })
+        if (cRes.data) setEstoqueConserto(cRes.data)
+      } catch (cErr) {
+        console.error("Failed to load estoque_conserto:", cErr)
+      }
+      try {
+        const baRes = await supabase.from("pedidos_ba").select("*")
+        if (baRes.data) setPedidosBa(baRes.data)
+      } catch (baErr) {
+        console.error("Failed to load pedidos_ba:", baErr)
+      }
     } catch (err) {
       console.error(err)
     } finally {
@@ -767,40 +775,77 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
 
   const pedidasPerSku = useMemo(() => {
     const m: Record<string, number> = {}
-    pedidas.filter(r => !r.isNew).forEach(r => {
+    // Somente pedidos NÃO finalizados E NÃO baixados (BA) contam como "Solicitado"
+    pedidas.filter(r => !r.isNew && (r.status || "").trim().toUpperCase() !== "FINALIZADO").forEach(r => {
+      const sol = String(r.solicitacao || "").trim()
+      const prod = String(r.codigo || "").trim().toUpperCase()
+      const emb = String(r.codigo_embalagem || "").trim().toUpperCase()
+      const isMarkedBa = pedidosBa.some(
+        ba => String(ba.solicitacao).trim() === sol &&
+              String(ba.codigo_produto).trim().toUpperCase() === prod &&
+              String(ba.codigo_embalagem).trim().toUpperCase() === emb
+      )
+      if (isMarkedBa) return
+
       const c = String(r.codigo || "").trim().toUpperCase()
       if (c) m[c] = (m[c] || 0) + Math.round(Number(r.quantidade) || 0)
     })
     return m
-  }, [pedidas])
+  }, [pedidas, pedidosBa])
 
   const atuaisPerSku = useMemo(() => {
     const m: Record<string, number> = {}
-    atuais.filter(r => !r.isNew).forEach(r => {
-      const c = String(r.codigo || "").trim().toUpperCase()
-      if (c) m[c] = (m[c] || 0) + Math.round(Number(r.quantidade) || 0)
+    // estoqueG300 é o estoque do CD — agrupa por codigo_produto, soma cd
+    estoqueG300.filter(r => !r.isNew).forEach(r => {
+      const c = String(r.codigo_produto || "").trim().toUpperCase()
+      if (c) m[c] = (m[c] || 0) + Math.round(Number(r.cd) || 0)
     })
     return m
-  }, [atuais])
+  }, [estoqueG300])
+
+  const consertoPerSku = useMemo(() => {
+    const m: Record<string, number> = {}
+    // estoqueConserto é o estoque do conserto — agrupa por codigo_produto, soma cd
+    estoqueConserto.filter(r => !r.isNew).forEach(r => {
+      const c = String(r.codigo_produto || "").trim().toUpperCase()
+      if (c) m[c] = (m[c] || 0) + Math.round(Number(r.cd) || 0)
+    })
+    return m
+  }, [estoqueConserto])
 
   const chegandoPerSku = useMemo(() => {
     const m: Record<string, number> = {}
+    // Pedidos FINALIZADOS E NÃO baixados (BA) entram como "A Caminho"
+    pedidas.filter(r => !r.isNew && (r.status || "").trim().toUpperCase() === "FINALIZADO").forEach(r => {
+      const sol = String(r.solicitacao || "").trim()
+      const prod = String(r.codigo || "").trim().toUpperCase()
+      const emb = String(r.codigo_embalagem || "").trim().toUpperCase()
+      const isMarkedBa = pedidosBa.some(
+        ba => String(ba.solicitacao).trim() === sol &&
+              String(ba.codigo_produto).trim().toUpperCase() === prod &&
+              String(ba.codigo_embalagem).trim().toUpperCase() === emb
+      )
+      if (isMarkedBa) return
+
+      const c = String(r.codigo || "").trim().toUpperCase()
+      if (c) m[c] = (m[c] || 0) + Math.round(Number(r.quantidade) || 0)
+    })
     chegando.filter(r => !r.isNew).forEach(r => {
       const c = String(r.codigo || "").trim().toUpperCase()
       if (c) m[c] = (m[c] || 0) + Math.round(Number(r.quantidade) || 0)
     })
     return m
-  }, [chegando])
+  }, [pedidas, chegando, pedidosBa])
 
   const allSkuRows = useMemo<SkuRow[]>(() => {
     const skusSet = new Set<string>()
     baseCodigos.forEach(b => { const c = String(b["Código"] || "").trim().toUpperCase(); if (c) skusSet.add(c) })
-    ;[avariasPerSku, atuaisPerSku, pedidasPerSku, chegandoPerSku].forEach(m => Object.keys(m).forEach(k => skusSet.add(k)))
+    ;[avariasPerSku, atuaisPerSku, consertoPerSku, pedidasPerSku, chegandoPerSku].forEach(m => Object.keys(m).forEach(k => skusSet.add(k)))
 
     return Array.from(skusSet).map(code => {
       const base = baseCodigos.find(b => String(b["Código"]).trim().toUpperCase() === code)
       const avarias = Math.round(avariasPerSku[code] || 0)
-      const estoque = Math.round(atuaisPerSku[code] || 0)
+      const estoque = Math.round(atuaisPerSku[code] || 0) + Math.round(consertoPerSku[code] || 0)
       const p = Math.round(pedidasPerSku[code] || 0)
       const c = Math.round(chegandoPerSku[code] || 0)
       const totalCoberto = estoque + p + c
@@ -809,7 +854,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
       const pctCoberto = avarias > 0 ? Math.min(100, Math.round((totalCoberto / avarias) * 100)) : (totalCoberto > 0 ? 100 : 0)
       return { codigo: code, descricao: base?.["Descrição"] || code, avarias, estoque, pedidas: p, chegando: c, totalCoberto, deficit, saldo, pctCoberto }
     })
-  }, [baseCodigos, avariasPerSku, atuaisPerSku, pedidasPerSku, chegandoPerSku])
+  }, [baseCodigos, avariasPerSku, atuaisPerSku, consertoPerSku, pedidasPerSku, chegandoPerSku])
 
   const filteredSkuRows = useMemo(() => {
     let active = allSkuRows.filter(s => s.codigo in avariasPerSku || s.estoque > 0 || s.pedidas > 0 || s.chegando > 0)
@@ -835,7 +880,9 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
 
   // ─── Global KPIs ──────────────────────────────────────────────────────────
   const totalAvarias = useMemo(() => Object.values(avariasPerSku).reduce((a, c) => a + c, 0), [avariasPerSku])
-  const totalEstoque = useMemo(() => Object.values(atuaisPerSku).reduce((a, c) => a + c, 0), [atuaisPerSku])
+  const totalCd = useMemo(() => Object.values(atuaisPerSku).reduce((a, c) => a + c, 0), [atuaisPerSku])
+  const totalConserto = useMemo(() => Object.values(consertoPerSku).reduce((a, c) => a + c, 0), [consertoPerSku])
+  const totalEstoque = useMemo(() => totalCd + totalConserto, [totalCd, totalConserto])
   const totalPedidas = useMemo(() => Object.values(pedidasPerSku).reduce((a, c) => a + c, 0), [pedidasPerSku])
   const totalChegando = useMemo(() => Object.values(chegandoPerSku).reduce((a, c) => a + c, 0), [chegandoPerSku])
   const totalDeficit = useMemo(() => filteredSkuRows.reduce((a, s) => a + s.deficit, 0), [filteredSkuRows])
@@ -843,18 +890,42 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
 
   // ─── Spreadsheet helpers ───────────────────────────────────────────────────
   const activeList = useMemo(() => {
+    if (subTab === "estoque_g300") {
+      if (!search) return estoqueG300
+      const t = search.toLowerCase()
+      return estoqueG300.filter(r =>
+        (r.codigo_embalagem || "").toLowerCase().includes(t) ||
+        (r.descricao_embalagem || "").toLowerCase().includes(t) ||
+        (r.codigo_produto || "").toLowerCase().includes(t) ||
+        (r.modelo_produto || "").toLowerCase().includes(t) ||
+        (r.status || "").toLowerCase().includes(t)
+      )
+    }
+    if (subTab === "conserto") {
+      if (!search) return estoqueConserto
+      const t = search.toLowerCase()
+      return estoqueConserto.filter(r =>
+        (r.codigo_embalagem || "").toLowerCase().includes(t) ||
+        (r.descricao_embalagem || "").toLowerCase().includes(t) ||
+        (r.codigo_produto || "").toLowerCase().includes(t) ||
+        (r.modelo_produto || "").toLowerCase().includes(t) ||
+        (r.status || "").toLowerCase().includes(t)
+      )
+    }
     const list = subTab === "pedidas" ? pedidas : subTab === "atuais" ? atuais : chegando
     if (!search) return list
     const t = search.toLowerCase()
     return list.filter(r => r.codigo.toLowerCase().includes(t) || (baseCodigos.find(b => b["Código"].toUpperCase() === r.codigo.toUpperCase())?.["Descrição"] || "").toLowerCase().includes(t))
-  }, [subTab, pedidas, atuais, chegando, search, baseCodigos])
+  }, [subTab, pedidas, atuais, chegando, estoqueG300, estoqueConserto, search, baseCodigos])
 
   const hasUnsaved = useMemo(() => {
+    if (subTab === "estoque_g300") return estoqueG300.some(r => r.isDirty)
+    if (subTab === "conserto") return estoqueConserto.some(r => r.isDirty)
     if (subTab === "pedidas") return pedidas.some(r => r.isDirty)
     if (subTab === "atuais") return atuais.some(r => r.isDirty)
     if (subTab === "chegando") return chegando.some(r => r.isDirty)
     return false
-  }, [subTab, pedidas, atuais, chegando])
+  }, [subTab, pedidas, atuais, chegando, estoqueG300, estoqueConserto])
 
   const cellSkus = useMemo(() => {
     if (!skuSearchCell) return baseCodigos.slice(0, 8)
@@ -865,38 +936,85 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
   const addRow = () => {
     if (!user) { alert("Faça login para adicionar lançamentos."); return }
     const today = new Date().toISOString().split("T")[0]
-    const row: EmbalagemRegistro = { codigo: "", quantidade: null, isNew: true, isDirty: true }
-    if (subTab === "pedidas") { row.data = today; setPedidas([row, ...pedidas]) }
-    else if (subTab === "atuais") { row.chegada = today; setAtuais([row, ...atuais]) }
-    else if (subTab === "chegando") { row.data = today; setChegando([row, ...chegando]) }
+    if (subTab === "estoque_g300" || subTab === "conserto") {
+      const row = { codigo_embalagem: "", descricao_embalagem: "", codigo_produto: "", modelo_produto: "", cd: 0, status: "", isNew: true, isDirty: true }
+      if (subTab === "estoque_g300") setEstoqueG300([row, ...estoqueG300])
+      else setEstoqueConserto([row, ...estoqueConserto])
+    } else {
+      const row: EmbalagemRegistro = { codigo: "", quantidade: null, isNew: true, isDirty: true }
+      if (subTab === "pedidas") { row.data = today; setPedidas([row, ...pedidas]) }
+      else if (subTab === "atuais") { row.chegada = today; setAtuais([row, ...atuais]) }
+      else if (subTab === "chegando") { row.data = today; setChegando([row, ...chegando]) }
+    }
   }
 
-  const updateRow = (idx: number, field: keyof EmbalagemRegistro, value: any) => {
-    if (subTab === "pedidas") { const u = [...pedidas]; u[idx] = { ...u[idx], [field]: value, isDirty: true }; setPedidas(u) }
-    else if (subTab === "atuais") { const u = [...atuais]; u[idx] = { ...u[idx], [field]: value, isDirty: true }; setAtuais(u) }
-    else if (subTab === "chegando") { const u = [...chegando]; u[idx] = { ...u[idx], [field]: value, isDirty: true }; setChegando(u) }
+  const updateRow = (idx: number, field: string, value: any) => {
+    if (subTab === "estoque_g300") {
+      const u = [...estoqueG300]; u[idx] = { ...u[idx], [field]: value, isDirty: true }; setEstoqueG300(u)
+    } else if (subTab === "conserto") {
+      const u = [...estoqueConserto]; u[idx] = { ...u[idx], [field]: value, isDirty: true }; setEstoqueConserto(u)
+    } else {
+      const fieldKey = field as keyof EmbalagemRegistro
+      if (subTab === "pedidas") { const u = [...pedidas]; u[idx] = { ...u[idx], [fieldKey]: value, isDirty: true }; setPedidas(u) }
+      else if (subTab === "atuais") { const u = [...atuais]; u[idx] = { ...u[idx], [fieldKey]: value, isDirty: true }; setAtuais(u) }
+      else if (subTab === "chegando") { const u = [...chegando]; u[idx] = { ...u[idx], [fieldKey]: value, isDirty: true }; setChegando(u) }
+    }
   }
 
   const removeRow = (idx: number) => {
-    if (subTab === "pedidas") setPedidas(pedidas.filter((_, i) => i !== idx))
+    if (subTab === "estoque_g300") setEstoqueG300(estoqueG300.filter((_, i) => i !== idx))
+    else if (subTab === "conserto") setEstoqueConserto(estoqueConserto.filter((_, i) => i !== idx))
+    else if (subTab === "pedidas") setPedidas(pedidas.filter((_, i) => i !== idx))
     else if (subTab === "atuais") setAtuais(atuais.filter((_, i) => i !== idx))
     else if (subTab === "chegando") setChegando(chegando.filter((_, i) => i !== idx))
   }
 
   const saveRows = async () => {
-    const listMap = { pedidas: { list: pedidas, table: "embalagens_pedidas" }, atuais: { list: atuais, table: "embalagens_atuais" }, chegando: { list: chegando, table: "embalagens_chegando" } }
+    const listMap = { 
+      pedidas: { list: pedidas, table: "embalagens_pedidas" }, 
+      atuais: { list: atuais, table: "embalagens_atuais" }, 
+      chegando: { list: chegando, table: "embalagens_chegando" },
+      estoque_g300: { list: estoqueG300, table: "estoque_g300" },
+      conserto: { list: estoqueConserto, table: "estoque_conserto" }
+    }
     const { list, table } = listMap[subTab as keyof typeof listMap]
     const dirty = list.filter(r => r.isDirty)
     if (!dirty.length) return
-    if (dirty.some(r => !r.codigo || !r.quantidade || Number(r.quantidade) <= 0)) {
-      alert("Preencha o SKU e quantidade > 0 em todas as linhas."); return
+
+    if (subTab === "estoque_g300" || subTab === "conserto") {
+      if (dirty.some(r => !r.codigo_embalagem || !r.codigo_produto)) {
+        alert("Preencha o código da embalagem e do produto em todas as linhas."); return
+      }
+    } else {
+      if (dirty.some(r => !r.codigo || !r.quantidade || Number(r.quantidade) <= 0)) {
+        alert("Preencha o SKU e quantidade > 0 em todas as linhas."); return
+      }
     }
+
     setSaving(true)
     try {
       for (const row of dirty) {
-        const payload: any = { codigo: row.codigo.trim().toUpperCase(), quantidade: Number(row.quantidade) }
-        payload[subTab === "atuais" ? "chegada" : "data"] = subTab === "atuais" ? row.chegada : row.data
-        if (row.isNew) { const { error } = await supabase.from(table).insert([payload]); if (error) throw error }
+        if (subTab === "estoque_g300" || subTab === "conserto") {
+          const payload = {
+            codigo_embalagem: row.codigo_embalagem.trim().toUpperCase(),
+            descricao_embalagem: (row.descricao_embalagem || '').trim(),
+            codigo_produto: row.codigo_produto.trim().toUpperCase(),
+            modelo_produto: (row.modelo_produto || '').trim(),
+            cd: Math.round(Number(row.cd) || 0),
+            status: (row.status || '').trim()
+          }
+          if (row.isNew) {
+            const { error } = await supabase.from(table).insert([payload])
+            if (error) throw error
+          } else {
+            const { error } = await supabase.from(table).update(payload).eq("id", row.id)
+            if (error) throw error
+          }
+        } else {
+          const payload: any = { codigo: row.codigo.trim().toUpperCase(), quantidade: Number(row.quantidade) }
+          payload[subTab === "atuais" ? "chegada" : "data"] = subTab === "atuais" ? row.chegada : row.data
+          if (row.isNew) { const { error } = await supabase.from(table).insert([payload]); if (error) throw error }
+        }
       }
       alert("Lançamentos salvos!")
       fetchData()
@@ -907,7 +1025,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
     }
   }
 
-  const deleteRecord = async (table: "embalagens_atuais" | "embalagens_pedidas" | "embalagens_chegando", id: number) => {
+  const deleteRecord = async (table: "embalagens_atuais" | "embalagens_pedidas" | "embalagens_chegando" | "estoque_g300" | "estoque_conserto", id: number) => {
     if (!user) { alert("Faça login para excluir."); return }
     if (!confirm("Excluir este lançamento?")) return
     try {
@@ -1049,8 +1167,8 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
         {[
           { id: "comparativo", label: "PAINEL COMPARATIVO", icon: LayoutGrid },
           { id: "pedidas", label: "PEDIDOS", icon: ShoppingCart },
-          { id: "atuais", label: "ESTOQUE CD / CONSERTO", icon: Package },
-          { id: "chegando", label: "A CAMINHO", icon: Truck },
+          { id: "estoque_g300", label: "ESTOQUE G300", icon: Boxes },
+          { id: "conserto", label: "CONSERTO", icon: Wrench },
         ].map(tab => (
           <button
             key={tab.id}
@@ -1078,14 +1196,8 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
           </div>
         )}
 
-        {subTab !== "comparativo" && subTab !== "pedidas" && user && (
+        {(subTab === "estoque_g300" || subTab === "conserto") && user && (
           <div className="ml-auto flex gap-2">
-            <button
-              onClick={() => setShowImportModal(true)}
-              className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 px-4 py-2.5 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition-all cursor-pointer"
-            >
-              <Plus size={13} /> Importar
-            </button>
             <button onClick={addRow} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition-all cursor-pointer">
               <Plus size={13} /> Nova Linha
             </button>
@@ -1168,8 +1280,8 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                     : <AnimatedNumber value={totalEstoque} className="text-3xl font-light text-white block leading-none mt-1" />
                   }
                   <p className="text-[9px] text-slate-400 mt-2 font-bold flex items-center gap-2">
-                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> CD: <span className="text-white font-bold">{Math.round(totalEstoque * 0.7).toLocaleString("pt-BR")}</span></span>
-                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> CONSERTO: <span className="text-white font-bold">{Math.round(totalEstoque * 0.3).toLocaleString("pt-BR")}</span></span>
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> CD: <span className="text-white font-bold">{totalCd.toLocaleString("pt-BR")}</span></span>
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> CONSERTO: <span className="text-white font-bold">{totalConserto.toLocaleString("pt-BR")}</span></span>
                   </p>
                 </div>
               </div>
@@ -1203,7 +1315,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                           {coverageArcs.map((arc, i) => {
                             if (arc.pct <= 0.001) return null
                             const path = describeArc(90, 90, 62, arc.startAngle, arc.endAngle)
-                            return <path key={i} d={path} fill="none" stroke={arc.color} strokeWidth={22} strokeLinecap="round" />
+                            return <path key={i} d={path} fill="none" stroke={arc.color} strokeWidth={22} />
                           })}
                           {/* Center label */}
                           <text x={90} y={84} textAnchor="middle" fill="#ffffff" fontSize={26} fontWeight={900} fontFamily="sans-serif">{globalPct}%</text>
@@ -1258,7 +1370,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                           {solicArcs.map((arc, i) => {
                             if (arc.pct <= 0.001) return null
                             const path = describeArc(90, 90, 62, arc.startAngle, arc.endAngle)
-                            return <path key={i} d={path} fill="none" stroke={arc.color} strokeWidth={22} strokeLinecap="round" />
+                            return <path key={i} d={path} fill="none" stroke={arc.color} strokeWidth={22} />
                           })}
                           {/* Center label */}
                           <text x={90} y={84} textAnchor="middle" fill="#ffffff" fontSize={26} fontWeight={900} fontFamily="sans-serif">{solicStatusData.total}</text>
@@ -1524,7 +1636,16 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                         ? 'text-blue-400'
                         : 'text-amber-400'
 
-                    return { p, sku, qty, enviado, pendente, status, statusCls }
+                    const sol = String(p.solicitacao || '').trim()
+                    const prod = String(p.codigo || '').trim().toUpperCase()
+                    const emb = String(p.codigo_embalagem || '').trim().toUpperCase()
+                    const isBa = pedidosBa.some(
+                      ba => String(ba.solicitacao).trim() === sol &&
+                            String(ba.codigo_produto).trim().toUpperCase() === prod &&
+                            String(ba.codigo_embalagem).trim().toUpperCase() === emb
+                    )
+
+                    return { p, sku, qty, enviado, pendente, status, statusCls, isBa }
                   })
 
                   const dateLabel = items[0]?.data_solicitacao
@@ -1591,6 +1712,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                               <col style={{ width: '100px' }} />
                               <col style={{ width: '100px' }} />
                               <col style={{ width: '95px' }} />
+                              <col style={{ width: '95px' }} />
                               <col style={{ width: '68px' }} />
                               <col style={{ width: '80px' }} />
                             </colgroup>
@@ -1608,6 +1730,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                                 <th className="px-3 py-2 text-center text-[9px] font-normal text-slate-500 uppercase tracking-wider">Entrega (C.)</th>
                                 <th className="px-3 py-2 text-center text-[9px] font-normal text-slate-500 uppercase tracking-wider">Envio (E.)</th>
                                 <th className="px-3 py-2 text-center text-[9px] font-normal text-slate-500 uppercase tracking-wider">Status</th>
+                                <th className="px-3 py-2 text-center text-[9px] font-normal text-emerald-400/90 uppercase tracking-wider">Status BA</th>
                                 <th className="px-3 py-2 text-center text-[9px] font-normal text-slate-500 uppercase tracking-wider">NF</th>
                                 <th className="px-3 py-2 text-center text-[9px] font-normal text-slate-500 uppercase tracking-wider">Previsão</th>
                               </tr>
@@ -1644,6 +1767,26 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                                   <td className="px-3 py-2.5 text-center text-[9px] font-normal uppercase tracking-wider">
                                     <span className={cn(row.statusCls, "font-normal")}>{row.status}</span>
                                   </td>
+                                  <td className="px-3 py-2.5 text-center text-[9px] font-normal">
+                                    <button
+                                      disabled={togglingBa}
+                                      onClick={() => toggleBaixado(
+                                        row.p.solicitacao || '',
+                                        row.sku,
+                                        row.p.codigo_embalagem || ''
+                                      )}
+                                      title={row.isBa ? "Clique para desmarcar BA" : "Clique para marcar como chegou (BA)"}
+                                      className={cn(
+                                        "px-2.5 py-0.5 rounded-md font-semibold transition-all text-[9px] border leading-relaxed",
+                                        togglingBa ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
+                                        row.isBa
+                                          ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/30"
+                                          : "bg-slate-900/60 border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-300"
+                                      )}
+                                    >
+                                      {row.isBa ? "✓ BA" : "—"}
+                                    </button>
+                                  </td>
                                   <td className="px-3 py-2.5 text-center text-slate-400 font-normal text-[9px]">{row.p.nf || '—'}</td>
                                   <td className="px-3 py-2.5 text-center text-slate-400 font-normal text-[9px]">{row.p.previsao_entrega || '—'}</td>
                                 </tr>
@@ -1659,13 +1802,13 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
             </div>
           </motion.div>
           ) : (
-          /* ─── SPREADSHEET TABS (atuais / chegando) ─── */
+          /* ─── SPREADSHEET TABS (estoque_g300 / conserto / atuais / chegando) ─── */
           <motion.div key="spreadsheet" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
             className="bg-[#111827] border border-slate-800 rounded-2xl overflow-hidden shadow-md"
           >
             <div className="px-6 py-4 border-b border-slate-800 bg-[#0f172a]/50">
               <h3 className="text-sm font-bold text-white uppercase tracking-wider font-sans">
-                {subTab === "atuais" ? "Estoque CD / Conserto" : "Cargas a Caminho"}
+                {subTab === "conserto" ? "Conserto" : subTab === "estoque_g300" ? "Estoque G300" : subTab === "atuais" ? "Estoque CD / Conserto" : "Cargas a Caminho"}
               </h3>
               <p className="text-[10px] font-medium text-slate-400 mt-0.5 font-sans">
                 Lançamento estilo Excel · Permite edição de qualquer célula, seleção rápida e colagem em massa
@@ -1676,30 +1819,45 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
               <table className="w-full text-left border-collapse min-w-[800px] font-sans">
                 <thead>
                   <tr className="border-b border-slate-800 bg-[#0f172a]/30">
-                    <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider w-[160px]">Data</th>
-                    <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider w-[220px]">SKU</th>
-                    <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider">Descrição</th>
-                    <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider text-center w-[140px]">Quantidade</th>
+                    {(subTab === "estoque_g300" || subTab === "conserto") ? (
+                      <>
+                        <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider w-[180px]">Cód. Embalagem</th>
+                        <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider w-[240px]">Descrição Embalagem</th>
+                        <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider w-[140px]">Cód. Produto</th>
+                        <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider">Modelo Produto</th>
+                        <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider text-center w-[100px]">CD</th>
+                        <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider w-[200px]">Status</th>
+                      </>
+                    ) : (
+                      <>
+                        <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider w-[160px]">Data</th>
+                        <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider w-[220px]">SKU</th>
+                        <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider">Descrição</th>
+                        <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider text-center w-[140px]">Quantidade</th>
+                      </>
+                    )}
                     <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider text-right w-[80px]">Ação</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60 bg-[#111827]">
                   {loading ? (
                     <tr>
-                      <td colSpan={5} className="px-8 py-10 text-center text-slate-500">
+                      <td colSpan={(subTab === "estoque_g300" || subTab === "conserto") ? 7 : 5} className="px-8 py-10 text-center text-slate-500">
                         <Loader2 className="animate-spin text-blue-500 mx-auto mb-2" size={20} />
                         Carregando...
                       </td>
                     </tr>
                   ) : activeList.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-8 py-10 text-center text-slate-600">
+                      <td colSpan={(subTab === "estoque_g300" || subTab === "conserto") ? 7 : 5} className="px-8 py-10 text-center text-slate-600">
                         <Inbox size={22} className="mx-auto mb-2" />
                         Nenhum lançamento. Clique em 'Nova Linha'.
                       </td>
                     </tr>
                   ) : activeList.map((item, idx) => {
-                    const base = baseCodigos.find(b => String(b["Código"]).trim().toUpperCase() === String(item.codigo).trim().toUpperCase())
+                    const base = (subTab !== "estoque_g300" && subTab !== "conserto")
+                      ? baseCodigos.find(b => String(b["Código"]).trim().toUpperCase() === String(item.codigo).trim().toUpperCase())
+                      : null
                     const dateVal = item.chegada || item.data || ""
 
                     // Smart paste handler - splits TSV/CSV text and updates active records
@@ -1723,16 +1881,17 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                         if (targetIdx < activeList.length) {
                           cells.forEach((val, colOffset) => {
                             const colIdx = startCol + colOffset;
-                            if (colIdx === 0) {
-                              // Data/Chegada
-                              updateRow(targetIdx, subTab === "atuais" ? "chegada" : "data", val);
-                            } else if (colIdx === 1) {
-                              // SKU
-                              updateRow(targetIdx, "codigo", val);
-                            } else if (colIdx === 2) {
-                              // Qty
-                              const num = Number(val.replace(/\D/g, ""));
-                              updateRow(targetIdx, "quantidade", isNaN(num) ? null : num);
+                            if (subTab === "estoque_g300" || subTab === "conserto") {
+                              if (colIdx === 0) updateRow(targetIdx, "codigo_embalagem", val);
+                              else if (colIdx === 1) updateRow(targetIdx, "descricao_embalagem", val);
+                              else if (colIdx === 2) updateRow(targetIdx, "codigo_produto", val);
+                              else if (colIdx === 3) updateRow(targetIdx, "modelo_produto", val);
+                              else if (colIdx === 4) updateRow(targetIdx, "cd", Number(val.replace(/\D/g, "")) || 0);
+                              else if (colIdx === 5) updateRow(targetIdx, "status", val);
+                            } else {
+                              if (colIdx === 0) updateRow(targetIdx, subTab === "atuais" ? "chegada" : "data", val);
+                              else if (colIdx === 1) updateRow(targetIdx, "codigo", val);
+                              else if (colIdx === 2) { const num = Number(val.replace(/\D/g, "")); updateRow(targetIdx, "quantidade", isNaN(num) ? null : num); }
                             }
                           });
                         }
@@ -1745,63 +1904,112 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                         item.isDirty && "bg-blue-500/[0.03]",
                         item.isNew && "bg-emerald-500/[0.03]"
                       )}>
-                        {/* Date Cell */}
-                        <td className="p-0 border-r border-white/5">
-                          <input
-                            type="date"
-                            value={dateVal}
-                            onChange={e => updateRow(idx, subTab === "atuais" ? "chegada" : "data", e.target.value)}
-                            onPaste={e => handleSmartPaste(e, 0)}
-                            className="w-full bg-transparent border-none px-6 py-3 text-[11px] text-slate-300 font-mono font-normal focus:bg-slate-900 focus:outline-none [color-scheme:dark]"
-                          />
-                        </td>
+                        {(subTab === "estoque_g300" || subTab === "conserto") ? (
+                          <>
+                            <td className="p-0 border-r border-white/5">
+                              <input type="text" value={item.codigo_embalagem || ''}
+                                onChange={e => updateRow(idx, "codigo_embalagem", e.target.value)}
+                                onPaste={e => handleSmartPaste(e, 0)}
+                                placeholder="Cód. Embalagem..."
+                                className="w-full bg-transparent border-none px-6 py-3 text-[11px] text-white font-mono font-normal focus:bg-slate-900/60 focus:outline-none uppercase" />
+                            </td>
+                            <td className="p-0 border-r border-white/5">
+                              <input type="text" value={item.descricao_embalagem || ''}
+                                onChange={e => updateRow(idx, "descricao_embalagem", e.target.value)}
+                                onPaste={e => handleSmartPaste(e, 1)}
+                                placeholder="Descrição..."
+                                className="w-full bg-transparent border-none px-6 py-3 text-[11px] text-slate-300 font-mono font-normal focus:bg-slate-900/60 focus:outline-none" />
+                            </td>
+                            <td className="p-0 border-r border-white/5">
+                              <input type="text" value={item.codigo_produto || ''}
+                                onChange={e => updateRow(idx, "codigo_produto", e.target.value)}
+                                onPaste={e => handleSmartPaste(e, 2)}
+                                placeholder="Cód. Produto..."
+                                className="w-full bg-transparent border-none px-6 py-3 text-[11px] text-white font-mono font-normal focus:bg-slate-900/60 focus:outline-none uppercase" />
+                            </td>
+                            <td className="p-0 border-r border-white/5">
+                              <input type="text" value={item.modelo_produto || ''}
+                                onChange={e => updateRow(idx, "modelo_produto", e.target.value)}
+                                onPaste={e => handleSmartPaste(e, 3)}
+                                placeholder="Modelo..."
+                                className="w-full bg-transparent border-none px-6 py-3 text-[11px] text-slate-300 font-mono font-normal focus:bg-slate-900/60 focus:outline-none" />
+                            </td>
+                            <td className="p-0 border-r border-white/5 text-center">
+                              <input type="text" value={item.cd ?? ''}
+                                onChange={e => updateRow(idx, "cd", e.target.value === '' ? 0 : Number(e.target.value.replace(/\D/g, '')))}
+                                onPaste={e => handleSmartPaste(e, 4)}
+                                placeholder="0"
+                                className="w-full bg-transparent border-none py-3 text-center text-[11px] text-white font-mono font-normal focus:bg-slate-900/60 focus:outline-none" />
+                            </td>
+                            <td className="p-0 border-r border-white/5">
+                              <input type="text" value={item.status || ''}
+                                onChange={e => updateRow(idx, "status", e.target.value)}
+                                onPaste={e => handleSmartPaste(e, 5)}
+                                placeholder="Status..."
+                                className="w-full bg-transparent border-none px-6 py-3 text-[11px] text-slate-300 font-mono font-normal focus:bg-slate-900/60 focus:outline-none" />
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            {/* Date Cell */}
+                            <td className="p-0 border-r border-white/5">
+                              <input
+                                type="date"
+                                value={dateVal}
+                                onChange={e => updateRow(idx, subTab === "atuais" ? "chegada" : "data", e.target.value)}
+                                onPaste={e => handleSmartPaste(e, 0)}
+                                className="w-full bg-transparent border-none px-6 py-3 text-[11px] text-slate-300 font-mono font-normal focus:bg-slate-900 focus:outline-none [color-scheme:dark]"
+                              />
+                            </td>
 
-                        {/* SKU Cell */}
-                        <td className="p-0 border-r border-white/5 relative">
-                          <div className="relative w-full">
-                            <input
-                              type="text"
-                              value={item.codigo}
-                              onChange={e => { updateRow(idx, "codigo", e.target.value); setSkuSearchCell(e.target.value); setActiveSkuDropdown({ type: subTab, index: idx }) }}
-                              onClick={() => { setSkuSearchCell(item.codigo); setActiveSkuDropdown({ type: subTab, index: idx }) }}
-                              onPaste={e => handleSmartPaste(e, 1)}
-                              placeholder="SKU..."
-                              className="w-full bg-transparent border-none px-6 py-3 text-[11px] text-white font-mono font-normal focus:bg-slate-900/60 focus:outline-none"
-                            />
-                            {activeSkuDropdown?.type === subTab && activeSkuDropdown?.index === idx && cellSkus.length > 0 && (
-                              <div ref={dropdownRef} className="absolute z-50 w-[300px] left-6 bottom-full mb-1 bg-[#0F172A] border border-white/10 rounded-2xl shadow-2xl p-2 space-y-1">
-                                {cellSkus.map(b => (
-                                  <button
-                                    key={b["Código"]}
-                                    type="button"
-                                    onClick={() => { updateRow(idx, "codigo", b["Código"]); setActiveSkuDropdown(null) }}
-                                    className="w-full text-left px-3 py-2 rounded-xl text-[10px] font-bold flex justify-between text-slate-400 hover:bg-white/5 hover:text-white transition-all cursor-pointer"
-                                  >
-                                    <span className="font-mono text-blue-400">{b["Código"]}</span>
-                                    <span className="opacity-60 max-w-[140px] truncate">{b["Descrição"]}</span>
-                                  </button>
-                                ))}
+                            {/* SKU Cell */}
+                            <td className="p-0 border-r border-white/5 relative">
+                              <div className="relative w-full">
+                                <input
+                                  type="text"
+                                  value={item.codigo}
+                                  onChange={e => { updateRow(idx, "codigo", e.target.value); setSkuSearchCell(e.target.value); setActiveSkuDropdown({ type: subTab, index: idx }) }}
+                                  onClick={() => { setSkuSearchCell(item.codigo); setActiveSkuDropdown({ type: subTab, index: idx }) }}
+                                  onPaste={e => handleSmartPaste(e, 1)}
+                                  placeholder="SKU..."
+                                  className="w-full bg-transparent border-none px-6 py-3 text-[11px] text-white font-mono font-normal focus:bg-slate-900/60 focus:outline-none"
+                                />
+                                {activeSkuDropdown?.type === subTab && activeSkuDropdown?.index === idx && cellSkus.length > 0 && (
+                                  <div ref={dropdownRef} className="absolute z-50 w-[300px] left-6 bottom-full mb-1 bg-[#0F172A] border border-white/10 rounded-2xl shadow-2xl p-2 space-y-1">
+                                    {cellSkus.map(b => (
+                                      <button
+                                        key={b["Código"]}
+                                        type="button"
+                                        onClick={() => { updateRow(idx, "codigo", b["Código"]); setActiveSkuDropdown(null) }}
+                                        className="w-full text-left px-3 py-2 rounded-xl text-[10px] font-bold flex justify-between text-slate-400 hover:bg-white/5 hover:text-white transition-all cursor-pointer"
+                                      >
+                                        <span className="font-mono text-blue-400">{b["Código"]}</span>
+                                        <span className="opacity-60 max-w-[140px] truncate">{b["Descrição"]}</span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
-                        </td>
+                            </td>
 
-                        {/* Desc Cell */}
-                        <td className="px-6 py-3 text-[11px] font-normal text-slate-500 max-w-xs truncate">
-                          {base?.["Descrição"] || (item.codigo ? `Produto ${item.codigo}` : "—")}
-                        </td>
+                            {/* Desc Cell */}
+                            <td className="px-6 py-3 text-[11px] font-normal text-slate-500 max-w-xs truncate">
+                              {base?.["Descrição"] || (item.codigo ? `Produto ${item.codigo}` : "—")}
+                            </td>
 
-                        {/* Quantity Cell */}
-                        <td className="p-0 border-l border-white/5 text-center">
-                          <input
-                            type="text"
-                            value={item.quantidade === null ? "" : item.quantidade}
-                            onChange={e => updateRow(idx, "quantidade", e.target.value === "" ? null : Number(e.target.value.replace(/\D/g, "")))}
-                            onPaste={e => handleSmartPaste(e, 2)}
-                            placeholder="0"
-                            className="w-full bg-transparent border-none py-3 text-center text-[11px] text-white font-mono font-normal focus:bg-slate-900/60 focus:outline-none"
-                          />
-                        </td>
+                            {/* Quantity Cell */}
+                            <td className="p-0 border-l border-white/5 text-center">
+                              <input
+                                type="text"
+                                value={item.quantidade === null ? "" : item.quantidade}
+                                onChange={e => updateRow(idx, "quantidade", e.target.value === "" ? null : Number(e.target.value.replace(/\D/g, "")))}
+                                onPaste={e => handleSmartPaste(e, 2)}
+                                placeholder="0"
+                                className="w-full bg-transparent border-none py-3 text-center text-[11px] text-white font-mono font-normal focus:bg-slate-900/60 focus:outline-none"
+                              />
+                            </td>
+                          </>
+                        )}
 
                         {/* Action Cell */}
                         <td className="px-6 py-2 text-right">
@@ -1811,7 +2019,12 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                             </button>
                           ) : (
                             user && (
-                              <button onClick={() => deleteRecord(subTab === "atuais" ? "embalagens_atuais" : "embalagens_chegando", item.id!)}
+                              <button onClick={() => deleteRecord(
+                                subTab === "conserto" ? "estoque_conserto"
+                                  : subTab === "estoque_g300" ? "estoque_g300"
+                                  : subTab === "atuais" ? "embalagens_atuais" : "embalagens_chegando",
+                                item.id!
+                              )}
                                 className="p-1.5 rounded-lg text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer" title="Excluir">
                                 <Trash2 size={13} />
                               </button>
