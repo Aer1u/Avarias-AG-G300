@@ -50,6 +50,27 @@ interface EmbalagemRegistro {
   chegada?: string | null
   isNew?: boolean
   isDirty?: boolean
+  solicitacao?: string | null
+  data_solicitacao?: string | null
+  solicitante?: string | null
+  destino?: string | null
+  codigo_embalagem?: string | null
+  descricao_embalagem?: string | null
+  tipo?: string | null
+  tipo_embalagem?: string | null
+  modelo_produto?: string | null
+  modelo?: string | null
+  enviado?: number | null
+  pendente?: number | null
+  entrega_compras?: string | null
+  envio_expedicao?: string | null
+  status?: string | null
+  comentario_tatiana?: string | null
+  comentario?: string | null
+  responsabilidade?: string | null
+  nf?: string | null
+  placa?: string | null
+  previsao_entrega?: string | null
 }
 
 interface SkuRow {
@@ -548,6 +569,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
   const [replaceExistingData, setReplaceExistingData] = useState(true)
   const [isImporting, setIsImporting] = useState(false)
   const [showSkuTable, setShowSkuTable] = useState(false)
+  const [expandedSolicitations, setExpandedSolicitations] = useState<Set<string>>(new Set())
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -925,7 +947,18 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
           </button>
         ))}
 
-        {subTab !== "comparativo" && user && (
+        {subTab === "pedidas" && (
+          <div className="ml-auto">
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 px-4 py-2.5 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition-all cursor-pointer shadow-inner"
+            >
+              <RefreshCw size={13} className="text-blue-400" /> Atualizar Relação
+            </button>
+          </div>
+        )}
+
+        {subTab !== "comparativo" && subTab !== "pedidas" && user && (
           <div className="ml-auto flex gap-2">
             <button
               onClick={() => setShowImportModal(true)}
@@ -1273,13 +1306,179 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
 
           </motion.div>
         ) : (
-          /* ─── SPREADSHEET TABS ─── */
+          /* ─── PEDIDOS ACCORDION VIEW ─── */
+          subTab === "pedidas" ? (
+          <motion.div key="pedidos-accordion" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} className="space-y-2">
+            {/* Accordion header */}
+            <div className="bg-[#111827] border border-slate-800 rounded-2xl overflow-hidden shadow-md">
+              <div className="grid grid-cols-[2fr_1.5fr_4fr_1fr_1fr_1fr] px-5 py-3 border-b border-slate-800 bg-[#0f172a]/60 text-[10px] font-mono font-medium text-slate-500 uppercase tracking-wider">
+                <span>Solicitação</span>
+                <span>Data Solicitação</span>
+                <span>Resumo Operacional (Responsável / Status)</span>
+                <span className="text-right">Solicitado</span>
+                <span className="text-right">Enviado</span>
+                <span className="text-right text-amber-400">Pendente</span>
+              </div>
+
+              {loading ? (
+                <div className="flex items-center justify-center py-12 text-slate-500">
+                  <Loader2 className="animate-spin text-blue-500 mr-2" size={18} />
+                  <span className="text-xs font-mono">Carregando...</span>
+                </div>
+              ) : (() => {
+                // Group pedidas by solicitation key
+                const realPedidas = pedidas.filter(r => !r.isNew)
+                if (realPedidas.length === 0) return (
+                  <div className="flex flex-col items-center justify-center py-16 text-slate-600">
+                    <Inbox size={24} className="mb-2" />
+                    <p className="text-xs font-mono">Nenhuma solicitação encontrada.</p>
+                  </div>
+                )
+
+                const groups: Record<string, EmbalagemRegistro[]> = {}
+                realPedidas.forEach(p => {
+                  const key = p.solicitacao || 'sem-solicitacao'
+                  if (!groups[key]) groups[key] = []
+                  groups[key].push(p)
+                })
+
+                const sortedGroups = Object.entries(groups).sort((a, b) => {
+                  const numA = Number(a[0].replace(/\D/g, '')) || 0
+                  const numB = Number(b[0].replace(/\D/g, '')) || 0
+                  return numB - numA // Descending
+                })
+
+                return sortedGroups.map(([solKey, items], gi) => {
+                  const isExpanded = expandedSolicitations.has(solKey)
+                  const toggle = () => setExpandedSolicitations(prev => {
+                    const next = new Set(prev)
+                    if (next.has(solKey)) next.delete(solKey)
+                    else next.add(solKey)
+                    return next
+                  })
+
+                  // Compute totals
+                  let totSolic = 0, totEnviado = 0, totPendente = 0
+                  const rowDetails = items.map(p => {
+                    const sku = String(p.codigo || '').trim().toUpperCase()
+                    const qty = Number(p.quantidade) || 0
+                    const enviado = Number(p.enviado) || 0
+                    const pendente = Number(p.pendente) || 0
+                    totSolic += qty; totEnviado += enviado; totPendente += pendente
+                    
+                    const status = String(p.status || 'PENDENTE').toUpperCase()
+                    const statusCls = status === 'FINALIZADO'
+                      ? 'text-emerald-400'
+                      : status === 'EM ANDAMENTO'
+                        ? 'text-blue-400'
+                        : 'text-amber-400'
+
+                    return { p, sku, qty, enviado, pendente, status, statusCls }
+                  })
+
+                  const dateLabel = items[0]?.data_solicitacao
+                    ? new Date(items[0].data_solicitacao + 'T00:00:00').toLocaleDateString('pt-BR')
+                    : items[0]?.data
+                      ? new Date(items[0].data + 'T00:00:00').toLocaleDateString('pt-BR')
+                      : '—'
+
+                  const responsavel = items[0]?.responsabilidade || 'Não definido'
+                  const statusResumo = totPendente > 0
+                    ? `Pendente (${totPendente.toLocaleString('pt-BR')} un)`
+                    : 'Concluído'
+
+                  return (
+                    <div key={solKey} className="border-b border-slate-800/60 last:border-0">
+                      {/* Summary row */}
+                      <button
+                        onClick={toggle}
+                        className="w-full grid grid-cols-[2fr_1.5fr_4fr_1fr_1fr_1fr] px-5 py-3.5 hover:bg-slate-800/20 transition-colors text-left items-center cursor-pointer"
+                      >
+                        <span className="flex items-center gap-2">
+                          <span className={cn("text-slate-400 transition-transform duration-200", isExpanded ? "rotate-0" : "-rotate-90")}>
+                            <ChevronRight size={14} className={cn("transition-transform duration-200", isExpanded ? "rotate-90" : "")} />
+                          </span>
+                          <span className="font-mono text-[11px] font-medium text-white uppercase tracking-wider">
+                            SOLICITAÇÃO {solKey === 'sem-solicitacao' ? 'S/N' : solKey}
+                          </span>
+                        </span>
+                        <span className="flex items-center gap-1.5 font-mono text-[11px] font-normal text-slate-400">
+                          <span className="text-slate-600">⧉</span>
+                          {dateLabel}
+                        </span>
+                        <span className="flex items-center gap-3 font-mono text-[11px] font-normal text-slate-300">
+                          <span className="text-slate-400">{items.length} {items.length === 1 ? 'item' : 'itens'}</span>
+                          <span className="text-slate-700">•</span>
+                          <span>👤 {responsavel}</span>
+                          <span className="text-slate-700">•</span>
+                          <span className={cn(totPendente > 0 ? 'text-amber-400' : 'text-emerald-400')}>
+                            {totPendente > 0 ? `⏳ ${statusResumo}` : '✓ Concluído'}
+                          </span>
+                        </span>
+                        <span className="font-mono text-[11px] font-normal text-white text-right">{totSolic.toLocaleString('pt-BR')}</span>
+                        <span className="font-mono text-[11px] font-normal text-emerald-400 text-right">{totEnviado.toLocaleString('pt-BR')}</span>
+                        <span className={cn("font-mono text-[11px] font-normal text-right", totPendente > 0 ? 'text-amber-400' : 'text-slate-500')}>{totPendente.toLocaleString('pt-BR')}</span>
+                      </button>
+
+                      {/* Expanded detail rows */}
+                      {isExpanded && (
+                        <div className="bg-slate-950/40 border-t border-slate-800/50 overflow-x-auto">
+                          <div className="min-w-[1200px]">
+                            {/* Detail header */}
+                            <div className="grid grid-cols-[1fr_1fr_0.8fr_1.3fr_0.9fr_1.3fr_0.8fr_0.8fr_1fr_1fr_0.95fr] px-6 py-2.5 text-[9px] font-mono font-medium text-slate-500 uppercase tracking-wider border-b border-slate-800/60">
+                              <span>Cód. Produto</span>
+                              <span>Modelo</span>
+                              <span className="text-center">Qtd Avaria</span>
+                              <span>Cód. Embalagem</span>
+                              <span>Tipo</span>
+                              <span>Tipo Embalagem</span>
+                              <span className="text-center text-emerald-400">Enviado</span>
+                              <span className="text-center text-amber-400">Pendente</span>
+                              <span className="text-center">Entrega (Compras)</span>
+                              <span className="text-center">Envio (Expedição)</span>
+                              <span className="text-center">Status</span>
+                            </div>
+                            {rowDetails.map((row, ri) => (
+                              <div key={ri} className={cn(
+                                "grid grid-cols-[1fr_1.1fr_0.8fr_1.3fr_0.9fr_1.3fr_0.8fr_0.8fr_1fr_1fr_0.95fr] px-6 py-2.5 items-center text-[10px] border-b border-slate-800/30 last:border-0 transition-colors hover:bg-slate-800/10",
+                                ri % 2 === 1 ? "bg-slate-800/10" : ""
+                              )}>
+                                <span className="font-mono font-normal text-white">{row.sku}</span>
+                                <span className="font-mono font-normal text-slate-400 truncate" title={row.p.modelo || ''}>{row.p.modelo || '—'}</span>
+                                <span className="font-mono font-normal text-white text-center">{row.qty.toLocaleString('pt-BR')}</span>
+                                <span className="font-mono font-normal text-slate-500 text-[10px]">{row.p.codigo_embalagem || '—'}</span>
+                                <span className="font-mono font-normal text-slate-400 uppercase">{row.p.tipo || 'EMBALAGEM'}</span>
+                                <span className="font-mono font-normal text-slate-400 uppercase">{row.p.tipo_embalagem || 'CAIXA INDIVIDUAL'}</span>
+                                <span className="font-mono font-normal text-emerald-400 text-center">{row.enviado.toLocaleString('pt-BR')}</span>
+                                <span className={cn("font-mono font-normal text-center", row.pendente > 0 ? 'text-amber-400' : 'text-slate-600')}>{row.pendente.toLocaleString('pt-BR')}</span>
+                                <span className="font-mono font-normal text-slate-400 text-center text-[9px]">
+                                  {row.p.entrega_compras || 'TBC'}
+                                </span>
+                                <span className="font-mono font-normal text-slate-400 text-center text-[9px]">
+                                  {row.p.envio_expedicao || 'TBC'}
+                                </span>
+                                <span className={cn("font-mono font-normal text-center text-[9px] uppercase tracking-wider", row.statusCls)}>
+                                  {row.status}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })
+              })()}
+            </div>
+          </motion.div>
+          ) : (
+          /* ─── SPREADSHEET TABS (atuais / chegando) ─── */
           <motion.div key="spreadsheet" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
             className="bg-[#111827] border border-slate-800 rounded-2xl overflow-hidden shadow-md"
           >
             <div className="px-6 py-4 border-b border-slate-800 bg-[#0f172a]/50">
               <h3 className="text-sm font-bold text-white uppercase tracking-wider font-sans">
-                {subTab === "pedidas" ? "Planilha de Pedidos / Solicitações" : subTab === "atuais" ? "Estoque CD / Conserto" : "Cargas a Caminho"}
+                {subTab === "atuais" ? "Estoque CD / Conserto" : "Cargas a Caminho"}
               </h3>
               <p className="text-[10px] font-medium text-slate-400 mt-0.5 font-sans">
                 Lançamento estilo Excel · Permite edição de qualquer célula, seleção rápida e colagem em massa
@@ -1425,7 +1624,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                             </button>
                           ) : (
                             user && (
-                              <button onClick={() => deleteRecord(subTab === "pedidas" ? "embalagens_pedidas" : subTab === "atuais" ? "embalagens_atuais" : "embalagens_chegando", item.id!)}
+                              <button onClick={() => deleteRecord(subTab === "atuais" ? "embalagens_atuais" : "embalagens_chegando", item.id!)}
                                 className="p-1.5 rounded-lg text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer" title="Excluir">
                                 <Trash2 size={13} />
                               </button>
@@ -1439,7 +1638,8 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
               </table>
             </div>
           </motion.div>
-        )}
+        )
+      )}
       </AnimatePresence>
 
       {/* ─── IMPORT MODAL ─── */}
@@ -1468,9 +1668,20 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
 
               <div className="flex flex-col flex-1 min-h-0 gap-6 font-sans">
                 <div className="space-y-2">
-                  <p className="text-xs text-slate-400 font-semibold">
-                    Cole os dados da planilha Excel ou Sheets abaixo. Ordem esperada:<br />
-                    <span className="font-bold text-white uppercase tracking-wider">DATA | CÓDIGO | QUANTIDADE</span> (separados por TAB).
+                  <p className="text-xs text-slate-400 font-semibold leading-relaxed">
+                    {subTab === "pedidas" ? (
+                      <>
+                        Cole as colunas do Excel de Compras (separados por TAB):<br />
+                        <span className="font-mono text-[9px] text-slate-500 font-normal uppercase tracking-wider block bg-slate-950 p-2 rounded-xl mt-1 overflow-x-auto whitespace-nowrap">
+                          SOLICITAÇÃO | DATA | SOLICITANTE | DESTINO | CÓD. EMBALAGEM | DESCRIÇÃO | TIPO | TIPO EMB. | CÓD. PRODUTO | MODELO PROD. | MODELO | SOLICITADO | ENVIADO | PENDENTE | ENTREGA | ENVIO | STATUS | COM. TATIANA | COMENTÁRIO | RESPONSABILIDADE | NF | PLACA | PREVISÃO
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        Cole os dados da planilha Excel ou Sheets abaixo. Ordem esperada:<br />
+                        <span className="font-bold text-white uppercase tracking-wider">DATA | CÓDIGO | QUANTIDADE</span> (separados por TAB).
+                      </>
+                    )}
                   </p>
                   <div className="relative flex-1 min-h-[220px]">
                     <textarea
@@ -1513,7 +1724,11 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                     let lines = importText.trim().split("\n").filter((l) => l.trim())
                     if (lines.length === 0) return
                     const first = lines[0].toLowerCase()
-                    if (first.includes("data") || first.includes("código") || first.includes("codigo") || first.includes("quantidade") || first.includes("qtd")) {
+                    if (
+                      first.includes("solicitação") || first.includes("solicitacao") ||
+                      first.includes("data") || first.includes("código") || first.includes("codigo") ||
+                      first.includes("quantidade") || first.includes("qtd") || first.includes("solicitante")
+                    ) {
                       lines = lines.slice(1)
                     }
                     if (lines.length === 0) { alert("Nenhum dado válido encontrado."); return }
@@ -1523,13 +1738,58 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                     try {
                       const payload = lines.map((line) => {
                         const cols = line.split("\t")
-                        const dateCol = String(cols[0] || "").trim()
-                        const skuCol = String(cols[1] || "").trim().toUpperCase()
-                        const qtyCol = Number(String(cols[2] || "0").replace(/\D/g, ""))
-                        const obj: any = { codigo: skuCol, quantidade: qtyCol }
-                        if (subTab === "atuais") { obj.chegada = dateCol || new Date().toISOString().split("T")[0] }
-                        else { obj.data = dateCol || new Date().toISOString().split("T")[0] }
-                        return obj
+                        if (subTab === "pedidas") {
+                          const parseBrNum = (s: string) => {
+                            const clean = String(s || "0").replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
+                            return Number(clean) || 0;
+                          };
+                          
+                          const parseBrDateToIso = (s: string) => {
+                            if (!s) return null;
+                            const parts = s.trim().split('/');
+                            if (parts.length === 3) {
+                              return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                            }
+                            return null;
+                          };
+
+                          const dateCol = parseBrDateToIso(cols[1]) || new Date().toISOString().split("T")[0];
+
+                          return {
+                            solicitacao: String(cols[0] || "").trim(),
+                            data_solicitacao: dateCol,
+                            data: dateCol, // Fallback for charts
+                            solicitante: String(cols[2] || "").trim(),
+                            destino: String(cols[3] || "").trim(),
+                            codigo_embalagem: String(cols[4] || "").trim(),
+                            descricao_embalagem: String(cols[5] || "").trim(),
+                            tipo: String(cols[6] || "").trim(),
+                            tipo_embalagem: String(cols[7] || "").trim(),
+                            codigo: String(cols[8] || "").trim().toUpperCase(), // Cód. Produto -> codigo
+                            modelo_produto: String(cols[9] || "").trim(),
+                            modelo: String(cols[10] || "").trim(),
+                            quantidade: parseBrNum(cols[11]), // Solicitado -> quantidade
+                            enviado: parseBrNum(cols[12]),
+                            pendente: parseBrNum(cols[13]),
+                            entrega_compras: String(cols[14] || "").trim(),
+                            envio_expedicao: String(cols[15] || "").trim(),
+                            status: String(cols[16] || "").trim(),
+                            comentario_tatiana: String(cols[17] || "").trim(),
+                            comentario: String(cols[18] || "").trim(),
+                            responsabilidade: String(cols[19] || "").trim(),
+                            nf: String(cols[20] || "").trim(),
+                            placa: String(cols[21] || "").trim(),
+                            previsao_entrega: String(cols[22] || "").trim(),
+                          };
+                        } else {
+                          const dateCol = String(cols[0] || "").trim()
+                          const skuCol = String(cols[1] || "").trim().toUpperCase()
+                          const qtyCol = Number(String(cols[2] || "0").replace(/\D/g, ""))
+                          const obj: any = { codigo: skuCol, quantidade: qtyCol }
+                          if (subTab === "atuais") { obj.chegada = dateCol || new Date().toISOString().split("T")[0] }
+                          else { obj.data = dateCol || new Date().toISOString().split("T")[0] }
+                          return obj
+                        }
                       })
                       if (replaceExistingData) {
                         const { error: delErr } = await supabase.from(targetTable).delete().neq("codigo", "placeholder_xyz")
