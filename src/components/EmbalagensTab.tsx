@@ -607,7 +607,24 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
               const mm = parseInt(m, 10);
               const dd = parseInt(d, 10);
               if (yyyy >= 2000 && yyyy <= 2100 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
-                return `${yyyy}-${mm.toString().padStart(2, '0')}-${dd.toString().padStart(2, '0')}`;
+                const today = new Date();
+                const currentYear = today.getFullYear();
+                const currentMonth = today.getMonth() + 1;
+                const currentDay = today.getDate();
+                
+                let finalM = mm;
+                let finalD = dd;
+                
+                const isFuture = yyyy > currentYear || 
+                                (yyyy === currentYear && mm > currentMonth) || 
+                                (yyyy === currentYear && mm === currentMonth && dd > currentDay);
+                                
+                if (isFuture && dd <= 12) {
+                  finalM = dd;
+                  finalD = mm;
+                }
+                
+                return `${yyyy}-${finalM.toString().padStart(2, '0')}-${finalD.toString().padStart(2, '0')}`;
               }
             }
             return null;
