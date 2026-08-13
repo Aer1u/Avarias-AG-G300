@@ -65,6 +65,323 @@ interface SkuRow {
   pctCoberto: number
 }
 
+// ─── AvariasGrowthChart ────────────────────────────────────────────────────────
+type ChartViewType = 'curva' | 'empilhado' | 'formacao' | 'acumulado'
+type GroupModeType = 'solicitacao' | 'item'
+
+const _COLOR_PALETTE = [
+  { stroke: '#f43f5e', fill: '#f43f5e' },
+  { stroke: '#38bdf8', fill: '#38bdf8' },
+  { stroke: '#10b981', fill: '#10b981' },
+  { stroke: '#f59e0b', fill: '#f59e0b' },
+  { stroke: '#a855f7', fill: '#a855f7' },
+  { stroke: '#ec4899', fill: '#ec4899' },
+  { stroke: '#06b6d4', fill: '#06b6d4' },
+  { stroke: '#84cc16', fill: '#84cc16' },
+  { stroke: '#6366f1', fill: '#6366f1' },
+  { stroke: '#14b8a6', fill: '#14b8a6' },
+]
+function _colorForIdx(i: number) { return _COLOR_PALETTE[i % _COLOR_PALETTE.length] }
+
+interface GrowthChartProps { pedidas: EmbalagemRegistro[]; allSkuRows: SkuRow[] }
+interface GrowthPoint {
+  id: number; label: string; dateStr: string
+  totalSolicitado: number; totalAvarias: number; totalDeficit: number
+  produtos: { codigo: string; descricao: string; solicitado: number; avarias: number; deficit: number; color: { stroke: string; fill: string } }[]
+  cumAvarias: number; cumSolicitado: number
+}
+
+function AvariasGrowthChart({ pedidas, allSkuRows }: GrowthChartProps) {
+  const [viewType, setViewType] = React.useState<ChartViewType>('curva')
+  const [groupMode, setGroupMode] = React.useState<GroupModeType>('solicitacao')
+  const [selectedIdx, setSelectedIdx] = React.useState(0)
+  const [hoveredIdx, setHoveredIdx] = React.useState<number | null>(null)
+
+  const valid = useMemo(() => pedidas.filter((p) => !p.isNew && p.codigo), [pedidas])
+
+  const series = useMemo<GrowthPoint[]>(() => {
+    if (!valid.length) return []
+    const groups: Record<string, EmbalagemRegistro[]> = {}
+    if (groupMode === 'solicitacao') {
+      valid.forEach((item) => {
+        const key = item.data ? `D_${item.data}` : 'OUTROS'
+        if (!groups[key]) groups[key] = []
+        groups[key].push(item)
+      })
+    } else {
+      valid.forEach((item, i) => { groups[`ITEM_${item.id || i}`] = [item] })
+    }
+    let cumA = 0, cumS = 0
+    return Object.keys(groups).map((key, gi) => {
+      const items = groups[key]
+      const first = items[0]
+      const dateStr = first.data
+        ? new Date(first.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+        : `Sol #${gi + 1}`
+      const skuMap: Record<string, number> = {}
+      items.forEach((it) => {
+        const c = String(it.codigo || '').trim().toUpperCase()
+        if (c) skuMap[c] = (skuMap[c] || 0) + (Number(it.quantidade) || 0)
+      })
+      let totS = 0, totA = 0, totD = 0
+      const produtos = Object.entries(skuMap).map(([code, qty], pi) => {
+        const row = allSkuRows.find((r) => r.codigo === code)
+        const av = row?.avarias || 0, def = row?.deficit || 0
+        totS += qty; totA += av; totD += def
+        return { codigo: code, descricao: row?.descricao || 'Embalagem', solicitado: qty, avarias: av, deficit: def, color: _colorForIdx(pi) }
+      }).sort((a, b) => b.solicitado - a.solicitado)
+      cumA += totA; cumS += totS
+      return { id: gi + 1, label: `Solic. #${gi + 1}`, dateStr, totalSolicitado: totS, totalAvarias: totA, totalDeficit: totD, produtos, cumAvarias: cumA, cumSolicitado: cumS }
+    })
+  }, [valid, allSkuRows, groupMode])
+
+  const W = 860, H = 220, pX = 44, pT = 28, pB = 38, iW = W - pX * 2, iH = H - pT - pB
+
+  const chartMax = useMemo(() => {
+    const vals = viewType === 'acumulado'
+      ? series.map((s) => Math.max(s.cumAvarias, s.cumSolicitado))
+      : series.map((s) => Math.max(s.totalAvarias, s.totalSolicitado))
+    return Math.max(...vals, 1) * 1.18
+  }, [series, viewType])
+
+  const coords = series.map((s, i) => {
+    const x = series.length === 1 ? W / 2 : pX + (i / (series.length - 1)) * iW
+    const vA = viewType === 'acumulado' ? s.cumAvarias : s.totalAvarias
+    const vS = viewType === 'acumulado' ? s.cumSolicitado : s.totalSolicitado
+    return { x, yA: pT + iH - (vA / chartMax) * iH, yS: pT + iH - (vS / chartMax) * iH, vA, vS, s }
+  })
+
+  const smooth = (pts: {x:number;y:number}[]) => {
+    if (!pts.length) return ''
+    if (pts.length === 1) return `M ${pts[0].x-20} ${pts[0].y} L ${pts[0].x+20} ${pts[0].y}`
+    return pts.reduce((acc, cur, i, arr) => {
+      if (i === 0) return `M ${cur.x} ${cur.y}`
+      const p = arr[i-1]
+      return `${acc} C ${p.x+(cur.x-p.x)*0.45} ${p.y}, ${p.x+(cur.x-p.x)*0.55} ${cur.y}, ${cur.x} ${cur.y}`
+    }, '')
+  }
+  const pathA = smooth(coords.map((c) => ({ x: c.x, y: c.yA })))
+  const pathS = smooth(coords.map((c) => ({ x: c.x, y: c.yS })))
+  const areaA = coords.length > 1 ? `${pathA} L ${coords[coords.length-1].x} ${pT+iH} L ${coords[0].x} ${pT+iH} Z` : ''
+
+  const totalVariation = series.reduce((acc, s, i) => acc + (i > 0 ? Math.max(0, s.totalAvarias - series[i-1].totalAvarias) : 0), 0)
+  const activeIdx = hoveredIdx !== null ? hoveredIdx : selectedIdx
+  const activePoint = series[Math.min(activeIdx, series.length - 1)]
+
+  if (!series.length) return null
+
+  return (
+    <div className="bg-[#111827] border border-slate-800/90 rounded-2xl p-5 shadow-xl flex flex-col gap-5">
+      {/* Header */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-800/80">
+        <div className="flex items-start gap-3">
+          <div className="p-2 rounded-lg bg-gradient-to-br from-rose-500/20 via-sky-500/10 to-emerald-500/20 border border-slate-700/80 flex-shrink-0">
+            <Boxes size={16} className="text-rose-400" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h3 className="text-xs font-black text-white uppercase tracking-wider font-sans">
+                Aumento Consolidado & Composição por Produto
+              </h3>
+              <div className="px-2 py-0.5 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center gap-1">
+                <ArrowUpRight size={12} className="text-rose-400" />
+                <span className="text-[9px] font-mono font-bold text-rose-400">+{totalVariation.toLocaleString('pt-BR')} un (variação)</span>
+              </div>
+            </div>
+            <p className="text-[9px] text-slate-500 mt-0.5 font-mono">
+              {series.length} solicitações · {series.reduce((a,s) => a + s.totalSolicitado, 0).toLocaleString('pt-BR')} un solicitadas no total
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1">
+            <span className="text-[9px] font-bold text-slate-400 px-1 uppercase font-mono hidden sm:inline">Agrupar:</span>
+            <select value={groupMode} onChange={(e) => { setGroupMode(e.target.value as GroupModeType); setSelectedIdx(0) }}
+              className="bg-slate-900/90 border border-slate-800 text-slate-300 text-[10px] font-mono font-bold rounded-lg px-2 py-1.5 outline-none focus:border-rose-500 transition-all min-w-[140px] cursor-pointer">
+              <option value="solicitacao">Por Solicitação ({series.length})</option>
+              <option value="item">Item a Item</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-[9px] font-bold text-slate-400 px-1 uppercase font-mono hidden sm:inline">Visão:</span>
+            <select value={viewType} onChange={(e) => setViewType(e.target.value as ChartViewType)}
+              className="bg-slate-900/90 border border-slate-800 text-slate-300 text-[10px] font-mono font-bold rounded-lg px-2 py-1.5 outline-none focus:border-sky-500 transition-all min-w-[130px] cursor-pointer">
+              <option value="curva">Curva Total</option>
+              <option value="empilhado">Empilhado</option>
+              <option value="formacao">Salto (Δ)</option>
+              <option value="acumulado">Acumulado</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* SVG Chart */}
+      <div className="relative w-full bg-slate-950/70 border border-slate-800/80 rounded-2xl p-2 sm:p-4 select-none overflow-hidden">
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-64 sm:h-72 overflow-visible" onMouseLeave={() => setHoveredIdx(null)}>
+          <defs>
+            <linearGradient id="agcAreaGrad2" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.28" />
+              <stop offset="80%" stopColor="#f43f5e" stopOpacity="0.03" />
+            </linearGradient>
+            <filter id="agcGlowRose2"><feDropShadow dx="0" dy="0" stdDeviation="3" floodColor="#f43f5e" floodOpacity="0.7" /></filter>
+            <filter id="agcGlowSky2"><feDropShadow dx="0" dy="0" stdDeviation="3" floodColor="#38bdf8" floodOpacity="0.7" /></filter>
+          </defs>
+
+          {/* Gridlines */}
+          {[0, 0.25, 0.5, 0.75, 1].map((pct, gi) => {
+            const y = pT + iH * (1 - pct)
+            return (
+              <g key={gi}>
+                <line x1={pX} y1={y} x2={W - pX} y2={y} stroke="#1e293b" strokeWidth="1" strokeDasharray={pct===0?'none':'3 3'} opacity="0.7" />
+                <text x={pX-8} y={y+3.5} textAnchor="end" fill="#64748b" fontSize="8.5" fontFamily="monospace" fontWeight="600">
+                  {Math.round(pct * chartMax).toLocaleString('pt-BR')}
+                </text>
+              </g>
+            )
+          })}
+
+          {/* EMPILHADO */}
+          {viewType === 'empilhado' && coords.map((c, i) => {
+            const pt = c.s
+            const colW = Math.min(40, (iW / coords.length) * 0.55)
+            const isAct = hoveredIdx === i || selectedIdx === i
+            let yOff = 0
+            return (
+              <g key={i} className="cursor-pointer" onClick={() => setSelectedIdx(i)} onMouseEnter={() => setHoveredIdx(i)}>
+                {isAct && <rect x={c.x - colW/2 - 4} y={pT} width={colW+8} height={iH} rx="6" fill="#1e293b" opacity="0.4" />}
+                {pt.produtos.map((prod, pi) => {
+                  const h = (prod.solicitado / chartMax) * iH
+                  const y = pT + iH - yOff - h
+                  yOff += h
+                  return <rect key={pi} x={c.x-colW/2} y={Math.max(pT,y)} width={colW} height={Math.max(2,h)} rx={pi===pt.produtos.length-1?4:0} fill={prod.color.fill} opacity={isAct?1:0.82} stroke="#0f172a" strokeWidth="0.8" />
+                })}
+                <text x={c.x} y={c.yS-6} textAnchor="middle" fill={isAct?'#fff':'#38bdf8'} fontSize="8.5" fontFamily="monospace" fontWeight="700">
+                  {pt.totalSolicitado.toLocaleString('pt-BR')}
+                </text>
+              </g>
+            )
+          })}
+
+          {/* CURVA / ACUMULADO */}
+          {(viewType === 'curva' || viewType === 'acumulado') && (
+            <>
+              {areaA && <path d={areaA} fill="url(#agcAreaGrad2)" />}
+              <path d={pathS} fill="none" stroke="#38bdf8" strokeWidth="2.8" strokeDasharray={viewType==='acumulado'?'none':'5 4'} strokeLinecap="round" strokeLinejoin="round" />
+              <path d={pathA} fill="none" stroke="#f43f5e" strokeWidth="3.6" strokeLinecap="round" strokeLinejoin="round" />
+            </>
+          )}
+
+          {/* FORMAÇÃO / WATERFALL */}
+          {viewType === 'formacao' && coords.map((c, i) => {
+            const prev = series[i-1]
+            const delta = i === 0 ? c.s.totalSolicitado : c.s.totalSolicitado - (prev?.totalSolicitado || 0)
+            const isPos = delta >= 0
+            const dH = (Math.abs(delta) / chartMax) * iH
+            const colW = Math.min(36, (iW / coords.length) * 0.45)
+            const yStart = isPos ? pT + iH - dH : pT + iH
+            const isAct = hoveredIdx === i || selectedIdx === i
+            return (
+              <g key={i} className="cursor-pointer" onClick={() => setSelectedIdx(i)} onMouseEnter={() => setHoveredIdx(i)}>
+                <rect x={c.x-colW/2} y={Math.max(pT,yStart)} width={colW} height={Math.max(3,dH)} rx="4" fill={i===0?'#64748b':isPos?'#10b981':'#f43f5e'} opacity={isAct?1:0.85} />
+                <text x={c.x} y={Math.max(pT+10,yStart-5)} textAnchor="middle" fill={i===0?'#94a3b8':isPos?'#34d399':'#fb7185'} fontSize="8.5" fontFamily="monospace" fontWeight="700">
+                  {i===0?'Base':(isPos?'+':'')+delta.toLocaleString('pt-BR')}
+                </text>
+              </g>
+            )
+          })}
+
+          {/* Interactive nodes + scrubber */}
+          {coords.map((c, i) => {
+            const isH = hoveredIdx === i, isSel = selectedIdx === i
+            const colW = iW / Math.max(coords.length, 1)
+            return (
+              <g key={i} className="cursor-pointer" onMouseEnter={() => setHoveredIdx(i)} onClick={() => setSelectedIdx(i)}>
+                <rect x={c.x-colW/2} y={pT} width={colW} height={iH+pB} fill="transparent" />
+                {(isH || isSel) && <line x1={c.x} y1={pT-6} x2={c.x} y2={pT+iH} stroke={isSel?'#38bdf8':'#94a3b8'} strokeWidth={isSel?'2':'1.2'} strokeDasharray={isSel?'none':'3 3'} opacity="0.9" />}
+                <rect x={c.x-(isH||isSel?5:3.5)} y={c.yS-(isH||isSel?5:3.5)} width={isH||isSel?10:7} height={isH||isSel?10:7} rx="2" fill={isH||isSel?'#fff':'#38bdf8'} stroke="#0f172a" strokeWidth="2" filter={isH||isSel?'url(#agcGlowSky2)':undefined} />
+                <circle cx={c.x} cy={c.yA} r={isH||isSel?6.5:4.5} fill={isH||isSel?'#fff':'#f43f5e'} stroke="#0f172a" strokeWidth="2" filter={isH||isSel?'url(#agcGlowRose2)':undefined} />
+                <text x={c.x} y={pT+iH+14} textAnchor="middle" fill={isH||isSel?'#fff':'#94a3b8'} fontSize="9" fontWeight={isH||isSel?'800':'600'} fontFamily="monospace">{c.s.dateStr}</text>
+                <text x={c.x} y={pT+iH+25} textAnchor="middle" fill={isSel?'#38bdf8':'#64748b'} fontSize="7.5" fontFamily="monospace" fontWeight="600">#{c.s.id} ({c.s.produtos.length} SKU)</text>
+              </g>
+            )
+          })}
+        </svg>
+
+        {/* Legend */}
+        <div className="flex items-center gap-4 flex-wrap mt-2 px-1">
+          <div className="flex items-center gap-1.5"><div className="w-4 h-0.5 rounded bg-rose-500" /><span className="text-[9px] font-mono text-slate-400">Avarias</span></div>
+          <div className="flex items-center gap-1.5"><div className="w-4 h-0.5 rounded" style={{background:'#38bdf8',opacity:0.8}} /><span className="text-[9px] font-mono text-slate-400">Solicitado</span></div>
+        </div>
+      </div>
+
+      {/* Detail panel for selected point */}
+      {activePoint && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="sm:col-span-1 bg-slate-900/60 border border-slate-800/60 rounded-xl p-4 flex flex-col gap-2">
+            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 font-mono mb-1">{activePoint.label}</p>
+            <div className="flex flex-col gap-1.5">
+              {[
+                { label: 'Total Avarias', val: activePoint.totalAvarias.toLocaleString('pt-BR'), cls: 'text-rose-400' },
+                { label: 'Solicitado', val: activePoint.totalSolicitado.toLocaleString('pt-BR'), cls: 'text-sky-400' },
+                { label: 'Déficit', val: activePoint.totalDeficit.toLocaleString('pt-BR'), cls: 'text-amber-400' },
+                { label: 'SKUs', val: String(activePoint.produtos.length), cls: 'text-white' },
+              ].map((row) => (
+                <div key={row.label} className="flex justify-between items-center border-b border-slate-800/40 pb-1 last:border-0 last:pb-0">
+                  <span className="text-[10px] text-slate-400 font-mono">{row.label}</span>
+                  <span className={cn("font-mono text-[11px] font-normal", row.cls)}>{row.val}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="sm:col-span-2 bg-slate-900/60 border border-slate-800/60 rounded-xl overflow-hidden">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-800 bg-[#0f172a]/40">
+                  <th className="px-4 py-2.5 font-mono text-[9px] font-medium text-slate-500 uppercase tracking-wider">SKU</th>
+                  <th className="px-4 py-2.5 font-mono text-[9px] font-medium text-slate-500 uppercase tracking-wider text-right">Solicitado</th>
+                  <th className="px-4 py-2.5 font-mono text-[9px] font-medium text-rose-400/80 uppercase tracking-wider text-right">Avarias</th>
+                  <th className="px-4 py-2.5 font-mono text-[9px] font-medium text-amber-400/80 uppercase tracking-wider text-right">Déficit</th>
+                  <th className="px-4 py-2.5 font-mono text-[9px] font-medium text-slate-500 uppercase tracking-wider text-right">Share</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/50">
+                {activePoint.produtos.map((prod, pi) => {
+                  const pct = activePoint.totalSolicitado > 0 ? Math.round((prod.solicitado / activePoint.totalSolicitado) * 100) : 0
+                  return (
+                    <tr key={pi} className={cn("hover:bg-slate-700/20 transition-colors", pi % 2 === 0 ? "bg-transparent" : "bg-slate-800/20")}>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-1.5 h-4 rounded-sm flex-shrink-0" style={{ background: prod.color.fill }} />
+                          <div>
+                            <p className="font-mono text-[11px] font-normal text-white">{prod.codigo}</p>
+                            <p className="font-mono text-[9px] text-slate-500 truncate max-w-[100px]">{prod.descricao}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5 font-mono text-[11px] font-normal text-sky-400 text-right">{prod.solicitado.toLocaleString('pt-BR')}</td>
+                      <td className="px-4 py-2.5 font-mono text-[11px] font-normal text-rose-400 text-right">{prod.avarias.toLocaleString('pt-BR')}</td>
+                      <td className="px-4 py-2.5 font-mono text-[11px] font-normal text-amber-400 text-right">{prod.deficit.toLocaleString('pt-BR')}</td>
+                      <td className="px-4 py-2.5 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <div className="w-12 h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: prod.color.fill }} />
+                          </div>
+                          <span className="font-mono text-[10px] text-slate-400">{pct}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Animated Number ───────────────────────────────────────────────────────────
 function AnimatedNumber({ value, className }: { value: number; className?: string }) {
   const [display, setDisplay] = useState(0)
