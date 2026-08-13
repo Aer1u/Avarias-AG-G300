@@ -601,7 +601,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
         if (subTab === "pedidas") {
           const parseBrNum = (s: string) => {
             const clean = String(s || "0").replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
-            return Number(clean) || 0;
+            return Math.round(Number(clean) || 0);
           };
           
           const parseBrDateToIso = (s: string): string | null => {
@@ -1549,7 +1549,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                         <div className="bg-slate-950/40 border-t border-slate-800/50 overflow-x-auto">
                           <div className="min-w-[1800px]">
                             {/* Detail header */}
-                            <div className="grid grid-cols-[1fr_1fr_0.6fr_1.2fr_1.4fr_0.7fr_1fr_0.6fr_0.6fr_0.9fr_0.9fr_0.9fr_0.7fr_0.7fr_0.9fr] px-6 py-2.5 text-[9px] font-mono font-medium text-slate-500 uppercase tracking-wider border-b border-slate-800/60">
+                            <div className="grid grid-cols-[1fr_1fr_0.6fr_1.2fr_1.4fr_0.7fr_1fr_0.6fr_0.6fr_0.9fr_0.9fr_0.9fr_0.7fr_0.9fr] px-6 py-2.5 text-[9px] font-mono font-medium text-slate-500 uppercase tracking-wider border-b border-slate-800/60">
                               <span>Cód. Produto</span>
                               <span>Modelo</span>
                               <span className="text-center">Qtd Solic.</span>
@@ -1562,13 +1562,12 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                               <span className="text-center">Entrega (Compras)</span>
                               <span className="text-center">Envio (Expedição)</span>
                               <span className="text-center">Status</span>
-                              <span className="text-center">Responsab.</span>
                               <span className="text-center">NF</span>
                               <span className="text-center">Previsão Entrega</span>
                             </div>
                             {rowDetails.map((row, ri) => (
                               <div key={ri} className={cn(
-                                "grid grid-cols-[1fr_1fr_0.6fr_1.2fr_1.4fr_0.7fr_1fr_0.6fr_0.6fr_0.9fr_0.9fr_0.9fr_0.7fr_0.7fr_0.9fr] px-6 py-2.5 items-center text-[10px] border-b border-slate-800/30 last:border-0 transition-colors hover:bg-slate-800/10",
+                                "grid grid-cols-[1fr_1fr_0.6fr_1.2fr_1.4fr_0.7fr_1fr_0.6fr_0.6fr_0.9fr_0.9fr_0.9fr_0.7fr_0.9fr] px-6 py-2.5 items-center text-[10px] border-b border-slate-800/30 last:border-0 transition-colors hover:bg-slate-800/10",
                                 ri % 2 === 1 ? "bg-slate-800/10" : ""
                               )}>
                                 {/* CÓD. PRODUTO – hover shows MODELO DO PRODUTO */}
@@ -1589,7 +1588,6 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                                 <span className="font-mono font-normal text-slate-400 text-center text-[9px]">{row.p.entrega_compras || 'TBC'}</span>
                                 <span className="font-mono font-normal text-slate-400 text-center text-[9px]">{row.p.envio_expedicao || 'TBC'}</span>
                                 <span className={cn("font-mono font-normal text-center text-[9px] uppercase tracking-wider", row.statusCls)}>{row.status}</span>
-                                <span className="font-mono font-normal text-slate-400 text-center text-[9px] truncate" title={row.p.responsabilidade || ''}>{row.p.responsabilidade || '—'}</span>
                                 <span className="font-mono font-normal text-slate-400 text-center text-[9px]">{row.p.nf || '—'}</span>
                                 <span className="font-mono font-normal text-slate-400 text-center text-[9px]">{row.p.previsao_entrega || '—'}</span>
                               </div>
