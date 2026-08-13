@@ -1374,45 +1374,75 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/50">
-                        {pedidas.filter(r => !r.isNew).slice(0, 5).map((p, i) => {
-                          const sku = String(p.codigo || '').trim().toUpperCase()
-                          const skuRow = allSkuRows.find(r => r.codigo === sku)
-                          const qty = Number(p.quantidade) || 0
-                          const recebido = Math.min(qty, skuRow?.estoque || 0)
-                          const pendente = Math.max(0, qty - recebido)
-                          const pct = skuRow?.pctCoberto || 0
-                          const status = pct >= 100 ? "FINALIZADO" : pct > 0 ? "EM ANDAMENTO" : "PENDENTE"
-                          const statusCls = pct >= 100
-                            ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
-                            : pct > 0
-                              ? "text-blue-400 bg-blue-500/10 border-blue-500/20"
-                              : "text-rose-400 bg-rose-500/10 border-rose-500/20"
+                        {(() => {
+                          const realPedidas = pedidas.filter(r => !r.isNew)
+                          const groups: Record<string, EmbalagemRegistro[]> = {}
+                          realPedidas.forEach(p => {
+                            const key = p.solicitacao || 'sem-solicitacao'
+                            if (!groups[key]) groups[key] = []
+                            groups[key].push(p)
+                          })
 
-                          const fakeDate = p.data ? new Date(p.data + 'T00:00:00') : new Date()
-                          const fakeDelivery = pct >= 100 
-                            ? new Date(fakeDate.getTime() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString("pt-BR")
-                            : "TBC"
+                          const sortedGroups = Object.entries(groups).sort((a, b) => {
+                            const dateA = a[1][0]?.data_solicitacao || a[1][0]?.data || ''
+                            const dateB = b[1][0]?.data_solicitacao || b[1][0]?.data || ''
+                            if (dateA !== dateB) return dateB.localeCompare(dateA)
+                            const numA = Number(a[0].replace(/\D/g, '')) || 0
+                            const numB = Number(b[0].replace(/\D/g, '')) || 0
+                            return numB - numA
+                          })
 
-                          return (
-                            <tr key={p.id || i} className={cn("hover:bg-slate-700/20 transition-colors", i % 2 === 0 ? "bg-transparent" : "bg-slate-800/20")}>
-                              <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-slate-400">{i + 1}</td>
-                              <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-slate-400">
-                                {p.data ? new Date(p.data + 'T00:00:00').toLocaleDateString("pt-BR") : "—"}
-                              </td>
-                              <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-blue-400 text-center">{qty.toLocaleString("pt-BR")}</td>
-                              <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-emerald-400 text-center">{recebido.toLocaleString("pt-BR")}</td>
-                              <td className={cn("px-5 py-3.5 font-mono text-[11px] font-normal text-center", pendente > 0 ? "text-amber-500" : "text-slate-500")}>
-                                {pendente.toLocaleString("pt-BR")}
-                              </td>
-                              <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-slate-400 text-center">{fakeDelivery}</td>
-                              <td className="px-5 py-3.5 text-center">
-                                <span className={cn("px-2.5 py-1 rounded-full text-[9px] font-semibold uppercase tracking-wider border", statusCls)}>
-                                  {status}
-                                </span>
-                              </td>
-                            </tr>
-                          )
-                        })}
+                          return sortedGroups.slice(0, 5).map(([solKey, items], i) => {
+                            let totSolic = 0, totEnviado = 0, totPendente = 0
+                            items.forEach(p => {
+                              totSolic += Math.round(Number(p.quantidade) || 0)
+                              totEnviado += Math.round(Number(p.enviado) || 0)
+                              totPendente += Math.round(Number(p.pendente) || 0)
+                            })
+
+                            const dateLabel = items[0]?.data_solicitacao
+                              ? new Date(items[0].data_solicitacao + 'T00:00:00').toLocaleDateString('pt-BR')
+                              : items[0]?.data
+                                ? new Date(items[0].data + 'T00:00:00').toLocaleDateString('pt-BR')
+                                : '—'
+
+                            const previsao = items[0]?.previsao_entrega || items[0]?.entrega_compras || 'TBC'
+
+                            const status = totPendente === 0 
+                              ? "FINALIZADO" 
+                              : totEnviado > 0 
+                                ? "EM ANDAMENTO" 
+                                : "PENDENTE"
+
+                            const statusCls = status === "FINALIZADO"
+                              ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+                              : status === "EM ANDAMENTO"
+                                ? "text-blue-400 bg-blue-500/10 border-blue-500/20"
+                                : "text-amber-500 bg-amber-500/10 border-amber-500/20"
+
+                            return (
+                              <tr key={solKey} className={cn("hover:bg-slate-700/20 transition-colors", i % 2 === 0 ? "bg-transparent" : "bg-slate-800/20")}>
+                                <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-slate-400">
+                                  {solKey === 'sem-solicitacao' ? 'S/N' : solKey}
+                                </td>
+                                <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-slate-400">
+                                  {dateLabel}
+                                </td>
+                                <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-blue-400 text-center">{totSolic.toLocaleString("pt-BR")}</td>
+                                <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-emerald-400 text-center">{totEnviado.toLocaleString("pt-BR")}</td>
+                                <td className={cn("px-5 py-3.5 font-mono text-[11px] font-normal text-center", totPendente > 0 ? "text-amber-500" : "text-slate-500")}>
+                                  {totPendente.toLocaleString("pt-BR")}
+                                </td>
+                                <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-slate-400 text-center">{previsao}</td>
+                                <td className="px-5 py-3.5 text-center">
+                                  <span className={cn("px-2.5 py-1 rounded-full text-[9px] font-semibold uppercase tracking-wider border", statusCls)}>
+                                    {status}
+                                  </span>
+                                </td>
+                              </tr>
+                            )
+                          })
+                        })()}
                       </tbody>
                     </table>
                   )}
