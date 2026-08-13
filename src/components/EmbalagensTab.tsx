@@ -1549,20 +1549,20 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                         <div className="bg-slate-950/40 border-t border-slate-800/50 overflow-x-auto">
                           <table className="w-full border-collapse text-[10px] font-mono" style={{ minWidth: '1400px', tableLayout: 'fixed' }}>
                             <colgroup>
-                              <col style={{ width: '88px' }} />   {/* Cód. Produto */}
-                              <col style={{ width: '110px' }} />  {/* Modelo */}
-                              <col style={{ width: '52px' }} />   {/* Qtd */}
-                              <col style={{ width: '120px' }} />  {/* Cód. Embalagem */}
-                              <col style={{ width: '180px' }} />  {/* Descrição */}
-                              <col style={{ width: '80px' }} />   {/* Tipo */}
-                              <col style={{ width: '110px' }} />  {/* Tipo Emb. */}
-                              <col style={{ width: '68px' }} />   {/* Enviado */}
-                              <col style={{ width: '68px' }} />   {/* Pendente */}
-                              <col style={{ width: '100px' }} />  {/* Entrega */}
-                              <col style={{ width: '100px' }} />  {/* Envio */}
-                              <col style={{ width: '95px' }} />   {/* Status */}
-                              <col style={{ width: '68px' }} />   {/* NF */}
-                              <col style={{ width: '80px' }} />   {/* Previsão */}
+                              <col style={{ width: '88px' }} />
+                              <col style={{ width: '110px' }} />
+                              <col style={{ width: '52px' }} />
+                              <col style={{ width: '120px' }} />
+                              <col style={{ width: '180px' }} />
+                              <col style={{ width: '80px' }} />
+                              <col style={{ width: '110px' }} />
+                              <col style={{ width: '68px' }} />
+                              <col style={{ width: '68px' }} />
+                              <col style={{ width: '100px' }} />
+                              <col style={{ width: '100px' }} />
+                              <col style={{ width: '95px' }} />
+                              <col style={{ width: '68px' }} />
+                              <col style={{ width: '80px' }} />
                             </colgroup>
                             <thead>
                               <tr className="border-b border-slate-800/60 bg-slate-950/20">
