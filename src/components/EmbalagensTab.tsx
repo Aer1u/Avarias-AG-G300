@@ -500,7 +500,32 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
   const [pedidosBa, setPedidosBa] = useState<any[]>([])
   const [togglingBa, setTogglingBa] = useState(false)
   
-  const [subTab, setSubTab] = useState<"comparativo" | "pedidas" | "atuais" | "chegando" | "estoque_g300" | "conserto">("comparativo")
+  const [subTab, setSubTab] = useState<"comparativo" | "pedidas" | "atuais" | "chegando" | "estoque_g300" | "conserto" | "ordem_pedido">("comparativo")
+  const [ordemCustom, setOrdemCustom] = useState<Record<string, { qtdReal?: number | string; obs?: string }>>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("ordem_pedido_custom_v1")
+        if (stored) return JSON.parse(stored)
+      } catch (e) {
+        console.error(e)
+      }
+    }
+    return {}
+  })
+
+  const updateOrdemCustom = (sku: string, field: "qtdReal" | "obs", value: any) => {
+    setOrdemCustom(prev => {
+      const next = {
+        ...prev,
+        [sku]: {
+          ...prev[sku],
+          [field]: value
+        }
+      }
+      localStorage.setItem("ordem_pedido_custom_v1", JSON.stringify(next))
+      return next
+    })
+  }
   const [search, setSearch] = useState("")
   const [user, setUser] = useState<any>(null)
   const [activeSkuDropdown, setActiveSkuDropdown] = useState<{ type: string, index: number } | null>(null)
@@ -854,6 +879,122 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
     return m
   }, [pedidas, chegando, pedidosBa])
 
+  const enviadoNaoChegouPerSku = useMemo(() => {
+    const m: Record<string, number> = {}
+    pedidas.filter(r => !r.isNew && (r.status || "").trim().toUpperCase() === "FINALIZADO").forEach(r => {
+      const sol = String(r.solicitacao || "").trim()
+      const prod = String(r.codigo || "").trim().toUpperCase()
+      const emb = String(r.codigo_embalagem || "").trim().toUpperCase()
+      const isMarkedBa = pedidosBa.some(
+        ba => String(ba.solicitacao).trim() === sol &&
+              String(ba.codigo_produto).trim().toUpperCase() === prod &&
+              String(ba.codigo_embalagem).trim().toUpperCase() === emb
+      )
+      if (isMarkedBa) return
+
+      const c = String(r.codigo || "").trim().toUpperCase()
+      if (c) m[c] = (m[c] || 0) + Math.round(Number(r.quantidade) || 0)
+    })
+    return m
+  }, [pedidas, pedidosBa])
+
+  // Helper to find packaging code for a product SKU
+  const getEmbCode = (prodCode: string) => {
+    const g300Item = estoqueG300.find(r => String(r.codigo_produto).trim().toUpperCase() === prodCode.trim().toUpperCase())
+    if (g300Item?.codigo_embalagem) return String(g300Item.codigo_embalagem).trim()
+    
+    const consertoItem = estoqueConserto.find(r => String(r.codigo_produto).trim().toUpperCase() === prodCode.trim().toUpperCase())
+    if (consertoItem?.codigo_embalagem) return String(consertoItem.codigo_embalagem).trim()
+
+    const pedidasItem = pedidas.find(r => String(r.codigo).trim().toUpperCase() === prodCode.trim().toUpperCase())
+    if (pedidasItem?.codigo_embalagem) return String(pedidasItem.codigo_embalagem).trim()
+
+    return ""
+  }
+
+  // Helper to find packaging description
+  const getEmbDesc = (prodCode: string, embCode: string) => {
+    const g300Item = estoqueG300.find(r => String(r.codigo_produto).trim().toUpperCase() === prodCode.trim().toUpperCase())
+    if (g300Item?.descricao_embalagem) return String(g300Item.descricao_embalagem).trim()
+
+    const consertoItem = estoqueConserto.find(r => String(r.codigo_produto).trim().toUpperCase() === prodCode.trim().toUpperCase())
+    if (consertoItem?.descricao_embalagem) return String(consertoItem.descricao_embalagem).trim()
+
+    const pedidasItem = pedidas.find(r => String(r.codigo).trim().toUpperCase() === prodCode.trim().toUpperCase())
+    if (pedidasItem?.descricao_embalagem) return String(pedidasItem.descricao_embalagem).trim()
+
+    if (embCode) {
+      const base = baseCodigos.find(b => String(b["Código"]).trim().toUpperCase() === embCode.trim().toUpperCase())
+      if (base?.["Descrição"]) return base["Descrição"]
+    }
+
+    return ""
+  }
+
+  const ordemPedidoRows = useMemo(() => {
+    const skus = Object.keys(avariasPerSku).filter(sku => avariasPerSku[sku] > 0)
+    skus.sort((a, b) => a.localeCompare(b))
+    
+    return skus.map(sku => {
+      const base = baseCodigos.find(b => String(b["Código"]).trim().toUpperCase() === sku)
+      const descricao = base?.["Descrição"] || "Produto " + sku
+      const avarias = Math.round(avariasPerSku[sku] || 0)
+      
+      const embCodigo = getEmbCode(sku)
+      const embDescricao = getEmbDesc(sku, embCodigo)
+      
+      const estConserto = Math.round(consertoPerSku[sku] || 0)
+      const estG300 = Math.round(atuaisPerSku[sku] || 0)
+      
+      const enviadoNaoChegou = Math.round(enviadoNaoChegouPerSku[sku] || 0)
+      const pendenteEnvio = Math.round(pedidasPerSku[sku] || 0)
+      
+      const totalCoberto = estConserto + estG300 + enviadoNaoChegou + pendenteEnvio
+      const qtdParaPedido = Math.max(0, avarias - totalCoberto)
+      
+      const custom = ordemCustom[sku] || {}
+      const qtdReal = custom.qtdReal !== undefined && custom.qtdReal !== "" ? custom.qtdReal : qtdParaPedido
+      const obs = custom.obs || ""
+      
+      return {
+        sku,
+        descricao,
+        avarias,
+        embCodigo,
+        embDescricao,
+        estoqueConserto: estConserto,
+        estoqueG300: estG300,
+        enviadoNaoChegou,
+        pendenteEnvio,
+        qtdParaPedido,
+        qtdReal,
+        obs
+      }
+    })
+  }, [baseCodigos, avariasPerSku, atuaisPerSku, consertoPerSku, enviadoNaoChegouPerSku, pedidasPerSku, ordemCustom, estoqueG300, estoqueConserto])
+
+  const exportOrdemPedidoToExcel = () => {
+    const dataToExport = ordemPedidoRows.map(r => ({
+      "Produto": r.sku,
+      "Descrição breve do produto": r.descricao,
+      "30.07": r.avarias,
+      "CÓDIGO EMBALAGEM": r.embCodigo,
+      "DESCRIÇÃO DA EMBALAGEM": r.embDescricao,
+      "ESTOQUE INSUMOS ATUAL CONSERTO": r.estoqueConserto,
+      "ESTOQUE INSUMOS ATUAL G300": r.estoqueG300,
+      "ENVIADO MAS NÃO CHEGOU AINDA": r.enviadoNaoChegou,
+      "PENDENTE DE ENVIO": r.pendenteEnvio,
+      "QTD PARA PEDIDO": r.qtdParaPedido,
+      "QTD REAL PARA PEDIR": r.qtdReal,
+      "OBS:": r.obs
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(dataToExport)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Ordem de Pedido")
+    XLSX.writeFile(wb, "Ordem_de_Pedido.xlsx")
+  }
+
   const allSkuRows = useMemo<SkuRow[]>(() => {
     const skusSet = new Set<string>()
     baseCodigos.forEach(b => { const c = String(b["Código"] || "").trim().toUpperCase(); if (c) skusSet.add(c) })
@@ -1183,7 +1324,8 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
       <div className="flex flex-wrap gap-2 items-center">
         {[
           { id: "comparativo", label: "PAINEL COMPARATIVO", icon: LayoutGrid },
-          { id: "pedidas", label: "PEDIDOS", icon: ShoppingCart },
+          { id: "pedidas", label: "CRONOGRAMA", icon: ShoppingCart },
+          { id: "ordem_pedido", label: "ORDEM DE PEDIDO", icon: FileText },
           { id: "estoque_g300", label: "ESTOQUE G300", icon: Boxes },
           { id: "conserto", label: "CONSERTO", icon: Wrench },
         ].map(tab => (
@@ -1816,6 +1958,93 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                   )
                 })
               })()}
+            </div>
+          </motion.div>
+          ) : subTab === "ordem_pedido" ? (
+          /* ─── ORDEM DE PEDIDO VIEW ─── */
+          <motion.div key="ordem-pedido" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} className="space-y-2">
+            <div className="bg-[#111827] border border-slate-800/80 rounded-2xl overflow-hidden shadow-md">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-[#0f172a]/50">
+                <div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider font-sans">Ordem de Pedido</h3>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Baseado nos registros de avaria. QTD Real e OBS são editáveis e salvos localmente.</p>
+                </div>
+                <button
+                  onClick={exportOrdemPedidoToExcel}
+                  className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition-all cursor-pointer"
+                >
+                  <FileText size={13} /> Exportar Excel
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[1400px] font-sans">
+                  <thead>
+                    <tr className="border-b border-slate-800 bg-[#0f172a]/30">
+                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider w-[90px]">Produto</th>
+                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider w-[200px]">Descrição breve do produto</th>
+                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider text-center w-[70px]">30.07</th>
+                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider w-[150px]">Código Embalagem</th>
+                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider w-[220px]">Descrição da Embalagem</th>
+                      <th className="px-4 py-3 text-[9px] font-medium text-emerald-400 uppercase tracking-wider text-center w-[110px]">Est. Conserto</th>
+                      <th className="px-4 py-3 text-[9px] font-medium text-sky-400 uppercase tracking-wider text-center w-[100px]">Est. G300</th>
+                      <th className="px-4 py-3 text-[9px] font-medium text-orange-400 uppercase tracking-wider text-center w-[110px]">Env. não chegou</th>
+                      <th className="px-4 py-3 text-[9px] font-medium text-yellow-400 uppercase tracking-wider text-center w-[110px]">Pendente Envio</th>
+                      <th className="px-4 py-3 text-[9px] font-medium text-rose-400 uppercase tracking-wider text-center w-[100px]">Qtd p/ Pedido</th>
+                      <th className="px-4 py-3 text-[9px] font-medium text-white uppercase tracking-wider text-center w-[110px]">Qtd Real p/ Pedir</th>
+                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider w-[160px]">OBS:</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 bg-[#111827]">
+                    {loading ? (
+                      <tr>
+                        <td colSpan={12} className="px-8 py-10 text-center text-slate-500">
+                          <Loader2 className="animate-spin text-blue-500 mx-auto mb-2" size={20} />
+                          Carregando...
+                        </td>
+                      </tr>
+                    ) : ordemPedidoRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={12} className="px-8 py-10 text-center text-slate-600">
+                          <Inbox size={22} className="mx-auto mb-2" />
+                          Nenhum produto com avaria registrado.
+                        </td>
+                      </tr>
+                    ) : ordemPedidoRows.map((row, idx) => (
+                      <tr key={row.sku} className={cn("hover:bg-white/[0.015] transition-colors", idx % 2 === 0 ? "bg-transparent" : "bg-slate-900/20")}>
+                        <td className="px-4 py-2.5 font-mono text-[11px] text-white font-semibold">{row.sku}</td>
+                        <td className="px-4 py-2.5 text-[11px] text-slate-300 max-w-[200px] truncate" title={row.descricao}>{row.descricao}</td>
+                        <td className="px-4 py-2.5 font-mono text-[11px] text-slate-300 text-center">{row.avarias.toLocaleString("pt-BR")}</td>
+                        <td className="px-4 py-2.5 font-mono text-[11px] text-slate-400">{row.embCodigo || "—"}</td>
+                        <td className="px-4 py-2.5 text-[11px] text-slate-400 max-w-[220px] truncate" title={row.embDescricao}>{row.embDescricao || "—"}</td>
+                        <td className="px-4 py-2.5 font-mono text-[11px] text-emerald-400 text-center">{row.estoqueConserto.toLocaleString("pt-BR")}</td>
+                        <td className="px-4 py-2.5 font-mono text-[11px] text-sky-400 text-center">{row.estoqueG300.toLocaleString("pt-BR")}</td>
+                        <td className="px-4 py-2.5 font-mono text-[11px] text-orange-400 text-center">{row.enviadoNaoChegou.toLocaleString("pt-BR")}</td>
+                        <td className="px-4 py-2.5 font-mono text-[11px] text-yellow-400 text-center">{row.pendenteEnvio.toLocaleString("pt-BR")}</td>
+                        <td className="px-4 py-2.5 font-mono text-[12px] font-bold text-rose-400 text-center">{row.qtdParaPedido.toLocaleString("pt-BR")}</td>
+                        <td className="p-0 text-center">
+                          <input
+                            type="text"
+                            value={ordemCustom[row.sku]?.qtdReal !== undefined ? String(ordemCustom[row.sku].qtdReal) : ""}
+                            onChange={e => updateOrdemCustom(row.sku, "qtdReal", e.target.value)}
+                            placeholder={String(row.qtdParaPedido)}
+                            className="w-full bg-transparent border-none py-2.5 text-center text-[11px] text-white font-mono font-semibold focus:bg-slate-800/60 focus:outline-none placeholder:text-slate-600"
+                          />
+                        </td>
+                        <td className="p-0">
+                          <input
+                            type="text"
+                            value={ordemCustom[row.sku]?.obs || ""}
+                            onChange={e => updateOrdemCustom(row.sku, "obs", e.target.value)}
+                            placeholder="Observações..."
+                            className="w-full bg-transparent border-none px-4 py-2.5 text-[11px] text-slate-300 font-sans font-normal focus:bg-slate-800/60 focus:outline-none placeholder:text-slate-600"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </motion.div>
           ) : (
