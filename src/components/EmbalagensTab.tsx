@@ -192,6 +192,14 @@ function AvariasGrowthChart({ pedidas, allSkuRows }: GrowthChartProps) {
   const activeIdx = hoveredIdx !== null ? hoveredIdx : selectedIdx
   const activePoint = series[Math.min(activeIdx, series.length - 1)]
 
+  // Coverage metrics: compare coverage with and without growth
+  const firstSolAvarias = series.length > 0 ? series[0].totalAvarias : 0
+  const lastSolAvarias = series.length > 0 ? series[series.length - 1].totalAvarias : 0
+  const deltaAvarias = Math.max(0, lastSolAvarias - firstSolAvarias)
+  const totalResources = allSkuRows.reduce((acc, r) => acc + (r.estoque || 0) + (r.pedidas || 0) + (r.chegando || 0), 0)
+  const coverageWithoutGrowth = firstSolAvarias > 0 ? Math.min(100, Math.round((totalResources / firstSolAvarias) * 100)) : 0
+  const coverageCurrent = lastSolAvarias > 0 ? Math.min(100, Math.round((totalResources / lastSolAvarias) * 100)) : 0
+
   if (!series.length) return null
 
   return (
@@ -209,12 +217,41 @@ function AvariasGrowthChart({ pedidas, allSkuRows }: GrowthChartProps) {
               </h3>
               <div className="px-2 py-0.5 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center gap-1">
                 <ArrowUpRight size={12} className="text-rose-400" />
-                <span className="text-[9px] font-mono font-normal text-rose-400">+{totalVariation.toLocaleString('pt-BR')} un (variação)</span>
+                <span className="text-[9px] font-mono font-normal text-rose-400">+{deltaAvarias.toLocaleString('pt-BR')} un desde 1ª sol.</span>
               </div>
             </div>
             <p className="text-[9px] text-slate-500 mt-0.5 font-mono">
               {series.length} solicitações · {series.reduce((a,s) => a + s.totalSolicitado, 0).toLocaleString('pt-BR')} un solicitadas no total
             </p>
+            {/* Coverage comparison strip */}
+            {series.length > 1 && (
+              <div className="flex items-center gap-3 mt-3 flex-wrap">
+                <div className="flex items-center gap-2 bg-slate-900/80 border border-slate-800 rounded-xl px-3 py-2">
+                  <div className="text-[9px] font-mono text-slate-400 uppercase tracking-wider">Cobertura atual</div>
+                  <div className={cn(
+                    "text-[13px] font-semibold font-mono",
+                    coverageCurrent >= 80 ? "text-emerald-400" : coverageCurrent >= 50 ? "text-amber-400" : "text-rose-400"
+                  )}>{coverageCurrent}%</div>
+                </div>
+                <div className="text-[9px] text-slate-600">vs</div>
+                <div className="flex items-center gap-2 bg-emerald-950/40 border border-emerald-800/40 rounded-xl px-3 py-2">
+                  <div className="text-[9px] font-mono text-slate-400 uppercase tracking-wider">Sem o crescimento</div>
+                  <div className={cn(
+                    "text-[13px] font-semibold font-mono",
+                    coverageWithoutGrowth >= 80 ? "text-emerald-400" : coverageWithoutGrowth >= 50 ? "text-amber-400" : "text-rose-400"
+                  )}>{coverageWithoutGrowth}%</div>
+                  {coverageWithoutGrowth > coverageCurrent && (
+                    <div className="flex items-center gap-0.5 text-emerald-400">
+                      <ArrowUpRight size={10} />
+                      <span className="text-[9px] font-mono">+{coverageWithoutGrowth - coverageCurrent}pp</span>
+                    </div>
+                  )}
+                </div>
+                <div className="text-[9px] text-slate-500 font-mono">
+                  (desconsiderando +{deltaAvarias.toLocaleString('pt-BR')} avarias novas)
+                </div>
+              </div>
+            )}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
