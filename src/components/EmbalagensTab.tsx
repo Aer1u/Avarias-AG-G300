@@ -515,6 +515,9 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
   const [showSkuTable, setShowSkuTable] = useState(false)
   const [expandedSolicitations, setExpandedSolicitations] = useState<Set<string>>(new Set())
   const [importedFileName, setImportedFileName] = useState("")
+  const [showAddG300Modal, setShowAddG300Modal] = useState(false)
+  const [addG300Search, setAddG300Search] = useState("")
+  const [selectedBaItems, setSelectedBaItems] = useState<Set<string>>(new Set())
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   const [parsedRows, setParsedRows] = useState<any[]>([])
@@ -1289,6 +1292,22 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
     return baseCodigos.filter(b => b["Código"].toLowerCase().includes(t) || b["Descrição"].toLowerCase().includes(t)).slice(0, 8)
   }, [baseCodigos, skuSearchCell])
 
+  const exportarEstoqueG300 = () => {
+    const data = subTab === "estoque_g300" ? estoqueG300 : estoqueConserto
+    if (!data.length) { alert('Nenhum dado para exportar.'); return }
+    let csv = '\uFEFFCód. Embalagem;Descrição Embalagem;Cód. Produto;Modelo Produto;CD;Status\n'
+    data.forEach((r: any) => {
+      csv += `"${r.codigo_embalagem || ''}";"${(r.descricao_embalagem || '').replace(/"/g, '""')}";"${r.codigo_produto || ''}";"${(r.modelo_produto || '').replace(/"/g, '""')}";${r.cd ?? 0};"${r.status || ''}"\n`
+    })
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.setAttribute('download', `estoque_g300_${new Date().toISOString().split('T')[0]}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
   const addRow = () => {
     if (!user) { alert("Faça login para adicionar lançamentos."); return }
     const today = new Date().toISOString().split("T")[0]
@@ -1553,7 +1572,35 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
           </div>
         )}
 
-        {(subTab === "estoque_g300" || subTab === "conserto") && user && (
+        {subTab === "estoque_g300" && user && (
+          <div className="ml-auto flex gap-2">
+            <button
+              onClick={exportarEstoqueG300}
+              className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 px-4 py-2.5 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition-all cursor-pointer"
+              title="Exportar Excel"
+            >
+              <FileText size={13} className="text-emerald-400" /> Exportar Excel
+            </button>
+            <button
+              onClick={() => { setShowAddG300Modal(true); setAddG300Search(''); setSelectedBaItems(new Set()) }}
+              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition-all cursor-pointer"
+            >
+              <Plus size={13} /> Nova Linha
+            </button>
+            <button
+              onClick={saveRows}
+              disabled={saving || !hasUnsaved}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2.5 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition-all",
+                hasUnsaved ? "bg-blue-600 hover:bg-blue-500 text-white cursor-pointer" : "bg-slate-900 text-slate-600 border border-slate-800 cursor-not-allowed"
+              )}
+            >
+              {saving ? <Loader2 className="animate-spin" size={13} /> : <Save size={13} />}
+              Salvar
+            </button>
+          </div>
+        )}
+        {subTab === "conserto" && user && (
           <div className="ml-auto flex gap-2">
             <button onClick={addRow} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition-all cursor-pointer">
               <Plus size={13} /> Nova Linha
@@ -2745,6 +2792,186 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                   {isImporting ? <Loader2 className="animate-spin" size={16} /> : <Plus size={16} />}
                   Gravar e Atualizar Portal BR
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── MODAL: Adicionar item BA ao Estoque G300 ─── */}
+      <AnimatePresence>
+        {showAddG300Modal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+              onClick={() => setShowAddG300Modal(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-[#111827] border border-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden z-10"
+            >
+              {/* Header */}
+              <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-semibold text-white">Adicionar ao Estoque G300</h2>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Selecione itens que já chegaram (com BA marcado no Cronograma)</p>
+                </div>
+                <button onClick={() => setShowAddG300Modal(false)} className="p-2 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer">
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Search */}
+              <div className="px-6 py-3 border-b border-slate-800/60">
+                <input
+                  type="text"
+                  placeholder="Buscar por produto ou embalagem..."
+                  value={addG300Search}
+                  onChange={e => setAddG300Search(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-[11px] text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+                  autoFocus
+                />
+              </div>
+
+              {/* List */}
+              <div className="flex-1 overflow-y-auto">
+                {(() => {
+                  const baItems = pedidosBa.map((ba: any) => {
+                    const relRow = pedidas.find(p =>
+                      String(p.codigo || '').trim().toUpperCase() === String(ba.codigo_produto || '').trim().toUpperCase() &&
+                      String(p.codigo_embalagem || '').trim().toUpperCase() === String(ba.codigo_embalagem || '').trim().toUpperCase()
+                    )
+                    return {
+                      key: `${String(ba.codigo_produto).trim().toUpperCase()}||${String(ba.codigo_embalagem).trim().toUpperCase()}`,
+                      codigo_produto: String(ba.codigo_produto || '').trim().toUpperCase(),
+                      codigo_embalagem: String(ba.codigo_embalagem || '').trim().toUpperCase(),
+                      descricao_embalagem: relRow?.descricao_embalagem || '',
+                      modelo_produto: relRow?.modelo || relRow?.modelo_produto || '',
+                    }
+                  })
+                  // Deduplica
+                  const unique = Array.from(new Map(baItems.map((i: any) => [i.key, i])).values()) as any[]
+                  const filtered = addG300Search
+                    ? unique.filter((i: any) =>
+                        i.codigo_produto.toLowerCase().includes(addG300Search.toLowerCase()) ||
+                        i.codigo_embalagem.toLowerCase().includes(addG300Search.toLowerCase()) ||
+                        (i.descricao_embalagem || '').toLowerCase().includes(addG300Search.toLowerCase()) ||
+                        (i.modelo_produto || '').toLowerCase().includes(addG300Search.toLowerCase())
+                      )
+                    : unique
+
+                  if (!filtered.length) return (
+                    <div className="flex flex-col items-center justify-center py-12 text-slate-500">
+                      <Inbox size={28} className="mb-3 opacity-50" />
+                      <p className="text-[11px]">Nenhum item com BA encontrado</p>
+                    </div>
+                  )
+
+                  return filtered.map((item: any) => {
+                    const isSelected = selectedBaItems.has(item.key)
+                    const alreadyInG300 = estoqueG300.some((g: any) =>
+                      String(g.codigo_produto || '').trim().toUpperCase() === item.codigo_produto &&
+                      String(g.codigo_embalagem || '').trim().toUpperCase() === item.codigo_embalagem
+                    )
+                    return (
+                      <div
+                        key={item.key}
+                        onClick={() => {
+                          if (alreadyInG300) return
+                          setSelectedBaItems(prev => {
+                            const next = new Set(prev)
+                            if (next.has(item.key)) next.delete(item.key)
+                            else next.add(item.key)
+                            return next
+                          })
+                        }}
+                        className={cn(
+                          "flex items-center gap-4 px-6 py-3.5 border-b border-slate-800/40 transition-colors",
+                          alreadyInG300 ? "opacity-40 cursor-not-allowed" : "cursor-pointer hover:bg-white/[0.02]",
+                          isSelected && !alreadyInG300 && "bg-emerald-500/[0.06]"
+                        )}
+                      >
+                        <div className={cn(
+                          "w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors",
+                          isSelected && !alreadyInG300 ? "bg-emerald-600 border-emerald-500" : "border-slate-600 bg-transparent"
+                        )}>
+                          {isSelected && !alreadyInG300 && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5L4.5 7.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-mono text-slate-400">{item.codigo_produto}</span>
+                            <span className="text-[9px] text-slate-600">·</span>
+                            <span className="text-[10px] font-mono text-slate-400">{item.codigo_embalagem}</span>
+                            {alreadyInG300 && <span className="text-[9px] text-slate-500 italic">(já cadastrado)</span>}
+                          </div>
+                          <p className="text-[11px] text-slate-300 mt-0.5 truncate">{item.descricao_embalagem || '—'}</p>
+                          {item.modelo_produto && <p className="text-[9px] text-slate-500 mt-0.5">{item.modelo_produto}</p>}
+                        </div>
+                      </div>
+                    )
+                  })
+                })()}
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-4 border-t border-slate-800 flex items-center justify-between gap-3">
+                <p className="text-[10px] text-slate-500">
+                  {selectedBaItems.size > 0 ? `${selectedBaItems.size} item(ns) selecionado(s)` : 'Selecione os itens para adicionar'}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowAddG300Modal(false)}
+                    className="px-4 py-2.5 rounded-xl text-[11px] font-semibold text-slate-400 hover:text-white bg-slate-900 border border-slate-800 hover:bg-slate-800 transition-all cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    disabled={selectedBaItems.size === 0}
+                    onClick={() => {
+                      const baItems = pedidosBa.map((ba: any) => {
+                        const relRow = pedidas.find(p =>
+                          String(p.codigo || '').trim().toUpperCase() === String(ba.codigo_produto || '').trim().toUpperCase() &&
+                          String(p.codigo_embalagem || '').trim().toUpperCase() === String(ba.codigo_embalagem || '').trim().toUpperCase()
+                        )
+                        return {
+                          key: `${String(ba.codigo_produto).trim().toUpperCase()}||${String(ba.codigo_embalagem).trim().toUpperCase()}`,
+                          codigo_produto: String(ba.codigo_produto || '').trim().toUpperCase(),
+                          codigo_embalagem: String(ba.codigo_embalagem || '').trim().toUpperCase(),
+                          descricao_embalagem: relRow?.descricao_embalagem || '',
+                          modelo_produto: relRow?.modelo || relRow?.modelo_produto || '',
+                        }
+                      })
+                      const unique = Array.from(new Map(baItems.map((i: any) => [i.key, i])).values()) as any[]
+                      const toAdd = unique.filter((i: any) => selectedBaItems.has(i.key))
+                      const newRows = toAdd.map((item: any) => ({
+                        codigo_embalagem: item.codigo_embalagem,
+                        descricao_embalagem: item.descricao_embalagem,
+                        codigo_produto: item.codigo_produto,
+                        modelo_produto: item.modelo_produto,
+                        cd: 0,
+                        status: '',
+                        isNew: true,
+                        isDirty: true,
+                      }))
+                      setEstoqueG300([...newRows, ...estoqueG300])
+                      setShowAddG300Modal(false)
+                      setSelectedBaItems(new Set())
+                    }}
+                    className={cn(
+                      "px-5 py-2.5 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition-all",
+                      selectedBaItems.size > 0
+                        ? "bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer"
+                        : "bg-slate-800 text-slate-600 cursor-not-allowed"
+                    )}
+                  >
+                    <span className="flex items-center gap-2"><Plus size={12} /> Adicionar Selecionados</span>
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>
