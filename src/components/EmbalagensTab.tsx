@@ -1023,9 +1023,14 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
       if (!sku || !emb) return
       const key = `${sku}||${emb}`
       if (!rowMap.has(key)) {
-        // Para itens só de estoque (sem relação), verificar se o produto tem avarias
         const pedidasItem = pedidas.find(r => String(r.codigo).trim().toUpperCase() === sku)
         const isMo = pedidasItem ? ehMicroOndas(pedidasItem.modelo, pedidasItem.modelo_produto, sku) : ehMicroOndas(undefined, undefined, sku)
+        
+        // Aplica o filtro inteligente: Oculta Coletivas e componentes não-superiores de MO
+        const desc = normalizarTipoEmb(descEmb)
+        if (desc.includes('COLETIVA')) return
+        if (isMo && !desc.includes('SUPERIOR')) return
+
         // Só adiciona EMBALAGEM (padrão para itens sem tipo definido)
         rowMap.set(key, {
           sku,
