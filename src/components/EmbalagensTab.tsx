@@ -15,6 +15,7 @@ import {
   FileText,
   Save,
   Loader2,
+  Hourglass,
   LayoutGrid,
   TrendingDown,
   TrendingUp,
@@ -501,31 +502,6 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
   const [togglingBa, setTogglingBa] = useState(false)
   
   const [subTab, setSubTab] = useState<"comparativo" | "pedidas" | "atuais" | "chegando" | "estoque_g300" | "conserto" | "ordem_pedido">("comparativo")
-  const [ordemCustom, setOrdemCustom] = useState<Record<string, { qtdReal?: number | string; obs?: string }>>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const stored = localStorage.getItem("ordem_pedido_custom_v1")
-        if (stored) return JSON.parse(stored)
-      } catch (e) {
-        console.error(e)
-      }
-    }
-    return {}
-  })
-
-  const updateOrdemCustom = (sku: string, field: "qtdReal" | "obs", value: any) => {
-    setOrdemCustom(prev => {
-      const next = {
-        ...prev,
-        [sku]: {
-          ...prev[sku],
-          [field]: value
-        }
-      }
-      localStorage.setItem("ordem_pedido_custom_v1", JSON.stringify(next))
-      return next
-    })
-  }
   const [search, setSearch] = useState("")
   const [user, setUser] = useState<any>(null)
   const [activeSkuDropdown, setActiveSkuDropdown] = useState<{ type: string, index: number } | null>(null)
@@ -815,10 +791,63 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
     return m
   }, [historicoData])
 
+  // ─── Helpers de Filtro Inteligente ─────────────────────────────────────────
+  const ehMicroOndas = (modelo: string | null | undefined, modeloProduto: string | null | undefined, sku?: string): boolean => {
+    let m = (modelo || modeloProduto || '').trim().toUpperCase()
+    if (!m && sku) {
+      const base = baseCodigos.find(b => String(b['Código']).trim().toUpperCase() === sku.toUpperCase())
+      if (base) m = String(base['Descrição'] || '').trim().toUpperCase()
+    }
+    return m.startsWith('MO') || m.includes('MICRO')
+  }
+
+  const normalizarTipoEmb = (te: string | null | undefined): string => {
+    return (te || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim()
+  }
+
+  // Regra central: deve incluir esta linha na Ordem de Pedido?
+  const deveIncluirLinha = (r: EmbalagemRegistro): boolean => {
+    const te = normalizarTipoEmb(r.tipo_embalagem)
+    const desc = normalizarTipoEmb(r.descricao_embalagem)
+
+    // Oculta embalagens coletivas da lista
+    if (te.includes('COLETIVA') || desc.includes('COLETIVA')) return false
+
+    // Para Micro-ondas, SÓ exibe o CALÇO SUPERIOR
+    if (ehMicroOndas(r.modelo, r.modelo_produto, r.codigo)) {
+      if (te.includes('SUPERIOR') || desc.includes('SUPERIOR')) return true
+      return false
+    }
+
+    const tipo = String(r.tipo || '').trim().toUpperCase()
+    if (tipo !== 'INSUMO') return true // EMBALAGEM → sempre inclui
+    return te.includes('CALCO') || desc.includes('CALCO') // Calço sem acento → inclui
+  }
+
+  // Regra para KPIs/Cronograma: evita dupla contagem de kits e ignora coletivas temporariamente
+  const deveContabilizarNoCronograma = (r: EmbalagemRegistro): boolean => {
+    const te = normalizarTipoEmb(r.tipo_embalagem)
+    const desc = normalizarTipoEmb(r.descricao_embalagem)
+    
+    // Regra Coletiva vs Individual: ignora coletivas
+    if (te.includes('COLETIVA') || desc.includes('COLETIVA')) return false
+
+    // Regra MO: contabiliza apenas o CALÇO SUPERIOR para representar o kit
+    if (ehMicroOndas(r.modelo, r.modelo_produto, r.codigo)) {
+      return te.includes('SUPERIOR') || desc.includes('SUPERIOR')
+    }
+
+    // Regra Não-MO: contabiliza EMBALAGEM (ou CALÇO, se for o único item)
+    const tipo = String(r.tipo || '').trim().toUpperCase()
+    return tipo !== 'INSUMO' || te.includes('CALCO') || desc.includes('CALCO')
+  }
+
+  // Compatibilidade antiga removida: const deveConsiderarInsumo = (r: any) => deveIncluirLinha(r as EmbalagemRegistro)
+
   const pedidasPerSku = useMemo(() => {
     const m: Record<string, number> = {}
     // Somente pedidos NÃO finalizados E NÃO baixados (BA) contam como "Solicitado"
-    pedidas.filter(r => !r.isNew && (r.status || "").trim().toUpperCase() !== "FINALIZADO").forEach(r => {
+    pedidas.filter(r => !r.isNew && (r.status || "").trim().toUpperCase() !== "FINALIZADO" && deveContabilizarNoCronograma(r as EmbalagemRegistro)).forEach(r => {
       const sol = String(r.solicitacao || "").trim()
       const prod = String(r.codigo || "").trim().toUpperCase()
       const emb = String(r.codigo_embalagem || "").trim().toUpperCase()
@@ -838,7 +867,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
   const atuaisPerSku = useMemo(() => {
     const m: Record<string, number> = {}
     // estoqueG300 é o estoque do CD — agrupa por codigo_produto, soma cd
-    estoqueG300.filter(r => !r.isNew).forEach(r => {
+    estoqueG300.filter(r => !r.isNew && deveContabilizarNoCronograma(r as EmbalagemRegistro)).forEach(r => {
       const c = String(r.codigo_produto || "").trim().toUpperCase()
       if (c) m[c] = (m[c] || 0) + Math.round(Number(r.cd) || 0)
     })
@@ -848,7 +877,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
   const consertoPerSku = useMemo(() => {
     const m: Record<string, number> = {}
     // estoqueConserto é o estoque do conserto — agrupa por codigo_produto, soma cd
-    estoqueConserto.filter(r => !r.isNew).forEach(r => {
+    estoqueConserto.filter(r => !r.isNew && deveContabilizarNoCronograma(r as EmbalagemRegistro)).forEach(r => {
       const c = String(r.codigo_produto || "").trim().toUpperCase()
       if (c) m[c] = (m[c] || 0) + Math.round(Number(r.cd) || 0)
     })
@@ -858,7 +887,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
   const chegandoPerSku = useMemo(() => {
     const m: Record<string, number> = {}
     // Pedidos FINALIZADOS E NÃO baixados (BA) entram como "A Caminho"
-    pedidas.filter(r => !r.isNew && (r.status || "").trim().toUpperCase() === "FINALIZADO").forEach(r => {
+    pedidas.filter(r => !r.isNew && (r.status || "").trim().toUpperCase() === "FINALIZADO" && deveContabilizarNoCronograma(r as EmbalagemRegistro)).forEach(r => {
       const sol = String(r.solicitacao || "").trim()
       const prod = String(r.codigo || "").trim().toUpperCase()
       const emb = String(r.codigo_embalagem || "").trim().toUpperCase()
@@ -872,7 +901,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
       const c = String(r.codigo || "").trim().toUpperCase()
       if (c) m[c] = (m[c] || 0) + Math.round(Number(r.quantidade) || 0)
     })
-    chegando.filter(r => !r.isNew).forEach(r => {
+    chegando.filter(r => !r.isNew && deveContabilizarNoCronograma(r as EmbalagemRegistro)).forEach(r => {
       const c = String(r.codigo || "").trim().toUpperCase()
       if (c) m[c] = (m[c] || 0) + Math.round(Number(r.quantidade) || 0)
     })
@@ -881,7 +910,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
 
   const enviadoNaoChegouPerSku = useMemo(() => {
     const m: Record<string, number> = {}
-    pedidas.filter(r => !r.isNew && (r.status || "").trim().toUpperCase() === "FINALIZADO").forEach(r => {
+    pedidas.filter(r => !r.isNew && (r.status || "").trim().toUpperCase() === "FINALIZADO" && deveContabilizarNoCronograma(r as EmbalagemRegistro)).forEach(r => {
       const sol = String(r.solicitacao || "").trim()
       const prod = String(r.codigo || "").trim().toUpperCase()
       const emb = String(r.codigo_embalagem || "").trim().toUpperCase()
@@ -931,62 +960,226 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
     return ""
   }
 
-  const ordemPedidoRows = useMemo(() => {
-    const skus = Object.keys(avariasPerSku).filter(sku => avariasPerSku[sku] > 0)
-    skus.sort((a, b) => a.localeCompare(b))
+  const getModelo = (sku: string) => {
+    const base = baseCodigos.find(b => String(b["Código"]).trim().toUpperCase() === sku.trim().toUpperCase())
+    if (base?.["Grade"]) return String(base["Grade"])
     
-    return skus.map(sku => {
-      const base = baseCodigos.find(b => String(b["Código"]).trim().toUpperCase() === sku)
-      const descricao = base?.["Descrição"] || "Produto " + sku
-      const avarias = Math.round(avariasPerSku[sku] || 0)
-      
-      const embCodigo = getEmbCode(sku)
-      const embDescricao = getEmbDesc(sku, embCodigo)
-      
-      const estConserto = Math.round(consertoPerSku[sku] || 0)
-      const estG300 = Math.round(atuaisPerSku[sku] || 0)
-      
-      const enviadoNaoChegou = Math.round(enviadoNaoChegouPerSku[sku] || 0)
-      const pendenteEnvio = Math.round(pedidasPerSku[sku] || 0)
-      
-      const totalCoberto = estConserto + estG300 + enviadoNaoChegou + pendenteEnvio
-      const qtdParaPedido = Math.max(0, avarias - totalCoberto)
-      
-      const custom = ordemCustom[sku] || {}
-      const qtdReal = custom.qtdReal !== undefined && custom.qtdReal !== "" ? custom.qtdReal : qtdParaPedido
-      const obs = custom.obs || ""
-      
-      return {
-        sku,
-        descricao,
-        avarias,
-        embCodigo,
-        embDescricao,
-        estoqueConserto: estConserto,
-        estoqueG300: estG300,
-        enviadoNaoChegou,
-        pendenteEnvio,
-        qtdParaPedido,
-        qtdReal,
-        obs
+    const g300Item = estoqueG300.find(r => String(r.codigo_produto).trim().toUpperCase() === sku.trim().toUpperCase())
+    if (g300Item?.modelo_produto) return String(g300Item.modelo_produto)
+    
+    const pedidasItem = pedidas.find(r => String(r.codigo).trim().toUpperCase() === sku.trim().toUpperCase())
+    if (pedidasItem?.modelo_produto || pedidasItem?.modelo) return String(pedidasItem.modelo_produto || pedidasItem.modelo)
+
+    return ""
+  }
+
+  const getTipo = (sku: string, embCode: string) => {
+    const ped = pedidas.find(p => String(p.codigo).trim().toUpperCase() === sku.trim().toUpperCase() && String(p.codigo_embalagem).trim().toUpperCase() === embCode.trim().toUpperCase())
+    if (ped?.tipo) return String(ped.tipo).trim().toUpperCase()
+    
+    const desc = getEmbDesc(sku, embCode).toUpperCase()
+    if (desc.includes("CALÇO") || desc.includes("CALCO") || desc.includes("ROTULO") || desc.includes("RÓTULO") || desc.includes("ETIQUETA") || embCode.startsWith("0306") || embCode.startsWith("0403")) {
+      return "INSUMO"
+    }
+    return "EMBALAGEM"
+  }
+
+  // ─── Ordem de Pedido: lógica central com filtro inteligente ────────────────
+  const ordemPedidoRows = useMemo(() => {
+    // Mapa de todos os pares únicos (sku, embCode) após filtro inteligente
+    // Fonte primária: linhas da relação (pedidas)
+    const rowMap = new Map<string, {
+      sku: string
+      embCodigo: string
+      embDescricao: string
+      tipo: string
+      tipoEmbalagem: string
+      isMo: boolean
+    }>()
+
+    // 1. Coletar pares da relação (pedidas), aplicando filtro inteligente
+    pedidas.filter(r => !r.isNew && r.codigo && r.codigo_embalagem).forEach(r => {
+      if (!deveIncluirLinha(r)) return
+      const sku = String(r.codigo || '').trim().toUpperCase()
+      const emb = String(r.codigo_embalagem || '').trim().toUpperCase()
+      if (!sku || !emb) return
+      const key = `${sku}||${emb}`
+      if (!rowMap.has(key)) {
+        rowMap.set(key, {
+          sku,
+          embCodigo: emb,
+          embDescricao: String(r.descricao_embalagem || '').trim(),
+          tipo: String(r.tipo || '').trim().toUpperCase(),
+          tipoEmbalagem: String(r.tipo_embalagem || '').trim().toUpperCase(),
+          isMo: ehMicroOndas(r.modelo, r.modelo_produto, sku),
+        })
       }
     })
-  }, [baseCodigos, avariasPerSku, atuaisPerSku, consertoPerSku, enviadoNaoChegouPerSku, pedidasPerSku, ordemCustom, estoqueG300, estoqueConserto])
+
+    // 2. Complementar com pares do estoque G300 e Conserto (se não existirem ainda)
+    const addStockPair = (codProd: string, codEmb: string, descEmb: string) => {
+      const sku = String(codProd || '').trim().toUpperCase()
+      const emb = String(codEmb || '').trim().toUpperCase()
+      if (!sku || !emb) return
+      const key = `${sku}||${emb}`
+      if (!rowMap.has(key)) {
+        // Para itens só de estoque (sem relação), verificar se o produto tem avarias
+        const pedidasItem = pedidas.find(r => String(r.codigo).trim().toUpperCase() === sku)
+        const isMo = pedidasItem ? ehMicroOndas(pedidasItem.modelo, pedidasItem.modelo_produto, sku) : ehMicroOndas(undefined, undefined, sku)
+        // Só adiciona EMBALAGEM (padrão para itens sem tipo definido)
+        rowMap.set(key, {
+          sku,
+          embCodigo: emb,
+          embDescricao: descEmb,
+          tipo: 'EMBALAGEM',
+          tipoEmbalagem: '',
+          isMo,
+        })
+      }
+    }
+    estoqueG300.filter(r => !r.isNew && r.codigo_produto && r.codigo_embalagem).forEach(r =>
+      addStockPair(r.codigo_produto, r.codigo_embalagem, r.descricao_embalagem || '')
+    )
+    estoqueConserto.filter(r => !r.isNew && r.codigo_produto && r.codigo_embalagem).forEach(r =>
+      addStockPair(r.codigo_produto, r.codigo_embalagem, r.descricao_embalagem || '')
+    )
+
+    // 3. Filtrar apenas produtos com avarias > 0 e calcular colunas
+    const result = Array.from(rowMap.values())
+      .filter(p => (avariasPerSku[p.sku] || 0) > 0)
+      .map(p => {
+        const { sku, embCodigo } = p
+        const base = baseCodigos.find(b => String(b['Código']).trim().toUpperCase() === sku)
+        const descricao = base?.['Descrição'] || 'Produto ' + sku
+        const avarias = Math.round(avariasPerSku[sku] || 0)
+
+        const embDescricao = p.embDescricao || getEmbDesc(sku, embCodigo)
+
+        const estConserto = estoqueConserto
+          .filter(r => !r.isNew &&
+            String(r.codigo_produto).trim().toUpperCase() === sku &&
+            String(r.codigo_embalagem).trim().toUpperCase() === embCodigo)
+          .reduce((sum, r) => sum + Math.round(Number(r.cd) || 0), 0)
+
+        const estG300 = estoqueG300
+          .filter(r => !r.isNew &&
+            String(r.codigo_produto).trim().toUpperCase() === sku &&
+            String(r.codigo_embalagem).trim().toUpperCase() === embCodigo)
+          .reduce((sum, r) => sum + Math.round(Number(r.cd) || 0), 0)
+
+        const enviadoNaoChegou = pedidas
+          .filter(r => !r.isNew &&
+            String(r.codigo).trim().toUpperCase() === sku &&
+            String(r.codigo_embalagem).trim().toUpperCase() === embCodigo &&
+            (r.status || '').trim().toUpperCase() === 'FINALIZADO' &&
+            deveIncluirLinha(r))
+          .reduce((sum, r) => {
+            const sol = String(r.solicitacao || '').trim()
+            const isBa = pedidosBa.some(
+              ba => String(ba.solicitacao).trim() === sol &&
+                String(ba.codigo_produto).trim().toUpperCase() === sku &&
+                String(ba.codigo_embalagem).trim().toUpperCase() === embCodigo
+            )
+            return isBa ? sum : sum + Math.round(Number(r.quantidade) || 0)
+          }, 0)
+
+        const pendenteEnvio = pedidas
+          .filter(r => !r.isNew &&
+            String(r.codigo).trim().toUpperCase() === sku &&
+            String(r.codigo_embalagem).trim().toUpperCase() === embCodigo &&
+            (r.status || '').trim().toUpperCase() !== 'FINALIZADO' &&
+            deveIncluirLinha(r))
+          .reduce((sum, r) => {
+            const sol = String(r.solicitacao || '').trim()
+            const isBa = pedidosBa.some(
+              ba => String(ba.solicitacao).trim() === sol &&
+                String(ba.codigo_produto).trim().toUpperCase() === sku &&
+                String(ba.codigo_embalagem).trim().toUpperCase() === embCodigo
+            )
+            return isBa ? sum : sum + Math.round(Number(r.quantidade) || 0)
+          }, 0)
+
+        const totalCoberto = estConserto + estG300 + enviadoNaoChegou + pendenteEnvio
+        const qtdParaPedido = Math.max(0, avarias - totalCoberto)
+
+        return {
+          sku,
+          descricao,
+          avarias,
+          embCodigo,
+          embDescricao,
+          tipo: p.tipo,
+          tipoEmbalagem: p.tipoEmbalagem,
+          isMo: p.isMo,
+          estoqueConserto: estConserto,
+          estoqueG300: estG300,
+          enviadoNaoChegou,
+          pendenteEnvio,
+          qtdParaPedido,
+        }
+      })
+
+    // 3.5. Limpar linhas "fantasmas" (redundantes sem cobertura) para produtos Não-MO
+    // Se um produto não-MO tiver múltiplas linhas, escondemos aquelas que não têm nenhuma cobertura
+    const finalResult: typeof result = []
+    const skus = Array.from(new Set(result.map(r => r.sku)))
+    
+    skus.forEach(sku => {
+      const rows = result.filter(r => r.sku === sku)
+      if (rows.length === 1 || rows[0].isMo) {
+        // Se só tem 1 linha, ou é MO (kit com múltiplos componentes), mantém todas
+        finalResult.push(...rows)
+      } else {
+        // Tem múltiplas linhas. Quais têm alguma cobertura (estoque ou pedidos)?
+        const rowsWithCoverage = rows.filter(r => (r.estoqueConserto + r.estoqueG300 + r.enviadoNaoChegou + r.pendenteEnvio) > 0)
+        
+        if (rowsWithCoverage.length > 0) {
+          finalResult.push(...rowsWithCoverage)
+        } else {
+          // Se NENHUMA tem cobertura, mantém apenas a primeira (para o produto não sumir)
+          finalResult.push(rows[0])
+        }
+      }
+    })
+
+    // 4. Ordenar: SKU primeiro, dentro do mesmo SKU por código de embalagem
+    finalResult.sort((a, b) => {
+      const skuCmp = a.sku.localeCompare(b.sku)
+      if (skuCmp !== 0) return skuCmp
+      return a.embCodigo.localeCompare(b.embCodigo)
+    })
+
+    return finalResult
+  }, [baseCodigos, avariasPerSku, estoqueG300, estoqueConserto, pedidas, pedidosBa])
+
+  const filteredOrdemPedidoRows = useMemo(() => {
+    if (!search) return ordemPedidoRows
+    const t = search.toLowerCase()
+    return ordemPedidoRows.filter(r =>
+      r.sku.toLowerCase().includes(t) ||
+      r.descricao.toLowerCase().includes(t) ||
+      r.embCodigo.toLowerCase().includes(t) ||
+      r.embDescricao.toLowerCase().includes(t) ||
+      r.tipo.toLowerCase().includes(t) ||
+      r.tipoEmbalagem.toLowerCase().includes(t)
+    )
+  }, [ordemPedidoRows, search])
 
   const exportOrdemPedidoToExcel = () => {
     const dataToExport = ordemPedidoRows.map(r => ({
       "Produto": r.sku,
       "Descrição breve do produto": r.descricao,
-      "30.07": r.avarias,
+      "30.07 (Avarias)": r.avarias,
       "CÓDIGO EMBALAGEM": r.embCodigo,
       "DESCRIÇÃO DA EMBALAGEM": r.embDescricao,
-      "ESTOQUE INSUMOS ATUAL CONSERTO": r.estoqueConserto,
-      "ESTOQUE INSUMOS ATUAL G300": r.estoqueG300,
+      "TIPO": r.tipo,
+      "TIPO EMBALAGEM": r.tipoEmbalagem,
+      "IS MICRO-ONDAS": r.isMo ? 'SIM' : 'NÃO',
+      "ESTOQUE CONSERTO": r.estoqueConserto,
+      "ESTOQUE G300": r.estoqueG300,
       "ENVIADO MAS NÃO CHEGOU AINDA": r.enviadoNaoChegou,
       "PENDENTE DE ENVIO": r.pendenteEnvio,
       "QTD PARA PEDIDO": r.qtdParaPedido,
-      "QTD REAL PARA PEDIR": r.qtdReal,
-      "OBS:": r.obs
     }))
 
     const ws = XLSX.utils.json_to_sheet(dataToExport)
@@ -1749,11 +1942,25 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                 </div>
               ) : (() => {
                 // Group pedidas by solicitation key
-                const realPedidas = pedidas.filter(r => !r.isNew)
+                const realPedidas = pedidas.filter(r => {
+                  if (r.isNew) return false
+                  if (search) {
+                    const t = search.toLowerCase()
+                    return (
+                      (r.solicitacao || '').toLowerCase().includes(t) ||
+                      (r.solicitante || '').toLowerCase().includes(t) ||
+                      (r.codigo || '').toLowerCase().includes(t) ||
+                      (r.codigo_embalagem || '').toLowerCase().includes(t) ||
+                      (r.status || '').toLowerCase().includes(t) ||
+                      (r.responsabilidade || '').toLowerCase().includes(t)
+                    )
+                  }
+                  return true
+                })
                 if (realPedidas.length === 0) return (
                   <div className="flex flex-col items-center justify-center py-16 text-slate-600">
                     <Inbox size={24} className="mb-2" />
-                    <p className="text-xs font-mono">Nenhuma solicitação encontrada.</p>
+                    <p className="text-xs font-mono">{search ? `Nenhum resultado para "${search}".` : "Nenhuma solicitação encontrada."}</p>
                   </div>
                 )
 
@@ -1967,7 +2174,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
               <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-[#0f172a]/50">
                 <div>
                   <h3 className="text-sm font-bold text-white uppercase tracking-wider font-sans">Ordem de Pedido</h3>
-                  <p className="text-[10px] text-slate-500 mt-0.5">Baseado nos registros de avaria. QTD Real e OBS são editáveis e salvos localmente.</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Calculado automaticamente — somente leitura. Produtos MO exibem todos os insumos individuais do kit.</p>
                 </div>
                 <button
                   onClick={exportOrdemPedidoToExcel}
@@ -1982,20 +2189,20 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                   <thead>
                     <tr className="border-b border-slate-800 bg-[#0f172a]/30">
                       <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider w-[90px]">Produto</th>
-                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider w-[200px]">Descrição breve do produto</th>
-                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider text-center w-[70px]">30.07</th>
+                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider w-[190px]">Descrição breve do produto</th>
+                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider text-center w-[60px]">30.07</th>
                       <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider w-[150px]">Código Embalagem</th>
-                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider w-[220px]">Descrição da Embalagem</th>
-                      <th className="px-4 py-3 text-[9px] font-medium text-emerald-400 uppercase tracking-wider text-center w-[110px]">Est. Conserto</th>
-                      <th className="px-4 py-3 text-[9px] font-medium text-sky-400 uppercase tracking-wider text-center w-[100px]">Est. G300</th>
-                      <th className="px-4 py-3 text-[9px] font-medium text-orange-400 uppercase tracking-wider text-center w-[110px]">Env. não chegou</th>
-                      <th className="px-4 py-3 text-[9px] font-medium text-yellow-400 uppercase tracking-wider text-center w-[110px]">Pendente Envio</th>
-                      <th className="px-4 py-3 text-[9px] font-medium text-rose-400 uppercase tracking-wider text-center w-[100px]">Qtd p/ Pedido</th>
-                      <th className="px-4 py-3 text-[9px] font-medium text-white uppercase tracking-wider text-center w-[110px]">Qtd Real p/ Pedir</th>
-                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider w-[160px]">OBS:</th>
+                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider w-[210px]">Descrição da Embalagem</th>
+                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider w-[72px]">Tipo</th>
+                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider w-[90px]">Tipo Emb.</th>
+                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider text-center w-[100px]">Est. Conserto</th>
+                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider text-center w-[90px]">Est. G300</th>
+                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider text-center w-[100px]">Env. não chegou</th>
+                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider text-center w-[100px]">Pendente Envio</th>
+                      <th className="px-4 py-3 text-[9px] font-medium text-white uppercase tracking-wider text-center w-[100px]">Qtd p/ Pedido</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/60 bg-[#111827]">
+                  <tbody className="bg-[#111827]">
                     {loading ? (
                       <tr>
                         <td colSpan={12} className="px-8 py-10 text-center text-slate-500">
@@ -2003,45 +2210,84 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                           Carregando...
                         </td>
                       </tr>
-                    ) : ordemPedidoRows.length === 0 ? (
+                    ) : filteredOrdemPedidoRows.length === 0 ? (
                       <tr>
                         <td colSpan={12} className="px-8 py-10 text-center text-slate-600">
                           <Inbox size={22} className="mx-auto mb-2" />
-                          Nenhum produto com avaria registrado.
+                          {search ? `Nenhum resultado para "${search}".` : "Nenhum produto com avaria registrado."}
                         </td>
                       </tr>
-                    ) : ordemPedidoRows.map((row, idx) => (
-                      <tr key={row.sku} className={cn("hover:bg-white/[0.015] transition-colors", idx % 2 === 0 ? "bg-transparent" : "bg-slate-900/20")}>
-                        <td className="px-4 py-2.5 font-mono text-[11px] text-white font-semibold">{row.sku}</td>
-                        <td className="px-4 py-2.5 text-[11px] text-slate-300 max-w-[200px] truncate" title={row.descricao}>{row.descricao}</td>
-                        <td className="px-4 py-2.5 font-mono text-[11px] text-slate-300 text-center">{row.avarias.toLocaleString("pt-BR")}</td>
-                        <td className="px-4 py-2.5 font-mono text-[11px] text-slate-400">{row.embCodigo || "—"}</td>
-                        <td className="px-4 py-2.5 text-[11px] text-slate-400 max-w-[220px] truncate" title={row.embDescricao}>{row.embDescricao || "—"}</td>
-                        <td className="px-4 py-2.5 font-mono text-[11px] text-emerald-400 text-center">{row.estoqueConserto.toLocaleString("pt-BR")}</td>
-                        <td className="px-4 py-2.5 font-mono text-[11px] text-sky-400 text-center">{row.estoqueG300.toLocaleString("pt-BR")}</td>
-                        <td className="px-4 py-2.5 font-mono text-[11px] text-orange-400 text-center">{row.enviadoNaoChegou.toLocaleString("pt-BR")}</td>
-                        <td className="px-4 py-2.5 font-mono text-[11px] text-yellow-400 text-center">{row.pendenteEnvio.toLocaleString("pt-BR")}</td>
-                        <td className="px-4 py-2.5 font-mono text-[12px] font-bold text-rose-400 text-center">{row.qtdParaPedido.toLocaleString("pt-BR")}</td>
-                        <td className="p-0 text-center">
-                          <input
-                            type="text"
-                            value={ordemCustom[row.sku]?.qtdReal !== undefined ? String(ordemCustom[row.sku].qtdReal) : ""}
-                            onChange={e => updateOrdemCustom(row.sku, "qtdReal", e.target.value)}
-                            placeholder={String(row.qtdParaPedido)}
-                            className="w-full bg-transparent border-none py-2.5 text-center text-[11px] text-white font-mono font-semibold focus:bg-slate-800/60 focus:outline-none placeholder:text-slate-600"
-                          />
-                        </td>
-                        <td className="p-0">
-                          <input
-                            type="text"
-                            value={ordemCustom[row.sku]?.obs || ""}
-                            onChange={e => updateOrdemCustom(row.sku, "obs", e.target.value)}
-                            placeholder="Observações..."
-                            className="w-full bg-transparent border-none px-4 py-2.5 text-[11px] text-slate-300 font-sans font-normal focus:bg-slate-800/60 focus:outline-none placeholder:text-slate-600"
-                          />
-                        </td>
-                      </tr>
-                    ))}
+                    ) : (() => {
+                      // Agrupamento visual: controla fundo alternado por SKU (não por linha)
+                      let lastSku = ''
+                      let skuGroupIdx = -1
+                      return filteredOrdemPedidoRows.map((row, idx) => {
+                        if (row.sku !== lastSku) {
+                          lastSku = row.sku
+                          skuGroupIdx++
+                        }
+                        const isKitMo = row.isMo
+                        // Detectar primeira e última linha do grupo
+                        const isFirstInGroup = idx === 0 || filteredOrdemPedidoRows[idx - 1].sku !== row.sku
+                        const isLastInGroup = idx === filteredOrdemPedidoRows.length - 1 || filteredOrdemPedidoRows[idx + 1].sku !== row.sku
+                        const groupBg = skuGroupIdx % 2 === 0 ? 'bg-transparent' : 'bg-slate-900/20'
+                        const kitBg = isKitMo ? (skuGroupIdx % 2 === 0 ? 'bg-sky-950/10' : 'bg-sky-950/20') : groupBg
+
+                        return (
+                          <tr
+                            key={`${row.sku}||${row.embCodigo}`}
+                            className={cn(
+                              'hover:bg-white/[0.02] transition-colors',
+                              kitBg,
+                              isFirstInGroup && !isLastInGroup && 'border-t border-slate-700/40',
+                              isLastInGroup && !isFirstInGroup && 'border-b border-slate-700/40',
+                            )}
+                          >
+                            {/* Produto: só mostra na primeira linha do grupo */}
+                            <td className="px-4 py-2.5 font-mono text-[11px] font-semibold">
+                              {isFirstInGroup ? (
+                                <span className="text-white">{row.sku}</span>
+                              ) : (
+                                <span className="text-slate-700 select-none">↳</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5 text-[11px] text-slate-400 max-w-[190px] truncate" title={row.descricao}>
+                              {isFirstInGroup ? row.descricao : ''}
+                            </td>
+                            <td className="px-4 py-2.5 font-mono text-[11px] text-slate-300 text-center">
+                              {isFirstInGroup ? row.avarias.toLocaleString('pt-BR') : ''}
+                            </td>
+                            <td className="px-4 py-2.5 font-mono text-[10px] text-slate-400">{row.embCodigo || '—'}</td>
+                            <td className="px-4 py-2.5 text-[11px] text-slate-300 max-w-[210px] truncate" title={row.embDescricao}>{row.embDescricao || '—'}</td>
+                            <td className="px-4 py-2.5 font-mono text-[10px] uppercase">
+                              <span className={cn(
+                                row.tipo === 'INSUMO' ? 'text-amber-400/80' : 'text-slate-400'
+                              )}>{row.tipo || '—'}</span>
+                            </td>
+                            <td className="px-4 py-2.5 font-mono text-[10px] text-slate-500 uppercase">{row.tipoEmbalagem || '—'}</td>
+                            <td className="px-4 py-2.5 font-mono text-[11px] text-slate-300 text-center">{row.estoqueConserto.toLocaleString('pt-BR')}</td>
+                            <td className="px-4 py-2.5 font-mono text-[11px] text-slate-300 text-center">{row.estoqueG300.toLocaleString('pt-BR')}</td>
+                            <td className="px-4 py-2.5 font-mono text-[11px] text-center">
+                              <div className={cn("flex items-center justify-center gap-1.5", row.enviadoNaoChegou > 0 ? "text-emerald-500" : "text-slate-500")}>
+                                {row.enviadoNaoChegou > 0 && <Truck size={12} className="opacity-80" />}
+                                <span>{row.enviadoNaoChegou.toLocaleString('pt-BR')}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-2.5 font-mono text-[11px] text-center">
+                              <div className={cn("flex items-center justify-center gap-1.5", row.pendenteEnvio > 0 ? "text-amber-500" : "text-slate-500")}>
+                                {row.pendenteEnvio > 0 && <Hourglass size={12} className="opacity-80" />}
+                                <span>{row.pendenteEnvio.toLocaleString('pt-BR')}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-2.5 font-mono text-[12px] text-center">
+                              <span className={cn(
+                                row.qtdParaPedido > 0 ? 'text-rose-500' : 'text-slate-600'
+                              )}>{row.qtdParaPedido.toLocaleString('pt-BR')}</span>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    })()}
                   </tbody>
                 </table>
               </div>
