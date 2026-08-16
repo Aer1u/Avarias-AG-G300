@@ -918,12 +918,21 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
     if (!confirm(`Tem certeza que deseja EXCLUIR completamente o lote ${loteStr}? Esta ação não pode ser desfeita.`)) return;
 
     try {
-      const { error } = await supabase
+      // Exclui os itens do lote da tabela retrabalhos
+      const { error: errorRetrabalhos } = await supabase
         .from('retrabalhos')
         .delete()
         .eq('lote', loteStr);
 
-      if (error) throw error;
+      if (errorRetrabalhos) throw errorRetrabalhos;
+
+      // Exclui a configuração do lote da tabela lotes_config
+      const { error: errorConfig } = await supabase
+        .from('lotes_config')
+        .delete()
+        .eq('lote', loteStr);
+
+      if (errorConfig) throw errorConfig;
       
       await fetchData();
     } catch (err: any) {
