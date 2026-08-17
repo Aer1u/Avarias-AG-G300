@@ -268,6 +268,7 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
   const [expandedViagens, setExpandedViagens] = useState<string | null>(null)
 
   const [isViagemModalOpen, setIsViagemModalOpen] = useState(false)
+  const [confirmingViagem, setConfirmingViagem] = useState(false)
   const [editingViagemGroup, setEditingViagemGroup] = useState<{ number: string, items: RetrabalhoRecord[] } | null>(null)
   const [excelRows, setExcelRows] = useState<{ a501: string, g501: string, qtd: string }[]>(
     Array.from({ length: 20 }, () => ({ a501: '', g501: '', qtd: '' }))
@@ -937,6 +938,41 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
       await fetchData();
     } catch (err: any) {
       alert("Erro ao excluir lote: " + err.message);
+    }
+  };
+
+  const handleDeleteViagem = async (viagemKey: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (viagemKey === 'SEM_VIAGEM') return;
+    if (!confirm(`Tem certeza que deseja EXCLUIR completamente todas as reservas da viagem #${viagemKey}? Esta ação não pode ser desfeita.`)) return;
+
+    try {
+      const viagemNum = Number(viagemKey);
+      if (isNaN(viagemNum)) {
+        alert("Número da viagem inválido.");
+        return;
+      }
+
+      // Exclui todas as reservas da viagem no banco
+      const { error } = await supabase
+        .from('retrabalhos')
+        .delete()
+        .eq('numero_da_viagem', viagemNum);
+
+      if (error) throw error;
+
+      alert("Viagem excluída com sucesso!");
+      await fetchData();
+
+      // Atualiza o estado local do lote selecionado se estiver aberto
+      if (selectedLoteDetail) {
+        setSelectedLoteDetail(prev => prev ? {
+          ...prev,
+          items: prev.items.filter(i => Number(i.numero_da_viagem) !== viagemNum)
+        } : null);
+      }
+    } catch (err: any) {
+      alert("Erro ao excluir viagem: " + err.message);
     }
   };
 
@@ -1629,19 +1665,29 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
 
                                           <div className="flex items-center gap-3">
                                             {user && viagemKey !== 'SEM_VIAGEM' && (
-                                              <button
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setEditingViagemGroup({ 
-                                                    number: viagemKey, 
-                                                    items: items 
-                                                  });
-                                                  setIsViagemModalOpen(true);
-                                                }}
-                                                className="p-2 rounded-xl bg-white/5 hover:bg-blue-600 border border-white/10 text-slate-400 hover:text-white transition-all group/edit"
-                                              >
-                                                <Edit3 size={14} className="group-hover/edit:scale-110 transition-transform" />
-                                              </button>
+                                              <>
+                                                <button
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setEditingViagemGroup({ 
+                                                      number: viagemKey, 
+                                                      items: items 
+                                                    });
+                                                    setIsViagemModalOpen(true);
+                                                  }}
+                                                  className="p-2 rounded-xl bg-white/5 hover:bg-blue-600 border border-white/10 text-slate-400 hover:text-white transition-all group/edit"
+                                                  title="Editar Viagem"
+                                                >
+                                                  <Edit3 size={14} className="group-hover/edit:scale-110 transition-transform" />
+                                                </button>
+                                                <button
+                                                  onClick={(e) => handleDeleteViagem(viagemKey, e)}
+                                                  className="p-2 rounded-xl bg-white/5 hover:bg-rose-600 border border-white/10 text-slate-400 hover:text-white transition-all group/delete"
+                                                  title="Excluir Viagem"
+                                                >
+                                                  <Trash2 size={14} className="group-hover/delete:scale-110 transition-transform" />
+                                                </button>
+                                              </>
                                             )}
                                             <div className={cn(
                                               "w-8 h-8 rounded-full flex items-center justify-center border border-white/10 transition-transform duration-300",
@@ -2108,75 +2154,89 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
 
                 <form onSubmit={async (e) => {
                   e.preventDefault();
-                  const formData = new FormData(e.currentTarget);
-                  const viagemNum = Number(formData.get('viagem_num'));
-                  const viagemDate = formData.get('viagem_date') as string;
-                  
-                  if (isNaN(viagemNum)) {
-                    alert("Por favor, insira um número de viagem válido.");
-                    return;
-                  }
+                  if (confirmingViagem) return;
+                  setConfirmingViagem(true);
 
-                  const updateData: any = { numero_da_viagem: viagemNum };
-                  if (viagemDate) updateData.enviado_ao_cd = viagemDate;
-                  
-                  const turnoVal = formData.get('turno_da_viagem');
-                  if (turnoVal) updateData.turno_da_viagem = Number(turnoVal);
-
-                  if (!editingViagemGroup.number || editingViagemGroup.number === 'SEM_VIAGEM') {
-                    // EXCEL MODE: Bulk Update/Insert
-                    const validRows = excelRows.filter(row => row.a501 || row.g501);
-                    if (validRows.length === 0) {
-                      alert("Insira pelo menos uma reserva na tabela.");
+                  try {
+                    const formData = new FormData(e.currentTarget);
+                    const viagemNum = Number(formData.get('viagem_num'));
+                    const viagemDate = formData.get('viagem_date') as string;
+                    
+                    if (isNaN(viagemNum)) {
+                      alert("Por favor, insira um número de viagem válido.");
+                      setConfirmingViagem(false);
                       return;
                     }
 
-                    if (!selectedLoteDetail) return;
-
-                    for (const row of validRows) {
-                      const resA = row.a501?.trim();
-                      const resG = row.g501?.trim();
-
-                      const existingInLote = selectedLoteDetail.items.find(item =>
-                        (resA && item.reserva_a501?.trim() === resA) ||
-                        (resG && item.reserva_g501?.trim() === resG)
-                      );
-
-                      const isDuplicateGlobal = records.some(r =>
-                        (resA && r.reserva_a501?.trim() === resA) ||
-                        (resG && r.reserva_g501?.trim() === resG)
-                      );
-
-                      if (existingInLote) {
-                        await supabase.from('retrabalhos').update(updateData).eq('id', existingInLote.id);
-                      } else if (!isDuplicateGlobal) {
-                        await supabase.from('retrabalhos').insert([{
-                          ...updateData,
-                          reserva_a501: resA || row.a501,
-                          reserva_g501: resG || row.g501,
-                          quantidade_enviada: Number(row.qtd) || 0,
-                          lote: selectedLoteDetail.lote,
-                          status: 'EM ANDAMENTO',
-                          data_inicio: new Date().toISOString()
-                        }]);
-                      }
-                    }
-                  } else {
-                    // NORMAL EDIT MODE: Bulk Update
-                    const ids = editingViagemGroup.items.map(i => i.id);
-                    const { error } = await supabase.from('retrabalhos').update(updateData).in('id', ids);
-                    if (error) alert("Erro ao atualizar: " + error.message);
+                    const updateData: any = { numero_da_viagem: viagemNum };
+                    if (viagemDate) updateData.enviado_ao_cd = viagemDate;
                     
-                    // Salva alterações de células individuais
-                    await saveAllViagemChanges();
-                  }
+                    const turnoVal = formData.get('turno_da_viagem');
+                    if (turnoVal) updateData.turno_da_viagem = Number(turnoVal);
 
-                  // Cleanup and Refresh
-                  fetchData();
-                  setIsViagemModalOpen(false);
-                  setSelectionMode(false);
-                  setSelectedReservas(new Set());
-                  setExcelRows(Array.from({ length: 20 }, () => ({ a501: '', g501: '', qtd: '' })));
+                    if (!editingViagemGroup.number || editingViagemGroup.number === 'SEM_VIAGEM') {
+                      // EXCEL MODE: Bulk Update/Insert
+                      const validRows = excelRows.filter(row => row.a501 || row.g501);
+                      if (validRows.length === 0) {
+                        alert("Insira pelo menos uma reserva na tabela.");
+                        setConfirmingViagem(false);
+                        return;
+                      }
+
+                      if (!selectedLoteDetail) {
+                        setConfirmingViagem(false);
+                        return;
+                      }
+
+                      for (const row of validRows) {
+                        const resA = row.a501?.trim();
+                        const resG = row.g501?.trim();
+
+                        const existingInLote = selectedLoteDetail.items.find(item =>
+                          (resA && item.reserva_a501?.trim() === resA) ||
+                          (resG && item.reserva_g501?.trim() === resG)
+                        );
+
+                        const isDuplicateGlobal = records.some(r =>
+                          (resA && r.reserva_a501?.trim() === resA) ||
+                          (resG && r.reserva_g501?.trim() === resG)
+                        );
+
+                        if (existingInLote) {
+                          await supabase.from('retrabalhos').update(updateData).eq('id', existingInLote.id);
+                        } else if (!isDuplicateGlobal) {
+                          await supabase.from('retrabalhos').insert([{
+                            ...updateData,
+                            reserva_a501: resA || row.a501,
+                            reserva_g501: resG || row.g501,
+                            quantidade_enviada: Number(row.qtd) || 0,
+                            lote: selectedLoteDetail.lote,
+                            status: 'EM ANDAMENTO',
+                            data_inicio: new Date().toISOString()
+                          }]);
+                        }
+                      }
+                    } else {
+                      // NORMAL EDIT MODE: Bulk Update
+                      const ids = editingViagemGroup.items.map(i => i.id);
+                      const { error } = await supabase.from('retrabalhos').update(updateData).in('id', ids);
+                      if (error) alert("Erro ao atualizar: " + error.message);
+                      
+                      // Salva alterações de células individuais
+                      await saveAllViagemChanges();
+                    }
+
+                    // Cleanup and Refresh
+                    await fetchData();
+                    setIsViagemModalOpen(false);
+                    setSelectionMode(false);
+                    setSelectedReservas(new Set());
+                    setExcelRows(Array.from({ length: 20 }, () => ({ a501: '', g501: '', qtd: '' })));
+                  } catch (err) {
+                    alert("Erro ao salvar viagem: " + (err instanceof Error ? err.message : String(err)));
+                  } finally {
+                    setConfirmingViagem(false);
+                  }
                 }} className="space-y-6">
                   {/* Common Header Fields */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -2520,15 +2580,17 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                     <button 
                       type="button"
                       onClick={() => setIsViagemModalOpen(false)}
-                      className="flex-1 py-4 rounded-2xl bg-white/5 border border-white/10 text-slate-400 font-semibold text-[10px] uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all"
+                      disabled={confirmingViagem}
+                      className="flex-1 py-4 rounded-2xl bg-white/5 border border-white/10 text-slate-400 font-semibold text-[10px] uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Cancelar
                     </button>
                     <button 
                       type="submit"
-                      className="flex-[2] py-4 rounded-2xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-[11px] uppercase tracking-[0.2em] shadow-xl shadow-amber-600/20 transition-all flex items-center justify-center gap-3"
+                      disabled={confirmingViagem}
+                      className="flex-[2] py-4 rounded-2xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-[11px] uppercase tracking-[0.2em] shadow-xl shadow-amber-600/20 transition-all flex items-center justify-center gap-3 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed cursor-pointer"
                     >
-                      <Save size={16} />
+                      {confirmingViagem ? <RefreshCw className="animate-spin" size={16} /> : <Save size={16} />}
                       Confirmar Viagem
                     </button>
                   </div>
