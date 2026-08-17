@@ -561,7 +561,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
   const [selectedSolicitantes, setSelectedSolicitantes] = useState<string[]>([])
   const uniqueSolicitantes = useMemo(() => Array.from(new Set(parsedRows.map(r => r.solicitante).filter(Boolean))) as string[], [parsedRows])
 
-  const toggleBaixado = async (solicitacao: string, codigoProduto: string, codigoEmbalagem: string) => {
+  const toggleBaixado = async (solicitacao: string, codigoProduto: string, codigoEmbalagem: string, rowId?: string | number) => {
     if (!user) {
       alert("Faça login para alterar o Status BA.");
       return;
@@ -577,10 +577,16 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
 
     setTogglingBa(true);
     try {
+      // Se row_id disponível, usá-lo como chave primária para diferenciar linhas duplicadas
       const exists = pedidosBa.find(
-        r => String(r.solicitacao).trim() === sol &&
-             String(r.codigo_produto).trim().toUpperCase() === prod &&
-             String(r.codigo_embalagem).trim().toUpperCase() === emb
+        r => {
+          if (rowId && r.row_id) {
+            return String(r.row_id) === String(rowId);
+          }
+          return String(r.solicitacao).trim() === sol &&
+                 String(r.codigo_produto).trim().toUpperCase() === prod &&
+                 String(r.codigo_embalagem).trim().toUpperCase() === emb;
+        }
       );
 
       if (exists) {
@@ -592,9 +598,11 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
         if (error) throw error;
       } else {
         // Add BA
+        const insertData: any = { solicitacao: sol, codigo_produto: prod, codigo_embalagem: emb };
+        if (rowId) insertData.row_id = String(rowId);
         const { error } = await supabase
           .from("pedidos_ba")
-          .insert([{ solicitacao: sol, codigo_produto: prod, codigo_embalagem: emb }]);
+          .insert([insertData]);
         if (error) throw error;
       }
       
@@ -2094,13 +2102,20 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                     const sol = String(p.solicitacao || '').trim()
                     const prod = String(p.codigo || '').trim().toUpperCase()
                     const emb = String(p.codigo_embalagem || '').trim().toUpperCase()
+                    const rowId = String(p.id || '')
                     const isBa = pedidosBa.some(
-                      ba => String(ba.solicitacao).trim() === sol &&
-                            String(ba.codigo_produto).trim().toUpperCase() === prod &&
-                            String(ba.codigo_embalagem).trim().toUpperCase() === emb
+                      ba => {
+                        // Se o registro BA tem row_id, usar para match preciso (evita confundir linhas duplicadas)
+                        if (ba.row_id && rowId) {
+                          return String(ba.row_id) === rowId;
+                        }
+                        return String(ba.solicitacao).trim() === sol &&
+                               String(ba.codigo_produto).trim().toUpperCase() === prod &&
+                               String(ba.codigo_embalagem).trim().toUpperCase() === emb;
+                      }
                     )
 
-                    return { p, sku, qty, enviado, pendente, status, statusCls, isBa }
+                    return { p, sku, qty, enviado, pendente, status, statusCls, isBa, rowId }
                   })
 
                   const dateLabel = items[0]?.data_solicitacao
@@ -2228,7 +2243,8 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                                       onClick={() => toggleBaixado(
                                         row.p.solicitacao || '',
                                         row.sku,
-                                        row.p.codigo_embalagem || ''
+                                        row.p.codigo_embalagem || '',
+                                        row.rowId
                                       )}
                                       title={row.isBa ? "Clique para desmarcar BA" : "Clique para marcar como chegou (BA)"}
                                       className={cn(
