@@ -976,6 +976,70 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
     }
   };
 
+  const handleExportLoteExcel = async (loteDetail: GroupedLote) => {
+    try {
+      const XLSX = await import("xlsx");
+      const dataToExport = loteDetail.items.map(item => ({
+        "Lote": loteDetail.lote,
+        "Código Produto": loteDetail.codigo,
+        "Descrição Produto": loteDetail.descricao,
+        "Grade": loteDetail.grade,
+        "ID Reserva": item.id,
+        "Reserva A501": item.reserva_a501 || "",
+        "Reserva G501": item.reserva_g501 || "",
+        "Estorno A501": item.estorno_a501 || "",
+        "Estorno G501": item.estorno_g501 || "",
+        "Qtd Enviada": item.quantidade_enviada || 0,
+        "Qtd Retornada": item.quantidade_retornada || 0,
+        "Qtd Rejeitada": item.quantidade_rejeitada || 0,
+        "Avarias Embalagem": item.embalagens_avariadas || 0,
+        "Situação": item.situacao || "Em preparação",
+        "Nº da Viagem": item.numero_da_viagem || "Não atribuída",
+        "Turno da Viagem": item.turno_da_viagem || "",
+        "Enviado ao CD": item.enviado_ao_cd || "",
+        "Status Lote": loteDetail.status
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(dataToExport);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Reservas");
+      XLSX.writeFile(wb, `Lote_${loteDetail.lote}_Reservas.xlsx`);
+    } catch (err: any) {
+      alert("Erro ao exportar lote: " + err.message);
+    }
+  };
+
+  const handleExportViagemExcel = async (viagemNum: string | number, items: RetrabalhoRecord[], loteDetail: GroupedLote) => {
+    try {
+      const XLSX = await import("xlsx");
+      const dataToExport = items.map(item => ({
+        "Nº da Viagem": viagemNum === 'SEM_VIAGEM' ? "Não atribuída" : viagemNum,
+        "Turno da Viagem": item.turno_da_viagem || "",
+        "Enviado ao CD": item.enviado_ao_cd || "",
+        "Lote": loteDetail.lote,
+        "Código Produto": loteDetail.codigo,
+        "Descrição Produto": loteDetail.descricao,
+        "ID Reserva": item.id,
+        "Reserva A501": item.reserva_a501 || "",
+        "Reserva G501": item.reserva_g501 || "",
+        "Estorno A501": item.estorno_a501 || "",
+        "Estorno G501": item.estorno_g501 || "",
+        "Qtd Enviada": item.quantidade_enviada || 0,
+        "Qtd Retornada": item.quantidade_retornada || 0,
+        "Qtd Rejeitada": item.quantidade_rejeitada || 0,
+        "Avarias Embalagem": item.embalagens_avariadas || 0,
+        "Situação": item.situacao || "Em preparação"
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(dataToExport);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Viagem");
+      XLSX.writeFile(wb, `Lote_${loteDetail.lote}_Viagem_${viagemNum}.xlsx`);
+    } catch (err: any) {
+      alert("Erro ao exportar viagem: " + err.message);
+    }
+  };
+
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '-'
     // Replace hyphens with slashes to avoid UTC shift
@@ -1397,9 +1461,17 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                         Nova Viagem
                       </button>
 
-
                     </>
                   )}
+
+                  <button 
+                    onClick={() => handleExportLoteExcel(selectedLoteDetail)}
+                    className="flex items-center gap-3 px-6 py-3.5 rounded-xl bg-blue-600/20 border border-blue-500/30 hover:bg-blue-600/30 text-blue-400 text-[11px] font-semibold uppercase tracking-widest transition-all active:scale-95"
+                    title="Exportar Lote Completo para Excel"
+                  >
+                    <FileText size={14} />
+                    Exportar Lote
+                  </button>
                   <button 
                     onClick={() => {
                       setSelectedLoteDetail(null);
@@ -1664,6 +1736,16 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                           </div>
 
                                           <div className="flex items-center gap-3">
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleExportViagemExcel(viagemKey, items, selectedLoteDetail);
+                                              }}
+                                              className="p-2 rounded-xl bg-white/5 hover:bg-emerald-600 border border-white/10 text-slate-400 hover:text-white transition-all group/export"
+                                              title="Exportar Viagem para Excel"
+                                            >
+                                              <FileText size={14} className="group-hover/export:scale-110 transition-transform" />
+                                            </button>
                                             {user && viagemKey !== 'SEM_VIAGEM' && (
                                               <>
                                                 <button

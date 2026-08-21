@@ -203,19 +203,19 @@ function AvariasGrowthChart({ pedidas, allSkuRows }: GrowthChartProps) {
   if (!series.length) return null
 
   return (
-    <div className="bg-[#111827] border border-slate-800/90 rounded-2xl p-5 shadow-xl flex flex-col gap-5">
+    <div className="rounded-2xl p-5 flex flex-col gap-5">
       {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-800/80">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3 border-b border-slate-800/40">
         <div className="flex items-start gap-3">
-          <div className="p-2 rounded-lg bg-gradient-to-br from-rose-500/20 via-sky-500/10 to-emerald-500/20 border border-slate-700/80 flex-shrink-0">
-            <Boxes size={16} className="text-rose-400" />
+          <div className="p-2 rounded-lg bg-rose-500/10 flex-shrink-0">
+            <Boxes size={15} className="text-rose-400" />
           </div>
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
               <h3 className="text-xs font-semibold text-white uppercase tracking-wider font-sans">
-                Aumento Consolidado & Composição por Produto
+                Aumento Consolidado &amp; Composição por Produto
               </h3>
-              <div className="px-2 py-0.5 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center gap-1">
+              <div className="px-2 py-0.5 rounded-full bg-rose-500/10 flex items-center gap-1">
                 <ArrowUpRight size={12} className="text-rose-400" />
                 <span className="text-[9px] font-mono font-normal text-rose-400">+{deltaAvarias.toLocaleString('pt-BR')} un desde 1ª sol.</span>
               </div>
@@ -226,7 +226,7 @@ function AvariasGrowthChart({ pedidas, allSkuRows }: GrowthChartProps) {
             {/* Coverage comparison strip */}
             {series.length > 1 && (
               <div className="flex items-center gap-3 mt-3 flex-wrap">
-                <div className="flex items-center gap-2 bg-slate-900/80 border border-slate-800 rounded-xl px-3 py-2">
+                <div className="flex items-center gap-2 bg-slate-900/60 rounded-xl px-3 py-2">
                   <div className="text-[9px] font-mono text-slate-400 uppercase tracking-wider">Cobertura atual</div>
                   <div className={cn(
                     "text-[13px] font-semibold font-mono",
@@ -234,7 +234,7 @@ function AvariasGrowthChart({ pedidas, allSkuRows }: GrowthChartProps) {
                   )}>{coverageCurrent}%</div>
                 </div>
                 <div className="text-[9px] text-slate-600">vs</div>
-                <div className="flex items-center gap-2 bg-emerald-950/40 border border-emerald-800/40 rounded-xl px-3 py-2">
+                <div className="flex items-center gap-2 bg-emerald-950/30 rounded-xl px-3 py-2">
                   <div className="text-[9px] font-mono text-slate-400 uppercase tracking-wider">Sem o crescimento</div>
                   <div className={cn(
                     "text-[13px] font-semibold font-mono",
@@ -256,17 +256,17 @@ function AvariasGrowthChart({ pedidas, allSkuRows }: GrowthChartProps) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1">
-            <span className="text-[9px] font-medium text-slate-400 px-1 uppercase font-mono hidden sm:inline">Agrupar:</span>
+            <span className="text-[9px] font-medium text-slate-500 px-1 uppercase font-mono hidden sm:inline">Agrupar:</span>
             <select value={groupMode} onChange={(e) => { setGroupMode(e.target.value as GroupModeType); setSelectedIdx(0) }}
-              className="bg-slate-900/90 border border-slate-800 text-slate-300 text-[10px] font-mono font-bold rounded-lg px-2 py-1.5 outline-none focus:border-rose-500 transition-all min-w-[140px] cursor-pointer">
+              className="bg-slate-900/60 border border-slate-800/60 text-slate-300 text-[10px] font-mono font-bold rounded-lg px-2 py-1.5 outline-none focus:border-rose-500/50 transition-all min-w-[140px] cursor-pointer">
               <option value="solicitacao">Por Solicitação ({series.length})</option>
               <option value="item">Item a Item</option>
             </select>
           </div>
           <div className="flex items-center gap-1">
-            <span className="text-[9px] font-medium text-slate-400 px-1 uppercase font-mono hidden sm:inline">Visão:</span>
+            <span className="text-[9px] font-medium text-slate-500 px-1 uppercase font-mono hidden sm:inline">Visão:</span>
             <select value={viewType} onChange={(e) => setViewType(e.target.value as ChartViewType)}
-              className="bg-slate-900/90 border border-slate-800 text-slate-300 text-[10px] font-mono font-bold rounded-lg px-2 py-1.5 outline-none focus:border-sky-500 transition-all min-w-[130px] cursor-pointer">
+              className="bg-slate-900/60 border border-slate-800/60 text-slate-300 text-[10px] font-mono font-bold rounded-lg px-2 py-1.5 outline-none focus:border-sky-500/50 transition-all min-w-[130px] cursor-pointer">
               <option value="curva">Curva Total</option>
               <option value="empilhado">Empilhado</option>
               <option value="formacao">Salto (Δ)</option>
@@ -276,25 +276,25 @@ function AvariasGrowthChart({ pedidas, allSkuRows }: GrowthChartProps) {
         </div>
       </div>
 
-      {/* SVG Chart */}
-      <div className="relative w-full bg-slate-950/70 border border-slate-800/80 rounded-2xl p-2 sm:p-4 select-none overflow-hidden">
+      {/* SVG Chart — sem container com borda */}
+      <div className="relative w-full select-none overflow-hidden">
         <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-64 sm:h-72 overflow-visible" onMouseLeave={() => setHoveredIdx(null)}>
           <defs>
             <linearGradient id="agcAreaGrad2" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.28" />
-              <stop offset="80%" stopColor="#f43f5e" stopOpacity="0.03" />
+              <stop offset="0%"  stopColor="#f43f5e" stopOpacity="0.18" />
+              <stop offset="90%" stopColor="#f43f5e" stopOpacity="0.01" />
             </linearGradient>
-            <filter id="agcGlowRose2"><feDropShadow dx="0" dy="0" stdDeviation="3" floodColor="#f43f5e" floodOpacity="0.7" /></filter>
-            <filter id="agcGlowSky2"><feDropShadow dx="0" dy="0" stdDeviation="3" floodColor="#38bdf8" floodOpacity="0.7" /></filter>
+            <filter id="agcGlowRose2"><feDropShadow dx="0" dy="0" stdDeviation="3" floodColor="#f43f5e" floodOpacity="0.6" /></filter>
+            <filter id="agcGlowSky2"><feDropShadow dx="0" dy="0" stdDeviation="3" floodColor="#38bdf8" floodOpacity="0.6" /></filter>
           </defs>
 
-          {/* Gridlines */}
+          {/* Gridlines — sutis */}
           {[0, 0.25, 0.5, 0.75, 1].map((pct, gi) => {
             const y = pT + iH * (1 - pct)
             return (
               <g key={gi}>
-                <line x1={pX} y1={y} x2={W - pX} y2={y} stroke="#1e293b" strokeWidth="1" strokeDasharray={pct===0?'none':'3 3'} opacity="0.7" />
-                <text x={pX-8} y={y+3.5} textAnchor="end" fill="#64748b" fontSize="8.5" fontFamily="monospace" fontWeight="600">
+                <line x1={pX} y1={y} x2={W - pX} y2={y} stroke="#1e293b" strokeWidth="0.7" strokeDasharray={pct===0?'none':'4 6'} opacity="0.5" />
+                <text x={pX-8} y={y+3.5} textAnchor="end" fill="#475569" fontSize="8" fontFamily="monospace" fontWeight="500">
                   {Math.round(pct * chartMax).toLocaleString('pt-BR')}
                 </text>
               </g>
@@ -309,12 +309,12 @@ function AvariasGrowthChart({ pedidas, allSkuRows }: GrowthChartProps) {
             let yOff = 0
             return (
               <g key={i} className="cursor-pointer" onClick={() => setSelectedIdx(i)} onMouseEnter={() => setHoveredIdx(i)}>
-                {isAct && <rect x={c.x - colW/2 - 4} y={pT} width={colW+8} height={iH} rx="6" fill="#1e293b" opacity="0.4" />}
+                {isAct && <rect x={c.x - colW/2 - 4} y={pT} width={colW+8} height={iH} rx="6" fill="#1e293b" opacity="0.3" />}
                 {pt.produtos.map((prod, pi) => {
                   const h = (prod.solicitado / chartMax) * iH
                   const y = pT + iH - yOff - h
                   yOff += h
-                  return <rect key={pi} x={c.x-colW/2} y={Math.max(pT,y)} width={colW} height={Math.max(2,h)} rx={pi===pt.produtos.length-1?4:0} fill={prod.color.fill} opacity={isAct?1:0.82} stroke="#0f172a" strokeWidth="0.8" />
+                  return <rect key={pi} x={c.x-colW/2} y={Math.max(pT,y)} width={colW} height={Math.max(2,h)} rx={pi===pt.produtos.length-1?4:0} fill={prod.color.fill} opacity={isAct?1:0.82} stroke="#0f172a" strokeWidth="0.5" />
                 })}
                 <text x={c.x} y={c.yS-6} textAnchor="middle" fill={isAct?'#fff':'#38bdf8'} fontSize="8.5" fontFamily="monospace" fontWeight="700">
                   {pt.totalSolicitado.toLocaleString('pt-BR')}
@@ -327,8 +327,8 @@ function AvariasGrowthChart({ pedidas, allSkuRows }: GrowthChartProps) {
           {(viewType === 'curva' || viewType === 'acumulado') && (
             <>
               {areaA && <path d={areaA} fill="url(#agcAreaGrad2)" />}
-              <path d={pathS} fill="none" stroke="#38bdf8" strokeWidth="2.8" strokeDasharray={viewType==='acumulado'?'none':'5 4'} strokeLinecap="round" strokeLinejoin="round" />
-              <path d={pathA} fill="none" stroke="#f43f5e" strokeWidth="3.6" strokeLinecap="round" strokeLinejoin="round" />
+              <path d={pathS} fill="none" stroke="#38bdf8" strokeWidth="1.8" strokeDasharray={viewType==='acumulado'?'none':'6 5'} strokeLinecap="round" strokeLinejoin="round" opacity="0.8" />
+              <path d={pathA} fill="none" stroke="#f43f5e" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
             </>
           )}
 
@@ -358,20 +358,20 @@ function AvariasGrowthChart({ pedidas, allSkuRows }: GrowthChartProps) {
             return (
               <g key={i} className="cursor-pointer" onMouseEnter={() => setHoveredIdx(i)} onClick={() => setSelectedIdx(i)}>
                 <rect x={c.x-colW/2} y={pT} width={colW} height={iH+pB} fill="transparent" />
-                {(isH || isSel) && <line x1={c.x} y1={pT-6} x2={c.x} y2={pT+iH} stroke={isSel?'#38bdf8':'#94a3b8'} strokeWidth={isSel?'2':'1.2'} strokeDasharray={isSel?'none':'3 3'} opacity="0.9" />}
-                <rect x={c.x-(isH||isSel?5:3.5)} y={c.yS-(isH||isSel?5:3.5)} width={isH||isSel?10:7} height={isH||isSel?10:7} rx="2" fill={isH||isSel?'#fff':'#38bdf8'} stroke="#0f172a" strokeWidth="2" filter={isH||isSel?'url(#agcGlowSky2)':undefined} />
-                <circle cx={c.x} cy={c.yA} r={isH||isSel?6.5:4.5} fill={isH||isSel?'#fff':'#f43f5e'} stroke="#0f172a" strokeWidth="2" filter={isH||isSel?'url(#agcGlowRose2)':undefined} />
-                <text x={c.x} y={pT+iH+14} textAnchor="middle" fill={isH||isSel?'#fff':'#94a3b8'} fontSize="9" fontWeight={isH||isSel?'800':'600'} fontFamily="monospace">{c.s.dateStr}</text>
-                <text x={c.x} y={pT+iH+25} textAnchor="middle" fill={isSel?'#38bdf8':'#64748b'} fontSize="7.5" fontFamily="monospace" fontWeight="600">#{c.s.id} ({c.s.produtos.length} SKU)</text>
+                {(isH || isSel) && <line x1={c.x} y1={pT-6} x2={c.x} y2={pT+iH} stroke={isSel?'#38bdf8':'#94a3b8'} strokeWidth={isSel?'1.5':'1'} strokeDasharray={isSel?'none':'4 4'} opacity="0.6" />}
+                <rect x={c.x-(isH||isSel?5:3.5)} y={c.yS-(isH||isSel?5:3.5)} width={isH||isSel?10:7} height={isH||isSel?10:7} rx="2" fill={isH||isSel?'#fff':'#38bdf8'} stroke="#0f172a" strokeWidth="1.5" filter={isH||isSel?'url(#agcGlowSky2)':undefined} />
+                <circle cx={c.x} cy={c.yA} r={isH||isSel?6:4} fill={isH||isSel?'#fff':'#f43f5e'} stroke="#0f172a" strokeWidth="1.5" filter={isH||isSel?'url(#agcGlowRose2)':undefined} />
+                <text x={c.x} y={pT+iH+14} textAnchor="middle" fill={isH||isSel?'#e2e8f0':'#64748b'} fontSize="9" fontWeight={isH||isSel?'700':'500'} fontFamily="monospace">{c.s.dateStr}</text>
+                <text x={c.x} y={pT+iH+25} textAnchor="middle" fill={isSel?'#38bdf8':'#475569'} fontSize="7.5" fontFamily="monospace" fontWeight="500">#{c.s.id} ({c.s.produtos.length} SKU)</text>
               </g>
             )
           })}
         </svg>
 
         {/* Legend */}
-        <div className="flex items-center gap-4 flex-wrap mt-2 px-1">
-          <div className="flex items-center gap-1.5"><div className="w-4 h-0.5 rounded bg-rose-500" /><span className="text-[9px] font-mono text-slate-400">Avarias</span></div>
-          <div className="flex items-center gap-1.5"><div className="w-4 h-0.5 rounded" style={{background:'#38bdf8',opacity:0.8}} /><span className="text-[9px] font-mono text-slate-400">Solicitado</span></div>
+        <div className="flex items-center gap-4 flex-wrap mt-1 px-1">
+          <div className="flex items-center gap-1.5"><div className="w-5 h-px rounded bg-rose-500" /><span className="text-[9px] font-mono text-slate-500">Avarias</span></div>
+          <div className="flex items-center gap-1.5"><div className="w-5 h-px rounded" style={{background:'#38bdf8',opacity:0.7}} /><span className="text-[9px] font-mono text-slate-500">Solicitado</span></div>
         </div>
       </div>
 
