@@ -2107,16 +2107,17 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
           subTab === "pedidas" ? (
           <motion.div key="pedidos-accordion" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} className="space-y-2">
             {/* Accordion header */}
-            <div className="bg-[#111827] border border-slate-800 rounded-2xl overflow-hidden shadow-md">
-              <div className="grid grid-cols-[2fr_1.5fr_1.5fr_4fr_1fr_1fr_1fr] px-5 py-3 border-b border-slate-800 bg-[#0f172a]/60 text-[10px] font-mono font-medium text-slate-500 uppercase tracking-wider">
+            <div className="rounded-xl overflow-hidden border border-white/[0.06] bg-[#191919]">
+              <div className="grid grid-cols-[2fr_1.5fr_1.5fr_4fr_1fr_1fr_1fr] px-4 py-2 border-b border-white/[0.06] text-[9.5px] font-medium text-slate-500 uppercase tracking-widest select-none">
                 <span>Solicitação</span>
                 <span>Data Solicitação</span>
                 <span>Solicitante</span>
-                <span>Resumo Operacional (Responsável / Status)</span>
+                <span>Resumo Operacional</span>
                 <span className="text-right">Solicitado</span>
                 <span className="text-right">Enviado</span>
-                <span className="text-right text-amber-400">Pendente</span>
+                <span className="text-right text-amber-500/80">Pendente</span>
               </div>
+
 
               {loading ? (
                 <div className="flex items-center justify-center py-12 text-slate-500">
@@ -2216,45 +2217,42 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                     : 'Concluído'
 
                   return (
-                    <div key={solKey} className="border-b border-slate-800/60 last:border-0">
+                    <div key={solKey} className="border-b border-white/[0.04] last:border-0">
                       {/* Summary row */}
                       <button
                         onClick={toggle}
-                        className="w-full grid grid-cols-[2fr_1.5fr_1.5fr_4fr_1fr_1fr_1fr] px-5 py-3.5 hover:bg-slate-800/20 transition-colors text-left items-center cursor-pointer"
+                        className="w-full grid grid-cols-[2fr_1.5fr_1.5fr_4fr_1fr_1fr_1fr] px-4 py-2.5 hover:bg-white/[0.02] transition-colors text-left items-center cursor-pointer group"
                       >
-                        <span className="flex items-center gap-2">
-                          <span className={cn("text-slate-400 transition-transform duration-200", isExpanded ? "rotate-0" : "-rotate-90")}>
-                            <ChevronRight size={14} className={cn("transition-transform duration-200", isExpanded ? "rotate-90" : "")} />
-                          </span>
-                          <span className="font-mono text-[11px] font-medium text-white uppercase tracking-wider">
-                            SOLICITAÇÃO {solKey === 'sem-solicitacao' ? 'S/N' : solKey}
+                        <span className="flex items-center gap-1.5">
+                          <ChevronRight size={13} className={cn("text-slate-600 transition-transform duration-150 flex-shrink-0", isExpanded ? "rotate-90" : "")} />
+                          <span className="text-[11px] font-medium text-slate-300 tracking-wide">
+                            Solicitação {solKey === 'sem-solicitacao' ? 'S/N' : solKey}
                           </span>
                         </span>
-                        <span className="flex items-center gap-1.5 font-mono text-[11px] font-normal text-slate-400">
-                          <span className="text-slate-600">⧉</span>
-                          {dateLabel}
-                        </span>
-                        <span className="font-mono text-[11px] font-normal text-slate-300 truncate">
-                          {items[0]?.solicitante || '—'}
-                        </span>
-                        <span className="flex items-center gap-3 font-mono text-[11px] font-normal text-slate-300">
-                          <span className="text-slate-400">{items.length} {items.length === 1 ? 'item' : 'itens'}</span>
-                          <span className="text-slate-700">•</span>
-                          <span>👤 {responsavel}</span>
-                          <span className="text-slate-700">•</span>
-                          <span className={cn(totPendente > 0 ? 'text-amber-400' : 'text-emerald-400')}>
-                            {totPendente > 0 ? `⏳ ${statusResumo}` : '✓ Concluído'}
+                        <span className="text-[11px] text-slate-500">{dateLabel}</span>
+                        <span className="text-[11px] text-slate-400 truncate">{items[0]?.solicitante || '—'}</span>
+                        <span className="flex items-center gap-2 text-[11px]">
+                          <span className="text-slate-600">{items.length} {items.length === 1 ? 'item' : 'itens'}</span>
+                          <span className="text-slate-700">·</span>
+                          <span className="text-slate-500">{responsavel}</span>
+                          <span className="text-slate-700">·</span>
+                          <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium",
+                            totPendente > 0
+                              ? 'text-amber-400/90 bg-amber-500/10'
+                              : 'text-emerald-400/90 bg-emerald-500/10'
+                          )}>
+                            {totPendente > 0 ? `Pendente` : '✓ Concluído'}
                           </span>
                         </span>
-                        <span className="font-mono text-[11px] font-normal text-white text-right">{totSolic.toLocaleString('pt-BR')}</span>
-                        <span className="font-mono text-[11px] font-normal text-emerald-400 text-right">{totEnviado.toLocaleString('pt-BR')}</span>
-                        <span className={cn("font-mono text-[11px] font-normal text-right", totPendente > 0 ? 'text-amber-400' : 'text-slate-500')}>{totPendente.toLocaleString('pt-BR')}</span>
+                        <span className="text-[11px] text-slate-400 text-right font-mono">{totSolic.toLocaleString('pt-BR')}</span>
+                        <span className="text-[11px] text-emerald-500/80 text-right font-mono">{totEnviado.toLocaleString('pt-BR')}</span>
+                        <span className={cn("text-[11px] text-right font-mono", totPendente > 0 ? 'text-amber-400' : 'text-slate-600')}>{totPendente.toLocaleString('pt-BR')}</span>
                       </button>
 
                       {/* Expanded detail rows */}
                       {isExpanded && (
-                        <div className="bg-slate-950/40 border-t border-slate-800/50 overflow-x-auto">
-                          <table className="w-full border-collapse text-[10px] font-mono" style={{ minWidth: '1400px', tableLayout: 'fixed' }}>
+                        <div className="border-t border-white/[0.04] overflow-x-auto">
+                          <table className="w-full border-collapse text-[10.5px]" style={{ minWidth: '1400px', tableLayout: 'fixed' }}>
                             <colgroup>
                               <col style={{ width: '88px' }} />
                               <col style={{ width: '110px' }} />
@@ -2273,57 +2271,59 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                               <col style={{ width: '80px' }} />
                             </colgroup>
                             <thead>
-                              <tr className="border-b border-slate-800/60 bg-slate-950/20">
-                                <th className="px-3 py-2 text-left text-[9px] font-normal text-slate-500 uppercase tracking-wider">Cód. Produto</th>
-                                <th className="px-3 py-2 text-left text-[9px] font-normal text-slate-500 uppercase tracking-wider">Modelo</th>
-                                <th className="px-3 py-2 text-center text-[9px] font-normal text-slate-500 uppercase tracking-wider">Qtd</th>
-                                <th className="px-3 py-2 text-left text-[9px] font-normal text-slate-500 uppercase tracking-wider">Cód. Emb.</th>
-                                <th className="px-3 py-2 text-left text-[9px] font-normal text-slate-500 uppercase tracking-wider">Descrição Emb.</th>
-                                <th className="px-3 py-2 text-left text-[9px] font-normal text-slate-500 uppercase tracking-wider">Tipo</th>
-                                <th className="px-3 py-2 text-left text-[9px] font-normal text-slate-500 uppercase tracking-wider">Tipo Emb.</th>
-                                <th className="px-3 py-2 text-center text-[9px] font-normal text-emerald-500/80 uppercase tracking-wider">Enviado</th>
-                                <th className="px-3 py-2 text-center text-[9px] font-normal text-orange-400/80 uppercase tracking-wider">Pendente</th>
-                                <th className="px-3 py-2 text-center text-[9px] font-normal text-slate-500 uppercase tracking-wider">Entrega (C.)</th>
-                                <th className="px-3 py-2 text-center text-[9px] font-normal text-slate-500 uppercase tracking-wider">Envio (E.)</th>
-                                <th className="px-3 py-2 text-center text-[9px] font-normal text-slate-500 uppercase tracking-wider">Status</th>
-                                <th className="px-3 py-2 text-center text-[9px] font-normal text-emerald-400/90 uppercase tracking-wider">Status BA</th>
-                                <th className="px-3 py-2 text-center text-[9px] font-normal text-slate-500 uppercase tracking-wider">NF</th>
-                                <th className="px-3 py-2 text-center text-[9px] font-normal text-slate-500 uppercase tracking-wider">Previsão</th>
+                              <tr className="border-b border-white/[0.04]">
+                                <th className="px-3 py-1.5 text-left text-[9px] font-medium text-slate-600 uppercase tracking-widest">Cód. Produto</th>
+                                <th className="px-3 py-1.5 text-left text-[9px] font-medium text-slate-600 uppercase tracking-widest">Modelo</th>
+                                <th className="px-3 py-1.5 text-center text-[9px] font-medium text-slate-600 uppercase tracking-widest">Qtd</th>
+                                <th className="px-3 py-1.5 text-left text-[9px] font-medium text-slate-600 uppercase tracking-widest">Cód. Emb.</th>
+                                <th className="px-3 py-1.5 text-left text-[9px] font-medium text-slate-600 uppercase tracking-widest">Descrição Emb.</th>
+                                <th className="px-3 py-1.5 text-left text-[9px] font-medium text-slate-600 uppercase tracking-widest">Tipo</th>
+                                <th className="px-3 py-1.5 text-left text-[9px] font-medium text-slate-600 uppercase tracking-widest">Tipo Emb.</th>
+                                <th className="px-3 py-1.5 text-center text-[9px] font-medium text-slate-600 uppercase tracking-widest">Enviado</th>
+                                <th className="px-3 py-1.5 text-center text-[9px] font-medium text-slate-600 uppercase tracking-widest">Pendente</th>
+                                <th className="px-3 py-1.5 text-center text-[9px] font-medium text-slate-600 uppercase tracking-widest">Entrega (C.)</th>
+                                <th className="px-3 py-1.5 text-center text-[9px] font-medium text-slate-600 uppercase tracking-widest">Envio (E.)</th>
+                                <th className="px-3 py-1.5 text-center text-[9px] font-medium text-slate-600 uppercase tracking-widest">Status</th>
+                                <th className="px-3 py-1.5 text-center text-[9px] font-medium text-slate-600 uppercase tracking-widest">Status BA</th>
+                                <th className="px-3 py-1.5 text-center text-[9px] font-medium text-slate-600 uppercase tracking-widest">NF</th>
+                                <th className="px-3 py-1.5 text-center text-[9px] font-medium text-slate-600 uppercase tracking-widest">Previsão</th>
                               </tr>
                             </thead>
                             <tbody>
                               {rowDetails.map((row, ri) => (
-                                <tr key={ri} className={cn(
-                                  "border-b border-slate-800/30 last:border-0 transition-colors hover:bg-slate-800/10 font-normal",
-                                  ri % 2 === 1 ? "bg-slate-800/10" : ""
-                                )}>
-                                  <td className="px-3 py-2.5 overflow-hidden">
-                                    <span className="block truncate text-slate-300 font-normal cursor-help" title={row.p.modelo_produto || row.p.modelo || ''}>{row.sku}</span>
+                                <tr key={ri} className="border-b border-white/[0.03] last:border-0 hover:bg-white/[0.015] transition-colors">
+                                  <td className="px-3 py-1.5 overflow-hidden">
+                                    <span className="block truncate text-slate-300 cursor-help" title={row.p.modelo_produto || row.p.modelo || ''}>{row.sku}</span>
                                   </td>
-                                  <td className="px-3 py-2.5 overflow-hidden">
-                                    <span className="block truncate text-slate-400 font-normal" title={row.p.modelo || ''}>{row.p.modelo || '—'}</span>
+                                  <td className="px-3 py-1.5 overflow-hidden">
+                                    <span className="block truncate text-slate-500" title={row.p.modelo || ''}>{row.p.modelo || '—'}</span>
                                   </td>
-                                  <td className="px-3 py-2.5 text-center text-slate-300 font-normal">{row.qty.toLocaleString('pt-BR')}</td>
-                                  <td className="px-3 py-2.5 overflow-hidden">
-                                    <span className="block truncate text-slate-500 font-normal" title={row.p.codigo_embalagem || ''}>{row.p.codigo_embalagem || '—'}</span>
+                                  <td className="px-3 py-1.5 text-center text-slate-400">{row.qty.toLocaleString('pt-BR')}</td>
+                                  <td className="px-3 py-1.5 overflow-hidden">
+                                    <span className="block truncate text-slate-600" title={row.p.codigo_embalagem || ''}>{row.p.codigo_embalagem || '—'}</span>
                                   </td>
-                                  <td className="px-3 py-2.5 overflow-hidden">
-                                    <span className="block truncate text-slate-400 font-normal" title={row.p.descricao_embalagem || ''}>{row.p.descricao_embalagem || '—'}</span>
+                                  <td className="px-3 py-1.5 overflow-hidden">
+                                    <span className="block truncate text-slate-400" title={row.p.descricao_embalagem || ''}>{row.p.descricao_embalagem || '—'}</span>
                                   </td>
-                                  <td className="px-3 py-2.5 overflow-hidden">
-                                    <span className="block truncate text-slate-400 font-normal uppercase">{row.p.tipo || '—'}</span>
+                                  <td className="px-3 py-1.5 overflow-hidden">
+                                    <span className="block truncate text-slate-500 uppercase text-[10px]">{row.p.tipo || '—'}</span>
                                   </td>
-                                  <td className="px-3 py-2.5 overflow-hidden">
-                                    <span className="block truncate text-slate-400 font-normal uppercase">{row.p.tipo_embalagem || '—'}</span>
+                                  <td className="px-3 py-1.5 overflow-hidden">
+                                    <span className="block truncate text-slate-500 uppercase text-[10px]">{row.p.tipo_embalagem || '—'}</span>
                                   </td>
-                                  <td className="px-3 py-2.5 text-center text-emerald-400/90 font-normal">{row.enviado.toLocaleString('pt-BR')}</td>
-                                  <td className={cn("px-3 py-2.5 text-center font-normal", row.pendente > 0 ? 'text-orange-400' : 'text-slate-600')}>{row.pendente.toLocaleString('pt-BR')}</td>
-                                  <td className="px-3 py-2.5 text-center text-slate-400 font-normal text-[9px]">{row.p.entrega_compras || 'TBC'}</td>
-                                  <td className="px-3 py-2.5 text-center text-slate-400 font-normal text-[9px]">{row.p.envio_expedicao || 'TBC'}</td>
-                                  <td className="px-3 py-2.5 text-center text-[9px] font-normal uppercase tracking-wider">
-                                    <span className={cn(row.statusCls, "font-normal")}>{row.status}</span>
+                                  <td className="px-3 py-1.5 text-center text-emerald-500/70">{row.enviado.toLocaleString('pt-BR')}</td>
+                                  <td className={cn("px-3 py-1.5 text-center", row.pendente > 0 ? 'text-amber-400' : 'text-slate-600')}>{row.pendente.toLocaleString('pt-BR')}</td>
+                                  <td className="px-3 py-1.5 text-center text-slate-500 text-[10px]">{row.p.entrega_compras || 'TBC'}</td>
+                                  <td className="px-3 py-1.5 text-center text-slate-500 text-[10px]">{row.p.envio_expedicao || 'TBC'}</td>
+                                  <td className="px-3 py-1.5 text-center">
+                                    <span className={cn(
+                                      "inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-medium",
+                                      row.status === 'FINALIZADO' ? 'text-emerald-400 bg-emerald-500/10' :
+                                      row.status === 'EM ANDAMENTO' ? 'text-blue-400 bg-blue-500/10' :
+                                      'text-amber-400 bg-amber-500/10'
+                                    )}>{row.status}</span>
                                   </td>
-                                  <td className="px-3 py-2.5 text-center text-[9px] font-normal">
+                                  <td className="px-3 py-1.5 text-center">
                                     <button
                                       disabled={togglingBa}
                                       onClick={() => toggleBaixado(
@@ -2334,18 +2334,18 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                                       )}
                                       title={row.isBa ? "Clique para desmarcar BA" : "Clique para marcar como chegou (BA)"}
                                       className={cn(
-                                        "px-2.5 py-0.5 rounded-md font-semibold transition-all text-[9px] border leading-relaxed",
+                                        "px-2 py-0.5 rounded text-[9.5px] font-medium transition-all border",
                                         togglingBa ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
                                         row.isBa
-                                          ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/30"
-                                          : "bg-slate-900/60 border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-300"
+                                          ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20"
+                                          : "bg-transparent border-white/[0.06] text-slate-600 hover:text-slate-400 hover:border-white/[0.12]"
                                       )}
                                     >
                                       {row.isBa ? "✓ BA" : "—"}
                                     </button>
                                   </td>
-                                  <td className="px-3 py-2.5 text-center text-slate-400 font-normal text-[9px]">{row.p.nf || '—'}</td>
-                                  <td className="px-3 py-2.5 text-center text-slate-400 font-normal text-[9px]">{row.p.previsao_entrega || '—'}</td>
+                                  <td className="px-3 py-1.5 text-center text-slate-500 text-[10px]">{row.p.nf || '—'}</td>
+                                  <td className="px-3 py-1.5 text-center text-slate-500 text-[10px]">{row.p.previsao_entrega || '—'}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -2354,6 +2354,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                       )}
                     </div>
                   )
+
                 })
               })()}
             </div>
