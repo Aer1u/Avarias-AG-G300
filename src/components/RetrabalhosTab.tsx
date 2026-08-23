@@ -1080,10 +1080,19 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
       </div>
 
       <div className="flex flex-col lg:flex-row items-center gap-3">
-        <div className="flex-1 flex flex-wrap items-center gap-2 bg-slate-50/50 dark:bg-[#0F172A]/50 p-1.5 rounded-2xl border border-slate-200 dark:border-white/5 backdrop-blur-sm">
+        <div className="flex-1 flex flex-wrap items-center gap-1.5 border border-white/[0.06] p-1 rounded-xl">
           {STATUS_OPTIONS.map((status) => (
-            <button key={status.id} onClick={() => setActiveStatus(status.id)} className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-semibold uppercase tracking-wider transition-all duration-200", activeStatus === status.id ? "bg-blue-600 text-white shadow-md scale-105" : "text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5")}>
-              <status.icon size={12} className={cn(activeStatus === status.id ? "text-white" : status.color)} />
+            <button
+              key={status.id}
+              onClick={() => setActiveStatus(status.id)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9.5px] font-semibold uppercase tracking-wider transition-all duration-150",
+                activeStatus === status.id
+                  ? "bg-white/[0.06] text-slate-100 border border-white/[0.08]"
+                  : "text-slate-500 hover:bg-white/[0.02]"
+              )}
+            >
+              <status.icon size={11} className={cn(activeStatus === status.id ? "text-white" : status.color)} />
               {status.label}
             </button>
           ))}
@@ -1091,35 +1100,51 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
 
         <div className="flex items-center gap-3 w-full lg:w-auto">
           <div className="relative flex-1 lg:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
-            <input type="text" placeholder="Filtrar por lote ou SKU..." className="w-full bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-white/10 rounded-2xl py-2.5 pl-9 pr-3 text-[11px] text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all placeholder:text-slate-400 shadow-xl" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-600" />
+            <input
+              type="text"
+              placeholder="Filtrar por lote ou SKU..."
+              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl py-1.5 pl-8 pr-3 text-[11px] text-slate-300 focus:outline-none focus:border-white/[0.12] transition-all placeholder:text-slate-600"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
           
-          <div className="flex items-center gap-1 bg-slate-50/50 dark:bg-[#0F172A]/50 p-1 rounded-2xl border border-slate-200 dark:border-white/5">
+          <div className="flex items-center gap-1 p-0.5 rounded-xl border border-white/[0.06]">
             <button
               onClick={() => setViewMode("list")}
-              className={cn("p-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer", viewMode === "list" ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:text-slate-200")}
+              className={cn(
+                "p-1.5 rounded-lg text-xs transition-all flex items-center gap-1 cursor-pointer",
+                viewMode === "list"
+                  ? "bg-white/[0.06] text-slate-100 border border-white/[0.08]"
+                  : "text-slate-500 hover:text-slate-300"
+              )}
               title="Visualização em Lista Hierárquica"
             >
-              <List size={14} />
-              <span className="text-[10px] uppercase font-bold hidden sm:inline">Lista</span>
+              <List size={13} />
+              <span className="text-[9.5px] uppercase font-bold hidden sm:inline">Lista</span>
             </button>
             <button
               onClick={() => setViewMode("grid")}
-              className={cn("p-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer", viewMode === "grid" ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:text-slate-200")}
+              className={cn(
+                "p-1.5 rounded-lg text-xs transition-all flex items-center gap-1 cursor-pointer",
+                viewMode === "grid"
+                  ? "bg-white/[0.06] text-slate-100 border border-white/[0.08]"
+                  : "text-slate-500 hover:text-slate-300"
+              )}
               title="Visualização em Cards"
             >
-              <LayoutGrid size={14} />
-              <span className="text-[10px] uppercase font-bold hidden sm:inline">Cards</span>
+              <LayoutGrid size={13} />
+              <span className="text-[9.5px] uppercase font-bold hidden sm:inline">Cards</span>
             </button>
           </div>
 
           {user && (
             <button 
               onClick={() => setIsNewLoteModalOpen(true)}
-              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl shadow-lg shadow-blue-600/20 transition-all font-semibold text-[10px] uppercase shrink-0 cursor-pointer"
+              className="flex items-center gap-1.5 bg-emerald-600/80 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-widest transition-all cursor-pointer shrink-0"
             >
-              <Plus size={14} />
+              <Plus size={11} />
               Novo Lote
             </button>
           )}
@@ -1137,118 +1162,118 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
           ) : groupedData.length > 0 ? (
             viewMode === "list" ? (
               /* ── Visualização Hierárquica em Lista ── */
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+              <div className="rounded-xl border border-white/[0.06] bg-[#191919] overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
-                      <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
-                        <th className="py-3 px-4 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Lote / SKU</th>
-                        <th className="py-3 px-4 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Produto</th>
-                        <th className="py-3 px-4 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center">Status</th>
-                        <th className="py-3 px-4 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Embalagens</th>
-                        <th className="py-3 px-4 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Enviado</th>
-                        <th className="py-3 px-4 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Retrabalhado</th>
-                        <th className="py-3 px-4 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center">Ações</th>
+                      <tr className="border-b border-white/[0.04] bg-white/[0.01]">
+                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest">Lote / SKU</th>
+                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest">Produto</th>
+                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest text-center">Status</th>
+                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest text-right">Embalagens</th>
+                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest text-right">Enviado</th>
+                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest text-right">Retrabalhado</th>
+                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest text-center">Ações</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                    <tbody>
                       {groupedData.map((lote) => (
                         <tr 
                           key={lote.displayId || lote.lote}
                           onClick={() => setSelectedLoteDetail(lote)}
-                          className="hover:bg-slate-50 dark:hover:bg-white/[0.03] transition-colors cursor-pointer group"
+                          className="border-b border-white/[0.03] last:border-0 hover:bg-white/[0.015] transition-colors cursor-pointer group"
                         >
                           {/* SKU / Lote */}
-                          <td className="py-3 px-4 whitespace-nowrap">
+                          <td className="py-1.5 px-3 whitespace-nowrap">
                             <div className="flex flex-col">
-                              <span className="text-[13px] font-semibold text-slate-900 dark:text-slate-100">
+                              <span className="text-[11.5px] font-semibold text-slate-200">
                                 Lote {lote.lote}
                               </span>
-                              <span className="text-xs font-medium text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                              <span className="text-[10px] font-normal text-slate-400 font-mono mt-0.5">
                                 {lote.codigo}
                               </span>
                             </div>
                           </td>
 
                           {/* Produto + Foto discreta */}
-                          <td className="py-3 px-4">
-                            <div className="flex items-center gap-3 max-w-md">
+                          <td className="py-1.5 px-3">
+                            <div className="flex items-center gap-2.5 max-w-md">
                               {lote.codigo && lote.codigo !== "---" && (
                                 <img 
                                   src={`https://bvgwlkdqmkuuhqiwzfti.supabase.co/storage/v1/object/public/Store/Codigos%20icon/${lote.codigo?.trim() || '---'}.png`}
                                   alt={lote.codigo}
-                                  className="w-8 h-8 object-contain shrink-0 rounded bg-slate-100 dark:bg-slate-800 p-0.5 border border-slate-200 dark:border-slate-700"
+                                  className="w-6 h-6 object-contain shrink-0 rounded bg-white/[0.02] p-0.5 border border-white/[0.05]"
                                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                                 />
                               )}
-                              <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate leading-snug">
+                              <span className="text-[10.5px] font-normal text-slate-400 truncate leading-snug">
                                 {lote.descricao}
                               </span>
                             </div>
                           </td>
 
                           {/* Status */}
-                          <td className="py-3 px-4 text-center whitespace-nowrap">
-                            <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md border text-[11px] font-medium tracking-wide", getStatusConfig(lote.status).style)}>
-                              <span className={cn("w-1.5 h-1.5 rounded-full", getStatusConfig(lote.status).dot)} />
+                          <td className="py-1.5 px-3 text-center whitespace-nowrap">
+                            <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-medium tracking-wide border border-white/5", getStatusConfig(lote.status).style)}>
+                              <span className={cn("w-1 h-1 rounded-full", getStatusConfig(lote.status).dot)} />
                               <span className="capitalize">{lote.status.toLowerCase()}</span>
                             </span>
                           </td>
 
                           {/* Embalagens */}
-                          <td className="py-3 px-4 text-right whitespace-nowrap">
-                            <span className="text-[13px] font-medium text-slate-900 dark:text-slate-100">{lote.totalEmbalagens}</span>
+                          <td className="py-1.5 px-3 text-right whitespace-nowrap">
+                            <span className="text-[11px] text-slate-400">{lote.totalEmbalagens}</span>
                             {lote.grade > 0 && lote.totalEmbalagens > 0 && (
-                              <span className="text-[10px] text-slate-500 block mt-0.5">
+                              <span className="text-[9.5px] text-slate-600 block mt-0.5">
                                 {formatPallets(lote.totalEmbalagens, lote.grade, true)}
                               </span>
                             )}
                           </td>
 
                           {/* Enviado */}
-                          <td className="py-3 px-4 text-right whitespace-nowrap">
-                            <span className="text-[13px] font-medium text-slate-900 dark:text-slate-100">{lote.totalEnviado}</span>
+                          <td className="py-1.5 px-3 text-right whitespace-nowrap">
+                            <span className="text-[11px] text-slate-400">{lote.totalEnviado}</span>
                             {lote.grade > 0 && lote.totalEnviado > 0 && (
-                              <span className="text-[10px] text-slate-500 block mt-0.5">
+                              <span className="text-[9.5px] text-slate-600 block mt-0.5">
                                 {formatPallets(lote.totalEnviado, lote.grade, true)}
                               </span>
                             )}
                           </td>
 
                           {/* Retrabalhado */}
-                          <td className="py-3 px-4 text-right whitespace-nowrap">
-                            <span className="text-[13px] font-medium text-slate-900 dark:text-slate-100">{lote.totalRetornado}</span>
+                          <td className="py-1.5 px-3 text-right whitespace-nowrap">
+                            <span className="text-[11px] text-slate-400">{lote.totalRetornado}</span>
                             {lote.grade > 0 && lote.totalRetornado > 0 && (
-                              <span className="text-[10px] text-slate-500 block mt-0.5">
+                              <span className="text-[9.5px] text-slate-600 block mt-0.5">
                                 {formatPallets(lote.totalRetornado, lote.grade, true)}
                               </span>
                             )}
                           </td>
 
                           {/* Ações */}
-                          <td className="py-3 px-4 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center justify-center gap-1.5">
+                          <td className="py-1.5 px-3 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-center gap-1">
                               {user && (
                                 <>
                                   <button 
                                     onClick={() => setEditingLote(lote)}
-                                    className="p-1.5 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                    className="p-1 rounded text-slate-500 hover:text-slate-300 hover:bg-white/[0.05] transition-colors"
                                     title="Editar Lote"
                                   >
-                                    <Edit3 size={14} />
+                                    <Edit3 size={12} />
                                   </button>
                                   <button 
                                     onClick={(e) => handleDeleteLoteCompleto(lote.lote, e)}
-                                    className="p-1.5 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
+                                    className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                                     title="Excluir Lote"
                                   >
-                                    <Trash2 size={14} />
+                                    <Trash2 size={12} />
                                   </button>
                                 </>
                               )}
                               <button 
                                 onClick={() => setSelectedLoteDetail(lote)}
-                                className="px-3 py-1.5 rounded bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-medium transition-colors shadow-sm"
+                                className="px-2 py-0.5 rounded bg-transparent border border-white/[0.06] hover:border-white/[0.12] text-slate-400 hover:text-slate-200 text-[10px] font-medium transition-colors cursor-pointer"
                               >
                                 Abrir
                               </button>
@@ -1675,76 +1700,76 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                     const firstItem = items[0];
                                     
                                     return (
-                                      <div key={viagemKey} className="border-b border-white/5 last:border-0">
+                                      <div key={viagemKey} className="border-b border-white/[0.04] last:border-0">
                                         {/* Group Header */}
                                         <div 
                                           onClick={() => toggleViagem(viagemKey)}
                                           className={cn(
-                                            "flex items-center justify-between px-6 py-4 cursor-pointer transition-all",
-                                            isExpanded ? "bg-white/[0.04]" : "hover:bg-white/[0.02]"
+                                            "flex items-center justify-between px-4 py-2.5 cursor-pointer transition-all",
+                                            isExpanded ? "bg-white/[0.03]" : "hover:bg-white/[0.015]"
                                           )}
                                         >
-                                          <div className="flex items-center gap-8">
+                                          <div className="flex items-center gap-6">
                                             <div className="flex flex-col">
-                                              <span className="text-[10px] font-medium text-slate-500 uppercase tracking-widest mb-1">Viagem</span>
-                                              <span className="text-lg font-mono font-bold text-white tracking-wider">
+                                              <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest mb-0.5">Viagem</span>
+                                              <span className="text-[14px] font-mono font-bold text-slate-200 tracking-wider">
                                                 {viagemKey === 'SEM_VIAGEM' ? 'NÃO ATRIBUÍDA' : `#${viagemKey}`}
                                               </span>
                                             </div>
                                             
                                             <div className="flex flex-col">
-                                              <span className="text-[10px] font-medium text-slate-500 uppercase tracking-widest mb-1">Data de Envio</span>
-                                              <div className="flex items-center gap-2">
-                                                <Calendar size={14} className="text-blue-400 opacity-70" />
-                                                <span className="text-sm font-medium text-slate-300">
+                                              <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest mb-0.5">Data de Envio</span>
+                                              <div className="flex items-center gap-1.5">
+                                                <Calendar size={11} className="text-slate-500" />
+                                                <span className="text-[11px] font-medium text-slate-400">
                                                   {viagemKey === 'SEM_VIAGEM' ? '--/--' : formatDayMonth(firstItem.enviado_ao_cd)}
                                                 </span>
                                               </div>
                                             </div>
 
                                             <div className="flex flex-col">
-                                              <span className="text-[10px] font-medium text-slate-500 uppercase tracking-widest mb-1">Turno</span>
-                                              <div className="flex items-center gap-2">
-                                                <Clock size={14} className="text-amber-400 opacity-70" />
-                                                <span className="text-sm font-bold text-white tracking-wider uppercase">
+                                              <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest mb-0.5">Turno</span>
+                                              <div className="flex items-center gap-1.5">
+                                                <Clock size={11} className="text-slate-500" />
+                                                <span className="text-[11px] font-normal text-slate-400 font-mono uppercase">
                                                   {firstItem.turno_da_viagem ? `TURNO ${firstItem.turno_da_viagem}` : '--'}
                                                 </span>
                                               </div>
                                             </div>
 
                                             <div className="flex flex-col">
-                                              <span className="text-[10px] font-medium text-slate-500 uppercase tracking-widest mb-1">Volume Total</span>
-                                              <div className="flex items-baseline gap-1">
-                                                <span className="text-sm font-bold text-emerald-400">
+                                              <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest mb-0.5">Volume Total</span>
+                                              <div className="flex items-baseline gap-0.5">
+                                                <span className="text-[11.5px] font-mono font-normal text-emerald-400">
                                                   {items.reduce((acc, curr) => acc + (curr.quantidade_enviada || 0), 0)}
                                                 </span>
-                                                <span className="text-[10px] text-emerald-500/50 font-bold uppercase tracking-widest">UN</span>
+                                                <span className="text-[9px] text-emerald-500/50 font-normal uppercase tracking-widest">UN</span>
                                               </div>
                                             </div>
 
                                             <div className="flex flex-col">
-                                              <span className="text-[10px] font-medium text-slate-500 uppercase tracking-widest mb-1">Situação</span>
+                                              <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest mb-0.5">Situação</span>
                                               <div className={cn(
-                                                "px-2 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-widest border",
+                                                "px-1.5 py-0.5 rounded text-[9.5px] font-medium tracking-wide border-0",
                                                 items.every(i => (i.situacao || '').toLowerCase() === 'armazenado')
-                                                  ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500"
-                                                  : "bg-blue-600/10 border-blue-500/20 text-blue-400"
+                                                  ? "bg-emerald-500/10 text-emerald-400"
+                                                  : "bg-blue-500/10 text-blue-400"
                                               )}>
                                                 {items.every(i => (i.situacao || '').toLowerCase() === 'armazenado') ? 'CONCLUÍDO' : 'EM ANDAMENTO'}
                                               </div>
                                             </div>
                                           </div>
 
-                                          <div className="flex items-center gap-3">
+                                          <div className="flex items-center gap-2">
                                             <button
                                               onClick={(e) => {
                                                 e.stopPropagation();
                                                 handleExportViagemExcel(viagemKey, items, selectedLoteDetail);
                                               }}
-                                              className="p-2 rounded-xl bg-white/5 hover:bg-emerald-600 border border-white/10 text-slate-400 hover:text-white transition-all group/export"
+                                              className="p-1.5 rounded-lg bg-transparent hover:bg-white/[0.05] border border-white/[0.06] hover:border-white/[0.12] text-slate-500 hover:text-slate-300 transition-colors"
                                               title="Exportar Viagem para Excel"
                                             >
-                                              <FileText size={14} className="group-hover/export:scale-110 transition-transform" />
+                                              <FileText size={12} />
                                             </button>
                                             {user && viagemKey !== 'SEM_VIAGEM' && (
                                               <>
@@ -1757,25 +1782,25 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                                     });
                                                     setIsViagemModalOpen(true);
                                                   }}
-                                                  className="p-2 rounded-xl bg-white/5 hover:bg-blue-600 border border-white/10 text-slate-400 hover:text-white transition-all group/edit"
+                                                  className="p-1.5 rounded-lg bg-transparent hover:bg-white/[0.05] border border-white/[0.06] hover:border-white/[0.12] text-slate-500 hover:text-slate-300 transition-colors"
                                                   title="Editar Viagem"
                                                 >
-                                                  <Edit3 size={14} className="group-hover/edit:scale-110 transition-transform" />
+                                                  <Edit3 size={12} />
                                                 </button>
                                                 <button
                                                   onClick={(e) => handleDeleteViagem(viagemKey, e)}
-                                                  className="p-2 rounded-xl bg-white/5 hover:bg-rose-600 border border-white/10 text-slate-400 hover:text-white transition-all group/delete"
+                                                  className="p-1.5 rounded-lg bg-transparent hover:bg-white/[0.05] border border-white/[0.06] hover:border-white/[0.12] text-slate-500 hover:text-red-400 transition-colors"
                                                   title="Excluir Viagem"
                                                 >
-                                                  <Trash2 size={14} className="group-hover/delete:scale-110 transition-transform" />
+                                                  <Trash2 size={12} />
                                                 </button>
                                               </>
                                             )}
                                             <div className={cn(
-                                              "w-8 h-8 rounded-full flex items-center justify-center border border-white/10 transition-transform duration-300",
-                                              isExpanded ? "rotate-180 bg-blue-600/10 border-blue-500/30 text-blue-400" : "text-slate-500"
+                                              "w-6 h-6 rounded-full flex items-center justify-center border border-white/[0.06] transition-transform duration-300 text-slate-500",
+                                              isExpanded && "rotate-180 text-blue-400 border-blue-500/30"
                                             )}>
-                                              <ChevronDown size={18} />
+                                              <ChevronDown size={14} />
                                             </div>
                                           </div>
 
@@ -1783,10 +1808,10 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
 
                                         {/* Group Content - Instant render without animations */}
                                         {isExpanded && (
-                                          <div className="bg-black/20 pb-4 overflow-x-auto relative">
+                                          <div className="pb-3 overflow-x-auto relative">
                                             {/* Table Header inside Group */}
                                             <div className={cn(
-                                              "grid gap-3 px-4 py-2.5 border-b border-white/10 items-center bg-slate-900/80 sticky top-0 z-30 font-mono text-[10px] uppercase font-extrabold text-slate-400 tracking-wider",
+                                              "grid gap-3 px-4 py-2 border-b border-white/[0.06] items-center bg-white/[0.01] sticky top-0 z-30 font-mono text-[9px] uppercase font-semibold text-slate-400 tracking-wider",
                                               selectionMode 
                                                 ? "grid-cols-[2.5rem_2.5rem_110px_110px_90px_120px_110px_110px_90px_140px_35px]" 
                                                 : "grid-cols-[2.5rem_110px_110px_90px_120px_110px_110px_90px_140px_35px]" 
@@ -1819,23 +1844,23 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                                   </button>
                                                 </div>
                                               )}
-                                              <span className="text-center text-slate-500">#</span>
+                                              <span className="text-center text-slate-600">#</span>
                                               <span className="text-left text-slate-300">Reserva (A)</span>
                                               <span className="text-left text-slate-300">Reserva (G)</span>
                                               <span className="text-center text-slate-300">Volume</span>
-                                              <span className="text-center text-blue-400">Criado em</span>
-                                              <span className="text-left text-blue-300">Estorno (A)</span>
-                                              <span className="text-left text-blue-300">Estorno (G)</span>
+                                              <span className="text-center text-slate-300">Criado em</span>
+                                              <span className="text-left text-slate-300">Estorno (A)</span>
+                                              <span className="text-left text-slate-300">Estorno (G)</span>
                                               <span className="text-center text-emerald-400">Retornado</span>
                                               <span className="text-left text-slate-300">Situação</span>
-                                              <span className="text-center text-slate-500">Ação</span>
+                                              <span className="text-center text-slate-600">Ação</span>
                                             </div>
 
                                             {items.map((item, idx) => (
                                               <div 
                                                 key={item.id} 
                                                 className={cn(
-                                                  "group/row grid gap-3 px-4 py-1 border-b border-white/5 transition-colors items-center relative hover:bg-slate-800/50",
+                                                  "group/row grid gap-3 px-4 py-1 border-b border-white/[0.03] last:border-0 transition-colors items-center relative hover:bg-white/[0.015]",
                                                   selectionMode 
                                                     ? "grid-cols-[2.5rem_2.5rem_110px_110px_90px_120px_110px_110px_90px_140px_35px]" 
                                                     : "grid-cols-[2.5rem_110px_110px_90px_120px_110px_110px_90px_140px_35px]",
@@ -1865,7 +1890,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                                 
                                                 {/* Index */}
                                                 <div className="text-center">
-                                                  <span className="text-[11px] font-mono font-bold text-slate-500">
+                                                  <span className="text-[11px] font-mono text-slate-600">
                                                     {String(idx + 1).padStart(2, '0')}
                                                   </span>
                                                 </div>
@@ -1877,7 +1902,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                                     value={item.reserva_a501 || ""}
                                                     onChange={e => updateReservaField(item.id, "reserva_a501", e.target.value)}
                                                     placeholder="A501..."
-                                                    className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/60 focus:bg-slate-900/80 rounded px-2 py-1 text-[11px] font-mono font-bold text-white transition-all outline-none"
+                                                    className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/60 focus:bg-slate-900/80 rounded px-2 py-1 text-[11px] font-mono text-slate-300 transition-all outline-none"
                                                   />
                                                 </div>
                                                 
@@ -1888,7 +1913,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                                     value={item.reserva_g501 || ""}
                                                     onChange={e => updateReservaField(item.id, "reserva_g501", e.target.value)}
                                                     placeholder="G501..."
-                                                    className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/60 focus:bg-slate-900/80 rounded px-2 py-1 text-[11px] font-mono font-bold text-slate-300 transition-all outline-none"
+                                                    className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/60 focus:bg-slate-900/80 rounded px-2 py-1 text-[11px] font-mono text-slate-400 transition-all outline-none"
                                                   />
                                                 </div>
 
@@ -1898,7 +1923,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                                     type="number"
                                                     value={item.quantidade_enviada || 0}
                                                     onChange={e => updateReservaField(item.id, "quantidade_enviada", Number(e.target.value))}
-                                                    className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/60 focus:bg-slate-900/80 rounded px-1.5 py-1 text-xs font-mono font-bold text-white text-center transition-all outline-none"
+                                                    className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/60 focus:bg-slate-900/80 rounded px-1.5 py-1 text-xs font-mono text-slate-300 text-center transition-all outline-none"
                                                   />
                                                 </div>
 
@@ -1908,7 +1933,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                                     type="date"
                                                     value={item.enviado_ao_cd || ""}
                                                     onChange={e => updateReservaField(item.id, "enviado_ao_cd", e.target.value || null)}
-                                                    className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/60 focus:bg-slate-900/80 rounded px-1 py-1 text-[10px] font-mono font-bold text-blue-400 transition-all outline-none text-center [color-scheme:dark]"
+                                                    className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/60 focus:bg-slate-900/80 rounded px-1 py-1 text-[10px] font-mono text-slate-400 transition-all outline-none text-center [color-scheme:dark]"
                                                   />
                                                 </div>
                                                 
@@ -1919,7 +1944,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                                     value={item.estorno_a501 || ""}
                                                     onChange={e => updateReservaField(item.id, "estorno_a501", e.target.value)}
                                                     placeholder="Est. A..."
-                                                    className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/60 focus:bg-slate-900/80 rounded px-2 py-1 text-[11px] font-mono font-bold text-blue-300 transition-all outline-none"
+                                                    className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/60 focus:bg-slate-900/80 rounded px-2 py-1 text-[11px] font-mono text-slate-300 transition-all outline-none"
                                                   />
                                                 </div>
 
@@ -1930,7 +1955,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                                     value={item.estorno_g501 || ""}
                                                     onChange={e => updateReservaField(item.id, "estorno_g501", e.target.value)}
                                                     placeholder="Est. G..."
-                                                    className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/60 focus:bg-slate-900/80 rounded px-2 py-1 text-[11px] font-mono font-bold text-blue-300 transition-all outline-none"
+                                                    className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/60 focus:bg-slate-900/80 rounded px-2 py-1 text-[11px] font-mono text-slate-400 transition-all outline-none"
                                                   />
                                                 </div>
 
@@ -1940,7 +1965,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                                     type="number"
                                                     value={item.quantidade_retornada || 0}
                                                     onChange={e => updateReservaField(item.id, "quantidade_retornada", Number(e.target.value))}
-                                                    className="w-full bg-transparent border border-transparent hover:border-emerald-500/60 focus:bg-slate-900/80 rounded px-1.5 py-1 text-xs font-mono font-bold text-emerald-400 text-center transition-all outline-none"
+                                                    className="w-full bg-transparent border border-transparent hover:border-emerald-500/60 focus:bg-slate-900/80 rounded px-1.5 py-1 text-xs font-mono text-emerald-400/90 text-center transition-all outline-none"
                                                   />
                                                 </div>
 
@@ -1949,10 +1974,10 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                                   <select 
                                                     value={item.situacao || 'Em preparação'} 
                                                     onChange={e => updateReservaField(item.id, "situacao", e.target.value)}
-                                                    className="w-full bg-slate-900/60 border border-white/10 hover:border-white/20 rounded px-2 py-1 text-[10px] font-extrabold text-slate-200 focus:border-blue-500 outline-none uppercase cursor-pointer"
+                                                    className="w-full bg-[#191919] border border-white/[0.06] hover:border-white/[0.12] rounded px-2 py-1 text-[10px] text-slate-300 focus:border-blue-500 outline-none uppercase cursor-pointer"
                                                   >
                                                     {SITUACAO_OPTIONS.map(o => (
-                                                      <option key={o.value} value={o.value} className="bg-[#0F172A] text-white text-[10px]">{o.value}</option>
+                                                      <option key={o.value} value={o.value} className="bg-[#191919] text-slate-300 text-[10px]">{o.value}</option>
                                                     ))}
                                                   </select>
                                                 </div>

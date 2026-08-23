@@ -413,6 +413,7 @@ function DashboardPage() {
   const [scrollRequested, setScrollRequested] = useState(false)
   const [showExportMenu, setShowExportMenu] = useState(false)
   const [showExportConfigModal, setShowExportConfigModal] = useState(false)
+  const [showEmbSetoresModal, setShowEmbSetoresModal] = useState(false)
   const [exportFormat, setExportFormat] = useState<"excel" | "pdf">("excel")
   const [exportTab, setExportTab] = useState<"simple" | "advanced">("simple")
   const [exportOptions, setExportOptions] = useState({
@@ -3823,6 +3824,27 @@ function DashboardPage() {
                               </button>
                             )}
 
+                            {/* Configurar Setores - apenas na aba Embalagens */}
+                            {topTab === 'embalagens' && !!user && (
+                              <>
+                                <div className="mx-4 my-1 border-t border-slate-100 dark:border-slate-800" />
+                                <button
+                                  onClick={() => { setShowEmbSetoresModal(true); setShowAjustesMenu(false); }}
+                                  className="w-full flex items-center justify-between px-4 py-3 rounded-2xl hover:bg-white dark:hover:bg-slate-800 transition-colors group text-left"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className="h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform">
+                                      <Settings size={14} />
+                                    </div>
+                                    <div>
+                                      <p className="text-xs font-normal text-slate-700 dark:text-slate-200 leading-none mb-1">Configurar Setores</p>
+                                      <p className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">Definir solicitantes CD / Conserto</p>
+                                    </div>
+                                  </div>
+                                </button>
+                              </>
+                            )}
+
                             {/* Cadastrar Produto - sempre visível para usuários logados */}
                             {!!user && (
                               <>
@@ -3843,6 +3865,7 @@ function DashboardPage() {
                                 </button>
                               </>
                             )}
+
                           </motion.div>
                         </>
                       )}
@@ -6229,7 +6252,7 @@ function DashboardPage() {
                   exit={{ opacity: 0, y: -10 }}
                   className="flex-1 overflow-auto"
                 >
-                  <EmbalagensTab refreshTrigger={isRefreshing} />
+                  <EmbalagensTab refreshTrigger={isRefreshing} showSetoresModal={showEmbSetoresModal} onCloseSetoresModal={() => setShowEmbSetoresModal(false)} />
                 </motion.div>
               )}
 

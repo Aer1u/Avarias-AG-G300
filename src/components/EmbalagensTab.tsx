@@ -524,7 +524,7 @@ function SkuCoverageBar({ row }: { row: SkuRow }) {
   )
 }
 
-export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boolean }) {
+export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onCloseSetoresModal }: { refreshTrigger?: boolean, showSetoresModal?: boolean, onCloseSetoresModal?: () => void }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [baseCodigos, setBaseCodigos] = useState<BaseCodigo[]>([])
@@ -560,6 +560,19 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
   const [parsedRows, setParsedRows] = useState<any[]>([])
   const [selectedSolicitantes, setSelectedSolicitantes] = useState<string[]>([])
   const uniqueSolicitantes = useMemo(() => Array.from(new Set(parsedRows.map(r => r.solicitante).filter(Boolean))) as string[], [parsedRows])
+
+  // ─── Configuração de Setores (CD / Conserto) — persiste em localStorage ───
+  const [setoresConfig, setSetoresConfig] = useState<{ cd: string[], conserto: string[] }>(() => {
+    try {
+      const stored = localStorage.getItem('embalagemSetoresConfig')
+      return stored ? JSON.parse(stored) : { cd: [], conserto: [] }
+    } catch { return { cd: [], conserto: [] } }
+  })
+  const saveSetoresConfig = (cfg: { cd: string[], conserto: string[] }) => {
+    setSetoresConfig(cfg)
+    try { localStorage.setItem('embalagemSetoresConfig', JSON.stringify(cfg)) } catch {}
+  }
+  const [setoresModalSearch, setSetoresModalSearch] = useState('')
 
   const toggleBaixado = async (solicitacao: string, codigoProduto: string, codigoEmbalagem: string, rowId?: string | number) => {
     if (!user) {
@@ -754,7 +767,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
           }
 
           const rawDate = getColVal("data_solicitacao")
-          const dateCol = parseBrDateToIso(rawDate) || new Date().toISOString().split("T")[0];
+          const dateCol = parseBrDateToIso(rawDate) || null;
 
           return {
             solicitacao: getColVal("solicitacao"),
@@ -943,9 +956,11 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
   const deveIncluirLinha = (r: EmbalagemRegistro): boolean => {
     const te = normalizarTipoEmb(r.tipo_embalagem)
     const desc = normalizarTipoEmb(r.descricao_embalagem)
+    const tipo = String(r.tipo || '').trim().toUpperCase()
 
-    // Oculta embalagens coletivas da lista
+    // Oculta lacres e coletivas da lista
     if (te.includes('COLETIVA') || desc.includes('COLETIVA')) return false
+    if (te.includes('LACRE') || desc.includes('LACRE') || tipo === 'LACRE') return false
 
     // Para Micro-ondas, SÓ exibe o CALÇO SUPERIOR
     if (ehMicroOndas(r.modelo, r.modelo_produto, r.codigo)) {
@@ -953,18 +968,19 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
       return false
     }
 
-    const tipo = String(r.tipo || '').trim().toUpperCase()
     if (tipo !== 'INSUMO') return true // EMBALAGEM → sempre inclui
     return te.includes('CALCO') || desc.includes('CALCO') // Calço sem acento → inclui
   }
 
-  // Regra para KPIs/Cronograma: evita dupla contagem de kits e ignora coletivas temporariamente
+  // Regra para KPIs/Cronograma: evita dupla contagem de kits e ignora coletivas/lacres
   const deveContabilizarNoCronograma = (r: EmbalagemRegistro): boolean => {
     const te = normalizarTipoEmb(r.tipo_embalagem)
     const desc = normalizarTipoEmb(r.descricao_embalagem)
+    const tipo = String(r.tipo || '').trim().toUpperCase()
     
-    // Regra Coletiva vs Individual: ignora coletivas
+    // Regra Coletiva e Lacre: ignora
     if (te.includes('COLETIVA') || desc.includes('COLETIVA')) return false
+    if (te.includes('LACRE') || desc.includes('LACRE') || tipo === 'LACRE') return false
 
     // Regra MO: contabiliza apenas o CALÇO SUPERIOR para representar o kit
     if (ehMicroOndas(r.modelo, r.modelo_produto, r.codigo)) {
@@ -972,16 +988,24 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
     }
 
     // Regra Não-MO: contabiliza EMBALAGEM (ou CALÇO, se for o único item)
-    const tipo = String(r.tipo || '').trim().toUpperCase()
     return tipo !== 'INSUMO' || te.includes('CALCO') || desc.includes('CALCO')
   }
 
   // Compatibilidade antiga removida: const deveConsiderarInsumo = (r: any) => deveIncluirLinha(r as EmbalagemRegistro)
 
+  // Filtra pedidas pelo setor CD configurado — se lista vazia, todos passam
+  const pedidasCD = useMemo(() => {
+    if (setoresConfig.cd.length === 0) return pedidas
+    return pedidas.filter(r => {
+      const sol = String(r.solicitante || '').trim().toUpperCase()
+      return setoresConfig.cd.some(s => s.trim().toUpperCase() === sol)
+    })
+  }, [pedidas, setoresConfig.cd])
+
   const pedidasPerSku = useMemo(() => {
     const m: Record<string, number> = {}
     // Somente pedidos NÃO finalizados E NÃO baixados (BA) contam como "Solicitado"
-    pedidas.filter(r => !r.isNew && (r.status || "").trim().toUpperCase() !== "FINALIZADO" && deveContabilizarNoCronograma(r as EmbalagemRegistro)).forEach(r => {
+    pedidasCD.filter(r => !r.isNew && (r.status || "").trim().toUpperCase() !== "FINALIZADO" && deveContabilizarNoCronograma(r as EmbalagemRegistro)).forEach(r => {
       const sol = String(r.solicitacao || "").trim()
       const prod = String(r.codigo || "").trim().toUpperCase()
       const emb = String(r.codigo_embalagem || "").trim().toUpperCase()
@@ -996,7 +1020,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
       if (c) m[c] = (m[c] || 0) + Math.round(Number(r.quantidade) || 0)
     })
     return m
-  }, [pedidas, pedidosBa])
+  }, [pedidasCD, pedidosBa])
 
   const atuaisPerSku = useMemo(() => {
     const m: Record<string, number> = {}
@@ -1022,7 +1046,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
     const m: Record<string, number> = {}
     // Pedidos FINALIZADOS E NÃO baixados (BA) entram como "Em trânsito"
     // Usa a coluna ENVIADO (não SOLICITADO): é o que foi de fato preparado e expedido
-    pedidas.filter(r => !r.isNew && (r.status || "").trim().toUpperCase() === "FINALIZADO" && deveContabilizarNoCronograma(r as EmbalagemRegistro)).forEach(r => {
+    pedidasCD.filter(r => !r.isNew && (r.status || "").trim().toUpperCase() === "FINALIZADO" && deveContabilizarNoCronograma(r as EmbalagemRegistro)).forEach(r => {
       const sol = String(r.solicitacao || "").trim()
       const prod = String(r.codigo || "").trim().toUpperCase()
       const emb = String(r.codigo_embalagem || "").trim().toUpperCase()
@@ -1042,13 +1066,13 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
       if (c) m[c] = (m[c] || 0) + Math.round(Number(r.quantidade) || 0)
     })
     return m
-  }, [pedidas, chegando, pedidosBa])
+  }, [pedidasCD, chegando, pedidosBa])
 
   const enviadoNaoChegouPerSku = useMemo(() => {
     const m: Record<string, number> = {}
     // Pedidos FINALIZADOS E NÃO baixados (BA): o que foi enviado mas ainda não chegou (BA)
     // Usa ENVIADO, não SOLICITADO — o que de fato saiu para expedição
-    pedidas.filter(r => !r.isNew && (r.status || "").trim().toUpperCase() === "FINALIZADO" && deveContabilizarNoCronograma(r as EmbalagemRegistro)).forEach(r => {
+    pedidasCD.filter(r => !r.isNew && (r.status || "").trim().toUpperCase() === "FINALIZADO" && deveContabilizarNoCronograma(r as EmbalagemRegistro)).forEach(r => {
       const sol = String(r.solicitacao || "").trim()
       const prod = String(r.codigo || "").trim().toUpperCase()
       const emb = String(r.codigo_embalagem || "").trim().toUpperCase()
@@ -1063,7 +1087,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
       if (c) m[c] = (m[c] || 0) + Math.round(Number(r.enviado) || 0)
     })
     return m
-  }, [pedidas, pedidosBa])
+  }, [pedidasCD, pedidosBa])
 
   // Helper to find packaging code for a product SKU
   const getEmbCode = (prodCode: string) => {
@@ -2275,50 +2299,60 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                               <col style={{ width: '80px' }} />
                             </colgroup>
                             <thead>
-                              <tr className="border-b border-white/[0.04]">
-                                <th className="px-3 py-1.5 text-left text-[9px] font-medium text-slate-600 uppercase tracking-widest">Cód. Produto</th>
-                                <th className="px-3 py-1.5 text-left text-[9px] font-medium text-slate-600 uppercase tracking-widest">Modelo</th>
-                                <th className="px-3 py-1.5 text-center text-[9px] font-medium text-slate-600 uppercase tracking-widest">Qtd</th>
-                                <th className="px-3 py-1.5 text-left text-[9px] font-medium text-slate-600 uppercase tracking-widest">Cód. Emb.</th>
-                                <th className="px-3 py-1.5 text-left text-[9px] font-medium text-slate-600 uppercase tracking-widest">Descrição Emb.</th>
-                                <th className="px-3 py-1.5 text-left text-[9px] font-medium text-slate-600 uppercase tracking-widest">Tipo</th>
-                                <th className="px-3 py-1.5 text-left text-[9px] font-medium text-slate-600 uppercase tracking-widest">Tipo Emb.</th>
-                                <th className="px-3 py-1.5 text-center text-[9px] font-medium text-slate-600 uppercase tracking-widest">Enviado</th>
-                                <th className="px-3 py-1.5 text-center text-[9px] font-medium text-slate-600 uppercase tracking-widest">Pendente</th>
-                                <th className="px-3 py-1.5 text-center text-[9px] font-medium text-slate-600 uppercase tracking-widest">Entrega (C.)</th>
-                                <th className="px-3 py-1.5 text-center text-[9px] font-medium text-slate-600 uppercase tracking-widest">Envio (E.)</th>
-                                <th className="px-3 py-1.5 text-center text-[9px] font-medium text-slate-600 uppercase tracking-widest">Status</th>
-                                <th className="px-3 py-1.5 text-center text-[9px] font-medium text-slate-600 uppercase tracking-widest">Status BA</th>
-                                <th className="px-3 py-1.5 text-center text-[9px] font-medium text-slate-600 uppercase tracking-widest">NF</th>
-                                <th className="px-3 py-1.5 text-center text-[9px] font-medium text-slate-600 uppercase tracking-widest">Previsão</th>
+                              <tr className="border-b border-white/[0.04] bg-white/[0.01]">
+                                <th className="px-3 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest">Cód. Produto</th>
+                                <th className="px-3 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest">Modelo</th>
+                                <th className="px-3 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest">Qtd</th>
+                                <th className="px-3 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest">Cód. Emb.</th>
+                                <th className="px-3 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest">Descrição Emb.</th>
+                                <th className="px-3 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest">Tipo</th>
+                                <th className="px-3 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest">Tipo Emb.</th>
+                                <th className="px-3 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest">Enviado</th>
+                                <th className="px-3 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest">Pendente</th>
+                                <th className="px-3 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest">Entrega (C.)</th>
+                                <th className="px-3 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest">Envio (E.)</th>
+                                <th className="px-3 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest">Status</th>
+                                <th className="px-3 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest">Status BA</th>
+                                <th className="px-3 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest">NF</th>
+                                <th className="px-3 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest">Previsão</th>
                               </tr>
                             </thead>
                             <tbody>
                               {rowDetails.map((row, ri) => (
                                 <tr key={ri} className="border-b border-white/[0.03] last:border-0 hover:bg-white/[0.015] transition-colors">
                                   <td className="px-3 py-1.5 overflow-hidden">
-                                    <span className="block truncate text-slate-300 cursor-help" title={row.p.modelo_produto || row.p.modelo || ''}>{row.sku}</span>
+                                    <span className="block truncate text-slate-400 cursor-help" title={row.p.modelo_produto || row.p.modelo || ''}>{row.sku}</span>
                                   </td>
                                   <td className="px-3 py-1.5 overflow-hidden">
-                                    <span className="block truncate text-slate-500" title={row.p.modelo || ''}>{row.p.modelo || '—'}</span>
+                                    <span className="block truncate text-slate-400" title={row.p.modelo || ''}>{row.p.modelo || '—'}</span>
                                   </td>
                                   <td className="px-3 py-1.5 text-center text-slate-400">{row.qty.toLocaleString('pt-BR')}</td>
                                   <td className="px-3 py-1.5 overflow-hidden">
-                                    <span className="block truncate text-slate-600" title={row.p.codigo_embalagem || ''}>{row.p.codigo_embalagem || '—'}</span>
+                                    <span className="block truncate text-slate-400" title={row.p.codigo_embalagem || ''}>{row.p.codigo_embalagem || '—'}</span>
                                   </td>
                                   <td className="px-3 py-1.5 overflow-hidden">
                                     <span className="block truncate text-slate-400" title={row.p.descricao_embalagem || ''}>{row.p.descricao_embalagem || '—'}</span>
                                   </td>
                                   <td className="px-3 py-1.5 overflow-hidden">
-                                    <span className="block truncate text-slate-500 uppercase text-[10px]">{row.p.tipo || '—'}</span>
+                                    <span className="block truncate text-slate-400 uppercase text-[10px]">{row.p.tipo || '—'}</span>
                                   </td>
                                   <td className="px-3 py-1.5 overflow-hidden">
-                                    <span className="block truncate text-slate-500 uppercase text-[10px]">{row.p.tipo_embalagem || '—'}</span>
+                                    <span className="block truncate text-slate-400 uppercase text-[10px]">{row.p.tipo_embalagem || '—'}</span>
                                   </td>
-                                  <td className="px-3 py-1.5 text-center text-emerald-500/70">{row.enviado.toLocaleString('pt-BR')}</td>
-                                  <td className={cn("px-3 py-1.5 text-center", row.pendente > 0 ? 'text-amber-400' : 'text-slate-600')}>{row.pendente.toLocaleString('pt-BR')}</td>
-                                  <td className="px-3 py-1.5 text-center text-slate-500 text-[10px]">{row.p.entrega_compras || 'TBC'}</td>
-                                  <td className="px-3 py-1.5 text-center text-slate-500 text-[10px]">{row.p.envio_expedicao || 'TBC'}</td>
+                                  <td className="px-3 py-1.5 text-center font-mono">
+                                    <span className={cn("inline-flex items-center gap-1", row.enviado > 0 ? "text-emerald-500" : "text-slate-600")}>
+                                      {row.enviado > 0 && <Truck size={10} className="opacity-70 flex-shrink-0" />}
+                                      {row.enviado.toLocaleString('pt-BR')}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-1.5 text-center font-mono">
+                                    <span className={cn("inline-flex items-center gap-1", row.pendente !== 0 ? "text-amber-500" : "text-slate-600")}>
+                                      {row.pendente !== 0 && <Hourglass size={10} className="opacity-70 flex-shrink-0" />}
+                                      {row.pendente.toLocaleString('pt-BR')}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-1.5 text-center text-slate-400 text-[10px]">{row.p.entrega_compras || 'TBC'}</td>
+                                  <td className="px-3 py-1.5 text-center text-slate-400 text-[10px]">{row.p.envio_expedicao || 'TBC'}</td>
                                   <td className="px-3 py-1.5 text-center">
                                     <span className={cn(
                                       "inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-medium",
@@ -2348,9 +2382,10 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                                       {row.isBa ? "✓ BA" : "—"}
                                     </button>
                                   </td>
-                                  <td className="px-3 py-1.5 text-center text-slate-500 text-[10px]">{row.p.nf || '—'}</td>
-                                  <td className="px-3 py-1.5 text-center text-slate-500 text-[10px]">{row.p.previsao_entrega || '—'}</td>
+                                  <td className="px-3 py-1.5 text-center text-slate-400 text-[10px]">{row.p.nf || '—'}</td>
+                                  <td className="px-3 py-1.5 text-center text-slate-400 text-[10px]">{row.p.previsao_entrega || '—'}</td>
                                 </tr>
+
                               ))}
                             </tbody>
                           </table>
@@ -2366,39 +2401,39 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
           ) : subTab === "ordem_pedido" ? (
           /* ─── ORDEM DE PEDIDO VIEW ─── */
           <motion.div key="ordem-pedido" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} className="space-y-2">
-            <div className="bg-[#111827] border border-slate-800/80 rounded-2xl overflow-hidden shadow-md">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-[#0f172a]/50">
+            <div className="rounded-xl overflow-hidden border border-white/[0.06] bg-[#191919]">
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.06]">
                 <div>
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider font-sans">Ordem de Pedido</h3>
-                  <p className="text-[10px] text-slate-500 mt-0.5">Calculado automaticamente — somente leitura. Produtos MO exibem todos os insumos individuais do kit.</p>
+                  <h3 className="text-[11px] font-semibold text-slate-300 uppercase tracking-widest">Ordem de Pedido</h3>
+                  <p className="text-[9.5px] text-slate-600 mt-0.5">Calculado automaticamente — somente leitura. Produtos MO exibem todos os insumos individuais do kit.</p>
                 </div>
                 <button
                   onClick={exportOrdemPedidoToExcel}
-                  className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition-all cursor-pointer"
+                  className="flex items-center gap-1.5 bg-emerald-600/80 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-widest transition-all cursor-pointer"
                 >
-                  <FileText size={13} /> Exportar Excel
+                  <FileText size={11} /> Exportar Excel
                 </button>
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[1400px] font-sans">
+                <table className="w-full text-left border-collapse min-w-[1400px]">
                   <thead>
-                    <tr className="border-b border-slate-800 bg-[#0f172a]/30">
-                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider w-[90px]">Produto</th>
-                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider w-[190px]">Descrição breve do produto</th>
-                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider text-center w-[60px]">30.07</th>
-                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider w-[150px]">Código Embalagem</th>
-                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider w-[210px]">Descrição da Embalagem</th>
-                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider w-[72px]">Tipo</th>
-                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider w-[90px]">Tipo Emb.</th>
-                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider text-center w-[100px]">Est. Conserto</th>
-                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider text-center w-[90px]">Est. G300</th>
-                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider text-center w-[100px]">Env. não chegou</th>
-                      <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-wider text-center w-[100px]">Pendente Envio</th>
-                      <th className="px-4 py-3 text-[9px] font-medium text-white uppercase tracking-wider text-center w-[100px]">Qtd p/ Pedido</th>
+                    <tr className="border-b border-white/[0.04] bg-white/[0.01]">
+                      <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest w-[90px]">Produto</th>
+                      <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest w-[190px]">Descrição</th>
+                      <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest text-center w-[60px]">Avarias</th>
+                      <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest w-[150px]">Cód. Embalagem</th>
+                      <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest w-[210px]">Descrição Embalagem</th>
+                      <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest w-[72px]">Tipo</th>
+                      <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest w-[90px]">Tipo Emb.</th>
+                      <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest text-center w-[100px]">Est. Conserto</th>
+                      <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest text-center w-[90px]">Est. G300</th>
+                      <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest text-center w-[100px]">Em Trânsito</th>
+                      <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest text-center w-[100px]">Pend. Envio</th>
+                      <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest text-center w-[100px]">Qtd p/ Pedido</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-[#111827]">
+                  <tbody>
                     {loading ? (
                       <tr>
                         <td colSpan={12} className="px-8 py-10 text-center text-slate-500">
@@ -2414,7 +2449,6 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                         </td>
                       </tr>
                     ) : (() => {
-                      // Agrupamento visual: controla fundo alternado por SKU (não por linha)
                       let lastSku = ''
                       let skuGroupIdx = -1
                       return filteredOrdemPedidoRows.map((row, idx) => {
@@ -2422,62 +2456,54 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
                           lastSku = row.sku
                           skuGroupIdx++
                         }
-                        const isKitMo = row.isMo
-                        // Detectar primeira e última linha do grupo
                         const isFirstInGroup = idx === 0 || filteredOrdemPedidoRows[idx - 1].sku !== row.sku
                         const isLastInGroup = idx === filteredOrdemPedidoRows.length - 1 || filteredOrdemPedidoRows[idx + 1].sku !== row.sku
-                        const groupBg = skuGroupIdx % 2 === 0 ? 'bg-transparent' : 'bg-slate-900/20'
-                        const kitBg = isKitMo ? (skuGroupIdx % 2 === 0 ? 'bg-sky-950/10' : 'bg-sky-950/20') : groupBg
 
                         return (
                           <tr
                             key={`${row.sku}||${row.embCodigo}`}
                             className={cn(
-                              'hover:bg-white/[0.02] transition-colors',
-                              kitBg,
-                              isFirstInGroup && !isLastInGroup && 'border-t border-slate-700/40',
-                              isLastInGroup && !isFirstInGroup && 'border-b border-slate-700/40',
+                              'border-b border-white/[0.03] last:border-0 hover:bg-white/[0.015] transition-colors',
+                              isFirstInGroup && !isLastInGroup && 'border-t border-white/[0.04]',
                             )}
                           >
                             {/* Produto: só mostra na primeira linha do grupo */}
-                            <td className="px-4 py-2.5 font-mono text-[11px] font-semibold">
+                            <td className="px-3 py-1.5 font-mono text-[10.5px]">
                               {isFirstInGroup ? (
-                                <span className="text-white">{row.sku}</span>
+                                <span className="text-slate-400 font-normal">{row.sku}</span>
                               ) : (
                                 <span className="text-slate-700 select-none">↳</span>
                               )}
                             </td>
-                            <td className="px-4 py-2.5 text-[11px] text-slate-400 max-w-[190px] truncate" title={row.descricao}>
+                            <td className="px-3 py-1.5 text-[10.5px] text-slate-400 max-w-[190px] truncate" title={row.descricao}>
                               {isFirstInGroup ? row.descricao : ''}
                             </td>
-                            <td className="px-4 py-2.5 font-mono text-[11px] text-slate-300 text-center">
+                            <td className="px-3 py-1.5 font-mono text-[10.5px] text-slate-400 text-center">
                               {isFirstInGroup ? row.avarias.toLocaleString('pt-BR') : ''}
                             </td>
-                            <td className="px-4 py-2.5 font-mono text-[10px] text-slate-400">{row.embCodigo || '—'}</td>
-                            <td className="px-4 py-2.5 text-[11px] text-slate-300 max-w-[210px] truncate" title={row.embDescricao}>{row.embDescricao || '—'}</td>
-                            <td className="px-4 py-2.5 font-mono text-[10px] uppercase">
+                            <td className="px-3 py-1.5 font-mono text-[10px] text-slate-400">{row.embCodigo || '—'}</td>
+                            <td className="px-3 py-1.5 text-[10.5px] text-slate-400 max-w-[210px] truncate" title={row.embDescricao}>{row.embDescricao || '—'}</td>
+                            <td className="px-3 py-1.5 font-mono text-[10px] uppercase">
+                              <span className="text-slate-400">{row.tipo || '—'}</span>
+                            </td>
+                            <td className="px-3 py-1.5 font-mono text-[10px] text-slate-400 uppercase">{row.tipoEmbalagem || '—'}</td>
+                            <td className="px-3 py-1.5 font-mono text-[10.5px] text-slate-400 text-center">{row.estoqueConserto.toLocaleString('pt-BR')}</td>
+                            <td className="px-3 py-1.5 font-mono text-[10.5px] text-slate-400 text-center">{row.estoqueG300.toLocaleString('pt-BR')}</td>
+                            <td className="px-3 py-1.5 font-mono text-[10.5px] text-center">
+                              <span className={cn("inline-flex items-center gap-1", row.enviadoNaoChegou > 0 ? "text-emerald-500" : "text-slate-600")}>
+                                {row.enviadoNaoChegou > 0 && <Truck size={10} className="opacity-70 flex-shrink-0" />}
+                                {row.enviadoNaoChegou.toLocaleString('pt-BR')}
+                              </span>
+                            </td>
+                            <td className="px-3 py-1.5 font-mono text-[10.5px] text-center">
+                              <span className={cn("inline-flex items-center gap-1", row.pendenteEnvio !== 0 ? "text-amber-500" : "text-slate-600")}>
+                                {row.pendenteEnvio !== 0 && <Hourglass size={10} className="opacity-70 flex-shrink-0" />}
+                                {row.pendenteEnvio.toLocaleString('pt-BR')}
+                              </span>
+                            </td>
+                            <td className="px-3 py-1.5 font-mono text-[10.5px] text-center">
                               <span className={cn(
-                                row.tipo === 'INSUMO' ? 'text-amber-400/80' : 'text-slate-400'
-                              )}>{row.tipo || '—'}</span>
-                            </td>
-                            <td className="px-4 py-2.5 font-mono text-[10px] text-slate-500 uppercase">{row.tipoEmbalagem || '—'}</td>
-                            <td className="px-4 py-2.5 font-mono text-[11px] text-slate-300 text-center">{row.estoqueConserto.toLocaleString('pt-BR')}</td>
-                            <td className="px-4 py-2.5 font-mono text-[11px] text-slate-300 text-center">{row.estoqueG300.toLocaleString('pt-BR')}</td>
-                            <td className="px-4 py-2.5 font-mono text-[11px] text-center">
-                              <div className={cn("flex items-center justify-center gap-1.5", row.enviadoNaoChegou > 0 ? "text-emerald-500" : "text-slate-500")}>
-                                {row.enviadoNaoChegou > 0 && <Truck size={12} className="opacity-80" />}
-                                <span>{row.enviadoNaoChegou.toLocaleString('pt-BR')}</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-2.5 font-mono text-[11px] text-center">
-                              <div className={cn("flex items-center justify-center gap-1.5", row.pendenteEnvio > 0 ? "text-amber-500" : "text-slate-500")}>
-                                {row.pendenteEnvio > 0 && <Hourglass size={12} className="opacity-80" />}
-                                <span>{row.pendenteEnvio.toLocaleString('pt-BR')}</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-2.5 font-mono text-[12px] text-center">
-                              <span className={cn(
-                                row.qtdParaPedido > 0 ? 'text-rose-500' : 'text-slate-600'
+                                row.qtdParaPedido > 0 ? 'text-red-500' : 'text-slate-600'
                               )}>{row.qtdParaPedido.toLocaleString('pt-BR')}</span>
                             </td>
                           </tr>
@@ -2489,6 +2515,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
               </div>
             </div>
           </motion.div>
+
           ) : (
           /* ─── SPREADSHEET TABS (estoque_g300 / conserto / atuais / chegando) ─── */
           <motion.div key="spreadsheet" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
@@ -3119,6 +3146,122 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── MODAL: CONFIGURAR SETORES ─── */}
+      <AnimatePresence>
+        {showSetoresModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) onCloseSetoresModal?.() }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 16 }}
+              className="w-full max-w-2xl rounded-xl border border-white/[0.06] bg-[#191919] shadow-2xl overflow-hidden"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/[0.06]">
+                <div>
+                  <h3 className="text-[12px] font-semibold text-slate-200 tracking-wide">Configurar Setores</h3>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Defina quais solicitantes pertencem ao CD. Os demais serão considerados Conserto (em breve).</p>
+                </div>
+                <button onClick={onCloseSetoresModal} className="text-slate-500 hover:text-slate-300 transition-colors">
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Search bar */}
+              <div className="px-5 py-3 border-b border-white/[0.04]">
+                <input
+                  type="text"
+                  placeholder="Buscar solicitante..."
+                  value={setoresModalSearch}
+                  onChange={e => setSetoresModalSearch(e.target.value)}
+                  className="w-full bg-white/[0.04] border border-white/[0.06] rounded-lg px-3 py-1.5 text-[11px] text-slate-300 placeholder-slate-600 outline-none focus:border-white/[0.12]"
+                />
+              </div>
+
+              {/* Two columns: Não Classificado | CD */}
+              <div className="grid grid-cols-2 divide-x divide-white/[0.06] max-h-80 overflow-y-auto">
+                {/* Coluna: Sem classificação */}
+                <div className="p-4">
+                  <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest mb-3">Sem Classificação</p>
+                  <div className="space-y-1">
+                    {(() => {
+                      const allSols = Array.from(new Set(pedidas.map(r => String(r.solicitante || '').trim()).filter(Boolean))).sort()
+                      const unclassified = allSols.filter(s =>
+                        !setoresConfig.cd.includes(s) &&
+                        !setoresConfig.conserto.includes(s) &&
+                        s.toLowerCase().includes(setoresModalSearch.toLowerCase())
+                      )
+                      if (unclassified.length === 0) return <p className="text-[10px] text-slate-600 italic">Nenhum</p>
+                      return unclassified.map(sol => (
+                        <button
+                          key={sol}
+                          onClick={() => saveSetoresConfig({ ...setoresConfig, cd: [...setoresConfig.cd, sol] })}
+                          title="Clique para adicionar ao CD"
+                          className="w-full text-left px-2.5 py-1.5 rounded-lg text-[10.5px] text-slate-400 hover:bg-white/[0.05] hover:text-slate-200 transition-all flex items-center justify-between gap-2 group"
+                        >
+                          <span className="truncate">{sol}</span>
+                          <span className="text-slate-600 group-hover:text-blue-400 text-[9px] shrink-0">→ CD</span>
+                        </button>
+                      ))
+                    })()}
+                  </div>
+                </div>
+
+                {/* Coluna: CD */}
+                <div className="p-4">
+                  <p className="text-[9px] font-semibold text-blue-400 uppercase tracking-widest mb-3">CD ✓</p>
+                  <div className="space-y-1">
+                    {setoresConfig.cd.filter(s => s.toLowerCase().includes(setoresModalSearch.toLowerCase())).length === 0
+                      ? <p className="text-[10px] text-slate-600 italic">Nenhum adicionado</p>
+                      : setoresConfig.cd.filter(s => s.toLowerCase().includes(setoresModalSearch.toLowerCase())).map(sol => (
+                        <button
+                          key={sol}
+                          onClick={() => saveSetoresConfig({ ...setoresConfig, cd: setoresConfig.cd.filter(s => s !== sol) })}
+                          title="Clique para remover do CD"
+                          className="w-full text-left px-2.5 py-1.5 rounded-lg text-[10.5px] text-blue-300 hover:bg-red-500/10 hover:text-red-400 transition-all flex items-center justify-between gap-2 group"
+                        >
+                          <span className="truncate">{sol}</span>
+                          <span className="text-blue-600 group-hover:text-red-400 text-[9px] shrink-0">✕ remover</span>
+                        </button>
+                      ))
+                    }
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-between px-5 py-3 border-t border-white/[0.06]">
+                <p className="text-[9.5px] text-slate-600">
+                  {setoresConfig.cd.length === 0
+                    ? 'Sem filtro ativo — todos os solicitantes são considerados'
+                    : `${setoresConfig.cd.length} solicitante(s) no CD`}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => saveSetoresConfig({ cd: [], conserto: [] })}
+                    className="px-3 py-1.5 text-[10px] text-slate-500 hover:text-slate-300 transition-colors"
+                  >
+                    Limpar tudo
+                  </button>
+                  <button
+                    onClick={onCloseSetoresModal}
+                    className="px-4 py-1.5 rounded-lg bg-blue-600/80 hover:bg-blue-600 text-white text-[10px] font-semibold transition-all"
+                  >
+                    Confirmar
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
