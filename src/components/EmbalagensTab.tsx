@@ -1020,7 +1020,8 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
 
   const chegandoPerSku = useMemo(() => {
     const m: Record<string, number> = {}
-    // Pedidos FINALIZADOS E NÃO baixados (BA) entram como "A Caminho"
+    // Pedidos FINALIZADOS E NÃO baixados (BA) entram como "Em trânsito"
+    // Usa a coluna ENVIADO (não SOLICITADO): é o que foi de fato preparado e expedido
     pedidas.filter(r => !r.isNew && (r.status || "").trim().toUpperCase() === "FINALIZADO" && deveContabilizarNoCronograma(r as EmbalagemRegistro)).forEach(r => {
       const sol = String(r.solicitacao || "").trim()
       const prod = String(r.codigo || "").trim().toUpperCase()
@@ -1033,7 +1034,8 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
       if (isMarkedBa) return
 
       const c = String(r.codigo || "").trim().toUpperCase()
-      if (c) m[c] = (m[c] || 0) + Math.round(Number(r.quantidade) || 0)
+      // ENVIADO = quantidade expedida (coluna "ENVIADO" da planilha), não SOLICITADO
+      if (c) m[c] = (m[c] || 0) + Math.round(Number(r.enviado) || 0)
     })
     chegando.filter(r => !r.isNew && deveContabilizarNoCronograma(r as EmbalagemRegistro)).forEach(r => {
       const c = String(r.codigo || "").trim().toUpperCase()
@@ -1044,6 +1046,8 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
 
   const enviadoNaoChegouPerSku = useMemo(() => {
     const m: Record<string, number> = {}
+    // Pedidos FINALIZADOS E NÃO baixados (BA): o que foi enviado mas ainda não chegou (BA)
+    // Usa ENVIADO, não SOLICITADO — o que de fato saiu para expedição
     pedidas.filter(r => !r.isNew && (r.status || "").trim().toUpperCase() === "FINALIZADO" && deveContabilizarNoCronograma(r as EmbalagemRegistro)).forEach(r => {
       const sol = String(r.solicitacao || "").trim()
       const prod = String(r.codigo || "").trim().toUpperCase()
@@ -1056,7 +1060,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
       if (isMarkedBa) return
 
       const c = String(r.codigo || "").trim().toUpperCase()
-      if (c) m[c] = (m[c] || 0) + Math.round(Number(r.quantidade) || 0)
+      if (c) m[c] = (m[c] || 0) + Math.round(Number(r.enviado) || 0)
     })
     return m
   }, [pedidas, pedidosBa])
