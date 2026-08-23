@@ -678,13 +678,14 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
           destino:           getIndex(["destino"]),
           codigo_embalagem:  getIndex(["codigo da embalagem", "código da embalagem", "cód. embalagem", "cod. embalagem"]),
           descricao_embalagem: getIndex(["descriçao da embalagem", "descrição da embalagem", "descricao da embalagem", "descrição embalagem", "descricao embalagem"]),
+          tipo:              getIndex(["tipo"]),
           tipo_embalagem:    getIndex(["tipo de embalagem", "tipo embalagem"]),
           codigo:            getIndex(["codigo do produto", "código do produto", "cód. produto", "cod. produto"]),
           modelo_produto:    getIndex(["modelo do produto", "modelo produto"]),
           modelo:            getIndex(["modelo"]),
-          quantidade:        getIndex(["solicitado", "quantidade"]),
-          enviado:           getIndex(["enviado"]),
-          pendente:          getIndex(["pendente"]),
+          quantidade:        getIndex(["solicitado.", "solicitado", "quantidade"]),
+          enviado:           getIndex(["enviado.", "enviado"]),
+          pendente:          getIndex(["pendente.", "pendente"]),
           entrega_compras:   getIndex(["entrega (compras)", "entrega compras", "entrega_compras"]),
           envio_expedicao:   getIndex(["envio (expedição)", "envio expedição", "envio expedicao", "envio_expedicao"]),
           status:            getIndex(["status"]),
@@ -695,6 +696,7 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
           placa:             getIndex(["placa"]),
           previsao_entrega:  getIndex(["previsão de entrega", "previsao de entrega", "previsão entrega", "previsao entrega"])
         }
+
 
         // Apply dynamic indices when found
         Object.entries(dynIndices).forEach(([key, val]) => {
@@ -805,9 +807,20 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
         try {
           const data = evt.target?.result
           const workbook = XLSX.read(data, { type: 'array' })
-          const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
-          const tsv = XLSX.utils.sheet_to_csv(firstSheet, { FS: '\t' })
+          // Procura a aba que contém coluna "solicitante" ou "solicitação" (não necessariamente a 1ª aba)
+          let targetSheet = workbook.Sheets[workbook.SheetNames[0]]
+          for (const sheetName of workbook.SheetNames) {
+            const sheet = workbook.Sheets[sheetName]
+            const preview = XLSX.utils.sheet_to_csv(sheet, { FS: '\t' })
+            const firstLine = preview.split('\n')[0]?.toLowerCase() || ''
+            if (firstLine.includes('solicitante') || firstLine.includes('solicitação')) {
+              targetSheet = sheet
+              break
+            }
+          }
+          const tsv = XLSX.utils.sheet_to_csv(targetSheet, { FS: '\t' })
           parseData(tsv)
+
         } catch (err: any) {
           alert('Erro ao ler o arquivo Excel: ' + err.message)
         }
