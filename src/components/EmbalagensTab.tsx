@@ -626,12 +626,78 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
       
       const first = lines[0].toLowerCase()
       let dataLines = lines
-      if (
-        first.includes("solicitação") || first.includes("solicitacao") ||
-        first.includes("data") || first.includes("código") || first.includes("codigo") ||
-        first.includes("quantidade") || first.includes("qtd") || first.includes("solicitante")
-      ) {
+      
+      const headers = lines[0].split('\t').map(h => h.trim().toLowerCase())
+      
+      // Helper function to find index using keyword aliases
+      const getIndex = (aliases: string[]) => {
+        return headers.findIndex(h => aliases.some(alias => h === alias || h.includes(alias)))
+      }
+
+      const hasHeader = first.includes("solicitação") || first.includes("solicitacao") ||
+                        first.includes("data") || first.includes("código") || first.includes("codigo") ||
+                        first.includes("quantidade") || first.includes("qtd") || first.includes("solicitante");
+
+      // Default indices (fallbacks) matching the layout
+      let headerIndices: Record<string, number> = {
+        solicitacao: 0,
+        data_solicitacao: 1,
+        solicitante: 2,
+        destino: 3,
+        codigo_embalagem: 4,
+        descricao_embalagem: 5,
+        tipo_embalagem: 6,
+        codigo: 7,
+        modelo_produto: 8,
+        modelo: 9,
+        quantidade: 10,
+        enviado: 11,
+        pendente: 12,
+        entrega_compras: 13,
+        envio_expedicao: 14,
+        status: 15,
+        comentario_tatiana: 16,
+        comentario: 17,
+        responsabilidade: 18,
+        nf: 19,
+        placa: 20,
+        previsao_entrega: 21
+      }
+
+      if (hasHeader) {
         dataLines = lines.slice(1)
+        
+        const dynIndices = {
+          solicitacao: getIndex(["solicitação", "solicitacao", "nº da solic", "num solic"]),
+          data_solicitacao: getIndex(["data solicitação", "data solicitacao", "data da solic", "data"]),
+          solicitante: getIndex(["solicitante", "quem solicitou"]),
+          destino: getIndex(["destino", "local destino"]),
+          codigo_embalagem: getIndex(["codigo da embalagem", "código da embalagem", "cód. embalagem", "codigo embalagem", "cod embalagem"]),
+          descricao_embalagem: getIndex(["descriçao da embalagem", "descrição da embalagem", "descrição embalagem", "descricao embalagem", "desc embalagem"]),
+          tipo_embalagem: getIndex(["tipo de embalagem", "tipo embalagem", "tipo_embalagem"]),
+          codigo: getIndex(["codigo do produto", "código do produto", "código produto", "codigo produto", "cód. produto", "código", "codigo"]),
+          modelo_produto: getIndex(["modelo do produto", "modelo produto"]),
+          modelo: getIndex(["modelo"]),
+          quantidade: getIndex(["solicitado", "quantidade", "qtd"]),
+          enviado: getIndex(["enviado"]),
+          pendente: getIndex(["pendente"]),
+          entrega_compras: getIndex(["entrega (compras)", "entrega compras", "entrega_compras", "entrega"]),
+          envio_expedicao: getIndex(["envio (expedição)", "envio expedição", "envio expedicao", "envio_expedicao", "envio"]),
+          status: getIndex(["status"]),
+          comentario_tatiana: getIndex(["comentário tatiana", "comentario tatiana", "tatiana"]),
+          comentario: getIndex(["comentário", "comentario"]),
+          responsabilidade: getIndex(["responsabilidade", "responsavel"]),
+          nf: getIndex(["nf", "nota fiscal"]),
+          placa: getIndex(["placa"]),
+          previsao_entrega: getIndex(["previsão de entrega", "previsao de entrega", "previsao entrega", "previsão entrega"])
+        }
+
+        // Apply if column exists in user sheet
+        Object.entries(dynIndices).forEach(([key, val]) => {
+          if (val !== -1) {
+            headerIndices[key] = val
+          }
+        })
       }
 
       const payload = dataLines.map((line) => {
@@ -645,13 +711,10 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
           const parseBrDateToIso = (s: string): string | null => {
             if (!s) return null;
             const str = s.trim();
-            // Try DD/MM/YYYY or DD/MM/YY formats (separator /, - or .)
             const parts = str.split(/[\/\-\.]/).filter(Boolean);
             if (parts.length === 3) {
               let [d, m, y] = parts;
-              // If year is 2-digit, assume 2000s
               if (y.length === 2) y = `20${y}`;
-              // Validate before returning
               const yyyy = parseInt(y, 10);
               const mm = parseInt(m, 10);
               const dd = parseInt(d, 10);
@@ -679,33 +742,39 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
             return null;
           };
 
-          const dateCol = parseBrDateToIso(cols[1]) || new Date().toISOString().split("T")[0];
+          const getColVal = (key: string) => {
+            const idx = headerIndices[key]
+            return idx !== undefined && idx !== -1 && cols[idx] !== undefined ? String(cols[idx]).trim() : ""
+          }
+
+          const rawDate = getColVal("data_solicitacao")
+          const dateCol = parseBrDateToIso(rawDate) || new Date().toISOString().split("T")[0];
 
           return {
-            solicitacao: String(cols[0] || "").trim(),
+            solicitacao: getColVal("solicitacao"),
             data_solicitacao: dateCol,
             data: dateCol, // Fallback for charts
-            solicitante: String(cols[2] || "").trim(),
-            destino: String(cols[3] || "").trim(),
-            codigo_embalagem: String(cols[4] || "").trim(),
-            descricao_embalagem: String(cols[5] || "").trim(),
-            tipo: String(cols[6] || "").trim(),
-            tipo_embalagem: String(cols[7] || "").trim(),
-            codigo: String(cols[8] || "").trim().toUpperCase(), // Cód. Produto -> codigo
-            modelo_produto: String(cols[9] || "").trim(),
-            modelo: String(cols[10] || "").trim(),
-            quantidade: parseBrNum(cols[11]), // Solicitado -> quantidade
-            enviado: parseBrNum(cols[12]),
-            pendente: parseBrNum(cols[13]),
-            entrega_compras: String(cols[14] || "").trim(),
-            envio_expedicao: String(cols[15] || "").trim(),
-            status: String(cols[16] || "").trim(),
-            comentario_tatiana: String(cols[17] || "").trim(),
-            comentario: String(cols[18] || "").trim(),
-            responsabilidade: String(cols[19] || "").trim(),
-            nf: String(cols[20] || "").trim(),
-            placa: String(cols[21] || "").trim(),
-            previsao_entrega: String(cols[22] || "").trim(),
+            solicitante: getColVal("solicitante"),
+            destino: getColVal("destino"),
+            codigo_embalagem: getColVal("codigo_embalagem"),
+            descricao_embalagem: getColVal("descricao_embalagem"),
+            tipo: getColVal("tipo_embalagem"),
+            tipo_embalagem: getColVal("tipo_embalagem"),
+            codigo: getColVal("codigo").toUpperCase(), 
+            modelo_produto: getColVal("modelo_produto"),
+            modelo: getColVal("modelo"),
+            quantidade: parseBrNum(getColVal("quantidade")), 
+            enviado: parseBrNum(getColVal("enviado")),
+            pendente: parseBrNum(getColVal("pendente")),
+            entrega_compras: getColVal("entrega_compras"),
+            envio_expedicao: getColVal("envio_expedicao"),
+            status: getColVal("status"),
+            comentario_tatiana: getColVal("comentario_tatiana"),
+            comentario: getColVal("comentario"),
+            responsabilidade: getColVal("responsabilidade"),
+            nf: getColVal("nf"),
+            placa: getColVal("placa"),
+            previsao_entrega: getColVal("previsao_entrega"),
           };
         } else {
           const dateCol = String(cols[0] || "").trim()
