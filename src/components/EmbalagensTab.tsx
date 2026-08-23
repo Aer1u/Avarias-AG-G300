@@ -629,16 +629,20 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
       
       const headers = lines[0].split('\t').map(h => h.trim().toLowerCase())
       
-      // Helper function to find index using keyword aliases
+      // Helper: exact match first, then substring (prevents "modelo" from hitting "modelo do produto" first)
       const getIndex = (aliases: string[]) => {
-        return headers.findIndex(h => aliases.some(alias => h === alias || h.includes(alias)))
+        // 1st pass: exact match
+        const exact = headers.findIndex(h => aliases.some(alias => h === alias))
+        if (exact !== -1) return exact
+        // 2nd pass: substring fallback (only for aliases longer than 3 chars to avoid false positives)
+        return headers.findIndex(h => aliases.some(alias => alias.length > 3 && h.includes(alias)))
       }
 
       const hasHeader = first.includes("solicitação") || first.includes("solicitacao") ||
                         first.includes("data") || first.includes("código") || first.includes("codigo") ||
                         first.includes("quantidade") || first.includes("qtd") || first.includes("solicitante");
 
-      // Default indices (fallbacks) matching the layout
+      // Default indices (fallbacks) — order matching user's standard layout
       let headerIndices: Record<string, number> = {
         solicitacao: 0,
         data_solicitacao: 1,
@@ -656,43 +660,43 @@ export default function EmbalagensTab({ refreshTrigger }: { refreshTrigger?: boo
         entrega_compras: 13,
         envio_expedicao: 14,
         status: 15,
-        comentario_tatiana: 16,
-        comentario: 17,
-        responsabilidade: 18,
-        nf: 19,
-        placa: 20,
-        previsao_entrega: 21
+        comentario_tatiana: -1,
+        comentario: 16,
+        responsabilidade: -1,
+        nf: 17,
+        placa: 18,
+        previsao_entrega: 19
       }
 
       if (hasHeader) {
         dataLines = lines.slice(1)
         
         const dynIndices = {
-          solicitacao: getIndex(["solicitação", "solicitacao", "nº da solic", "num solic"]),
-          data_solicitacao: getIndex(["data solicitação", "data solicitacao", "data da solic", "data"]),
-          solicitante: getIndex(["solicitante", "quem solicitou"]),
-          destino: getIndex(["destino", "local destino"]),
-          codigo_embalagem: getIndex(["codigo da embalagem", "código da embalagem", "cód. embalagem", "codigo embalagem", "cod embalagem"]),
-          descricao_embalagem: getIndex(["descriçao da embalagem", "descrição da embalagem", "descrição embalagem", "descricao embalagem", "desc embalagem"]),
-          tipo_embalagem: getIndex(["tipo de embalagem", "tipo embalagem", "tipo_embalagem"]),
-          codigo: getIndex(["codigo do produto", "código do produto", "código produto", "codigo produto", "cód. produto", "código", "codigo"]),
-          modelo_produto: getIndex(["modelo do produto", "modelo produto"]),
-          modelo: getIndex(["modelo"]),
-          quantidade: getIndex(["solicitado", "quantidade", "qtd"]),
-          enviado: getIndex(["enviado"]),
-          pendente: getIndex(["pendente"]),
-          entrega_compras: getIndex(["entrega (compras)", "entrega compras", "entrega_compras", "entrega"]),
-          envio_expedicao: getIndex(["envio (expedição)", "envio expedição", "envio expedicao", "envio_expedicao", "envio"]),
-          status: getIndex(["status"]),
-          comentario_tatiana: getIndex(["comentário tatiana", "comentario tatiana", "tatiana"]),
-          comentario: getIndex(["comentário", "comentario"]),
-          responsabilidade: getIndex(["responsabilidade", "responsavel"]),
-          nf: getIndex(["nf", "nota fiscal"]),
-          placa: getIndex(["placa"]),
-          previsao_entrega: getIndex(["previsão de entrega", "previsao de entrega", "previsao entrega", "previsão entrega"])
+          solicitacao:       getIndex(["solicitação", "solicitacao"]),
+          data_solicitacao:  getIndex(["data solicitação", "data solicitacao", "data da solicitação", "data"]),
+          solicitante:       getIndex(["solicitante"]),
+          destino:           getIndex(["destino"]),
+          codigo_embalagem:  getIndex(["codigo da embalagem", "código da embalagem", "cód. embalagem", "cod. embalagem"]),
+          descricao_embalagem: getIndex(["descriçao da embalagem", "descrição da embalagem", "descricao da embalagem", "descrição embalagem", "descricao embalagem"]),
+          tipo_embalagem:    getIndex(["tipo de embalagem", "tipo embalagem"]),
+          codigo:            getIndex(["codigo do produto", "código do produto", "cód. produto", "cod. produto"]),
+          modelo_produto:    getIndex(["modelo do produto", "modelo produto"]),
+          modelo:            getIndex(["modelo"]),
+          quantidade:        getIndex(["solicitado", "quantidade"]),
+          enviado:           getIndex(["enviado"]),
+          pendente:          getIndex(["pendente"]),
+          entrega_compras:   getIndex(["entrega (compras)", "entrega compras", "entrega_compras"]),
+          envio_expedicao:   getIndex(["envio (expedição)", "envio expedição", "envio expedicao", "envio_expedicao"]),
+          status:            getIndex(["status"]),
+          comentario_tatiana:getIndex(["comentário tatiana", "comentario tatiana", "tatiana"]),
+          comentario:        getIndex(["comentário", "comentario"]),
+          responsabilidade:  getIndex(["responsabilidade"]),
+          nf:                getIndex(["nf", "nota fiscal", "n.f."]),
+          placa:             getIndex(["placa"]),
+          previsao_entrega:  getIndex(["previsão de entrega", "previsao de entrega", "previsão entrega", "previsao entrega"])
         }
 
-        // Apply if column exists in user sheet
+        // Apply dynamic indices when found
         Object.entries(dynIndices).forEach(([key, val]) => {
           if (val !== -1) {
             headerIndices[key] = val
