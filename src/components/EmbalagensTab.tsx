@@ -730,31 +730,46 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
           const parseBrDateToIso = (s: string): string | null => {
             if (!s) return null;
             const str = s.trim();
+            // Handle Excel serial date numbers (e.g. 46603 = 30/07/2026)
+            const serial = Number(str);
+            if (!isNaN(serial) && serial > 40000 && serial < 60000) {
+              const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+              const d = new Date(excelEpoch.getTime() + serial * 86400000);
+              const yyyy = d.getUTCFullYear();
+              const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+              const dd = String(d.getUTCDate()).padStart(2, '0');
+              return `${yyyy}-${mm}-${dd}`;
+            }
+            // Handle ISO date string (produced by XLSX cellDates:true): "2026-07-30" or "2026-07-30T00:00:00.000Z"
+            const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/)
+            if (isoMatch) {
+              return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`
+            }
+            // Handle M/D/YY, DD/MM/YY, DD/MM/YYYY etc.
             const parts = str.split(/[\/\-\.]/).filter(Boolean);
             if (parts.length === 3) {
-              let [d, m, y] = parts;
+              let [a, b, y] = parts;
               if (y.length === 2) y = `20${y}`;
               const yyyy = parseInt(y, 10);
-              const mm = parseInt(m, 10);
-              const dd = parseInt(d, 10);
-              if (yyyy >= 2000 && yyyy <= 2100 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+              const numA = parseInt(a, 10);
+              const numB = parseInt(b, 10);
+              let finalM: number, finalD: number;
+              if (numB > 12) {
+                // M/DD format (Excel US locale): a=month, b=day
+                finalM = numA; finalD = numB;
+              } else if (numA > 12) {
+                // DD/MM format (Brazilian): a=day, b=month
+                finalM = numB; finalD = numA;
+              } else {
+                // Ambiguous — default to DD/MM (Brazilian) but apply isFuture heuristic
+                finalM = numB; finalD = numA;
                 const today = new Date();
-                const currentYear = today.getFullYear();
-                const currentMonth = today.getMonth() + 1;
-                const currentDay = today.getDate();
-                
-                let finalM = mm;
-                let finalD = dd;
-                
-                const isFuture = yyyy > currentYear || 
-                                (yyyy === currentYear && mm > currentMonth) || 
-                                (yyyy === currentYear && mm === currentMonth && dd > currentDay);
-                                
-                if (isFuture && dd <= 12) {
-                  finalM = dd;
-                  finalD = mm;
-                }
-                
+                const isFuture = yyyy > today.getFullYear() ||
+                  (yyyy === today.getFullYear() && finalM > today.getMonth() + 1) ||
+                  (yyyy === today.getFullYear() && finalM === today.getMonth() + 1 && finalD > today.getDate());
+                if (isFuture && numA <= 12) { finalM = numA; finalD = numB; }
+              }
+              if (yyyy >= 2000 && yyyy <= 2100 && finalM >= 1 && finalM <= 12 && finalD >= 1 && finalD <= 31) {
                 return `${yyyy}-${finalM.toString().padStart(2, '0')}-${finalD.toString().padStart(2, '0')}`;
               }
             }
@@ -1320,9 +1335,11 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
   }, [baseCodigos, avariasPerSku, estoqueG300, estoqueConserto, pedidas, pedidosBa])
 
   const filteredOrdemPedidoRows = useMemo(() => {
-    if (!search) return ordemPedidoRows
+    // Exclui rótulos da ordem de pedido
+    const semRotulo = ordemPedidoRows.filter(r => r.tipo.trim().toUpperCase() !== 'ROTULO')
+    if (!search) return semRotulo
     const t = search.toLowerCase()
-    return ordemPedidoRows.filter(r =>
+    return semRotulo.filter(r =>
       r.sku.toLowerCase().includes(t) ||
       r.descricao.toLowerCase().includes(t) ||
       r.embCodigo.toLowerCase().includes(t) ||
@@ -1333,7 +1350,7 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
   }, [ordemPedidoRows, search])
 
   const exportOrdemPedidoToExcel = () => {
-    const dataToExport = ordemPedidoRows.map(r => ({
+    const dataToExport = filteredOrdemPedidoRows.map(r => ({
       "Produto": r.sku,
       "Descrição breve do produto": r.descricao,
       "30.07 (Avarias)": r.avarias,
@@ -1575,22 +1592,20 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
   const solicStatusData = useMemo(() => {
     const realPedidas = pedidas.filter(r => !r.isNew)
     const total = realPedidas.length
-    if (total === 0) return { total: 0, concluidas: 0, parciais: 0, pendentes: 0, atrasadas: 0 }
-    let concluidas = 0, parciais = 0, pendentes = 0, atrasadas = 0
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    if (total === 0) return { total: 0, concluidas: 0, parciais: 0, pendentes: 0 }
+    let concluidas = 0, parciais = 0, pendentes = 0
     realPedidas.forEach(p => {
       const sku = String(p.codigo || '').trim().toUpperCase()
       const skuRow = allSkuRows.find(r => r.codigo === sku)
-      const isOld = p.data ? new Date(p.data + 'T00:00:00') < thirtyDaysAgo : false
       if (!skuRow || skuRow.pctCoberto === 0) {
-        if (isOld) atrasadas++; else pendentes++
+        pendentes++
       } else if (skuRow.pctCoberto >= 100) {
         concluidas++
       } else {
-        if (isOld) atrasadas++; else parciais++
+        parciais++
       }
     })
-    return { total, concluidas, parciais, pendentes, atrasadas }
+    return { total, concluidas, parciais, pendentes }
   }, [pedidas, allSkuRows])
 
   // ─── Donut arc helper (segmented with gaps + rounded caps) ──────────────────
@@ -1636,12 +1651,11 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
     { label: "Concluídas", value: solicStatusData.concluidas, color: "#10b981" },
     { label: "Parciais", value: solicStatusData.parciais, color: "#f59e0b" },
     { label: "Pendentes", value: solicStatusData.pendentes, color: "#3b82f6" },
-    { label: "Atrasadas", value: solicStatusData.atrasadas, color: "#ef4444" },
   ]
   const solicArcs = buildGappedArcs(solicSegments, solicTotal)
 
   return (
-    <div className="flex flex-col h-full space-y-6 pb-12 text-slate-200 font-sans">
+    <div className={cn("flex flex-col h-full space-y-6 pb-12 text-slate-200 font-sans mx-auto w-full", subTab === "comparativo" && "max-w-7xl")}>
 
       {/* ─── HEADER ─── */}
       <div className="flex items-center justify-between gap-4">
@@ -1871,18 +1885,18 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
                     <div className="flex flex-col md:flex-row items-center gap-8 justify-between">
                       {/* Donut Chart - Relação de Cobertura */}
                       <div className="relative flex-shrink-0 flex items-center justify-center">
-                        <svg width={150} height={150} viewBox="0 0 180 180">
+                        <svg width={160} height={160} viewBox="0 0 180 180">
                           {/* Track */}
-                          <circle cx={90} cy={90} r={62} fill="none" stroke="#1e293b" strokeWidth={22} />
-                          {/* Segments */}
+                          <circle cx={90} cy={90} r={68} fill="none" stroke="#1e293b" strokeWidth={10} />
+                          {/* Segments with small gap */}
                           {coverageArcs.map((arc, i) => {
                             if (arc.pct <= 0.001) return null
-                            const path = describeArc(90, 90, 62, arc.startAngle, arc.endAngle)
-                            return <path key={i} d={path} fill="none" stroke={arc.color} strokeWidth={22} />
+                            const path = describeArc(90, 90, 68, arc.startAngle + 1, arc.endAngle - 1)
+                            return <path key={i} d={path} fill="none" stroke={arc.color} strokeWidth={10} />
                           })}
                           {/* Center label */}
-                          <text x={90} y={84} textAnchor="middle" fill="#ffffff" fontSize={26} fontWeight={900} fontFamily="sans-serif">{globalPct}%</text>
-                          <text x={90} y={103} textAnchor="middle" fill="#64748b" fontSize={9} fontWeight={700} letterSpacing={2} fontFamily="sans-serif">COBERTURA</text>
+                          <text x={90} y={86} textAnchor="middle" fill="#ffffff" fontSize={20} fontWeight={800} fontFamily="sans-serif">{globalPct}%</text>
+                          <text x={90} y={102} textAnchor="middle" fill="#64748b" fontSize={9} fontWeight={600} letterSpacing={2} fontFamily="sans-serif">COBERTURA</text>
                         </svg>
                       </div>
                       {/* Legend */}
@@ -1926,18 +1940,18 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
                     <div className="flex flex-col md:flex-row items-center gap-8 justify-between">
                       {/* Donut Chart - Status das Solicitações */}
                       <div className="relative flex-shrink-0 flex items-center justify-center">
-                        <svg width={150} height={150} viewBox="0 0 180 180">
+                        <svg width={160} height={160} viewBox="0 0 180 180">
                           {/* Track */}
-                          <circle cx={90} cy={90} r={62} fill="none" stroke="#1e293b" strokeWidth={22} />
-                          {/* Segments */}
+                          <circle cx={90} cy={90} r={68} fill="none" stroke="#1e293b" strokeWidth={10} />
+                          {/* Segments with small gap */}
                           {solicArcs.map((arc, i) => {
                             if (arc.pct <= 0.001) return null
-                            const path = describeArc(90, 90, 62, arc.startAngle, arc.endAngle)
-                            return <path key={i} d={path} fill="none" stroke={arc.color} strokeWidth={22} />
+                            const path = describeArc(90, 90, 68, arc.startAngle + 1, arc.endAngle - 1)
+                            return <path key={i} d={path} fill="none" stroke={arc.color} strokeWidth={10} />
                           })}
                           {/* Center label */}
-                          <text x={90} y={84} textAnchor="middle" fill="#ffffff" fontSize={26} fontWeight={900} fontFamily="sans-serif">{solicStatusData.total}</text>
-                          <text x={90} y={103} textAnchor="middle" fill="#64748b" fontSize={9} fontWeight={700} letterSpacing={2} fontFamily="sans-serif">SOLICITAÇÕES</text>
+                          <text x={90} y={86} textAnchor="middle" fill="#ffffff" fontSize={20} fontWeight={800} fontFamily="sans-serif">{solicStatusData.total}</text>
+                          <text x={90} y={102} textAnchor="middle" fill="#64748b" fontSize={9} fontWeight={600} letterSpacing={2} fontFamily="sans-serif">SOLICITAÇÕES</text>
                         </svg>
                       </div>
                       {/* Legend */}
@@ -1963,171 +1977,10 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
               </div>
             </div>
 
-            {/* ─── BOTTOM TWO COLUMNS ─── */}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
 
-              {/* LEFT COLUMN: TOP AVARIAS COM DÉFICIT DE EMBALAGENS */}
-              <div className="bg-[#111827] border border-slate-800/80 rounded-2xl overflow-hidden shadow-sm flex flex-col">
-                <div className="flex items-center px-6 py-4 border-b border-slate-800">
-                  <h3 className="text-xs font-semibold text-white uppercase tracking-[0.15em] font-sans">
-                    TOP AVARIAS COM DÉFICIT DE EMBALAGENS
-                  </h3>
-                </div>
-                <div className="overflow-x-auto flex-1 flex flex-col">
-                  {loading ? (
-                    <div className="flex-1 flex items-center justify-center p-10">
-                      <Loader2 className="animate-spin text-blue-500" size={18} />
-                    </div>
-                  ) : filteredSkuRows.filter(s => s.deficit > 0).length === 0 ? (
-                    <div className="flex-1 flex flex-col items-center justify-center py-16 text-slate-500 text-xs">
-                      <Inbox size={28} className="mb-2 text-slate-600" />
-                      <p className="font-semibold uppercase tracking-wider font-sans">Nenhum déficit de embalagem encontrado!</p>
-                    </div>
-                  ) : (
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-800 bg-[#0f172a]/50">
-                          <th className="px-5 py-3 font-mono text-[11px] font-medium text-slate-400 uppercase tracking-wider">SKU / ITEM</th>
-                          <th className="px-5 py-3 font-mono text-[11px] font-medium text-slate-400 uppercase tracking-wider text-center">AVARIAS</th>
-                          <th className="px-5 py-3 font-mono text-[11px] font-medium text-slate-400 uppercase tracking-wider text-center">S/ SOLICITAÇÃO</th>
-                          <th className="px-5 py-3 font-mono text-[11px] font-medium text-slate-400 uppercase tracking-wider text-center">ESTOQUE</th>
-                          <th className="px-5 py-3 font-mono text-[11px] font-medium text-rose-400 uppercase tracking-wider text-center">DÉFICIT</th>
-                          <th className="px-5 py-3 font-mono text-[11px] font-medium text-slate-400 uppercase tracking-wider text-center">COBERTURA</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/50">
-                        {filteredSkuRows.filter(s => s.deficit > 0).slice(0, 5).map((sku, idx) => (
-                          <tr key={sku.codigo} className={cn("hover:bg-slate-700/20 transition-colors", idx % 2 === 0 ? "bg-transparent" : "bg-slate-800/20")}>
-                            <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-slate-300">{sku.codigo}</td>
-                            <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-white text-center">{sku.avarias.toLocaleString("pt-BR")}</td>
-                            <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-slate-400 text-center">{Math.max(0, sku.avarias - sku.pedidas - sku.chegando).toLocaleString("pt-BR")}</td>
-                            <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-emerald-400 text-center">{sku.estoque.toLocaleString("pt-BR")}</td>
-                            <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-rose-500 text-center">{sku.deficit.toLocaleString("pt-BR")}</td>
-                            <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-slate-300 text-center">{sku.pctCoberto}%</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              </div>
 
-              {/* RIGHT COLUMN: SOLICITAÇÕES RECENTES */}
-              <div className="bg-[#111827] border border-slate-800/80 rounded-2xl overflow-hidden shadow-sm flex flex-col">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
-                  <h3 className="text-xs font-semibold text-white uppercase tracking-[0.15em] font-sans">
-                    SOLICITAÇÕES RECENTES
-                  </h3>
-                  <button
-                    onClick={() => setSubTab("pedidas")}
-                    className="text-[10px] font-medium text-blue-400 hover:text-blue-300 transition-colors uppercase tracking-widest flex items-center gap-1 cursor-pointer"
-                  >
-                    VER TODAS <ChevronRight size={10} />
-                  </button>
-                </div>
-                <div className="overflow-x-auto flex-1 flex flex-col">
-                  {loading ? (
-                    <div className="flex-1 flex items-center justify-center p-10">
-                      <Loader2 className="animate-spin text-blue-500" size={18} />
-                    </div>
-                  ) : pedidas.filter(r => !r.isNew).length === 0 ? (
-                    <div className="flex-1 flex flex-col items-center justify-center py-16 text-slate-500 text-xs">
-                      <Inbox size={28} className="mb-2 text-slate-600" />
-                      <p className="font-semibold uppercase tracking-wider font-sans">Nenhuma solicitação encontrada!</p>
-                    </div>
-                  ) : (
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-800 bg-[#0f172a]/50">
-                          <th className="px-5 py-3 font-mono text-[11px] font-medium text-slate-400 uppercase tracking-wider">ID</th>
-                          <th className="px-5 py-3 font-mono text-[11px] font-medium text-slate-400 uppercase tracking-wider">DATA</th>
-                          <th className="px-5 py-3 font-mono text-[11px] font-medium text-blue-400 uppercase tracking-wider text-center">SOLICITADO</th>
-                          <th className="px-5 py-3 font-mono text-[11px] font-medium text-emerald-400 uppercase tracking-wider text-center">ENVIADO</th>
-                          <th className="px-5 py-3 font-mono text-[11px] font-medium text-slate-400 uppercase tracking-wider text-center">PENDENTE</th>
-                          <th className="px-5 py-3 font-mono text-[11px] font-medium text-slate-400 uppercase tracking-wider text-center">ENTREGA</th>
-                          <th className="px-5 py-3 font-mono text-[11px] font-medium text-slate-400 uppercase tracking-wider text-center">STATUS</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/50">
-                        {(() => {
-                          const realPedidas = pedidas.filter(r => !r.isNew)
-                          const groups: Record<string, EmbalagemRegistro[]> = {}
-                          realPedidas.forEach(p => {
-                            const key = p.solicitacao || 'sem-solicitacao'
-                            if (!groups[key]) groups[key] = []
-                            groups[key].push(p)
-                          })
-
-                          const sortedGroups = Object.entries(groups).sort((a, b) => {
-                            const dateA = a[1][0]?.data_solicitacao || a[1][0]?.data || ''
-                            const dateB = b[1][0]?.data_solicitacao || b[1][0]?.data || ''
-                            if (dateA !== dateB) return dateB.localeCompare(dateA)
-                            const numA = Number(a[0].replace(/\D/g, '')) || 0
-                            const numB = Number(b[0].replace(/\D/g, '')) || 0
-                            return numB - numA
-                          })
-
-                          return sortedGroups.slice(0, 5).map(([solKey, items], i) => {
-                            let totSolic = 0, totEnviado = 0, totPendente = 0
-                            items.forEach(p => {
-                              totSolic += Math.round(Number(p.quantidade) || 0)
-                              totEnviado += Math.round(Number(p.enviado) || 0)
-                              totPendente += Math.round(Number(p.pendente) || 0)
-                            })
-
-                            const dateLabel = items[0]?.data_solicitacao
-                              ? new Date(items[0].data_solicitacao + 'T00:00:00').toLocaleDateString('pt-BR')
-                              : items[0]?.data
-                                ? new Date(items[0].data + 'T00:00:00').toLocaleDateString('pt-BR')
-                                : '—'
-
-                            const previsao = items[0]?.previsao_entrega || items[0]?.entrega_compras || 'TBC'
-
-                            const status = totPendente === 0 
-                              ? "FINALIZADO" 
-                              : totEnviado > 0 
-                                ? "EM ANDAMENTO" 
-                                : "PENDENTE"
-
-                            const statusCls = status === "FINALIZADO"
-                              ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
-                              : status === "EM ANDAMENTO"
-                                ? "text-blue-400 bg-blue-500/10 border-blue-500/20"
-                                : "text-amber-500 bg-amber-500/10 border-amber-500/20"
-
-                            return (
-                              <tr key={solKey} className={cn("hover:bg-slate-700/20 transition-colors", i % 2 === 0 ? "bg-transparent" : "bg-slate-800/20")}>
-                                <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-slate-400">
-                                  {solKey === 'sem-solicitacao' ? 'S/N' : solKey}
-                                </td>
-                                <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-slate-400">
-                                  {dateLabel}
-                                </td>
-                                <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-blue-400 text-center">{totSolic.toLocaleString("pt-BR")}</td>
-                                <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-emerald-400 text-center">{totEnviado.toLocaleString("pt-BR")}</td>
-                                <td className={cn("px-5 py-3.5 font-mono text-[11px] font-normal text-center", totPendente > 0 ? "text-amber-500" : "text-slate-500")}>
-                                  {totPendente.toLocaleString("pt-BR")}
-                                </td>
-                                <td className="px-5 py-3.5 font-mono text-[11px] font-normal text-slate-400 text-center">{previsao}</td>
-                                <td className="px-5 py-3.5 text-center">
-                                  <span className={cn("px-2.5 py-1 rounded-full text-[9px] font-semibold uppercase tracking-wider border", statusCls)}>
-                                    {status}
-                                  </span>
-                                </td>
-                              </tr>
-                            )
-                          })
-                        })()}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              </div>
-
-            </div>
-
-            {/* ─── GROWTH CHART ─── */}
-            <AvariasGrowthChart pedidas={pedidas} allSkuRows={allSkuRows} />
+            {/* ─── GROWTH CHART (Ocultado temporariamente) ─── */}
+            {/* <AvariasGrowthChart pedidas={pedidas} allSkuRows={allSkuRows} /> */}
 
           </motion.div>
         ) : (
@@ -2135,7 +1988,7 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
           subTab === "pedidas" ? (
           <motion.div key="pedidos-accordion" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} className="space-y-2">
             {/* Accordion header */}
-            <div className="rounded-xl overflow-hidden border border-white/[0.06] bg-[#191919]">
+            <div className="rounded-xl overflow-hidden border border-white/[0.06] bg-[#0B1120]">
               <div className="grid grid-cols-[2fr_1.5fr_1.5fr_4fr_1fr_1fr_1fr] px-4 py-2 border-b border-white/[0.06] text-[9.5px] font-medium text-slate-500 uppercase tracking-widest select-none">
                 <span>Solicitação</span>
                 <span>Data Solicitação</span>
@@ -2233,10 +2086,11 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
                     return { p, sku, qty, enviado, pendente, status, statusCls, isBa, rowId }
                   })
 
-                  const dateLabel = items[0]?.data_solicitacao
-                    ? new Date(items[0].data_solicitacao + 'T00:00:00').toLocaleDateString('pt-BR')
-                    : items[0]?.data
-                      ? new Date(items[0].data + 'T00:00:00').toLocaleDateString('pt-BR')
+                  const itemWithDate = items.find(x => x.data_solicitacao || x.data)
+                  const dateLabel = itemWithDate?.data_solicitacao
+                    ? new Date(itemWithDate.data_solicitacao + 'T00:00:00').toLocaleDateString('pt-BR')
+                    : itemWithDate?.data
+                      ? new Date(itemWithDate.data + 'T00:00:00').toLocaleDateString('pt-BR')
                       : '—'
 
                   const responsavel = items[0]?.responsabilidade || 'Não definido'
@@ -2264,13 +2118,18 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
                           <span className="text-slate-700">·</span>
                           <span className="text-slate-500">{responsavel}</span>
                           <span className="text-slate-700">·</span>
-                          <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium",
-                            totPendente > 0
-                              ? 'text-amber-400/90 bg-amber-500/10'
-                              : 'text-emerald-400/90 bg-emerald-500/10'
-                          )}>
-                            {totPendente > 0 ? `Pendente` : '✓ Concluído'}
-                          </span>
+                          {(() => {
+                            const isAllFinalized = items.every(x => String(x.status || '').trim().toUpperCase() === 'FINALIZADO')
+                            return (
+                              <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium",
+                                isAllFinalized
+                                  ? 'text-emerald-400/90 bg-emerald-500/10'
+                                  : 'text-amber-400/90 bg-amber-500/10'
+                              )}>
+                                {isAllFinalized ? '✓ Concluído' : 'Pendente'}
+                              </span>
+                            )
+                          })()}
                         </span>
                         <span className="text-[11px] text-slate-400 text-right font-mono">{totSolic.toLocaleString('pt-BR')}</span>
                         <span className="text-[11px] text-emerald-500/80 text-right font-mono">{totEnviado.toLocaleString('pt-BR')}</span>
@@ -2401,7 +2260,7 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
           ) : subTab === "ordem_pedido" ? (
           /* ─── ORDEM DE PEDIDO VIEW ─── */
           <motion.div key="ordem-pedido" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} className="space-y-2">
-            <div className="rounded-xl overflow-hidden border border-white/[0.06] bg-[#191919]">
+            <div className="rounded-xl overflow-hidden border border-white/[0.06] bg-[#0B1120]">
               <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.06]">
                 <div>
                   <h3 className="text-[11px] font-semibold text-slate-300 uppercase tracking-widest">Ordem de Pedido</h3>
@@ -2519,39 +2378,39 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
           ) : (
           /* ─── SPREADSHEET TABS (estoque_g300 / conserto / atuais / chegando) ─── */
           <motion.div key="spreadsheet" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
-            className="bg-[#111827] border border-slate-800 rounded-2xl overflow-hidden shadow-md"
+            className="rounded-xl overflow-hidden border border-white/[0.06] bg-[#0B1120]"
           >
-            <div className="px-6 py-4 border-b border-slate-800 bg-[#0f172a]/50">
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider font-sans">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.06]">
+              <h3 className="text-[11px] font-semibold text-slate-300 uppercase tracking-widest">
                 {subTab === "conserto" ? "Conserto" : subTab === "estoque_g300" ? "Estoque G300" : subTab === "atuais" ? "Estoque CD / Conserto" : "Cargas a Caminho"}
               </h3>
             </div>
 
             <div className="overflow-x-auto min-h-[300px]">
-              <table className="w-full text-left border-collapse min-w-[800px] font-sans">
+              <table className="w-full text-left border-collapse min-w-[800px]">
                 <thead>
-                  <tr className="border-b border-slate-800 bg-[#0f172a]/30">
+                  <tr className="border-b border-white/[0.04] bg-white/[0.01]">
                     {(subTab === "estoque_g300" || subTab === "conserto") ? (
                       <>
-                        <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider w-[180px]">Cód. Embalagem</th>
-                        <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider w-[240px]">Descrição Embalagem</th>
-                        <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider w-[140px]">Cód. Produto</th>
-                        <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider">Modelo Produto</th>
-                        <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider text-center w-[100px]">CD</th>
-                        <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider w-[200px]">Status</th>
+                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest w-[160px]">Cód. Embalagem</th>
+                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest w-[240px]">Descrição Embalagem</th>
+                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest w-[110px]">Cód. Produto</th>
+                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest">Modelo Produto</th>
+                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest text-center w-[80px]">CD</th>
+                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest w-[180px]">Status</th>
                       </>
                     ) : (
                       <>
-                        <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider w-[160px]">Data</th>
-                        <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider w-[220px]">SKU</th>
-                        <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider">Descrição</th>
-                        <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider text-center w-[140px]">Quantidade</th>
+                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest w-[130px]">Data</th>
+                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest w-[180px]">SKU</th>
+                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest">Descrição</th>
+                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest text-center w-[120px]">Quantidade</th>
                       </>
                     )}
-                    <th className="px-6 py-3.5 text-[10px] font-medium text-slate-400 uppercase tracking-wider text-right w-[80px]">Ação</th>
+                    <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest text-right w-[70px]">Ação</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60 bg-[#111827]">
+                <tbody className="divide-y divide-white/[0.03] bg-[#0B1120]">
                   {loading ? (
                     <tr>
                       <td colSpan={(subTab === "estoque_g300" || subTab === "conserto") ? 7 : 5} className="px-8 py-10 text-center text-slate-500">
@@ -2618,64 +2477,64 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
                       )}>
                         {(subTab === "estoque_g300" || subTab === "conserto") ? (
                           <>
-                            <td className="p-0 border-r border-white/5">
+                            <td className="p-0">
                               <input type="text" value={item.codigo_embalagem || ''}
                                 onChange={e => updateRow(idx, "codigo_embalagem", e.target.value)}
                                 onPaste={e => handleSmartPaste(e, 0)}
                                 placeholder="Cód. Embalagem..."
-                                className="w-full bg-transparent border-none px-6 py-3 text-[11px] text-white font-mono font-normal focus:bg-slate-900/60 focus:outline-none uppercase" />
+                                className="w-full bg-transparent border-none px-3 py-1.5 text-[10.5px] text-white font-mono font-normal focus:bg-slate-900/60 focus:outline-none uppercase" />
                             </td>
-                            <td className="p-0 border-r border-white/5">
+                            <td className="p-0">
                               <input type="text" value={item.descricao_embalagem || ''}
                                 onChange={e => updateRow(idx, "descricao_embalagem", e.target.value)}
                                 onPaste={e => handleSmartPaste(e, 1)}
                                 placeholder="Descrição..."
-                                className="w-full bg-transparent border-none px-6 py-3 text-[11px] text-slate-300 font-mono font-normal focus:bg-slate-900/60 focus:outline-none" />
+                                className="w-full bg-transparent border-none px-3 py-1.5 text-[10.5px] text-slate-300 font-mono font-normal focus:bg-slate-900/60 focus:outline-none" />
                             </td>
-                            <td className="p-0 border-r border-white/5">
+                            <td className="p-0">
                               <input type="text" value={item.codigo_produto || ''}
                                 onChange={e => updateRow(idx, "codigo_produto", e.target.value)}
                                 onPaste={e => handleSmartPaste(e, 2)}
                                 placeholder="Cód. Produto..."
-                                className="w-full bg-transparent border-none px-6 py-3 text-[11px] text-white font-mono font-normal focus:bg-slate-900/60 focus:outline-none uppercase" />
+                                className="w-full bg-transparent border-none px-3 py-1.5 text-[10.5px] text-white font-mono font-normal focus:bg-slate-900/60 focus:outline-none uppercase" />
                             </td>
-                            <td className="p-0 border-r border-white/5">
+                            <td className="p-0">
                               <input type="text" value={item.modelo_produto || ''}
                                 onChange={e => updateRow(idx, "modelo_produto", e.target.value)}
                                 onPaste={e => handleSmartPaste(e, 3)}
                                 placeholder="Modelo..."
-                                className="w-full bg-transparent border-none px-6 py-3 text-[11px] text-slate-300 font-mono font-normal focus:bg-slate-900/60 focus:outline-none" />
+                                className="w-full bg-transparent border-none px-3 py-1.5 text-[10.5px] text-slate-300 font-mono font-normal focus:bg-slate-900/60 focus:outline-none" />
                             </td>
-                            <td className="p-0 border-r border-white/5 text-center">
+                            <td className="p-0 text-center">
                               <input type="text" value={item.cd ?? ''}
                                 onChange={e => updateRow(idx, "cd", e.target.value === '' ? 0 : Number(e.target.value.replace(/\D/g, '')))}
                                 onPaste={e => handleSmartPaste(e, 4)}
                                 placeholder="0"
-                                className="w-full bg-transparent border-none py-3 text-center text-[11px] text-white font-mono font-normal focus:bg-slate-900/60 focus:outline-none" />
+                                className="w-full bg-transparent border-none py-1.5 text-center text-[10.5px] text-white font-mono font-normal focus:bg-slate-900/60 focus:outline-none" />
                             </td>
-                            <td className="p-0 border-r border-white/5">
+                            <td className="p-0">
                               <input type="text" value={item.status || ''}
                                 onChange={e => updateRow(idx, "status", e.target.value)}
                                 onPaste={e => handleSmartPaste(e, 5)}
                                 placeholder="Status..."
-                                className="w-full bg-transparent border-none px-6 py-3 text-[11px] text-slate-300 font-mono font-normal focus:bg-slate-900/60 focus:outline-none" />
+                                className="w-full bg-transparent border-none px-3 py-1.5 text-[10.5px] text-slate-300 font-mono font-normal focus:bg-slate-900/60 focus:outline-none" />
                             </td>
                           </>
                         ) : (
                           <>
                             {/* Date Cell */}
-                            <td className="p-0 border-r border-white/5">
+                            <td className="p-0">
                               <input
                                 type="date"
                                 value={dateVal}
                                 onChange={e => updateRow(idx, subTab === "atuais" ? "chegada" : "data", e.target.value)}
                                 onPaste={e => handleSmartPaste(e, 0)}
-                                className="w-full bg-transparent border-none px-6 py-3 text-[11px] text-slate-300 font-mono font-normal focus:bg-slate-900 focus:outline-none [color-scheme:dark]"
+                                className="w-full bg-transparent border-none px-3 py-1.5 text-[10.5px] text-slate-300 font-mono font-normal focus:bg-slate-900 focus:outline-none [color-scheme:dark]"
                               />
                             </td>
 
                             {/* SKU Cell */}
-                            <td className="p-0 border-r border-white/5 relative">
+                            <td className="p-0 relative">
                               <div className="relative w-full">
                                 <input
                                   type="text"
@@ -2684,10 +2543,10 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
                                   onClick={() => { setSkuSearchCell(item.codigo); setActiveSkuDropdown({ type: subTab, index: idx }) }}
                                   onPaste={e => handleSmartPaste(e, 1)}
                                   placeholder="SKU..."
-                                  className="w-full bg-transparent border-none px-6 py-3 text-[11px] text-white font-mono font-normal focus:bg-slate-900/60 focus:outline-none"
+                                  className="w-full bg-transparent border-none px-3 py-1.5 text-[10.5px] text-white font-mono font-normal focus:bg-slate-900/60 focus:outline-none"
                                 />
                                 {activeSkuDropdown?.type === subTab && activeSkuDropdown?.index === idx && cellSkus.length > 0 && (
-                                  <div ref={dropdownRef} className="absolute z-50 w-[300px] left-6 bottom-full mb-1 bg-[#0F172A] border border-white/10 rounded-2xl shadow-2xl p-2 space-y-1">
+                                  <div ref={dropdownRef} className="absolute z-50 w-[300px] left-3 bottom-full mb-1 bg-[#0F172A] border border-white/10 rounded-2xl shadow-2xl p-2 space-y-1">
                                     {cellSkus.map(b => (
                                       <button
                                         key={b["Código"]}
@@ -2705,19 +2564,19 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
                             </td>
 
                             {/* Desc Cell */}
-                            <td className="px-6 py-3 text-[11px] font-normal text-slate-500 max-w-xs truncate">
+                            <td className="px-3 py-1.5 text-[10.5px] font-normal text-slate-400 max-w-xs truncate">
                               {base?.["Descrição"] || (item.codigo ? `Produto ${item.codigo}` : "—")}
                             </td>
 
                             {/* Quantity Cell */}
-                            <td className="p-0 border-l border-white/5 text-center">
+                            <td className="p-0 text-center">
                               <input
                                 type="text"
                                 value={item.quantidade === null ? "" : item.quantidade}
                                 onChange={e => updateRow(idx, "quantidade", e.target.value === "" ? null : Number(e.target.value.replace(/\D/g, "")))}
                                 onPaste={e => handleSmartPaste(e, 2)}
                                 placeholder="0"
-                                className="w-full bg-transparent border-none py-3 text-center text-[11px] text-white font-mono font-normal focus:bg-slate-900/60 focus:outline-none"
+                                className="w-full bg-transparent border-none py-1.5 text-center text-[10.5px] text-white font-mono font-normal focus:bg-slate-900/60 focus:outline-none"
                               />
                             </td>
                           </>
@@ -3163,7 +3022,7 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
               initial={{ opacity: 0, scale: 0.95, y: 16 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 16 }}
-              className="w-full max-w-2xl rounded-xl border border-white/[0.06] bg-[#191919] shadow-2xl overflow-hidden"
+              className="w-full max-w-2xl rounded-xl border border-white/[0.06] bg-[#0B1120] shadow-2xl overflow-hidden"
             >
               {/* Header */}
               <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/[0.06]">

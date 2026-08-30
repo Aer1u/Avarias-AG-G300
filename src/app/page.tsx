@@ -3100,8 +3100,9 @@ function DashboardPage() {
   }
 
   const [printData, setPrintData] = useState<any[]>([])
+  const [a501PrintMap, setA501PrintMap] = useState<Record<string, number>>({})
 
-  const handleExportMap = (mode: "all" | "filtered") => {
+  const handleExportMap = async (mode: "all" | "filtered") => {
     let dataToPrint = []
     if (mode === "all") {
       dataToPrint = effectiveData
@@ -3116,23 +3117,47 @@ function DashboardPage() {
         dataToPrint = effectiveData
       }
     }
+
+    // Buscar quantidades A501 por SKU
+    try {
+      const { data: a501Raw } = await supabase.from('A501').select('Produto, Quantidade')
+      const map: Record<string, number> = {}
+      ;(a501Raw || []).forEach((row: any) => {
+        const sku = String(row['Produto'] || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        if (sku) map[sku] = (map[sku] || 0) + (Number(row['Quantidade']) || 0)
+      })
+      setA501PrintMap(map)
+    } catch { /* silencioso */ }
+
     setPrintData(dataToPrint)
     // Small timeout to allow state to settle before printing
     setTimeout(() => {
       window.print()
-      setTimeout(() => setPrintData([]), 500)
-    }, 100)
+      setTimeout(() => { setPrintData([]); setA501PrintMap({}) }, 500)
+    }, 200)
   }
 
 
-  const handleExportSelection = () => {
+  const handleExportSelection = async () => {
     if (selectedPositions.size === 0) return
     const dataToPrint = effectiveData.filter(item => selectedPositions.has(item.posicao))
+
+    // Buscar quantidades A501 por SKU
+    try {
+      const { data: a501Raw } = await supabase.from('A501').select('Produto, Quantidade')
+      const map: Record<string, number> = {}
+      ;(a501Raw || []).forEach((row: any) => {
+        const sku = String(row['Produto'] || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        if (sku) map[sku] = (map[sku] || 0) + (Number(row['Quantidade']) || 0)
+      })
+      setA501PrintMap(map)
+    } catch { /* silencioso */ }
+
     setPrintData(dataToPrint)
     setTimeout(() => {
       window.print()
-      setTimeout(() => setPrintData([]), 500)
-    }, 100)
+      setTimeout(() => { setPrintData([]); setA501PrintMap({}) }, 500)
+    }, 200)
   }
 
   // Group data by position for the report
@@ -3304,16 +3329,23 @@ function DashboardPage() {
                                       </div>
 
                                       <div className="flex-1 flex flex-col">
-                                        {group.items.map((item, iIdx) => (
-                                          <div key={iIdx} className={`flex flex-1 ${iIdx > 0 ? 'border-t border-black' : ''}`}>
-                                            <div className="flex-1 px-2 border-r border-black flex items-center min-w-0">
-                                              <span className="text-[9.5px] font-semibold uppercase truncate">CÓD: {item.sku}</span>
+                                        {group.items.map((item, iIdx) => {
+                                          const skuNorm = String(item.sku || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                                          const qtdA501 = a501PrintMap[skuNorm]
+                                          return (
+                                            <div key={iIdx} className={`flex flex-1 ${iIdx > 0 ? 'border-t border-black' : ''}`}>
+                                              <div className="flex-1 px-2 border-r border-black flex items-center gap-2 min-w-0">
+                                                <span className="text-[9.5px] font-semibold uppercase truncate">CÓD: {item.sku}</span>
+                                                {qtdA501 !== undefined && (
+                                                  <span className="text-[8px] font-bold bg-black text-white px-1 py-0.5 rounded shrink-0">A501: {fmtNum(qtdA501)}</span>
+                                                )}
+                                              </div>
+                                              <div className="w-24 px-2 flex items-center justify-end shrink-0">
+                                                <span className="text-[12px] font-semibold">{fmtNum(item.portion)} UN</span>
+                                              </div>
                                             </div>
-                                            <div className="w-24 px-2 flex items-center justify-end shrink-0">
-                                              <span className="text-[12px] font-semibold">{fmtNum(item.portion)} UN</span>
-                                            </div>
-                                          </div>
-                                        ))}
+                                          )
+                                        })}
                                       </div>
                                     </div>
                                   );

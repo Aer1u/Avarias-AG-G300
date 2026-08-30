@@ -286,6 +286,11 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
   })
 
   const importConfirmadosRef = useRef<HTMLInputElement>(null)
+  const [isConfirmadosModalOpen, setIsConfirmadosModalOpen] = useState(false)
+  const [confirmadosRows, setConfirmadosRows] = useState<{ a501: string, g501: string }[]>(
+    Array.from({ length: 20 }, () => ({ a501: '', g501: '' }))
+  )
+  const [processingConfirmados, setProcessingConfirmados] = useState(false)
 
   const handleImportConfirmados = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -382,6 +387,161 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
     }
     reader.readAsBinaryString(file)
     e.target.value = ''
+  }
+
+  const handleProcessConfirmadosTable = async () => {
+    const validRows = confirmadosRows.filter(r => r.a501.trim() || r.g501.trim())
+    if (validRows.length === 0) {
+      alert('Insira pelo menos uma reserva na tabela.')
+      return
+    }
+    setProcessingConfirmados(true)
+    try {
+      let confirmadosA = 0, confirmadosG = 0, registrosCriados = 0
+      const today = new Date().toISOString().slice(0, 10)
+
+      // 1. Identificar quais linhas serão totalmente confirmadas e agrupar demanda por SKU
+      const toConfirm: {
+        record: any
+        confirmA: boolean
+        confirmG: boolean
+        willBothConfirmed: boolean
+        matchA: any
+        matchG: any
+      }[] = []
+
+      const requiredQtyPerProduct: Record<string, number> = {}
+
+      for (const row of validRows) {
+        const valA = row.a501.trim().toUpperCase()
+        const valG = row.g501.trim().toUpperCase()
+
+        const matchA = valA ? records.find(r => (r.reserva_a501 || '').trim().toUpperCase() === valA) : null
+        const matchG = valG ? records.find(r => (r.reserva_g501 || '').trim().toUpperCase() === valG) : null
+
+        const targetRecord = matchA ?? matchG
+        if (targetRecord) {
+          const aConfirmed = (matchA?.id === targetRecord.id && matchA.situacao_a501 !== 'CONFIRMADO') || targetRecord.situacao_a501 === 'CONFIRMADO'
+          const gConfirmed = (matchG?.id === targetRecord.id && matchG.situacao_g501 !== 'CONFIRMADO') || targetRecord.situacao_g501 === 'CONFIRMADO'
+
+          const willAConfirm = !!(valA && matchA?.id === targetRecord.id && matchA.situacao_a501 !== 'CONFIRMADO')
+          const willGConfirm = !!(valG && matchG?.id === targetRecord.id && matchG.situacao_g501 !== 'CONFIRMADO')
+
+          const willBothConfirmed =
+            (valA && matchA?.id === targetRecord.id ? true : aConfirmed) &&
+            (valG && matchG?.id === targetRecord.id ? true : gConfirmed)
+
+          toConfirm.push({
+            record: targetRecord,
+            confirmA: willAConfirm,
+            confirmG: willGConfirm,
+            willBothConfirmed,
+            matchA,
+            matchG
+          })
+
+          if (willBothConfirmed) {
+            const sku = String(targetRecord.codigo || '').trim().toUpperCase()
+            const qty = Math.round(Number(targetRecord.quantidade_enviada) || 0)
+            if (sku && qty > 0) {
+              requiredQtyPerProduct[sku] = (requiredQtyPerProduct[sku] || 0) + qty
+            }
+          }
+        }
+      }
+
+      // 2. Verificar o estoque disponível na posição Chão no Mapeamento
+      const errorsList: string[] = []
+      const productStocks: Record<string, { id: number, Quantidade: number }[]> = {}
+
+      for (const [sku, reqQty] of Object.entries(requiredQtyPerProduct)) {
+        const { data: floorStock, error: stockErr } = await supabase
+          .from('mapeamento')
+          .select('id, Quantidade')
+          .eq('Posição', 'Chão')
+          .eq('Código', sku)
+          .order('id', { ascending: true })
+
+        if (stockErr) throw stockErr
+
+        const totalFloor = (floorStock || []).reduce((acc, curr) => acc + (curr.Quantidade || 0), 0)
+        if (totalFloor < reqQty) {
+          errorsList.push(`• ${sku}: necessário ${reqQty}, disponível ${totalFloor} no Chão.`)
+        } else {
+          productStocks[sku] = floorStock || []
+        }
+      }
+
+      if (errorsList.length > 0) {
+        alert("⚠️ Impeditivo de Salvar — Estoque Insuficiente no Chão:\n\n" + errorsList.join("\n") + "\n\nPor favor, aloque a quantidade necessária de peças no 'Chão' antes de registrar a saída.")
+        setProcessingConfirmados(false)
+        return
+      }
+
+      // 3. Processar confirmações e consumir o estoque do Chão
+      for (const item of toConfirm) {
+        if (item.confirmA) {
+          await supabase.from('retrabalhos').update({ situacao_a501: 'CONFIRMADO' }).eq('id', item.matchA.id)
+          setRecords(prev => prev.map(r => r.id === item.matchA.id ? { ...r, situacao_a501: 'CONFIRMADO' } : r))
+          confirmadosA++
+        }
+
+        if (item.confirmG) {
+          await supabase.from('retrabalhos').update({ situacao_g501: 'CONFIRMADO' }).eq('id', item.matchG.id)
+          setRecords(prev => prev.map(r => r.id === item.matchG.id ? { ...r, situacao_g501: 'CONFIRMADO' } : r))
+          confirmadosG++
+        }
+
+        if (item.willBothConfirmed) {
+          const sku = String(item.record.codigo || '').trim().toUpperCase()
+          const qtyToConsume = Math.round(Number(item.record.quantidade_enviada) || 0)
+          
+          if (sku && qtyToConsume > 0) {
+            let remainingToConsume = qtyToConsume
+            const pallets = productStocks[sku] || []
+
+            for (const pallet of pallets) {
+              if (remainingToConsume <= 0) break
+              const palletQty = pallet.Quantidade || 0
+              if (palletQty <= 0) continue
+
+              if (palletQty <= remainingToConsume) {
+                const { error: delErr } = await supabase.from('mapeamento').delete().eq('id', pallet.id)
+                if (delErr) throw delErr
+                remainingToConsume -= palletQty
+                pallet.Quantidade = 0
+              } else {
+                const { error: updErr } = await supabase.from('mapeamento').update({ Quantidade: palletQty - remainingToConsume }).eq('id', pallet.id)
+                if (updErr) throw updErr
+                pallet.Quantidade = palletQty - remainingToConsume
+                remainingToConsume = 0
+              }
+            }
+          }
+
+          const { error } = await supabase.from('Registros').insert({
+            Data: today,
+            Produto: item.record.codigo || '',
+            'Saída': item.record.quantidade_enviada || 0,
+            Entrada: null,
+            Origem: 'Retrabalho',
+            tipo_avaria: 'Sem Avaria',
+            turno: 1,
+            Observação: `Confirmado via tabela — Lote ${item.record.lote}`,
+          })
+          if (!error) registrosCriados++
+        }
+      }
+
+      await fetchData()
+      setIsConfirmadosModalOpen(false)
+      setConfirmadosRows(Array.from({ length: 20 }, () => ({ a501: '', g501: '' })))
+      alert(`✅ Importação concluída!\nA501 confirmados: ${confirmadosA}\nG501 confirmados: ${confirmadosG}\nRegistros criados em Monitoramento: ${registrosCriados}`)
+    } catch (err: any) {
+      alert('Erro ao processar: ' + err.message)
+    } finally {
+      setProcessingConfirmados(false)
+    }
   }
 
   const handleDeleteReserva = async (id: number, e?: React.MouseEvent) => {
@@ -1263,7 +1423,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
           ) : groupedData.length > 0 ? (
             viewMode === "list" ? (
               /* ── Visualização Hierárquica em Lista ── */
-              <div className="rounded-xl border border-white/[0.06] bg-[#191919] overflow-hidden">
+              <div className="rounded-xl border border-white/[0.06] bg-[#0B1120] overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
@@ -1548,7 +1708,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
               }} 
               className="absolute inset-0 bg-black/90 backdrop-blur-md" 
             />
-            <motion.div initial={{ opacity: 0, scale: 0.95, y: 30 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 30 }} className="relative w-full h-full bg-[#0A0F1D] border border-white/10 shadow-[0_0_100px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col">
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 30 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 30 }} className="relative w-full h-full bg-[#0B1120] border border-white/10 shadow-[0_0_100px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col">
               <div className="absolute top-0 left-0 w-full h-[500px] bg-gradient-to-b from-blue-600/5 to-transparent pointer-events-none" />
               
               {/* Section 1: Header & Identity - Top Priority */}
@@ -1563,9 +1723,9 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                           initial={{ opacity: 0, scale: 0.9 }}
                           animate={{ opacity: 1, scale: 1 }}
                           onClick={handlePrintQR}
-                          className="flex items-center gap-3 px-6 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-semibold uppercase tracking-widest transition-all shadow-lg shadow-emerald-600/30 active:scale-95"
+                          className="flex items-center gap-2 px-4 py-2 rounded-md bg-emerald-600/15 border border-emerald-500/25 hover:bg-emerald-600/25 text-emerald-400 text-[10px] font-semibold uppercase tracking-wider transition-colors"
                         >
-                          <Printer size={14} />
+                          <Printer size={13} />
                           Imprimir ({selectedReservas.size})
                         </motion.button>
                       )}
@@ -1581,9 +1741,9 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                           setEditingViagemGroup({ number: "", items: itemsToGroup });
                           setIsViagemModalOpen(true);
                         }}
-                        className="flex items-center gap-3 px-6 py-3.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-semibold uppercase tracking-widest transition-all shadow-lg shadow-amber-600/30 active:scale-95"
+                        className="flex items-center gap-2 px-4 py-2 rounded-md bg-amber-500/10 border border-amber-500/25 hover:bg-amber-500/20 text-amber-400 text-[10px] font-semibold uppercase tracking-wider transition-colors"
                       >
-                        <Truck size={14} />
+                        <Truck size={13} />
                         Nova Viagem
                       </button>
 
@@ -1598,20 +1758,20 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                     className="hidden"
                   />
                   <button
-                    onClick={() => importConfirmadosRef.current?.click()}
-                    className="flex items-center gap-3 px-6 py-3.5 rounded-xl bg-emerald-600/20 border border-emerald-500/30 hover:bg-emerald-600/30 text-emerald-400 text-[11px] font-semibold uppercase tracking-widest transition-all active:scale-95"
-                    title="Importar planilha de reservas confirmadas"
+                    onClick={() => setIsConfirmadosModalOpen(true)}
+                    className="flex items-center gap-2 px-4 py-2 rounded-md bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] hover:border-white/20 text-slate-300 text-[10px] font-semibold uppercase tracking-wider transition-colors"
+                    title="Importar reservas confirmadas"
                   >
-                    <FileText size={14} />
+                    <FileText size={13} />
                     Importar Confirmados
                   </button>
 
                   <button 
                     onClick={() => handleExportLoteExcel(selectedLoteDetail)}
-                    className="flex items-center gap-3 px-6 py-3.5 rounded-xl bg-blue-600/20 border border-blue-500/30 hover:bg-blue-600/30 text-blue-400 text-[11px] font-semibold uppercase tracking-widest transition-all active:scale-95"
+                    className="flex items-center gap-2 px-4 py-2 rounded-md bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] hover:border-white/20 text-slate-300 text-[10px] font-semibold uppercase tracking-wider transition-colors"
                     title="Exportar Lote Completo para Excel"
                   >
-                    <FileText size={14} />
+                    <FileText size={13} />
                     Exportar Lote
                   </button>
                   <button 
@@ -1621,39 +1781,34 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                       setSelectionMode(false);
                       setModalSearch("");
                     }}
-                    className="w-12 h-12 rounded-xl flex items-center justify-center bg-white/5 text-slate-400 hover:text-white hover:bg-rose-500/20 transition-all border border-white/10"
+                    className="flex items-center justify-center w-9 h-9 rounded-md bg-white/[0.04] border border-white/10 hover:bg-rose-500/10 hover:border-rose-500/20 hover:text-rose-400 text-slate-500 transition-colors"
                   >
-                    <X size={24} />
+                    <X size={15} />
                   </button>
                 </div>
               </div>
 
               {/* Section 2: Dashboard Overview - Milestone Volume Grid */}
-              <div className="grid grid-cols-4 gap-3 px-12 py-1 shrink-0 border-b border-white/5 relative z-10 bg-white/[0.01]">
+              <div className="grid grid-cols-3 gap-3 px-12 py-1 shrink-0 border-b border-white/5 relative z-10 bg-white/[0.01]">
                 {(() => {
                   const items = selectedLoteDetail.items;
                   const filterId = modalSituacaoFilter.toLowerCase();
                   
-                  // Calculate volumes per milestone (each situação is independent)
+                  // Calculate volumes based on double-confirmation status
                   const vTotal = selectedLoteDetail.totalEmbalagens;
                   const vEmPreparacao = items.reduce((acc, curr) => {
-                    const sit = (curr.situacao || 'Em preparação').toLowerCase();
-                    return acc + (sit === 'em preparação' ? (curr.quantidade_enviada || 0) : 0);
+                    const isBothConfirmed = curr.situacao_a501 === 'CONFIRMADO' && curr.situacao_g501 === 'CONFIRMADO';
+                    return acc + (!isBothConfirmed ? (curr.quantidade_enviada || 0) : 0);
                   }, 0);
                   const vRetrabalhados = items.reduce((acc, curr) => {
-                    const sit = (curr.situacao || '').toLowerCase();
-                    return acc + (sit === 'retrabalhados' || sit === 'retornado ao g300' ? (curr.quantidade_enviada || 0) : 0);
-                  }, 0);
-                  const vArmazenado = items.reduce((acc, curr) => {
-                    const sit = (curr.situacao || '').toLowerCase();
-                    return acc + (sit === 'armazenado' ? (curr.quantidade_enviada || 0) : 0);
+                    const isBothConfirmed = curr.situacao_a501 === 'CONFIRMADO' && curr.situacao_g501 === 'CONFIRMADO';
+                    return acc + (isBothConfirmed ? (curr.quantidade_enviada || 0) : 0);
                   }, 0);
 
                   const milestones = [
                     { id: 'all', label: 'Total de Embalagens', value: vTotal, unit: 'emb', icon: Database, color: 'text-white', active: filterId === 'all' },
                     { id: 'em preparação', label: 'Em Preparação', value: vEmPreparacao, unit: 'pçs', icon: Hourglass, color: 'text-slate-400', active: filterId === 'em preparação' },
-                    { id: 'retrabalhados', label: 'Retrabalhados', value: vRetrabalhados, unit: 'pçs', icon: RefreshCw, color: 'text-indigo-400', active: filterId === 'retrabalhados' || filterId === 'retornado ao g300' },
-                    { id: 'armazenado', label: 'Armazenado', value: vArmazenado, unit: 'pçs', icon: CheckCircle2, color: 'text-emerald-400', active: filterId === 'armazenado' },
+                    { id: 'retrabalhados', label: 'Retrabalhados', value: vRetrabalhados, unit: 'pçs', icon: RefreshCw, color: 'text-indigo-400', active: filterId === 'retrabalhados' },
                   ];
 
                   return milestones.map((stat, i) => (
@@ -1766,13 +1921,14 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                 {(() => {
                                   const filteredForTable = selectedLoteDetail.items
                                     .filter(item => {
-                                      const matchesSituacao = modalSituacaoFilter === 'all' || (item.situacao || 'Em preparação').toLowerCase() === modalSituacaoFilter.toLowerCase();
+                                      const isBothConfirmed = item.situacao_a501 === 'CONFIRMADO' && item.situacao_g501 === 'CONFIRMADO';
+                                      const matchesSituacao = modalSituacaoFilter === 'all' || 
+                                        (modalSituacaoFilter === 'em preparação' && !isBothConfirmed) ||
+                                        (modalSituacaoFilter === 'retrabalhados' && isBothConfirmed);
                                       const searchLower = modalSearch.toLowerCase();
                                       const matchesSearch = !modalSearch || 
                                         (item.reserva_a501 || '').toLowerCase().includes(searchLower) ||
-                                        (item.reserva_g501 || '').toLowerCase().includes(searchLower) ||
-                                        (item.estorno_a501 || '').toLowerCase().includes(searchLower) ||
-                                        (item.estorno_g501 || '').toLowerCase().includes(searchLower);
+                                        (item.reserva_g501 || '').toLowerCase().includes(searchLower);
                                       return matchesSituacao && matchesSearch;
                                     });
 
@@ -1930,8 +2086,8 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                             <div className={cn(
                                               "grid gap-3 px-4 py-2 border-b border-white/[0.06] items-center bg-white/[0.01] sticky top-0 z-30 font-mono text-[9px] uppercase font-semibold text-slate-400 tracking-wider",
                                               selectionMode 
-                                                ? "grid-cols-[2.5rem_2.5rem_110px_110px_90px_120px_110px_110px_90px_140px_35px]" 
-                                                : "grid-cols-[2.5rem_110px_110px_90px_120px_110px_110px_90px_140px_35px]" 
+                                                ? "grid-cols-[3rem_3rem_150px_150px_110px_1fr_100px_120px_120px_50px]" 
+                                                : "grid-cols-[3rem_150px_150px_110px_1fr_100px_120px_120px_50px]" 
                                             )}>
                                               {selectionMode && (
                                                 <div className="flex justify-center">
@@ -1964,27 +2120,30 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                               <span className="text-center text-slate-600">#</span>
                                               <span className="text-left text-slate-300">Reserva (A)</span>
                                               <span className="text-left text-slate-300">Reserva (G)</span>
+                                              <span className="text-left text-slate-300">Código</span>
+                                              <span className="text-left text-slate-300">Descrição</span>
                                               <span className="text-center text-slate-300">Volume</span>
-                                              <span className="text-center text-slate-300">Criado em</span>
-                                              <span className="text-left text-slate-300">Estorno (A)</span>
-                                              <span className="text-left text-slate-300">Estorno (G)</span>
-                                              <span className="text-center text-emerald-400">Retornado</span>
-                                              <span className="text-left text-slate-300">Situação</span>
+                                              <span className="text-center text-slate-300">Sit. A</span>
+                                              <span className="text-center text-slate-300">Sit. G</span>
                                               <span className="text-center text-slate-600">Ação</span>
                                             </div>
-
-                                            {items.map((item, idx) => (
-                                              <div 
-                                                key={item.id} 
-                                                className={cn(
-                                                  "group/row grid gap-3 px-4 py-1 border-b border-white/[0.03] last:border-0 transition-colors items-center relative hover:bg-white/[0.015]",
-                                                  selectionMode 
-                                                    ? "grid-cols-[2.5rem_2.5rem_110px_110px_90px_120px_110px_110px_90px_140px_35px]" 
-                                                    : "grid-cols-[2.5rem_110px_110px_90px_120px_110px_110px_90px_140px_35px]",
-                                                  selectedReservas.has(item.id) && "bg-emerald-500/10"
-                                                )}
-                                              >
-                                                {selectionMode && (
+                                            {items.map((item, idx) => {
+                                               const config = lotesConfig.find(c => String(c.lote).trim() === String(item.lote).trim());
+                                               const cleanCodigo = (item.codigo || config?.codigo || '---').trim();
+                                               const base = baseCodigos.find(b => String(b["Código"]).trim() === cleanCodigo);
+                                               const desc = item.desc_produto || base?.["Descrição"] || `Produto ${cleanCodigo}`;
+                                               return (
+                                                 <div 
+                                                   key={item.id} 
+                                                   className={cn(
+                                                     "group/row grid gap-3 px-4 py-1 border-b border-white/[0.03] last:border-0 transition-colors items-center relative hover:bg-white/[0.015]",
+                                                     selectionMode 
+                                                       ? "grid-cols-[3rem_3rem_150px_150px_110px_1fr_100px_120px_120px_50px]" 
+                                                       : "grid-cols-[3rem_150px_150px_110px_1fr_100px_120px_120px_50px]",
+                                                     selectedReservas.has(item.id) && "bg-emerald-500/10"
+                                                   )}
+                                                 >
+                                                 {selectionMode && (
                                                   <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>
                                                     <button 
                                                       onClick={() => {
@@ -2034,6 +2193,20 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                                   />
                                                 </div>
 
+                                                 {/* Código */}
+                                                 <div className="text-left select-text">
+                                                   <span className="text-[11px] font-mono text-slate-400">
+                                                     {cleanCodigo}
+                                                   </span>
+                                                 </div>
+                                                 
+                                                 {/* Descrição */}
+                                                 <div className="text-left select-text truncate" title={desc}>
+                                                   <span className="text-[11px] text-slate-300">
+                                                     {desc}
+                                                   </span>
+                                                 </div>
+
                                                 {/* Volume Enviado */}
                                                 <div className="text-center">
                                                   <input
@@ -2044,60 +2217,31 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                                   />
                                                 </div>
 
-                                                {/* Criado Em */}
+                                                {/* Sit. A */}
                                                 <div className="text-center">
-                                                  <input
-                                                    type="date"
-                                                    value={item.enviado_ao_cd || ""}
-                                                    onChange={e => updateReservaField(item.id, "enviado_ao_cd", e.target.value || null)}
-                                                    className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/60 focus:bg-slate-900/80 rounded px-1 py-1 text-[10px] font-mono text-slate-400 transition-all outline-none text-center [color-scheme:dark]"
-                                                  />
-                                                </div>
-                                                
-                                                {/* Estorno A */}
-                                                <div>
-                                                  <input
-                                                    type="text"
-                                                    value={item.estorno_a501 || ""}
-                                                    onChange={e => updateReservaField(item.id, "estorno_a501", e.target.value)}
-                                                    placeholder="Est. A..."
-                                                    className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/60 focus:bg-slate-900/80 rounded px-2 py-1 text-[11px] font-mono text-slate-300 transition-all outline-none"
-                                                  />
+                                                  <span className={cn(
+                                                    "inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider",
+                                                    item.situacao_a501 === 'CONFIRMADO'
+                                                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                                      : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                                                  )}>
+                                                    {item.situacao_a501 === 'CONFIRMADO' ? 'CONFIRMADO' : 'PENDENTE'}
+                                                  </span>
                                                 </div>
 
-                                                {/* Estorno G */}
-                                                <div>
-                                                  <input
-                                                    type="text"
-                                                    value={item.estorno_g501 || ""}
-                                                    onChange={e => updateReservaField(item.id, "estorno_g501", e.target.value)}
-                                                    placeholder="Est. G..."
-                                                    className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/60 focus:bg-slate-900/80 rounded px-2 py-1 text-[11px] font-mono text-slate-400 transition-all outline-none"
-                                                  />
-                                                </div>
-
-                                                {/* Retornado */}
+                                                {/* Sit. G */}
                                                 <div className="text-center">
-                                                  <input
-                                                    type="number"
-                                                    value={item.quantidade_retornada || 0}
-                                                    onChange={e => updateReservaField(item.id, "quantidade_retornada", Number(e.target.value))}
-                                                    className="w-full bg-transparent border border-transparent hover:border-emerald-500/60 focus:bg-slate-900/80 rounded px-1.5 py-1 text-xs font-mono text-emerald-400/90 text-center transition-all outline-none"
-                                                  />
+                                                  <span className={cn(
+                                                    "inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider",
+                                                    item.situacao_g501 === 'CONFIRMADO'
+                                                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                                      : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                                                  )}>
+                                                    {item.situacao_g501 === 'CONFIRMADO' ? 'CONFIRMADO' : 'PENDENTE'}
+                                                  </span>
                                                 </div>
 
-                                                {/* Situação */}
-                                                <div>
-                                                  <select 
-                                                    value={item.situacao || 'Em preparação'} 
-                                                    onChange={e => updateReservaField(item.id, "situacao", e.target.value)}
-                                                    className="w-full bg-[#191919] border border-white/[0.06] hover:border-white/[0.12] rounded px-2 py-1 text-[10px] text-slate-300 focus:border-blue-500 outline-none uppercase cursor-pointer"
-                                                  >
-                                                    {SITUACAO_OPTIONS.map(o => (
-                                                      <option key={o.value} value={o.value} className="bg-[#191919] text-slate-300 text-[10px]">{o.value}</option>
-                                                    ))}
-                                                  </select>
-                                                </div>
+
 
                                                 {/* Excluir Reserva */}
                                                 <div className="text-center" onClick={(e) => e.stopPropagation()}>
@@ -2112,7 +2256,8 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                                   )}
                                                 </div>
                                               </div>
-                                            ))}
+                                            );
+                                          })}
                                           </div>
                                         )}
                                       </div>
@@ -2349,30 +2494,25 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
               initial={{ opacity: 0, scale: 0.9, y: 20 }} 
               animate={{ opacity: 1, scale: 1, y: 0 }} 
               exit={{ opacity: 0, scale: 0.9, y: 20 }} 
-              className="relative bg-[#0F172A] border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl transition-all duration-500 w-full max-w-6xl"
+              className="relative bg-[#0B1120] border border-white/10 rounded-xl overflow-hidden shadow-2xl transition-all duration-500 w-full max-w-6xl"
             >
 
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500" />
+              <div className="absolute top-0 left-0 w-full h-px bg-white/10" />
               
               <div className="p-8 overflow-y-auto max-h-[90vh] custom-scrollbar">
 
-                <div className="flex items-center justify-between mb-8">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-500">
-                      <Truck size={24} />
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-semibold text-white uppercase tracking-tight">
-                        {editingViagemGroup.number && editingViagemGroup.number !== 'SEM_VIAGEM' ? 'Editar Viagem' : 'Nova Viagem'}
-                      </h2>
-                    </div>
-
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <Truck size={16} className="text-amber-500/70" />
+                    <h2 className="text-sm font-semibold text-white tracking-tight">
+                      {editingViagemGroup.number && editingViagemGroup.number !== 'SEM_VIAGEM' ? 'Editar Viagem' : 'Nova Viagem'}
+                    </h2>
                   </div>
                   <button 
                     onClick={() => setIsViagemModalOpen(false)}
-                    className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-slate-500 hover:text-white transition-all"
+                    className="w-8 h-8 rounded-md bg-white/[0.04] border border-white/10 flex items-center justify-center text-slate-500 hover:text-white hover:bg-white/[0.08] transition-colors"
                   >
-                    <X size={20} />
+                    <X size={14} />
                   </button>
                 </div>
 
@@ -2461,13 +2601,13 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                   } finally {
                     setConfirmingViagem(false);
                   }
-                }} className="space-y-6">
+                }} className="space-y-5">
                   {/* Common Header Fields */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest ml-1 block">Nº da Viagem</label>
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest block">Nº da Viagem</label>
                       <div className="relative group">
-                        <Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 group-focus-within:text-amber-500 transition-colors" />
+                        <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-600 group-focus-within:text-amber-500 transition-colors" />
                         <input 
                           name="viagem_num"
                           type="number"
@@ -2475,29 +2615,29 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                           autoFocus
                           defaultValue={editingViagemGroup.number && editingViagemGroup.number !== "SEM_VIAGEM" ? editingViagemGroup.number : ""}
                           placeholder="Ex: 12345"
-                          className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-sm font-semibold text-white font-mono focus:outline-none focus:border-amber-500/50 focus:bg-amber-500/5 transition-all no-spinner"
+                          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-md py-2.5 pl-9 pr-3 text-sm font-mono text-white focus:outline-none focus:border-amber-500/40 focus:bg-amber-500/[0.04] transition-all no-spinner"
                         />
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest ml-1 block">Data de Envio</label>
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest block">Data de Envio</label>
                       <div className="relative group">
-                        <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 group-focus-within:text-blue-500 transition-colors" />
+                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-600 group-focus-within:text-blue-500 transition-colors" />
                         <input 
                           name="viagem_date"
                           type="date"
                           defaultValue={editingViagemGroup.items[0]?.enviado_ao_cd?.split('T')[0] || ""}
-                          className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-sm font-semibold text-white font-mono focus:outline-none focus:border-blue-500/50 focus:bg-blue-500/5 transition-all [color-scheme:dark]"
+                          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-md py-2.5 pl-9 pr-3 text-sm font-mono text-white focus:outline-none focus:border-blue-500/40 focus:bg-blue-500/[0.04] transition-all [color-scheme:dark]"
                         />
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest ml-1 block">Turno da Viagem</label>
-                      <div className="grid grid-cols-3 gap-2">
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest block">Turno da Viagem</label>
+                      <div className="grid grid-cols-3 gap-1.5">
                         {[1, 2, 3].map((t) => (
-                          <label key={t} className="relative group cursor-pointer">
+                          <label key={t} className="relative cursor-pointer">
                             <input 
                               type="radio" 
                               name="turno_da_viagem" 
@@ -2505,8 +2645,8 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                               defaultChecked={editingViagemGroup.items[0]?.turno_da_viagem === t}
                               className="peer sr-only" 
                             />
-                            <div className="flex items-center justify-center py-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-500 peer-checked:bg-amber-600 peer-checked:text-white peer-checked:border-amber-400 transition-all font-semibold text-xs">
-                              TURNO {t}
+                            <div className="flex items-center justify-center py-2.5 rounded-md bg-white/[0.04] border border-white/[0.08] text-slate-500 peer-checked:bg-amber-500/10 peer-checked:text-amber-400 peer-checked:border-amber-500/30 transition-all text-[10px] font-semibold tracking-wider">
+                              T{t}
                             </div>
                           </label>
                         ))}
@@ -2516,126 +2656,125 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
 
                   {/* Body: Excel Table for NEW or Summary for EDIT */}
                   {!editingViagemGroup.number || editingViagemGroup.number === 'SEM_VIAGEM' ? (
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between px-2">
-                        <h3 className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                          <Table size={12} /> Tabela de Lançamento
+                    <div className="space-y-0">
+                      <div className="flex items-center justify-between px-1 pb-2">
+                        <h3 className="text-[9px] font-semibold text-slate-500 uppercase tracking-[0.18em] flex items-center gap-1.5">
+                          <Table size={11} className="opacity-70" /> Tabela de Lançamento
                         </h3>
                         <button 
                           type="button" 
                           onClick={() => setExcelRows(Array.from({ length: 20 }, () => ({ a501: '', g501: '', qtd: '' })))}
-                          className="text-[9px] font-semibold text-rose-400 hover:text-rose-300 uppercase tracking-widest flex items-center gap-1.5 transition-colors"
+                          className="text-[9px] font-semibold text-rose-500/70 hover:text-rose-400 uppercase tracking-widest flex items-center gap-1 transition-colors"
                         >
-                          <Trash2 size={12} /> Limpar
+                          <Trash2 size={11} /> Limpar
                         </button>
                       </div>
 
+                      <div className="border border-white/[0.06] rounded-sm overflow-hidden bg-[#0B1120]">
+                        {/* Table Header */}
+                        <div className="grid grid-cols-[40px_1fr_1fr_140px] border-b border-white/[0.06] bg-white/[0.03]">
+                          <div className="px-3 py-2.5 text-[9px] font-semibold text-slate-500 uppercase tracking-widest text-center border-r border-white/[0.06]">#</div>
+                          <div className="px-4 py-2.5 text-[9px] font-semibold text-slate-500 uppercase tracking-widest border-r border-white/[0.06]">Reserva A501</div>
+                          <div className="px-4 py-2.5 text-[9px] font-semibold text-slate-500 uppercase tracking-widest border-r border-white/[0.06]">Reserva G501</div>
+                          <div className="px-4 py-2.5 text-[9px] font-semibold text-slate-500 uppercase tracking-widest">Quantidade</div>
+                        </div>
 
-                      <div className="border border-white/5 rounded-3xl overflow-hidden bg-black/20 max-h-[40vh] overflow-y-auto custom-scrollbar">
-
-                        <table className="w-full text-left border-collapse">
-                          <thead>
-                            <tr className="bg-white/5">
-                              <th className="px-4 py-3 text-[9px] font-semibold text-slate-500 uppercase tracking-widest border-r border-white/5 w-12 text-center">#</th>
-                              <th className="px-4 py-3 text-[9px] font-semibold text-slate-500 uppercase tracking-widest border-r border-white/5">Reserva A501</th>
-                              <th className="px-4 py-3 text-[9px] font-semibold text-slate-500 uppercase tracking-widest border-r border-white/5">Reserva G501</th>
-                              <th className="px-4 py-3 text-[9px] font-semibold text-slate-500 uppercase tracking-widest">Quantidade</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {excelRows.map((row, idx) => {
-                              // Smart paste handler - works from any cell
-                              const handleSmartPaste = (e: React.ClipboardEvent<HTMLInputElement>, startCol: number) => {
-                                const text = e.clipboardData.getData('text');
-                                const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+                        {/* Table Body */}
+                        <div className="max-h-[38vh] overflow-y-auto custom-scrollbar">
+                          {excelRows.map((row, idx) => {
+                            // Smart paste handler - works from any cell
+                            const handleSmartPaste = (e: React.ClipboardEvent<HTMLInputElement>, startCol: number) => {
+                              const text = e.clipboardData.getData('text');
+                              const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+                              
+                              // Detect if it's multi-column (tab or semicolon separated)
+                              const isTSV = lines.some(l => l.includes('\t'));
+                              const isCSV = !isTSV && lines.some(l => l.includes(';'));
+                              const isMultiCol = isTSV || isCSV;
+                              
+                              if (!isMultiCol && lines.length === 1) return; // single value, paste normally
+                              
+                              e.preventDefault();
+                              const sep = isTSV ? '\t' : ';';
+                              const newRows = [...excelRows];
+                              
+                              lines.forEach((line, lineOffset) => {
+                                const cells = line.split(sep).map(c => c.trim());
+                                const targetIdx = idx + lineOffset;
                                 
-                                // Detect if it's multi-column (tab or semicolon separated)
-                                const isTSV = lines.some(l => l.includes('\t'));
-                                const isCSV = !isTSV && lines.some(l => l.includes(';'));
-                                const isMultiCol = isTSV || isCSV;
+                                // Expand rows if needed
+                                while (newRows.length <= targetIdx) {
+                                  newRows.push({ a501: '', g501: '', qtd: '' });
+                                }
                                 
-                                if (!isMultiCol && lines.length === 1) return; // single value, paste normally
-                                
-                                e.preventDefault();
-                                const sep = isTSV ? '\t' : ';';
-                                const newRows = [...excelRows];
-                                
-                                lines.forEach((line, lineOffset) => {
-                                  const cells = line.split(sep).map(c => c.trim());
-                                  const targetIdx = idx + lineOffset;
-                                  
-                                  // Expand rows if needed
-                                  while (newRows.length <= targetIdx) {
-                                    newRows.push({ a501: '', g501: '', qtd: '' });
+                                const cols: (keyof typeof newRows[0])[] = ['a501', 'g501', 'qtd'];
+                                cells.forEach((val, colOffset) => {
+                                  const colIdx = startCol + colOffset;
+                                  if (colIdx < cols.length) {
+                                    newRows[targetIdx][cols[colIdx]] = val;
                                   }
-                                  
-                                  const cols: (keyof typeof newRows[0])[] = ['a501', 'g501', 'qtd'];
-                                  cells.forEach((val, colOffset) => {
-                                    const colIdx = startCol + colOffset;
-                                    if (colIdx < cols.length) {
-                                      newRows[targetIdx][cols[colIdx]] = val;
-                                    }
-                                  });
                                 });
-                                
-                                setExcelRows(newRows);
-                              };
+                              });
+                              
+                              setExcelRows(newRows);
+                            };
 
-                              return (
-                                <tr key={idx} className="border-t border-white/5 hover:bg-white/[0.02] transition-colors">
-                                  <td className="px-4 py-1 text-[10px] font-mono font-bold text-slate-600 border-r border-white/5 text-center">{idx + 1}</td>
-                                  <td className="px-1 py-1 border-r border-white/5">
-                                    <input 
-                                      value={row.a501}
-                                      onChange={(e) => {
-                                        const newRows = [...excelRows];
-                                        newRows[idx].a501 = e.target.value;
-                                        setExcelRows(newRows);
-                                      }}
-                                      onPaste={(e) => handleSmartPaste(e, 0)}
-                                      placeholder="Digitar..."
-                                      className="w-full bg-transparent px-3 py-2 text-[11px] font-mono font-semibold text-white focus:outline-none placeholder:text-slate-700"
-                                    />
-                                  </td>
-                                  <td className="px-1 py-1 border-r border-white/5">
-                                    <input 
-                                      value={row.g501}
-                                      onChange={(e) => {
-                                        const newRows = [...excelRows];
-                                        newRows[idx].g501 = e.target.value;
-                                        setExcelRows(newRows);
-                                      }}
-                                      onPaste={(e) => handleSmartPaste(e, 1)}
-                                      placeholder="Digitar..."
-                                      className="w-full bg-transparent px-3 py-2 text-[11px] font-mono font-semibold text-white focus:outline-none placeholder:text-slate-700"
-                                    />
-                                  </td>
-                                  <td className="px-1 py-1">
-                                    <input 
-                                      value={row.qtd}
-                                      onChange={(e) => {
-                                        const newRows = [...excelRows];
-                                        newRows[idx].qtd = e.target.value;
-                                        setExcelRows(newRows);
-                                      }}
-                                      onPaste={(e) => handleSmartPaste(e, 2)}
-                                      placeholder="Qtd..."
-                                      className="w-full bg-transparent px-3 py-2 text-[11px] font-mono font-semibold text-white focus:outline-none placeholder:text-slate-700"
-                                    />
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
+                            return (
+                              <div key={idx} className="grid grid-cols-[40px_1fr_1fr_140px] border-b border-white/[0.04] hover:bg-white/[0.015] transition-colors">
+                                <div className="flex items-center justify-center border-r border-white/[0.06] text-[10px] font-mono text-slate-600">{idx + 1}</div>
+                                <div className="border-r border-white/[0.06]">
+                                  <input 
+                                    value={row.a501}
+                                    onChange={(e) => {
+                                      const newRows = [...excelRows];
+                                      newRows[idx].a501 = e.target.value;
+                                      setExcelRows(newRows);
+                                    }}
+                                    onPaste={(e) => handleSmartPaste(e, 0)}
+                                    placeholder="Digitar..."
+                                    className="w-full bg-transparent px-4 py-2 text-[11px] font-mono text-slate-200 focus:outline-none placeholder:text-slate-700"
+                                  />
+                                </div>
+                                <div className="border-r border-white/[0.06]">
+                                  <input 
+                                    value={row.g501}
+                                    onChange={(e) => {
+                                      const newRows = [...excelRows];
+                                      newRows[idx].g501 = e.target.value;
+                                      setExcelRows(newRows);
+                                    }}
+                                    onPaste={(e) => handleSmartPaste(e, 1)}
+                                    placeholder="Digitar..."
+                                    className="w-full bg-transparent px-4 py-2 text-[11px] font-mono text-slate-200 focus:outline-none placeholder:text-slate-700"
+                                  />
+                                </div>
+                                <div>
+                                  <input 
+                                    value={row.qtd}
+                                    onChange={(e) => {
+                                      const newRows = [...excelRows];
+                                      newRows[idx].qtd = e.target.value;
+                                      setExcelRows(newRows);
+                                    }}
+                                    onPaste={(e) => handleSmartPaste(e, 2)}
+                                    placeholder="Qtd..."
+                                    className="w-full bg-transparent px-4 py-2 text-[11px] font-mono text-slate-200 focus:outline-none placeholder:text-slate-700"
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Add Line Footer */}
+                        <button 
+                          type="button"
+                          onClick={() => setExcelRows([...excelRows, { a501: '', g501: '', qtd: '' }])}
+                          className="w-full py-2.5 text-center text-[9px] font-semibold text-slate-600 uppercase tracking-widest hover:text-slate-400 hover:bg-white/[0.02] transition-colors border-t border-white/[0.04]"
+                        >
+                          + Adicionar Linha
+                        </button>
                       </div>
-                      <button 
-                        type="button"
-                        onClick={() => setExcelRows([...excelRows, { a501: '', g501: '', qtd: '' }])}
-                        className="w-full py-2 border border-dashed border-white/10 rounded-xl text-[9px] font-semibold text-slate-500 uppercase tracking-widest hover:bg-white/5 hover:text-slate-300 transition-all"
-                      >
-                        + Adicionar Linha
-                      </button>
                     </div>
                   ) : (
                     <div className="rounded-xl overflow-hidden border border-slate-700/60">
@@ -2656,7 +2795,6 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                               <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider text-center border-r border-b border-slate-700/60">Volume</th>
                               <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider text-center border-r border-b border-slate-700/60">Sit. A</th>
                               <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider text-center border-r border-b border-slate-700/60">Sit. G</th>
-                              <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider text-center border-r border-b border-slate-700/60">Retornado</th>
                               <th className="w-9 border-b border-slate-700/60"></th>
                             </tr>
                           </thead>
@@ -2743,18 +2881,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                     {item.situacao_g501 === 'CONFIRMADO' ? 'CONFIRMADO' : 'PENDENTE'}
                                   </span>
                                 </td>
-                                {/* Retornado */}
-                                <td className="p-0 border-r border-slate-700/40">
-                                  <input 
-                                    type="number" 
-                                    value={item.quantidade_retornada ?? ""} 
-                                    onChange={e => updateLocalViagemItem(item.id, "quantidade_retornada", e.target.value)} 
-                                    onBlur={e => { updateReservaField(item.id, "quantidade_retornada", Number(e.target.value)); saveReservaFieldToDb(item.id, "quantidade_retornada", e.target.value); }}
-                                    onPaste={e => handleViagemPaste(e, idx, "quantidade_retornada")}
-                                    onClick={e => e.stopPropagation()}
-                                    className="w-full h-full px-2 py-2 bg-transparent text-[11px] font-mono font-bold text-emerald-400 text-center focus:outline-none focus:bg-emerald-500/10 transition-colors no-spinner" 
-                                  />
-                                </td>
+
                                 {/* Excluir */}
                                 <td className="px-1 py-0 text-center" onClick={(e) => e.stopPropagation()}>
                                   {user && (
@@ -2771,26 +2898,180 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                     </div>
                   )}
 
-                  <div className="flex gap-4 pt-4">
+                  <div className="flex gap-3 pt-3">
                     <button 
                       type="button"
                       onClick={() => setIsViagemModalOpen(false)}
                       disabled={confirmingViagem}
-                      className="flex-1 py-4 rounded-2xl bg-white/5 border border-white/10 text-slate-400 font-semibold text-[10px] uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex-1 py-2.5 rounded-md bg-white/[0.04] border border-white/[0.08] text-slate-400 text-[10px] font-semibold uppercase tracking-wider hover:bg-white/[0.08] hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       Cancelar
                     </button>
                     <button 
                       type="submit"
                       disabled={confirmingViagem}
-                      className="flex-[2] py-4 rounded-2xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-[11px] uppercase tracking-[0.2em] shadow-xl shadow-amber-600/20 transition-all flex items-center justify-center gap-3 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed cursor-pointer"
+                      className="flex-[2] py-2.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[10px] font-semibold uppercase tracking-wider hover:bg-amber-500/25 transition-colors flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                     >
-                      {confirmingViagem ? <RefreshCw className="animate-spin" size={16} /> : <Save size={16} />}
+                      {confirmingViagem ? <RefreshCw className="animate-spin" size={13} /> : <Save size={13} />}
                       Confirmar Viagem
                     </button>
                   </div>
                 </form>
 
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Confirmados Table Modal */}
+      <AnimatePresence>
+        {isConfirmadosModalOpen && (
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsConfirmadosModalOpen(false)}
+              className="absolute inset-0 bg-black/90 backdrop-blur-md"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 16 }}
+              className="relative bg-[#0B1120] border border-white/10 rounded-xl overflow-hidden shadow-2xl w-full max-w-2xl"
+            >
+              <div className="absolute top-0 left-0 w-full h-px bg-white/10" />
+
+              <div className="p-6">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-5">
+                  <div className="flex items-center gap-3">
+                    <FileText size={15} className="text-slate-400" />
+                    <h2 className="text-sm font-semibold text-white tracking-tight">Importar Confirmados</h2>
+                  </div>
+                  <button
+                    onClick={() => setIsConfirmadosModalOpen(false)}
+                    className="w-8 h-8 rounded-md bg-white/[0.04] border border-white/10 flex items-center justify-center text-slate-500 hover:text-white hover:bg-white/[0.08] transition-colors"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+
+                {/* Table */}
+                <div className="space-y-0">
+                  <div className="flex items-center justify-between px-1 pb-2">
+                    <h3 className="text-[9px] font-semibold text-slate-500 uppercase tracking-[0.18em] flex items-center gap-1.5">
+                      <Table size={11} className="opacity-70" /> Tabela de Confirmações
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmadosRows(Array.from({ length: 20 }, () => ({ a501: '', g501: '' })))}
+                      className="text-[9px] font-semibold text-rose-500/70 hover:text-rose-400 uppercase tracking-widest flex items-center gap-1 transition-colors"
+                    >
+                      <Trash2 size={11} /> Limpar
+                    </button>
+                  </div>
+
+                  <div className="border border-white/[0.06] rounded-sm overflow-hidden bg-[#0B1120]">
+                    {/* Header */}
+                    <div className="grid grid-cols-[40px_1fr_1fr] border-b border-white/[0.06] bg-white/[0.03]">
+                      <div className="px-3 py-2.5 text-[9px] font-semibold text-slate-500 uppercase tracking-widest text-center border-r border-white/[0.06]">#</div>
+                      <div className="px-4 py-2.5 text-[9px] font-semibold text-slate-500 uppercase tracking-widest border-r border-white/[0.06]">Reserva A501</div>
+                      <div className="px-4 py-2.5 text-[9px] font-semibold text-slate-500 uppercase tracking-widest">Reserva G501</div>
+                    </div>
+
+                    {/* Body */}
+                    <div className="max-h-[40vh] overflow-y-auto custom-scrollbar">
+                      {confirmadosRows.map((row, idx) => {
+                        const handleSmartPaste = (e: React.ClipboardEvent<HTMLInputElement>, startCol: number) => {
+                          const text = e.clipboardData.getData('text')
+                          const lines = text.split(/\r?\n/).filter(l => l.trim() !== '')
+                          const isTSV = lines.some(l => l.includes('\t'))
+                          const isCSV = !isTSV && lines.some(l => l.includes(';'))
+                          const isMultiCol = isTSV || isCSV
+                          if (!isMultiCol && lines.length === 1) return
+                          e.preventDefault()
+                          const sep = isTSV ? '\t' : ';'
+                          const newRows = [...confirmadosRows]
+                          lines.forEach((line, lineOffset) => {
+                            const cells = line.split(sep).map(c => c.trim())
+                            const targetIdx = idx + lineOffset
+                            while (newRows.length <= targetIdx) newRows.push({ a501: '', g501: '' })
+                            const cols: (keyof typeof newRows[0])[] = ['a501', 'g501']
+                            cells.forEach((val, colOffset) => {
+                              const colIdx = startCol + colOffset
+                              if (colIdx < cols.length) newRows[targetIdx][cols[colIdx]] = val
+                            })
+                          })
+                          setConfirmadosRows(newRows)
+                        }
+
+                        return (
+                          <div key={idx} className="grid grid-cols-[40px_1fr_1fr] border-b border-white/[0.04] hover:bg-white/[0.015] transition-colors">
+                            <div className="flex items-center justify-center border-r border-white/[0.06] text-[10px] font-mono text-slate-600">{idx + 1}</div>
+                            <div className="border-r border-white/[0.06]">
+                              <input
+                                value={row.a501}
+                                onChange={(e) => {
+                                  const newRows = [...confirmadosRows]
+                                  newRows[idx].a501 = e.target.value
+                                  setConfirmadosRows(newRows)
+                                }}
+                                onPaste={(e) => handleSmartPaste(e, 0)}
+                                placeholder="Digitar..."
+                                className="w-full bg-transparent px-4 py-2 text-[11px] font-mono text-slate-200 focus:outline-none placeholder:text-slate-700"
+                              />
+                            </div>
+                            <div>
+                              <input
+                                value={row.g501}
+                                onChange={(e) => {
+                                  const newRows = [...confirmadosRows]
+                                  newRows[idx].g501 = e.target.value
+                                  setConfirmadosRows(newRows)
+                                }}
+                                onPaste={(e) => handleSmartPaste(e, 1)}
+                                placeholder="Digitar..."
+                                className="w-full bg-transparent px-4 py-2 text-[11px] font-mono text-slate-200 focus:outline-none placeholder:text-slate-700"
+                              />
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {/* Add Line */}
+                    <button
+                      type="button"
+                      onClick={() => setConfirmadosRows([...confirmadosRows, { a501: '', g501: '' }])}
+                      className="w-full py-2.5 text-center text-[9px] font-semibold text-slate-600 uppercase tracking-widest hover:text-slate-400 hover:bg-white/[0.02] transition-colors border-t border-white/[0.04]"
+                    >
+                      + Adicionar Linha
+                    </button>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setIsConfirmadosModalOpen(false)}
+                    disabled={processingConfirmados}
+                    className="flex-1 py-2.5 rounded-md bg-white/[0.04] border border-white/[0.08] text-slate-400 text-[10px] font-semibold uppercase tracking-wider hover:bg-white/[0.08] hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleProcessConfirmadosTable}
+                    disabled={processingConfirmados}
+                    className="flex-[2] py-2.5 rounded-md bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-[10px] font-semibold uppercase tracking-wider hover:bg-emerald-500/20 transition-colors flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {processingConfirmados ? <RefreshCw className="animate-spin" size={13} /> : <Check size={13} />}
+                    Confirmar Reservas
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>
