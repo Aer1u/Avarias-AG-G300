@@ -3236,8 +3236,39 @@ function DashboardPage() {
             /* Layout 2: Manifesto de Conferência (By Position Mapping) */
             <>
               <div className="flex justify-between items-center border-b-[2px] border-black pb-1 mb-4">
-                <h1 className="text-[16px] font-semibold uppercase tracking-tight">Manifesto de Conferência de Drive - G300</h1>
-                <p className="text-[8px] font-medium text-slate-500 uppercase">{new Date().toLocaleString('pt-BR')} • {printData.length} Registros</p>
+                <div>
+                  <h1 className="text-[16px] font-semibold uppercase tracking-tight">Manifesto de Conferência de Drive - G300</h1>
+                  {(() => {
+                    const uniqueSkus = Array.from(new Set(printData.map(item => String(item.produto || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')).filter(Boolean)))
+                    if (uniqueSkus.length === 1) {
+                      const sku = uniqueSkus[0]
+                      const qty = a501PrintMap[sku] || 0
+                      return (
+                        <p className="text-[10.5px] font-bold text-slate-800 uppercase mt-0.5">
+                          Produto: {sku} • Saldo A501: {fmtNum(qty)} UN
+                        </p>
+                      )
+                    } else if (uniqueSkus.length > 1 && uniqueSkus.length <= 5) {
+                      return (
+                        <p className="text-[9px] font-semibold text-slate-800 uppercase mt-0.5">
+                          Saldo A501: {uniqueSkus.map(sku => `${sku} (${fmtNum(a501PrintMap[sku] || 0)})`).join(' | ')}
+                        </p>
+                      )
+                    } else if (uniqueSkus.length > 5) {
+                      const totalA501 = uniqueSkus.reduce((sum, sku) => sum + (a501PrintMap[sku] || 0), 0)
+                      return (
+                        <p className="text-[10px] font-bold text-slate-800 uppercase mt-0.5">
+                          Total Saldo A501: {fmtNum(totalA501)} UN
+                        </p>
+                      )
+                    }
+                    return null
+                  })()}
+                </div>
+                <div className="text-right">
+                  <p className="text-[8px] font-medium text-slate-500 uppercase">{new Date().toLocaleString('pt-BR')}</p>
+                  <p className="text-[8px] font-bold text-blue-600 uppercase">{printData.length} Registros</p>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-x-3 gap-y-2">
@@ -3329,23 +3360,16 @@ function DashboardPage() {
                                       </div>
 
                                       <div className="flex-1 flex flex-col">
-                                        {group.items.map((item, iIdx) => {
-                                          const skuNorm = String(item.sku || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-                                          const qtdA501 = a501PrintMap[skuNorm]
-                                          return (
-                                            <div key={iIdx} className={`flex flex-1 ${iIdx > 0 ? 'border-t border-black' : ''}`}>
-                                              <div className="flex-1 px-2 border-r border-black flex items-center gap-2 min-w-0">
-                                                <span className="text-[9.5px] font-semibold uppercase truncate">CÓD: {item.sku}</span>
-                                                {qtdA501 !== undefined && (
-                                                  <span className="text-[8px] font-bold bg-black text-white px-1 py-0.5 rounded shrink-0">A501: {fmtNum(qtdA501)}</span>
-                                                )}
-                                              </div>
-                                              <div className="w-24 px-2 flex items-center justify-end shrink-0">
-                                                <span className="text-[12px] font-semibold">{fmtNum(item.portion)} UN</span>
-                                              </div>
+                                        {group.items.map((item, iIdx) => (
+                                          <div key={iIdx} className={`flex flex-1 ${iIdx > 0 ? 'border-t border-black' : ''}`}>
+                                            <div className="flex-1 px-2 border-r border-black flex items-center min-w-0">
+                                              <span className="text-[9.5px] font-semibold uppercase truncate">CÓD: {item.sku}</span>
                                             </div>
-                                          )
-                                        })}
+                                            <div className="w-24 px-2 flex items-center justify-end shrink-0">
+                                              <span className="text-[12px] font-semibold">{fmtNum(item.portion)} UN</span>
+                                            </div>
+                                          </div>
+                                        ))}
                                       </div>
                                     </div>
                                   );
