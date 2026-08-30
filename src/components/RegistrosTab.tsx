@@ -21,13 +21,15 @@ import {
   AlertCircle,
   Info as InfoIcon,
   Edit2,
-  FilterX
+  FilterX,
+  FileText
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { format, startOfWeek, endOfWeek, addDays, subWeeks, addWeeks, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'framer-motion';
+import * as XLSX from 'xlsx';
 
 interface Registro {
   id?: number;
@@ -206,7 +208,124 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToast({ show: true, message, type });
   };
-   // Row Editing State
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = evt.target?.result;
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json<any>(sheet, { raw: false });
+
+        if (rows.length === 0) {
+          showToast('A planilha importada está vazia.', 'error');
+          return;
+        }
+
+        const headers = Object.keys(rows[0] || {});
+
+        const getIndex = (aliases: string[]): string | undefined => {
+          for (const alias of aliases) {
+            const match = headers.find(h => h.trim().toLowerCase() === alias.toLowerCase());
+            if (match) return match;
+          }
+          for (const alias of aliases) {
+            const match = headers.find(h => h.trim().toLowerCase().includes(alias.toLowerCase()));
+            if (match) return match;
+          }
+          return undefined;
+        };
+
+        const keyData = getIndex(['data chegada', 'entrega', 'data entrega', 'data de chegada', 'data de entrega', 'data', 'recebimento']);
+        const keyTransp = getIndex(['transportadora', 'transportador', 'transp', 'transportadora/veiculo']);
+        const keyCodigo = getIndex(['código', 'codigo', 'cod', 'sku', 'produto', 'código do produto', 'codigo do produto']);
+        const keyAvaria = getIndex(['avaria', 'avarias', 'qtd avaria', 'qtd avarias', 'quantidade avaria', 'quantidade avarias', 'quantidade']);
+        const keyLacre = getIndex(['nº lacre', 'no lacre', 'lacre', 'lacre container', 'numero lacre', 'numero do lacre', 'n lacre']);
+        const keyPlaca = getIndex(['placa', 'placa veiculo', 'placa do veiculo']);
+
+        if (!keyCodigo || !keyAvaria) {
+          showToast('Colunas obrigatórias não encontradas. Certifique-se de incluir CÓDIGO e AVARIA.', 'error');
+          return;
+        }
+
+        const parseBrDateToIso = (s: string): string => {
+          if (!s) return format(new Date(), 'yyyy-MM-dd');
+          const str = String(s).trim();
+          if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+          
+          const parts = str.split(/[\/\-\.]/).filter(Boolean);
+          if (parts.length === 3) {
+            let [d, m, y] = parts;
+            if (y.length === 2) y = `20${y}`;
+            const yyyy = parseInt(y, 10);
+            const mm = parseInt(m, 10);
+            const dd = parseInt(d, 10);
+            if (yyyy >= 2000 && yyyy <= 2100 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+              return `${yyyy}-${mm.toString().padStart(2, '0')}-${dd.toString().padStart(2, '0')}`;
+            }
+          }
+          const excelDate = Number(str);
+          if (!isNaN(excelDate) && excelDate > 30000 && excelDate < 60000) {
+            const date = new Date((excelDate - 25569) * 86400 * 1000);
+            return format(date, 'yyyy-MM-dd');
+          }
+          return format(new Date(), 'yyyy-MM-dd');
+        };
+
+        const newRows: Registro[] = rows.map(r => {
+          const rawAvaria = String(r[keyAvaria] || '0').replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+          const parsedAvaria = Math.round(Number(rawAvaria) || 0);
+
+          const rawDate = keyData ? (r[keyData] ? String(r[keyData]) : '') : '';
+          const finalDate = parseBrDateToIso(rawDate);
+
+          const rawPlaca = keyPlaca && r[keyPlaca] ? String(r[keyPlaca]).toUpperCase().replace(/-/g, '') : '';
+          const formattedPlaca = rawPlaca.length > 3 ? rawPlaca.slice(0, 3) + '-' + rawPlaca.slice(3, 7) : rawPlaca;
+
+          return {
+            Data: finalDate,
+            Produto: keyCodigo ? String(r[keyCodigo] || '').trim() : '',
+            Entrada: parsedAvaria > 0 ? parsedAvaria : null,
+            Saída: null,
+            Origem: 'Recebimento',
+            Observação: 'Importado via planilha de Recebimentos',
+            transportadora: keyTransp ? String(r[keyTransp] || '').trim().toUpperCase() : '',
+            lacre: keyLacre ? String(r[keyLacre] || '').trim().toUpperCase() : '',
+            placa: formattedPlaca,
+            tipo_avaria: 'Sem Avaria',
+            turno: 1,
+            'Movimentação Sistema': false,
+            Molhado: false,
+            isNew: true,
+            isDirty: true
+          };
+        }).filter(item => item.Produto && (item.Entrada && item.Entrada > 0));
+
+        if (newRows.length === 0) {
+          showToast('Nenhum recebimento válido com quantidade de avaria > 0 foi encontrado.', 'info');
+          return;
+        }
+
+        setRegistros(prev => [...newRows, ...prev]);
+        showToast(`${newRows.length} recebimentos importados com sucesso! Revise e clique em Salvar.`, 'success');
+      } catch (err) {
+        console.error('Erro ao ler Excel:', err);
+        showToast('Erro ao processar planilha do Excel.', 'error');
+      }
+    };
+
+    reader.readAsBinaryString(file);
+    e.target.value = '';
+  };
+
+  // Row Editing State
   const [editingRowIds, setEditingRowIds] = useState<Set<number>>(new Set());
 
   const toggleEditRow = (id: number) => {
@@ -724,6 +843,21 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
 
           {viewMode === 'geral' && (
             <>
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleImportExcel} 
+                accept=".xlsx,.xls,.csv" 
+                className="hidden" 
+              />
+              <button 
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all active:scale-95 cursor-pointer"
+              >
+                <FileText size={18} />
+                Importar Recebimentos
+              </button>
+
               <button 
                 onClick={handleAddRow}
                 className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all active:scale-95"
@@ -914,12 +1048,11 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
 
       <div className="flex-1 overflow-auto border-none bg-white/50 dark:bg-slate-900/30 backdrop-blur-sm rounded-2xl overflow-hidden shadow-none custom-scrollbar relative">
         {viewMode === 'geral' ? (
-          <table className="w-full text-left min-w-[1600px] border-none">
+          <table className="w-full text-left min-w-[1100px] border-none">
             <thead className="sticky top-0 z-20 bg-slate-100/80 dark:bg-slate-900/80 border-none">
               <tr>
                 <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[110px]">Data</th>
                 <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[110px]">Produto</th>
-                <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[150px]">Responsável</th>
                 <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[150px]">Tipo Avaria</th>
                 <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[80px]">Turno</th>
                 <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[80px]">Entrada</th>
@@ -928,16 +1061,13 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                 <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[130px]">Origem</th>
                 <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[130px]">Transp.</th>
                 <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[100px]">NF</th>
-                <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[110px]">Placa</th>
-                <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[130px]">Container</th>
-                <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[110px]">Lacre</th>
                 <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[80px] text-center">Obs.</th>
               </tr>
             </thead>
             <tbody className="border-none">
               {loading ? (
                 <tr>
-                  <td colSpan={15} className="py-20 text-center">
+                  <td colSpan={11} className="py-20 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <Loader2 className="animate-spin text-blue-500" size={32} />
                       <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Carregando registros...</p>
@@ -946,7 +1076,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                 </tr>
               ) : filteredRegistros.length === 0 ? (
                 <tr>
-                  <td colSpan={15} className="py-20 text-center">
+                  <td colSpan={11} className="py-20 text-center">
                     <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Nenhum registro encontrado</p>
                   </td>
                 </tr>
@@ -955,8 +1085,6 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                   const isReceb = row.Origem === 'Recebimento';
                   const transpUpper = (row.transportadora || '').toUpperCase();
                   const showTranspNF = isReceb;
-                  const showContainer = isReceb && transpUpper !== 'JTD';
-                  const showPlacaLacre = isReceb && transpUpper !== 'ALIANÇA' && transpUpper !== 'ALIANCA';
                   const isEditable = isRowEditable(row);
                   
                   return (
@@ -994,16 +1122,6 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                         onChange={(e) => updateRow(idx, 'Produto', e.target.value)}
                         placeholder="0000-00"
                         className="w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight text-slate-800 dark:text-slate-200 group-hover:text-slate-900 dark:group-hover:text-white disabled:cursor-default placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/20 focus:outline-none transition-colors"
-                      />
-                    </td>
-                    <td className="p-0">
-                      <input 
-                        type="text" 
-                        value={row.responsavel ?? ''} 
-                        disabled={!isEditable} 
-                        onChange={(e) => updateRow(idx, 'responsavel', e.target.value)} 
-                        placeholder="---"
-                        className="w-full bg-transparent border-none px-5 py-3.5 text-sm focus:bg-white dark:focus:bg-slate-800 focus:outline-none transition-colors text-slate-800 dark:text-slate-200 disabled:cursor-default" 
                       />
                     </td>
                     <td className="p-0">
@@ -1121,69 +1239,6 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                         />
                       )}
                     </td>
-                    <td className="p-0">
-                      {!showPlacaLacre ? (
-                        <div className="px-5 py-3.5 text-slate-400 dark:text-slate-600 text-sm">---</div>
-                      ) : (
-                        <input 
-                          type="text"
-                          value={row.placa ?? ''}
-                          disabled={!isEditable}
-                          maxLength={8}
-                          onChange={(e) => {
-                            const raw = e.target.value.toUpperCase().replace(/-/g, '');
-                            const formatted = raw.length > 3 ? raw.slice(0, 3) + '-' + raw.slice(3) : raw;
-                            updateRow(idx, 'placa', formatted);
-                          }}
-                          placeholder="ABC-1234"
-                          className={cn(
-                            "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors uppercase",
-                            !isEditable 
-                              ? "text-slate-800 dark:text-slate-200 cursor-default" 
-                              : "text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/20 group-hover:text-slate-900 dark:group-hover:text-white cursor-text"
-                          )}
-                        />
-                      )}
-                    </td>
-                    <td className="p-0">
-                      {!showContainer ? (
-                        <div className="px-5 py-3.5 text-slate-400 dark:text-slate-600 text-sm">---</div>
-                      ) : (
-                        <input 
-                          type="text"
-                          value={row.container ?? ''}
-                          disabled={!isEditable}
-                          onChange={(e) => updateRow(idx, 'container', e.target.value.toUpperCase())}
-                          placeholder="---"
-                          className={cn(
-                            "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors uppercase",
-                            !isEditable 
-                              ? "text-slate-800 dark:text-slate-200 cursor-default" 
-                              : "text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/20 group-hover:text-slate-900 dark:group-hover:text-white cursor-text"
-                          )}
-                        />
-                      )}
-                    </td>
-                    <td className="p-0">
-                      {!showPlacaLacre ? (
-                        <div className="px-5 py-3.5 text-slate-400 dark:text-slate-600 text-sm">---</div>
-                      ) : (
-                        <input 
-                          type="text"
-                          value={row.lacre ?? ''}
-                          disabled={!isEditable}
-                          onChange={(e) => updateRow(idx, 'lacre', e.target.value.toUpperCase())}
-                          placeholder="---"
-                          className={cn(
-                            "w-full bg-transparent border-none px-5 py-3.5 text-sm font-normal tracking-tight focus:outline-none transition-colors uppercase",
-                            !isEditable 
-                              ? "text-slate-800 dark:text-slate-200 cursor-default" 
-                              : "text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500/20 group-hover:text-slate-900 dark:group-hover:text-white cursor-text"
-                          )}
-                        />
-                      )}
-                    </td>
-
                     <td className="p-0 text-center">
                       <div className="flex items-center justify-center gap-1 px-2">
                         <button 
