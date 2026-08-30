@@ -231,24 +231,32 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
 
         const headers = Object.keys(rows[0] || {});
 
+        const normalize = (s: string) =>
+          s.trim().toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos: código → codigo, nº → no
+            .replace(/[º°]/g, 'o')                            // ordinal/grau → o
+            .replace(/\s+/g, ' ');                            // espaços múltiplos → um
+
         const getIndex = (aliases: string[]): string | undefined => {
+          // 1ª passagem: match exato (normalizado)
           for (const alias of aliases) {
-            const match = headers.find(h => h.trim().toLowerCase() === alias.toLowerCase());
+            const match = headers.find(h => normalize(h) === normalize(alias));
             if (match) return match;
           }
+          // 2ª passagem: substring (normalizado)
           for (const alias of aliases) {
-            const match = headers.find(h => h.trim().toLowerCase().includes(alias.toLowerCase()));
+            const match = headers.find(h => normalize(h).includes(normalize(alias)));
             if (match) return match;
           }
           return undefined;
         };
 
-        const keyData = getIndex(['data chegada', 'entrega', 'data entrega', 'data de chegada', 'data de entrega', 'data', 'recebimento']);
-        const keyTransp = getIndex(['transportadora', 'transportador', 'transp', 'transportadora/veiculo']);
-        const keyCodigo = getIndex(['código', 'codigo', 'cod', 'sku', 'produto', 'código do produto', 'codigo do produto']);
+        const keyData   = getIndex(['data chegada', 'entrega', 'data entrega', 'data de chegada', 'data de entrega', 'data chegada ou entrega', 'data']);
+        const keyTransp = getIndex(['transportadora', 'transportador', 'transp']);
+        const keyCodigo = getIndex(['codigo', 'sku', 'cod', 'produto']);
         const keyAvaria = getIndex(['avaria', 'avarias', 'qtd avaria', 'qtd avarias', 'quantidade avaria', 'quantidade avarias', 'quantidade']);
-        const keyLacre = getIndex(['nº lacre', 'no lacre', 'lacre', 'lacre container', 'numero lacre', 'numero do lacre', 'n lacre']);
-        const keyPlaca = getIndex(['placa', 'placa veiculo', 'placa do veiculo']);
+        const keyLacre  = getIndex(['no lacre', 'lacre', 'numero lacre', 'n lacre', 'num lacre']);
+        const keyPlaca  = getIndex(['placa']);
 
         if (!keyCodigo || !keyAvaria) {
           showToast('Colunas obrigatórias não encontradas. Certifique-se de incluir CÓDIGO e AVARIA.', 'error');
