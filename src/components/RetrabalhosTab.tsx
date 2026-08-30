@@ -97,6 +97,8 @@ interface RetrabalhoRecord {
   cliente?: string
   unidade?: string
   situacao?: string | null
+  situacao_a501?: string | null
+  situacao_g501?: string | null
   Sistema?: boolean
   enviado_ao_cd?: string | null
   enviado_ao_conserto?: string | null
@@ -283,6 +285,105 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
     type: 'success'
   })
 
+  const importConfirmadosRef = useRef<HTMLInputElement>(null)
+
+  const handleImportConfirmados = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const XLSX = await import('xlsx')
+    const reader = new FileReader()
+    reader.onload = async (evt) => {
+      try {
+        const data = evt.target?.result
+        const wb = XLSX.read(data, { type: 'binary' })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        const rows = XLSX.utils.sheet_to_json<any>(ws, { raw: false })
+
+        if (rows.length === 0) { alert('Planilha vazia.'); return }
+
+        const headers = Object.keys(rows[0] || {})
+        const norm = (s: string) => s.trim().toLowerCase()
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .replace(/[º°]/g, 'o').replace(/\s+/g, ' ')
+
+        const findCol = (aliases: string[]) => {
+          for (const a of aliases) {
+            const m = headers.find(h => norm(h) === norm(a)); if (m) return m
+          }
+          for (const a of aliases) {
+            const m = headers.find(h => norm(h).includes(norm(a))); if (m) return m
+          }
+          return undefined
+        }
+
+        const colA = findCol(['a501', 'reserva a', 'reserva a501', 'nr a', 'numero a'])
+        const colG = findCol(['g501', 'reserva g', 'reserva g501', 'nr g', 'numero g'])
+
+        if (!colA && !colG) {
+          alert('Nenhuma coluna A501 ou G501 encontrada na planilha.')
+          return
+        }
+
+        let confirmadosA = 0, confirmadosG = 0, registrosCriados = 0
+        const today = new Date().toISOString().slice(0, 10)
+
+        for (const row of rows) {
+          const valA = colA ? String(row[colA] || '').trim().toUpperCase() : ''
+          const valG = colG ? String(row[colG] || '').trim().toUpperCase() : ''
+
+          // Busca registros que batem
+          const matchA = valA ? records.find(r => (r.reserva_a501 || '').trim().toUpperCase() === valA) : null
+          const matchG = valG ? records.find(r => (r.reserva_g501 || '').trim().toUpperCase() === valG) : null
+
+          // Atualiza A501
+          if (matchA && matchA.situacao_a501 !== 'CONFIRMADO') {
+            await supabase.from('retrabalhos').update({ situacao_a501: 'CONFIRMADO' }).eq('id', matchA.id)
+            setRecords(prev => prev.map(r => r.id === matchA.id ? { ...r, situacao_a501: 'CONFIRMADO' } : r))
+            confirmadosA++
+          }
+
+          // Atualiza G501
+          if (matchG && matchG.situacao_g501 !== 'CONFIRMADO') {
+            await supabase.from('retrabalhos').update({ situacao_g501: 'CONFIRMADO' }).eq('id', matchG.id)
+            setRecords(prev => prev.map(r => r.id === matchG.id ? { ...r, situacao_g501: 'CONFIRMADO' } : r))
+            confirmadosG++
+          }
+
+          // Cria Registro em Monitoramento quando os dois do mesmo item são confirmados
+          const targetRecord = matchA ?? matchG
+          if (targetRecord) {
+            const aConfirmed = (matchA?.id === targetRecord.id && matchA.situacao_a501 !== 'CONFIRMADO') || targetRecord.situacao_a501 === 'CONFIRMADO'
+            const gConfirmed = (matchG?.id === targetRecord.id && matchG.situacao_g501 !== 'CONFIRMADO') || targetRecord.situacao_g501 === 'CONFIRMADO'
+            const willBothConfirmed =
+              (valA && matchA?.id === targetRecord.id ? true : aConfirmed) &&
+              (valG && matchG?.id === targetRecord.id ? true : gConfirmed)
+
+            if (willBothConfirmed) {
+              const { error } = await supabase.from('Registros').insert({
+                Data: today,
+                Produto: targetRecord.codigo || '',
+                'Saída': targetRecord.quantidade_enviada || 0,
+                Entrada: null,
+                Origem: 'Retrabalho',
+                tipo_avaria: 'Sem Avaria',
+                turno: 1,
+                Observação: `Confirmado via importação — Lote ${targetRecord.lote}`,
+              })
+              if (!error) registrosCriados++
+            }
+          }
+        }
+
+        alert(`✅ Importação concluída!\nA501 confirmados: ${confirmadosA}\nG501 confirmados: ${confirmadosG}\nRegistros criados em Monitoramento: ${registrosCriados}`)
+      } catch (err: any) {
+        alert('Erro ao processar planilha: ' + err.message)
+      }
+    }
+    reader.readAsBinaryString(file)
+    e.target.value = ''
+  }
+
   const handleDeleteReserva = async (id: number, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (!confirm("Tem certeza que deseja excluir esta reserva?")) return;
@@ -360,9 +461,9 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
           reserva_a501: item.reserva_a501,
           reserva_g501: item.reserva_g501,
           quantidade_enviada: Number(item.quantidade_enviada) || 0,
-          estorno_a501: item.estorno_a501,
-          estorno_g501: item.estorno_g501,
           quantidade_retornada: Number(item.quantidade_retornada) || 0,
+          situacao_a501: item.situacao_a501 ?? 'PENDENTE',
+          situacao_g501: item.situacao_g501 ?? 'PENDENTE',
           situacao: item.situacao,
         }).eq('id', item.id)
       ));
@@ -1489,6 +1590,22 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                     </>
                   )}
 
+                  <input
+                    type="file"
+                    ref={importConfirmadosRef}
+                    onChange={handleImportConfirmados}
+                    accept=".xlsx,.xls,.csv"
+                    className="hidden"
+                  />
+                  <button
+                    onClick={() => importConfirmadosRef.current?.click()}
+                    className="flex items-center gap-3 px-6 py-3.5 rounded-xl bg-emerald-600/20 border border-emerald-500/30 hover:bg-emerald-600/30 text-emerald-400 text-[11px] font-semibold uppercase tracking-widest transition-all active:scale-95"
+                    title="Importar planilha de reservas confirmadas"
+                  >
+                    <FileText size={14} />
+                    Importar Confirmados
+                  </button>
+
                   <button 
                     onClick={() => handleExportLoteExcel(selectedLoteDetail)}
                     className="flex items-center gap-3 px-6 py-3.5 rounded-xl bg-blue-600/20 border border-blue-500/30 hover:bg-blue-600/30 text-blue-400 text-[11px] font-semibold uppercase tracking-widest transition-all active:scale-95"
@@ -2537,11 +2654,9 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                               <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider border-r border-b border-slate-700/60">Reserva A</th>
                               <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider border-r border-b border-slate-700/60">Reserva G</th>
                               <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider text-center border-r border-b border-slate-700/60">Volume</th>
-                              <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider text-center border-r border-b border-slate-700/60">Criado Em</th>
-                              <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider border-r border-b border-slate-700/60">Estorno A</th>
-                              <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider border-r border-b border-slate-700/60">Estorno G</th>
+                              <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider text-center border-r border-b border-slate-700/60">Sit. A</th>
+                              <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider text-center border-r border-b border-slate-700/60">Sit. G</th>
                               <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider text-center border-r border-b border-slate-700/60">Retornado</th>
-                              <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider border-r border-b border-slate-700/60">Situação</th>
                               <th className="w-9 border-b border-slate-700/60"></th>
                             </tr>
                           </thead>
@@ -2606,43 +2721,27 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                     className="w-full h-full px-2 py-2 bg-transparent text-[11px] font-mono font-bold text-white text-center focus:outline-none focus:bg-blue-500/10 transition-colors no-spinner" 
                                   />
                                 </td>
-                                {/* Criado Em */}
-                                <td className="p-0 border-r border-slate-700/40">
-                                  <input 
-                                    type="date" 
-                                    value={item.enviado_ao_cd || ""} 
-                                    onChange={e => updateLocalViagemItem(item.id, "enviado_ao_cd", e.target.value)} 
-                                    onBlur={e => { updateReservaField(item.id, "enviado_ao_cd", e.target.value || null); saveReservaFieldToDb(item.id, "enviado_ao_cd", e.target.value || null); }}
-                                    onClick={e => e.stopPropagation()}
-                                    className="w-full h-full px-2 py-2 bg-transparent text-[10px] font-mono text-blue-400 focus:outline-none focus:bg-blue-500/10 transition-colors text-center [color-scheme:dark]" 
-                                  />
+                                {/* Sit. A */}
+                                <td className="px-2 py-1 text-center border-r border-slate-700/40" onClick={e => e.stopPropagation()}>
+                                  <span className={cn(
+                                    "inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider",
+                                    item.situacao_a501 === 'CONFIRMADO'
+                                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                      : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                                  )}>
+                                    {item.situacao_a501 === 'CONFIRMADO' ? 'CONFIRMADO' : 'PENDENTE'}
+                                  </span>
                                 </td>
-                            
-                                {/* Estorno A */}
-                                <td className="p-0 border-r border-slate-700/40">
-                                  <input 
-                                    type="text" 
-                                    value={item.estorno_a501 || ""} 
-                                    onChange={e => updateLocalViagemItem(item.id, "estorno_a501", e.target.value)} 
-                                    onBlur={e => { updateReservaField(item.id, "estorno_a501", e.target.value); saveReservaFieldToDb(item.id, "estorno_a501", e.target.value); }}
-                                    onPaste={e => handleViagemPaste(e, idx, "estorno_a501")}
-                                    onClick={e => e.stopPropagation()}
-                                    placeholder="Est. A..." 
-                                    className="w-full h-full px-3 py-2 bg-transparent text-[11px] font-mono text-blue-300 focus:outline-none focus:bg-blue-500/10 transition-colors" 
-                                  />
-                                </td>
-                                {/* Estorno G */}
-                                <td className="p-0 border-r border-slate-700/40">
-                                  <input 
-                                    type="text" 
-                                    value={item.estorno_g501 || ""} 
-                                    onChange={e => updateLocalViagemItem(item.id, "estorno_g501", e.target.value)} 
-                                    onBlur={e => { updateReservaField(item.id, "estorno_g501", e.target.value); saveReservaFieldToDb(item.id, "estorno_g501", e.target.value); }}
-                                    onPaste={e => handleViagemPaste(e, idx, "estorno_g501")}
-                                    onClick={e => e.stopPropagation()}
-                                    placeholder="Est. G..." 
-                                    className="w-full h-full px-3 py-2 bg-transparent text-[11px] font-mono text-blue-300 focus:outline-none focus:bg-blue-500/10 transition-colors" 
-                                  />
+                                {/* Sit. G */}
+                                <td className="px-2 py-1 text-center border-r border-slate-700/40" onClick={e => e.stopPropagation()}>
+                                  <span className={cn(
+                                    "inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider",
+                                    item.situacao_g501 === 'CONFIRMADO'
+                                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                      : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                                  )}>
+                                    {item.situacao_g501 === 'CONFIRMADO' ? 'CONFIRMADO' : 'PENDENTE'}
+                                  </span>
                                 </td>
                                 {/* Retornado */}
                                 <td className="p-0 border-r border-slate-700/40">
@@ -2655,17 +2754,6 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                     onClick={e => e.stopPropagation()}
                                     className="w-full h-full px-2 py-2 bg-transparent text-[11px] font-mono font-bold text-emerald-400 text-center focus:outline-none focus:bg-emerald-500/10 transition-colors no-spinner" 
                                   />
-                                </td>
-                                {/* Situação */}
-                                <td className="p-0 border-r border-slate-700/40">
-                                  <select 
-                                    value={item.situacao || 'Em preparação'} 
-                                    onChange={e => { updateLocalViagemItem(item.id, "situacao", e.target.value); updateReservaField(item.id, "situacao", e.target.value); saveReservaFieldToDb(item.id, "situacao", e.target.value); }} 
-                                    onClick={e => e.stopPropagation()}
-                                    className="w-full h-full px-2 py-2 bg-transparent text-[11px] text-slate-200 focus:outline-none focus:bg-blue-500/10 transition-colors cursor-pointer border-none"
-                                  >
-                                    {SITUACAO_OPTIONS.map(o => <option key={o.value} value={o.value} className="bg-slate-900 text-white">{o.value}</option>)}
-                                  </select>
                                 </td>
                                 {/* Excluir */}
                                 <td className="px-1 py-0 text-center" onClick={(e) => e.stopPropagation()}>
