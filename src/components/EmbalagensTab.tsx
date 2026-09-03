@@ -1655,7 +1655,7 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
   const solicArcs = buildGappedArcs(solicSegments, solicTotal)
 
   return (
-    <div className={cn("flex flex-col h-full space-y-6 pb-12 text-slate-200 font-sans mx-auto w-full", subTab === "comparativo" && "max-w-7xl")}>
+    <div className="flex flex-col h-full space-y-6 pb-12 text-slate-200 font-sans mx-auto w-full max-w-7xl">
 
       {/* ─── HEADER ─── */}
       <div className="flex items-center justify-between gap-4">

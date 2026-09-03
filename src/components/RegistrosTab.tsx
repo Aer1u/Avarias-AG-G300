@@ -195,6 +195,15 @@ const Toast: React.FC<ToastState & { onClose: () => void }> = ({ show, message, 
   );
 };
 
+interface ImportRecebimentoRow {
+  data: string;
+  codigo: string;
+  avaria: string;
+  transportadora: string;
+  lacre: string;
+  placa: string;
+}
+
 const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -205,13 +214,25 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
   const [toast, setToast] = useState<ToastState>({ show: false, message: '', type: 'info' });
   const [obsModalTarget, setObsModalTarget] = useState<{ index: number, isNew: boolean, value: string } | null>(null);
 
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importModalRows, setImportModalRows] = useState<ImportRecebimentoRow[]>(
+    Array.from({ length: 15 }, () => ({
+      data: '',
+      codigo: '',
+      avaria: '',
+      transportadora: '',
+      lacre: '',
+      placa: ''
+    }))
+  );
+
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToast({ show: true, message, type });
   };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleExcelFileToModal = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -233,17 +254,15 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
 
         const normalize = (s: string) =>
           s.trim().toLowerCase()
-            .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos: código → codigo, nº → no
-            .replace(/[º°]/g, 'o')                            // ordinal/grau → o
-            .replace(/\s+/g, ' ');                            // espaços múltiplos → um
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/[º°]/g, 'o')
+            .replace(/\s+/g, ' ');
 
         const getIndex = (aliases: string[]): string | undefined => {
-          // 1ª passagem: match exato (normalizado)
           for (const alias of aliases) {
             const match = headers.find(h => normalize(h) === normalize(alias));
             if (match) return match;
           }
-          // 2ª passagem: substring (normalizado)
           for (const alias of aliases) {
             const match = headers.find(h => normalize(h).includes(normalize(alias)));
             if (match) return match;
@@ -251,78 +270,33 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
           return undefined;
         };
 
-        const keyData   = getIndex(['data chegada', 'entrega', 'data entrega', 'data de chegada', 'data de entrega', 'data chegada ou entrega', 'data']);
+        const keyData   = getIndex(['data chegada', 'entrega', 'data entrega', 'data de chegada', 'data de entrega', 'data']);
         const keyTransp = getIndex(['transportadora', 'transportador', 'transp']);
         const keyCodigo = getIndex(['codigo', 'sku', 'cod', 'produto']);
-        const keyAvaria = getIndex(['avaria', 'avarias', 'qtd avaria', 'qtd avarias', 'quantidade avaria', 'quantidade avarias', 'quantidade']);
-        const keyLacre  = getIndex(['no lacre', 'lacre', 'numero lacre', 'n lacre', 'num lacre']);
+        const keyAvaria = getIndex(['avaria', 'avarias', 'qtd avaria', 'quantidade']);
+        const keyLacre  = getIndex(['no lacre', 'lacre', 'numero lacre', 'n lacre']);
         const keyPlaca  = getIndex(['placa']);
 
-        if (!keyCodigo || !keyAvaria) {
-          showToast('Colunas obrigatórias não encontradas. Certifique-se de incluir CÓDIGO e AVARIA.', 'error');
+        const parsedRows: ImportRecebimentoRow[] = rows.map(r => ({
+          data: keyData && r[keyData] ? String(r[keyData]) : '',
+          codigo: keyCodigo && r[keyCodigo] ? String(r[keyCodigo]).trim() : '',
+          avaria: keyAvaria && r[keyAvaria] ? String(r[keyAvaria]).trim() : '',
+          transportadora: keyTransp && r[keyTransp] ? String(r[keyTransp]).trim() : '',
+          lacre: keyLacre && r[keyLacre] ? String(r[keyLacre]).trim() : '',
+          placa: keyPlaca && r[keyPlaca] ? String(r[keyPlaca]).trim() : '',
+        })).filter(r => r.codigo || r.avaria);
+
+        if (parsedRows.length === 0) {
+          showToast('Nenhum recebimento válido encontrado na planilha.', 'error');
           return;
         }
 
-        const parseBrDateToIso = (s: string): string => {
-          if (!s) return format(new Date(), 'yyyy-MM-dd');
-          const str = String(s).trim();
-          if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
-          
-          const parts = str.split(/[\/\-\.]/).filter(Boolean);
-          if (parts.length === 3) {
-            let [d, m, y] = parts;
-            if (y.length === 2) y = `20${y}`;
-            const yyyy = parseInt(y, 10);
-            const mm = parseInt(m, 10);
-            const dd = parseInt(d, 10);
-            if (yyyy >= 2000 && yyyy <= 2100 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
-              return `${yyyy}-${mm.toString().padStart(2, '0')}-${dd.toString().padStart(2, '0')}`;
-            }
-          }
-          const excelDate = Number(str);
-          if (!isNaN(excelDate) && excelDate > 30000 && excelDate < 60000) {
-            const date = new Date((excelDate - 25569) * 86400 * 1000);
-            return format(date, 'yyyy-MM-dd');
-          }
-          return format(new Date(), 'yyyy-MM-dd');
-        };
-
-        const newRows: Registro[] = rows.map(r => {
-          const rawAvaria = String(r[keyAvaria] || '0').replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
-          const parsedAvaria = Math.round(Number(rawAvaria) || 0);
-
-          const rawDate = keyData ? (r[keyData] ? String(r[keyData]) : '') : '';
-          const finalDate = parseBrDateToIso(rawDate);
-
-          const rawPlaca = keyPlaca && r[keyPlaca] ? String(r[keyPlaca]).toUpperCase().replace(/-/g, '') : '';
-          const formattedPlaca = rawPlaca.length > 3 ? rawPlaca.slice(0, 3) + '-' + rawPlaca.slice(3, 7) : rawPlaca;
-
-          return {
-            Data: finalDate,
-            Produto: keyCodigo ? String(r[keyCodigo] || '').trim() : '',
-            Entrada: parsedAvaria > 0 ? parsedAvaria : null,
-            Saída: null,
-            Origem: 'Recebimento',
-            Observação: 'Importado via planilha de Recebimentos',
-            transportadora: keyTransp ? String(r[keyTransp] || '').trim().toUpperCase() : '',
-            lacre: keyLacre ? String(r[keyLacre] || '').trim().toUpperCase() : '',
-            placa: formattedPlaca,
-            tipo_avaria: 'Sem Avaria',
-            turno: 1,
-            'Movimentação Sistema': false,
-            Molhado: false,
-            isNew: true,
-            isDirty: true
-          };
-        }).filter(item => item.Produto && (item.Entrada && item.Entrada > 0));
-
-        if (newRows.length === 0) {
-          showToast('Nenhum recebimento válido com quantidade de avaria > 0 foi encontrado.', 'info');
-          return;
+        while (parsedRows.length < 15) {
+          parsedRows.push({ data: '', codigo: '', avaria: '', transportadora: '', lacre: '', placa: '' });
         }
 
-        setRegistros(prev => [...newRows, ...prev]);
-        showToast(`${newRows.length} recebimentos importados com sucesso! Revise e clique em Salvar.`, 'success');
+        setImportModalRows(parsedRows);
+        showToast(`${parsedRows.filter(r => r.codigo).length} linhas carregadas na tabela do modal.`, 'success');
       } catch (err) {
         console.error('Erro ao ler Excel:', err);
         showToast('Erro ao processar planilha do Excel.', 'error');
@@ -331,6 +305,79 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
 
     reader.readAsBinaryString(file);
     e.target.value = '';
+  };
+
+  const parseBrDateToIso = (s?: string): string => {
+    if (!s || !s.trim()) return format(new Date(), 'yyyy-MM-dd');
+    const str = String(s).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+    
+    const parts = str.split(/[\/\-\.]/).filter(Boolean);
+    if (parts.length === 3) {
+      let [d, m, y] = parts;
+      if (y.length === 2) y = `20${y}`;
+      const yyyy = parseInt(y, 10);
+      const mm = parseInt(m, 10);
+      const dd = parseInt(d, 10);
+      if (yyyy >= 2000 && yyyy <= 2100 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+        return `${yyyy}-${mm.toString().padStart(2, '0')}-${dd.toString().padStart(2, '0')}`;
+      }
+    }
+    const excelDate = Number(str);
+    if (!isNaN(excelDate) && excelDate > 30000 && excelDate < 60000) {
+      const date = new Date((excelDate - 25569) * 86400 * 1000);
+      return format(date, 'yyyy-MM-dd');
+    }
+    return format(new Date(), 'yyyy-MM-dd');
+  };
+
+  const handleProcessImportModal = () => {
+    const validRows = importModalRows.filter(r => r.codigo.trim() && (Number(r.avaria.replace(/\D/g, '')) > 0 || Number(r.avaria) > 0));
+
+    if (validRows.length === 0) {
+      showToast('Insira pelo menos um produto com quantidade de avaria > 0.', 'error');
+      return;
+    }
+
+    const newRows: Registro[] = validRows.map(r => {
+      const rawAvaria = String(r.avaria || '0').replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+      const parsedAvaria = Math.round(Number(rawAvaria) || 0);
+
+      const finalDate = parseBrDateToIso(r.data);
+
+      const rawPlaca = r.placa ? String(r.placa).toUpperCase().replace(/-/g, '') : '';
+      const formattedPlaca = rawPlaca.length > 3 ? rawPlaca.slice(0, 3) + '-' + rawPlaca.slice(3, 7) : rawPlaca;
+
+      return {
+        Data: finalDate,
+        Produto: String(r.codigo || '').trim().toUpperCase(),
+        Entrada: parsedAvaria > 0 ? parsedAvaria : null,
+        Saída: null,
+        Origem: 'Recebimento',
+        Observação: 'Importado via tabela de Recebimentos',
+        transportadora: r.transportadora ? String(r.transportadora).trim().toUpperCase() : '',
+        lacre: r.lacre ? String(r.lacre).trim().toUpperCase() : '',
+        placa: formattedPlaca,
+        tipo_avaria: 'Sem Avaria',
+        turno: 1,
+        'Movimentação Sistema': false,
+        Molhado: false,
+        isNew: true,
+        isDirty: true
+      };
+    });
+
+    setRegistros(prev => [...newRows, ...prev]);
+    setIsImportModalOpen(false);
+    setImportModalRows(Array.from({ length: 15 }, () => ({
+      data: '',
+      codigo: '',
+      avaria: '',
+      transportadora: '',
+      lacre: '',
+      placa: ''
+    })));
+    showToast(`✅ ${newRows.length} recebimentos importados! Revise na tabela e clique em Salvar.`, 'success');
   };
 
   // Row Editing State
@@ -851,15 +898,8 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
 
           {viewMode === 'geral' && (
             <>
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                onChange={handleImportExcel} 
-                accept=".xlsx,.xls,.csv" 
-                className="hidden" 
-              />
               <button 
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => setIsImportModalOpen(true)}
                 className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all active:scale-95 cursor-pointer"
               >
                 <FileText size={18} />
@@ -1419,6 +1459,224 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                       Salvar Observação
                     </button>
                   )}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal de Importar Recebimentos (Copiar e Colar) */}
+      <AnimatePresence>
+        {isImportModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#0B1120] border border-white/10 rounded-2xl max-w-5xl w-full p-6 shadow-2xl space-y-4 text-slate-200"
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between border-b border-white/[0.06] pb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400">
+                    <FileText size={18} />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-semibold text-white tracking-tight">Importar Recebimentos</h2>
+                    <p className="text-[11px] text-slate-400">Copie e cole colunas do Excel ou digite diretamente na tabela abaixo.</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsImportModalOpen(false)}
+                  className="w-8 h-8 rounded-lg bg-white/[0.04] border border-white/10 flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Action Controls Bar */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setImportModalRows(prev => [
+                      ...prev,
+                      ...Array.from({ length: 5 }, () => ({ data: '', codigo: '', avaria: '', transportadora: '', lacre: '', placa: '' }))
+                    ])}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-[11px] font-semibold text-slate-300 transition-colors cursor-pointer"
+                  >
+                    <Plus size={13} /> +5 Linhas
+                  </button>
+
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleExcelFileToModal}
+                    accept=".xlsx,.xls,.csv"
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-[11px] font-semibold text-blue-400 transition-colors cursor-pointer"
+                  >
+                    <FileText size={13} /> Carregar Arquivo Excel
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setImportModalRows(Array.from({ length: 15 }, () => ({ data: '', codigo: '', avaria: '', transportadora: '', lacre: '', placa: '' })))}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-rose-400/80 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                >
+                  <Trash2 size={13} /> Limpar Tabela
+                </button>
+              </div>
+
+              {/* Table Container */}
+              <div className="border border-white/[0.06] rounded-xl overflow-hidden bg-[#0B1120]">
+                {/* Table Header */}
+                <div className="grid grid-cols-[36px_1.1fr_1.3fr_0.9fr_1.2fr_1fr_1fr] border-b border-white/[0.06] bg-white/[0.02] text-[9.5px] font-semibold text-slate-400 uppercase tracking-widest">
+                  <div className="px-2 py-2 text-center border-r border-white/[0.06]">#</div>
+                  <div className="px-3 py-2 border-r border-white/[0.06]">Data</div>
+                  <div className="px-3 py-2 border-r border-white/[0.06]">Código (SKU) *</div>
+                  <div className="px-3 py-2 border-r border-white/[0.06] text-center">Qtd Avaria *</div>
+                  <div className="px-3 py-2 border-r border-white/[0.06]">Transportadora</div>
+                  <div className="px-3 py-2 border-r border-white/[0.06]">Nº Lacre</div>
+                  <div className="px-3 py-2">Placa</div>
+                </div>
+
+                {/* Table Body */}
+                <div className="max-h-[50vh] overflow-y-auto custom-scrollbar divide-y divide-white/[0.03]">
+                  {importModalRows.map((row, rIdx) => {
+                    const handleSmartPaste = (e: React.ClipboardEvent<HTMLInputElement>, startColIdx: number) => {
+                      const text = e.clipboardData.getData('text');
+                      const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+                      const isTSV = lines.some(l => l.includes('\t'));
+                      const isCSV = !isTSV && lines.some(l => l.includes(';'));
+                      const isMultiCol = isTSV || isCSV;
+                      
+                      if (!isMultiCol && lines.length === 1) return;
+                      
+                      e.preventDefault();
+                      const sep = isTSV ? '\t' : (isCSV ? ';' : '\t');
+                      const cols: (keyof ImportRecebimentoRow)[] = ['data', 'codigo', 'avaria', 'transportadora', 'lacre', 'placa'];
+                      
+                      const newRows = [...importModalRows];
+                      lines.forEach((line, lineOffset) => {
+                        const cells = line.split(sep).map(c => c.trim());
+                        const targetRowIdx = rIdx + lineOffset;
+                        while (newRows.length <= targetRowIdx) {
+                          newRows.push({ data: '', codigo: '', avaria: '', transportadora: '', lacre: '', placa: '' });
+                        }
+                        cells.forEach((val, colOffset) => {
+                          const targetColIdx = startColIdx + colOffset;
+                          if (targetColIdx < cols.length) {
+                            newRows[targetRowIdx][cols[targetColIdx]] = val;
+                          }
+                        });
+                      });
+                      setImportModalRows(newRows);
+                    };
+
+                    const updateRowField = (field: keyof ImportRecebimentoRow, val: string) => {
+                      const updated = [...importModalRows];
+                      updated[rIdx][field] = val;
+                      setImportModalRows(updated);
+                    };
+
+                    return (
+                      <div key={rIdx} className="grid grid-cols-[36px_1.1fr_1.3fr_0.9fr_1.2fr_1fr_1fr] hover:bg-white/[0.015] transition-colors items-center">
+                        <div className="flex items-center justify-center border-r border-white/[0.06] text-[10px] font-mono text-slate-600 py-1.5">{rIdx + 1}</div>
+                        <div className="border-r border-white/[0.06]">
+                          <input
+                            type="text"
+                            value={row.data}
+                            onChange={e => updateRowField('data', e.target.value)}
+                            onPaste={e => handleSmartPaste(e, 0)}
+                            placeholder="AAAA-MM-DD"
+                            className="w-full bg-transparent px-3 py-1.5 text-[11px] font-mono text-slate-200 focus:bg-white/[0.04] focus:outline-none"
+                          />
+                        </div>
+                        <div className="border-r border-white/[0.06]">
+                          <input
+                            type="text"
+                            value={row.codigo}
+                            onChange={e => updateRowField('codigo', e.target.value)}
+                            onPaste={e => handleSmartPaste(e, 1)}
+                            placeholder="SKU..."
+                            className="w-full bg-transparent px-3 py-1.5 text-[11px] font-mono text-white font-medium focus:bg-white/[0.04] focus:outline-none uppercase"
+                          />
+                        </div>
+                        <div className="border-r border-white/[0.06]">
+                          <input
+                            type="text"
+                            value={row.avaria}
+                            onChange={e => updateRowField('avaria', e.target.value)}
+                            onPaste={e => handleSmartPaste(e, 2)}
+                            placeholder="0"
+                            className="w-full bg-transparent px-3 py-1.5 text-[11px] font-mono text-center text-emerald-400 focus:bg-white/[0.04] focus:outline-none"
+                          />
+                        </div>
+                        <div className="border-r border-white/[0.06]">
+                          <input
+                            type="text"
+                            value={row.transportadora}
+                            onChange={e => updateRowField('transportadora', e.target.value)}
+                            onPaste={e => handleSmartPaste(e, 3)}
+                            placeholder="Transp..."
+                            className="w-full bg-transparent px-3 py-1.5 text-[11px] text-slate-300 focus:bg-white/[0.04] focus:outline-none uppercase"
+                          />
+                        </div>
+                        <div className="border-r border-white/[0.06]">
+                          <input
+                            type="text"
+                            value={row.lacre}
+                            onChange={e => updateRowField('lacre', e.target.value)}
+                            onPaste={e => handleSmartPaste(e, 4)}
+                            placeholder="Lacre..."
+                            className="w-full bg-transparent px-3 py-1.5 text-[11px] font-mono text-slate-300 focus:bg-white/[0.04] focus:outline-none uppercase"
+                          />
+                        </div>
+                        <div>
+                          <input
+                            type="text"
+                            value={row.placa}
+                            onChange={e => updateRowField('placa', e.target.value)}
+                            onPaste={e => handleSmartPaste(e, 5)}
+                            placeholder="ABC-1234"
+                            className="w-full bg-transparent px-3 py-1.5 text-[11px] font-mono text-slate-300 focus:bg-white/[0.04] focus:outline-none uppercase"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex items-center justify-between pt-2 border-t border-white/[0.06]">
+                <span className="text-[11px] text-slate-500 font-mono">
+                  {importModalRows.filter(r => r.codigo.trim() && (Number(r.avaria.replace(/\D/g, '')) > 0 || Number(r.avaria) > 0)).length} linhas válidas prontas para importar
+                </span>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsImportModalOpen(false)}
+                    className="px-4 py-2 rounded-xl border border-white/10 text-slate-400 hover:text-white hover:bg-white/[0.05] text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleProcessImportModal}
+                    className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-wider shadow-lg shadow-blue-600/20 transition-all active:scale-95 cursor-pointer"
+                  >
+                    Importar Recebimentos
+                  </button>
                 </div>
               </div>
             </motion.div>
