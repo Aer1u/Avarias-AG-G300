@@ -159,11 +159,44 @@ export function DriveInGrid({
     
     setIsSubmitting(true)
     try {
-      // If we have multi-selection active and the starting addingCoords is part of it, 
-      // we apply the SAME addition to ALL selected slots.
       const targetKeys = selectedGaps.size > 0 && selectedGaps.has(`${addingCoords.lvl}-${addingCoords.d}`)
         ? Array.from(selectedGaps)
         : [`${addingCoords.lvl}-${addingCoords.d}`];
+
+      const targetCount = targetKeys.length;
+
+      // Validação estrita de saldo total necessário no Chão para cada SKU
+      const requiredTotalPerSku: Record<string, number> = {};
+
+      items.forEach(item => {
+        if (item.sku && typeof item.qty === 'number' && item.qty > 0) {
+          const sku = item.sku.trim().toUpperCase();
+          const totalForThisItem = item.qty * targetCount;
+          requiredTotalPerSku[sku] = (requiredTotalPerSku[sku] || 0) + totalForThisItem;
+        }
+      });
+
+      const floorStockErrors: string[] = [];
+      for (const [sku, totalReq] of Object.entries(requiredTotalPerSku)) {
+        const stockInfo = availableStocks.find(s => s.produto.toUpperCase() === sku);
+        const availableInFloor = stockInfo ? stockInfo.available : 0;
+
+        if (totalReq > availableInFloor) {
+          floorStockErrors.push(
+            `• ${sku}: necessário ${totalReq} un (${targetCount} células × ${totalReq / targetCount} un/célula), mas há apenas ${availableInFloor} un disponíveis no Chão.`
+          );
+        }
+      }
+
+      if (floorStockErrors.length > 0) {
+        alert(
+          `⚠️ Impeditivo de Mapeamento — Saldo Insuficiente no Chão:\n\n` +
+          floorStockErrors.join('\n') +
+          `\n\nPor favor, reduza a quantidade por célula ou desfaça a seleção em lote.`
+        );
+        setIsSubmitting(false);
+        return;
+      }
 
       const batchMixId = targetKeys.length > 1 ? await getNextPalletIdFromDB() : null;
       let mixIdCounter = 0;
@@ -406,6 +439,15 @@ export function DriveInGrid({
       const newQty = Number(editingProduct.quantidade) || 0;
       const originalProduct = products.find(p => String(p.id) === String(editingProduct.id));
       const originalQty = originalProduct ? (Number(originalProduct.quantidade) || 0) : newQty;
+      const diff = newQty - originalQty;
+
+      const floorStock = availableStocks.find(s => s.produto === editingProduct.sku)?.available || 0;
+
+      if (diff > floorStock) {
+        alert(`⚠️ Impeditivo: Saldo insuficiente no Chão para aumentar a quantidade em ${diff} un. Saldo disponível no Chão para o SKU ${editingProduct.sku}: ${floorStock} un.`);
+        setIsSubmitting(false);
+        return;
+      }
 
       setPendingChanges(prev => [...prev, {
         id: rowIdToUpdate,
@@ -415,16 +457,16 @@ export function DriveInGrid({
           'Quantidade': newQty,
           'Nível': parseFloat(String(editingProduct.nivel)),
           'Profundidade': editingProduct.profundidade,
-          'Parte Tombada': parseFloat(String(editingProduct.qtd_tombada)),
-          'Parte Molhada': parseFloat(String(editingProduct.qtd_molhado)),
+          'Parte Tombada': parseFloat(String(editingProduct.qtd_tombada || 0)),
+          'Parte Molhada': parseFloat(String(editingProduct.qtd_molhado || 0)),
           'Id Palete': editingProduct.id_palete,
           // Sync with page.tsx reactive keys
           sku: editingProduct.sku,
           quantidade_total: newQty,
           nivel: parseFloat(String(editingProduct.nivel)),
           profundidade: editingProduct.profundidade,
-          qtd_tombada: parseFloat(String(editingProduct.qtd_tombada)),
-          qtd_molhado: parseFloat(String(editingProduct.qtd_molhado)),
+          qtd_tombada: parseFloat(String(editingProduct.qtd_tombada || 0)),
+          qtd_molhado: parseFloat(String(editingProduct.qtd_molhado || 0)),
           nv: editingProduct.nivel,
           pr: editingProduct.profundidade
         },
@@ -1218,73 +1260,127 @@ export function DriveInGrid({
             ) : editingProduct ? (
               <form onSubmit={handleSaveEdit} className="space-y-4">
                 <div className="flex justify-between items-center mb-2">
-                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white dark:text-white uppercase leading-none">Editar Item</h3>
-                  <button type="button" onClick={() => setEditingProduct(null)} className="text-slate-400 hover:text-slate-900 dark:text-white dark:hover:text-white font-semibold text-[10px] uppercase">X Fechar</button>
+                  <div className="flex items-center gap-2">
+                    <Edit2 size={16} className="text-blue-500" />
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white uppercase leading-none">Editar Item de Posição</h3>
+                  </div>
+                  <button type="button" onClick={() => setEditingProduct(null)} className="text-slate-400 hover:text-slate-900 dark:hover:text-white font-semibold text-[10px] uppercase">X Fechar</button>
                 </div>
-                <div className="bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800 mb-4">
-                  <p className="text-xs font-semibold text-slate-500 uppercase">Item atual</p>
-                  <p className="font-bold text-slate-900 dark:text-white dark:text-white">{editingProduct.sku}</p>
-                </div>
-                <div className="space-y-3">
-                   <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-semibold text-slate-400 uppercase">Nível Anterior</label>
-                        <input type="text" value={editingProduct._original_nivel} disabled className="w-full text-sm bg-slate-100 dark:bg-slate-800/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 dark:border-slate-700 p-2 rounded-lg text-slate-500" />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-semibold text-slate-400 uppercase">Profundidade Anter.</label>
-                        <input type="text" value={editingProduct._original_profundidade} disabled className="w-full text-sm bg-slate-100 dark:bg-slate-800/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 dark:border-slate-700 p-2 rounded-lg text-slate-500" />
-                      </div>
-                    </div>
 
-                    <div className="space-y-1">
-                      <div className="flex justify-between items-center">
-                        <label className="text-[9px] font-semibold text-slate-400 uppercase">Quantidade Total *</label>
-                        {editingProduct && (
+                <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200/60 dark:border-slate-800 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase">Item Atual</p>
+                    <p className="font-bold text-slate-900 dark:text-white text-sm font-mono">{editingProduct.sku}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[9px] font-semibold uppercase tracking-widest text-slate-400 block">Posição Original</span>
+                    <span className="text-xs font-bold text-blue-600 dark:text-blue-400">N{editingProduct._original_nivel} · P{editingProduct._original_profundidade}</span>
+                  </div>
+                </div>
+
+                {(() => {
+                  const originalProduct = products.find(p => String(p.id) === String(editingProduct.id));
+                  const originalQty = originalProduct ? (Number(originalProduct.quantidade) || 0) : Number(editingProduct.quantidade) || 0;
+                  const floorStock = availableStocks.find(s => s.produto === editingProduct.sku)?.available || 0;
+                  const currentInputQty = Number(editingProduct.quantidade) || 0;
+                  const diff = currentInputQty - originalQty;
+                  const isOverFloor = diff > floorStock;
+
+                  return (
+                    <div className="space-y-3">
+                      {/* Qtd Total + Chão Badge */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center">
+                          <label className="text-[9px] font-semibold text-slate-400 uppercase">Quantidade Total *</label>
                           <span className={cn(
-                            "text-[9px] font-semibold uppercase tracking-widest px-1.5 py-0.5 rounded",
-                            (availableStocks.find(s => s.produto === editingProduct.sku)?.available || 0) > 0 
-                              ? "bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400" 
-                              : "bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:bg-slate-800"
+                            "text-[9px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded-full border",
+                            floorStock > 0 
+                              ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20" 
+                              : "bg-slate-500/10 text-slate-500 border-slate-500/20"
                           )}>
-                            Chão: {availableStocks.find(s => s.produto === editingProduct.sku)?.available || 0}
+                            Saldo no Chão: {floorStock} un
                           </span>
-                        )}
-                      </div>
-                      <input 
-                        type="number" 
-                        value={editingProduct.quantidade || ""} 
-                        onChange={e => setEditingProduct({...editingProduct, quantidade: Math.floor(Number(e.target.value))})} 
-                        className="w-full text-sm bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 dark:border-slate-700 p-2 rounded-lg text-slate-900 dark:text-white dark:text-white font-bold" 
-                        required 
-                      />
-                    </div>
+                        </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-semibold text-slate-400 uppercase">Qtd Tombada</label>
-                        <input type="number" value={editingProduct.qtd_tombada || ""} onChange={e => setEditingProduct({...editingProduct, qtd_tombada: Math.floor(Number(e.target.value))})} className="w-full text-sm bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 dark:border-slate-700 p-2 rounded-lg text-slate-900 dark:text-white dark:text-white" />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-semibold text-slate-400 uppercase">Qtd Molhado</label>
-                        <input type="number" value={editingProduct.qtd_molhado || ""} onChange={e => setEditingProduct({...editingProduct, qtd_molhado: Math.floor(Number(e.target.value))})} className="w-full text-sm bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 dark:border-slate-700 p-2 rounded-lg text-slate-900 dark:text-white dark:text-white" />
-                      </div>
-                    </div>
+                        <input 
+                          type="number" 
+                          value={editingProduct.quantidade ?? ""} 
+                          onChange={e => setEditingProduct({...editingProduct, quantidade: Math.max(0, Math.floor(Number(e.target.value)))})} 
+                          className={cn(
+                            "w-full text-sm bg-slate-50 dark:bg-slate-800 border p-2.5 rounded-xl font-bold font-mono outline-none transition-colors",
+                            isOverFloor
+                              ? "border-rose-500 text-rose-600 focus:ring-2 focus:ring-rose-500/30"
+                              : "border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:border-blue-500"
+                          )}
+                          required 
+                        />
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-semibold text-slate-400 uppercase">Novo Nível *</label>
-                        <input type="number" value={editingProduct.nivel ?? ""} onChange={e => setEditingProduct({...editingProduct, nivel: Number(e.target.value)})} className="w-full text-sm bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-800 border border-blue-500 p-2 rounded-lg text-slate-900 dark:text-white dark:text-white font-bold" required />
+                        {/* Status Messages */}
+                        {isOverFloor ? (
+                          <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500 text-[10px] font-semibold flex items-center gap-1.5">
+                            <AlertCircle size={13} className="shrink-0" />
+                            <span>Impeditivo: Saldo insuficiente no Chão (+{diff} un &gt; {floorStock} un disp.).</span>
+                          </div>
+                        ) : diff < 0 ? (
+                          <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[10px] font-semibold">
+                            ℹ️ {Math.abs(diff)} un retornarão automaticamente para a posição Chão ao salvar.
+                          </div>
+                        ) : diff > 0 ? (
+                          <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-[10px] font-semibold">
+                            ℹ️ {diff} un serão consumidas da posição Chão ao salvar.
+                          </div>
+                        ) : null}
                       </div>
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-semibold text-slate-400 uppercase">Nova Profundidade *</label>
-                        <input type="number" value={editingProduct.profundidade ?? ""} onChange={e => setEditingProduct({...editingProduct, profundidade: Number(e.target.value)})} className="w-full text-sm bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-800 border border-blue-500 p-2 rounded-lg text-slate-900 dark:text-white dark:text-white font-bold" required />
+
+                      {/* Tombado / Molhado */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-semibold text-slate-400 uppercase">Qtd Tombada</label>
+                          <input type="number" value={editingProduct.qtd_tombada ?? ""} onChange={e => setEditingProduct({...editingProduct, qtd_tombada: Math.max(0, Math.floor(Number(e.target.value)))})} className="w-full text-xs font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-slate-900 dark:text-white outline-none" />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-semibold text-slate-400 uppercase">Qtd Molhado</label>
+                          <input type="number" value={editingProduct.qtd_molhado ?? ""} onChange={e => setEditingProduct({...editingProduct, qtd_molhado: Math.max(0, Math.floor(Number(e.target.value)))})} className="w-full text-xs font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-slate-900 dark:text-white outline-none" />
+                        </div>
+                      </div>
+
+                      {/* Novo Nível / Nova Profundidade */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-semibold text-slate-400 uppercase">Novo Nível *</label>
+                          <input type="number" value={editingProduct.nivel ?? ""} onChange={e => setEditingProduct({...editingProduct, nivel: Number(e.target.value)})} className="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-blue-500 p-2 rounded-lg text-slate-900 dark:text-white font-bold outline-none" required />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-semibold text-slate-400 uppercase">Nova Profundidade *</label>
+                          <input type="number" value={editingProduct.profundidade ?? ""} onChange={e => setEditingProduct({...editingProduct, profundidade: Number(e.target.value)})} className="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-blue-500 p-2 rounded-lg text-slate-900 dark:text-white font-bold outline-none" required />
+                        </div>
+                      </div>
+
+                      {/* Modal Action Buttons */}
+                      <div className="space-y-2 pt-2">
+                        <button 
+                          type="submit" 
+                          disabled={isSubmitting || isOverFloor} 
+                          className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-blue-600/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                        >
+                          {isSubmitting ? "Salvando..." : "Salvar Alterações"}
+                        </button>
+
+                        <button 
+                          type="button" 
+                          onClick={() => {
+                            const prodToMove = { ...editingProduct };
+                            setEditingProduct(null);
+                            handleMoveItemToFloor(prodToMove);
+                          }}
+                          className="w-full py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-500 dark:text-rose-400 font-semibold text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          <Trash2 size={13} /> Remover Item (Voltar para o Chão)
+                        </button>
                       </div>
                     </div>
-                </div>
-                <button type="submit" disabled={isSubmitting} className="w-full mt-4 p-3 rounded-xl bg-blue-600 text-white font-semibold text-xs uppercase hover:bg-blue-700 shadow-lg shadow-blue-500/20 disabled:opacity-50">
-                  {isSubmitting ? "Salvando..." : "Salvar Alterações"}
-                </button>
+                  );
+                })()}
               </form>
             ) : null}
           </div>
@@ -1300,6 +1396,11 @@ export function DriveInGrid({
          nextId={nextPalletId}
          destinationLevel={addingCoords?.lvl ?? null}
          destinationDepth={addingCoords?.d ?? null}
+         selectedSlotsCount={
+           addingCoords && selectedGaps.size > 0 && selectedGaps.has(`${addingCoords.lvl}-${addingCoords.d}`)
+             ? selectedGaps.size
+             : 1
+         }
       />
 
       {/* Printable Sheet Element (only visible during print) */}

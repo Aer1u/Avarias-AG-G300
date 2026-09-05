@@ -22,7 +22,8 @@ import {
   Info as InfoIcon,
   Edit2,
   FilterX,
-  FileText
+  FileText,
+  Settings
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
@@ -200,6 +201,7 @@ interface ImportRecebimentoRow {
   codigo: string;
   avaria: string;
   transportadora: string;
+  notaFiscal: string;
   lacre: string;
   placa: string;
 }
@@ -221,10 +223,132 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
       codigo: '',
       avaria: '',
       transportadora: '',
+      notaFiscal: '',
       lacre: '',
       placa: ''
     }))
   );
+
+  // Disguised Gear SKU Sync Modal State
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [syncSkuInput, setSyncSkuInput] = useState('');
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncData, setSyncData] = useState<{
+    sku: string;
+    saldoRegistrado: number;
+    saldoMapeado: number;
+    diferenca: number;
+    hasCalculated: boolean;
+  } | null>(null);
+  const [syncConfirmCode, setSyncConfirmCode] = useState('');
+  const [syncExecuting, setSyncExecuting] = useState(false);
+
+  const uniqueSkusList = useMemo(() => {
+    const set = new Set<string>();
+    registros.forEach(r => {
+      if (r.Produto && r.Produto.trim()) set.add(r.Produto.trim().toUpperCase());
+    });
+    return Array.from(set).sort();
+  }, [registros]);
+
+  const handleCalculateSync = async (skuToPass?: string) => {
+    const targetSku = (skuToPass || syncSkuInput).trim().toUpperCase();
+    if (!targetSku) {
+      showToast('Digite um código SKU válido.', 'error');
+      return;
+    }
+
+    setSyncLoading(true);
+    try {
+      // 1. Fetch total registered balance for targetSku from Supabase Registros
+      const { data: regRows, error: regErr } = await supabase
+        .from('Registros')
+        .select('*');
+
+      if (regErr) throw regErr;
+
+      const normSku = (s: string) => String(s || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+      const skuRegRows = (regRows || []).filter(r => normSku(r.Produto) === normSku(targetSku));
+      const totalEntrada = skuRegRows.reduce((acc, curr) => acc + (Number(curr.Entrada) || 0), 0);
+      const totalSaida = skuRegRows.reduce((acc, curr) => acc + (Number(curr.Saída) || 0), 0);
+      const saldoRegistrado = totalEntrada - totalSaida;
+
+      // 2. Fetch total mapped balance for targetSku from Supabase mapeamento
+      const { data: mapRows, error: mapErr } = await supabase
+        .from('mapeamento')
+        .select('*');
+
+      if (mapErr) throw mapErr;
+
+      const skuMapRows = (mapRows || []).filter(r => {
+        const itemSku = r['Código'] || r.produto || r.sku || '';
+        return normSku(itemSku) === normSku(targetSku);
+      });
+      const saldoMapeado = skuMapRows.reduce((acc, curr) => acc + (Number(curr.Quantidade) || 0), 0);
+
+      const diferenca = saldoMapeado - saldoRegistrado;
+
+      setSyncData({
+        sku: targetSku,
+        saldoRegistrado,
+        saldoMapeado,
+        diferenca,
+        hasCalculated: true
+      });
+      setSyncConfirmCode('');
+    } catch (err: any) {
+      console.error('Erro ao calcular sincronização:', err);
+      showToast('Erro ao buscar dados do SKU no banco.', 'error');
+    } finally {
+      setSyncLoading(false);
+    }
+  };
+
+  const handleExecuteSync = async () => {
+    if (!syncData || !syncData.hasCalculated || syncData.diferenca === 0) return;
+
+    if (syncConfirmCode.trim().toUpperCase() !== syncData.sku.toUpperCase()) {
+      showToast('O código digitado para confirmação não confere.', 'error');
+      return;
+    }
+
+    setSyncExecuting(true);
+    try {
+      const diferenca = syncData.diferenca;
+      const todayIso = format(new Date(), 'yyyy-MM-dd');
+
+      const payload = {
+        Data: todayIso,
+        Produto: syncData.sku,
+        Entrada: diferenca > 0 ? diferenca : null,
+        Saída: diferenca < 0 ? Math.abs(diferenca) : null,
+        Origem: 'Ajuste',
+        tipo_avaria: 'Sem Avaria',
+        turno: 1,
+        Observação: `Ajuste automático de sincronização com mapeamento (Mapeado: ${syncData.saldoMapeado}, Registrado ant: ${syncData.saldoRegistrado})`,
+        'Movimentação Sistema': false,
+        Molhado: false
+      };
+
+      const { error } = await supabase.from('Registros').insert([payload]);
+      if (error) throw error;
+
+      showToast(`✅ Ajuste de ${Math.abs(diferenca)} pçs (${diferenca > 0 ? 'Entrada' : 'Saída'}) registrado com sucesso para ${syncData.sku}!`, 'success');
+      
+      setIsSyncModalOpen(false);
+      setSyncData(null);
+      setSyncSkuInput('');
+      setSyncConfirmCode('');
+      fetchRegistros();
+      onRefresh?.();
+    } catch (err: any) {
+      console.error('Erro ao executar sincronização:', err);
+      showToast(`Erro ao registrar ajuste: ${err.message || 'Falha de conexão'}`, 'error');
+    } finally {
+      setSyncExecuting(false);
+    }
+  };
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToast({ show: true, message, type });
@@ -270,18 +394,20 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
           return undefined;
         };
 
-        const keyData   = getIndex(['data chegada', 'entrega', 'data entrega', 'data de chegada', 'data de entrega', 'data']);
-        const keyTransp = getIndex(['transportadora', 'transportador', 'transp']);
-        const keyCodigo = getIndex(['codigo', 'sku', 'cod', 'produto']);
-        const keyAvaria = getIndex(['avaria', 'avarias', 'qtd avaria', 'quantidade']);
-        const keyLacre  = getIndex(['no lacre', 'lacre', 'numero lacre', 'n lacre']);
-        const keyPlaca  = getIndex(['placa']);
+        const keyData       = getIndex(['data chegada', 'entrega', 'data entrega', 'data de chegada', 'data de entrega', 'data']);
+        const keyTransp     = getIndex(['transportadora', 'transportador', 'transp']);
+        const keyCodigo     = getIndex(['codigo', 'sku', 'cod', 'produto']);
+        const keyAvaria     = getIndex(['avaria', 'avarias', 'qtd avaria', 'quantidade']);
+        const keyNotaFiscal = getIndex(['nota fiscal', 'nf', 'nota', 'nº nf', 'no nf', 'num nf', 'numero nf']);
+        const keyLacre      = getIndex(['no lacre', 'lacre', 'numero lacre', 'n lacre']);
+        const keyPlaca      = getIndex(['placa']);
 
         const parsedRows: ImportRecebimentoRow[] = rows.map(r => ({
           data: keyData && r[keyData] ? String(r[keyData]) : '',
           codigo: keyCodigo && r[keyCodigo] ? String(r[keyCodigo]).trim() : '',
           avaria: keyAvaria && r[keyAvaria] ? String(r[keyAvaria]).trim() : '',
           transportadora: keyTransp && r[keyTransp] ? String(r[keyTransp]).trim() : '',
+          notaFiscal: keyNotaFiscal && r[keyNotaFiscal] ? String(r[keyNotaFiscal]).trim() : '',
           lacre: keyLacre && r[keyLacre] ? String(r[keyLacre]).trim() : '',
           placa: keyPlaca && r[keyPlaca] ? String(r[keyPlaca]).trim() : '',
         })).filter(r => r.codigo || r.avaria);
@@ -292,7 +418,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
         }
 
         while (parsedRows.length < 15) {
-          parsedRows.push({ data: '', codigo: '', avaria: '', transportadora: '', lacre: '', placa: '' });
+          parsedRows.push({ data: '', codigo: '', avaria: '', transportadora: '', notaFiscal: '', lacre: '', placa: '' });
         }
 
         setImportModalRows(parsedRows);
@@ -310,24 +436,45 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
   const parseBrDateToIso = (s?: string): string => {
     if (!s || !s.trim()) return format(new Date(), 'yyyy-MM-dd');
     const str = String(s).trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
-    
-    const parts = str.split(/[\/\-\.]/).filter(Boolean);
-    if (parts.length === 3) {
-      let [d, m, y] = parts;
-      if (y.length === 2) y = `20${y}`;
-      const yyyy = parseInt(y, 10);
-      const mm = parseInt(m, 10);
-      const dd = parseInt(d, 10);
+
+    // 1. Direct ISO match: YYYY-MM-DD
+    const isoMatch = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+    if (isoMatch) {
+      const yyyy = parseInt(isoMatch[1], 10);
+      const mm = parseInt(isoMatch[2], 10);
+      const dd = parseInt(isoMatch[3], 10);
       if (yyyy >= 2000 && yyyy <= 2100 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
         return `${yyyy}-${mm.toString().padStart(2, '0')}-${dd.toString().padStart(2, '0')}`;
       }
     }
+
+    // 2. Brazilian / European match: DD/MM/YYYY or DD-MM-YYYY
+    const brMatch = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
+    if (brMatch) {
+      const dd = parseInt(brMatch[1], 10);
+      const mm = parseInt(brMatch[2], 10);
+      let yyyy = parseInt(brMatch[3], 10);
+      if (yyyy < 100) yyyy += 2000;
+      if (yyyy >= 2000 && yyyy <= 2100 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+        return `${yyyy}-${mm.toString().padStart(2, '0')}-${dd.toString().padStart(2, '0')}`;
+      }
+    }
+
+    // 3. Excel serial number (e.g. 45538)
     const excelDate = Number(str);
     if (!isNaN(excelDate) && excelDate > 30000 && excelDate < 60000) {
       const date = new Date((excelDate - 25569) * 86400 * 1000);
-      return format(date, 'yyyy-MM-dd');
+      if (isValid(date)) {
+        return format(date, 'yyyy-MM-dd');
+      }
     }
+
+    // 4. Fallback JS Date parsing
+    const parsedDate = new Date(str);
+    if (isValid(parsedDate) && !isNaN(parsedDate.getTime())) {
+      return format(parsedDate, 'yyyy-MM-dd');
+    }
+
     return format(new Date(), 'yyyy-MM-dd');
   };
 
@@ -348,6 +495,8 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
       const rawPlaca = r.placa ? String(r.placa).toUpperCase().replace(/-/g, '') : '';
       const formattedPlaca = rawPlaca.length > 3 ? rawPlaca.slice(0, 3) + '-' + rawPlaca.slice(3, 7) : rawPlaca;
 
+      const rawNf = r.notaFiscal ? Number(String(r.notaFiscal).replace(/\D/g, '')) : null;
+
       return {
         Data: finalDate,
         Produto: String(r.codigo || '').trim().toUpperCase(),
@@ -356,6 +505,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
         Origem: 'Recebimento',
         Observação: 'Importado via tabela de Recebimentos',
         transportadora: r.transportadora ? String(r.transportadora).trim().toUpperCase() : '',
+        nota_fiscal: rawNf && !isNaN(rawNf) ? rawNf : null,
         lacre: r.lacre ? String(r.lacre).trim().toUpperCase() : '',
         placa: formattedPlaca,
         tipo_avaria: 'Sem Avaria',
@@ -374,6 +524,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
       codigo: '',
       avaria: '',
       transportadora: '',
+      notaFiscal: '',
       lacre: '',
       placa: ''
     })));
@@ -926,6 +1077,20 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
               >
                 {saving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
                 Salvar
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSyncModalOpen(true);
+                  setSyncData(null);
+                  setSyncSkuInput('');
+                  setSyncConfirmCode('');
+                }}
+                title="Configurações Avançadas de Saldo"
+                className="p-2 rounded-xl text-slate-400/40 hover:text-slate-600 dark:text-slate-600/40 dark:hover:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all opacity-40 hover:opacity-100 cursor-pointer ml-1"
+              >
+                <Settings size={16} />
               </button>
             </>
           )}
@@ -1503,7 +1668,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                     type="button"
                     onClick={() => setImportModalRows(prev => [
                       ...prev,
-                      ...Array.from({ length: 5 }, () => ({ data: '', codigo: '', avaria: '', transportadora: '', lacre: '', placa: '' }))
+                      ...Array.from({ length: 5 }, () => ({ data: '', codigo: '', avaria: '', transportadora: '', notaFiscal: '', lacre: '', placa: '' }))
                     ])}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-[11px] font-semibold text-slate-300 transition-colors cursor-pointer"
                   >
@@ -1528,7 +1693,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
 
                 <button
                   type="button"
-                  onClick={() => setImportModalRows(Array.from({ length: 15 }, () => ({ data: '', codigo: '', avaria: '', transportadora: '', lacre: '', placa: '' })))}
+                  onClick={() => setImportModalRows(Array.from({ length: 15 }, () => ({ data: '', codigo: '', avaria: '', transportadora: '', notaFiscal: '', lacre: '', placa: '' })))}
                   className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-rose-400/80 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
                 >
                   <Trash2 size={13} /> Limpar Tabela
@@ -1538,12 +1703,13 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
               {/* Table Container */}
               <div className="border border-white/[0.06] rounded-xl overflow-hidden bg-[#0B1120]">
                 {/* Table Header */}
-                <div className="grid grid-cols-[36px_1.1fr_1.3fr_0.9fr_1.2fr_1fr_1fr] border-b border-white/[0.06] bg-white/[0.02] text-[9.5px] font-semibold text-slate-400 uppercase tracking-widest">
+                <div className="grid grid-cols-[36px_1.1fr_1.3fr_0.9fr_1.2fr_1fr_1fr_1fr] border-b border-white/[0.06] bg-white/[0.02] text-[9.5px] font-semibold text-slate-400 uppercase tracking-widest">
                   <div className="px-2 py-2 text-center border-r border-white/[0.06]">#</div>
                   <div className="px-3 py-2 border-r border-white/[0.06]">Data</div>
                   <div className="px-3 py-2 border-r border-white/[0.06]">Código (SKU) *</div>
                   <div className="px-3 py-2 border-r border-white/[0.06] text-center">Qtd Avaria *</div>
                   <div className="px-3 py-2 border-r border-white/[0.06]">Transportadora</div>
+                  <div className="px-3 py-2 border-r border-white/[0.06]">Nº NF</div>
                   <div className="px-3 py-2 border-r border-white/[0.06]">Nº Lacre</div>
                   <div className="px-3 py-2">Placa</div>
                 </div>
@@ -1562,14 +1728,14 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                       
                       e.preventDefault();
                       const sep = isTSV ? '\t' : (isCSV ? ';' : '\t');
-                      const cols: (keyof ImportRecebimentoRow)[] = ['data', 'codigo', 'avaria', 'transportadora', 'lacre', 'placa'];
+                      const cols: (keyof ImportRecebimentoRow)[] = ['data', 'codigo', 'avaria', 'transportadora', 'notaFiscal', 'lacre', 'placa'];
                       
                       const newRows = [...importModalRows];
                       lines.forEach((line, lineOffset) => {
                         const cells = line.split(sep).map(c => c.trim());
                         const targetRowIdx = rIdx + lineOffset;
                         while (newRows.length <= targetRowIdx) {
-                          newRows.push({ data: '', codigo: '', avaria: '', transportadora: '', lacre: '', placa: '' });
+                          newRows.push({ data: '', codigo: '', avaria: '', transportadora: '', notaFiscal: '', lacre: '', placa: '' });
                         }
                         cells.forEach((val, colOffset) => {
                           const targetColIdx = startColIdx + colOffset;
@@ -1588,7 +1754,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                     };
 
                     return (
-                      <div key={rIdx} className="grid grid-cols-[36px_1.1fr_1.3fr_0.9fr_1.2fr_1fr_1fr] hover:bg-white/[0.015] transition-colors items-center">
+                      <div key={rIdx} className="grid grid-cols-[36px_1.1fr_1.3fr_0.9fr_1.2fr_1fr_1fr_1fr] hover:bg-white/[0.015] transition-colors items-center">
                         <div className="flex items-center justify-center border-r border-white/[0.06] text-[10px] font-mono text-slate-600 py-1.5">{rIdx + 1}</div>
                         <div className="border-r border-white/[0.06]">
                           <input
@@ -1633,9 +1799,19 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                         <div className="border-r border-white/[0.06]">
                           <input
                             type="text"
+                            value={row.notaFiscal}
+                            onChange={e => updateRowField('notaFiscal', e.target.value)}
+                            onPaste={e => handleSmartPaste(e, 4)}
+                            placeholder="Nº NF..."
+                            className="w-full bg-transparent px-3 py-1.5 text-[11px] font-mono text-slate-300 focus:bg-white/[0.04] focus:outline-none"
+                          />
+                        </div>
+                        <div className="border-r border-white/[0.06]">
+                          <input
+                            type="text"
                             value={row.lacre}
                             onChange={e => updateRowField('lacre', e.target.value)}
-                            onPaste={e => handleSmartPaste(e, 4)}
+                            onPaste={e => handleSmartPaste(e, 5)}
                             placeholder="Lacre..."
                             className="w-full bg-transparent px-3 py-1.5 text-[11px] font-mono text-slate-300 focus:bg-white/[0.04] focus:outline-none uppercase"
                           />
@@ -1645,7 +1821,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                             type="text"
                             value={row.placa}
                             onChange={e => updateRowField('placa', e.target.value)}
-                            onPaste={e => handleSmartPaste(e, 5)}
+                            onPaste={e => handleSmartPaste(e, 6)}
                             placeholder="ABC-1234"
                             className="w-full bg-transparent px-3 py-1.5 text-[11px] font-mono text-slate-300 focus:bg-white/[0.04] focus:outline-none uppercase"
                           />
@@ -1679,6 +1855,194 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                   </button>
                 </div>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal Disfarçado de Sincronização de Saldo por SKU */}
+      <AnimatePresence>
+        {isSyncModalOpen && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsSyncModalOpen(false)}
+              className="absolute inset-0 bg-slate-950/70 backdrop-blur-md"
+            />
+
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              className="relative w-full max-w-xl rounded-3xl bg-slate-900 border border-slate-800 p-6 shadow-2xl overflow-hidden text-slate-100 flex flex-col space-y-5"
+            >
+              {/* Header */}
+              <div className="flex items-start justify-between border-b border-slate-800 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                    <Settings size={20} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-white tracking-tight">Sincronização Registro × Mapeamento</h3>
+                      <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">Ajuste de Saldo</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Lança uma movimentação equivalente para tornar a quantidade registrada igual à física mapeada.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsSyncModalOpen(false)}
+                  className="h-8 w-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* SKU Selection & Search */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider block">
+                  Código do Produto / SKU:
+                </label>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      list="unique-skus-sync-list"
+                      placeholder="Ex: 7040-01, 5615-03, 8843-03..."
+                      value={syncSkuInput}
+                      onChange={(e) => {
+                        setSyncSkuInput(e.target.value.toUpperCase());
+                        setSyncData(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleCalculateSync();
+                      }}
+                      className="w-full bg-slate-950 border border-slate-700/80 rounded-xl px-4 py-2.5 text-sm font-mono text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500 transition-colors uppercase"
+                    />
+                    <datalist id="unique-skus-sync-list">
+                      {uniqueSkusList.map(sku => (
+                        <option key={sku} value={sku} />
+                      ))}
+                    </datalist>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCalculateSync()}
+                    disabled={syncLoading || !syncSkuInput.trim()}
+                    className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold transition-all flex items-center gap-2"
+                  >
+                    {syncLoading ? <Loader2 className="animate-spin" size={16} /> : <Search size={16} />}
+                    Verificar
+                  </button>
+                </div>
+              </div>
+
+              {/* Calculation Summary & Comparison */}
+              {syncData && syncData.hasCalculated && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="space-y-4"
+                >
+                  {/* KPI Row */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-3.5 text-center">
+                      <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1">Saldo Registrado</span>
+                      <span className="text-xl font-bold text-slate-200">{syncData.saldoRegistrado}</span>
+                      <span className="text-[9px] text-slate-500 block mt-0.5">Histórico Geral</span>
+                    </div>
+
+                    <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-3.5 text-center">
+                      <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1">Saldo Mapeado</span>
+                      <span className="text-xl font-bold text-blue-400">{syncData.saldoMapeado}</span>
+                      <span className="text-[9px] text-slate-500 block mt-0.5">Físico Drive-In</span>
+                    </div>
+
+                    <div className={cn(
+                      "border rounded-2xl p-3.5 text-center transition-colors",
+                      syncData.diferenca > 0
+                        ? "bg-emerald-950/30 border-emerald-500/40 text-emerald-400"
+                        : syncData.diferenca < 0
+                        ? "bg-rose-950/30 border-rose-500/40 text-rose-400"
+                        : "bg-slate-950/70 border-slate-800 text-slate-400"
+                    )}>
+                      <span className="text-[10px] font-medium uppercase tracking-wider block mb-1">Ajuste Necessário</span>
+                      <span className="text-xl font-bold">
+                        {syncData.diferenca > 0 ? `+${syncData.diferenca}` : syncData.diferenca}
+                      </span>
+                      <span className="text-[9px] font-semibold block mt-0.5">
+                        {syncData.diferenca > 0 ? "ENTRADA" : syncData.diferenca < 0 ? "SAÍDA" : "Já Alinhado"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Operational Impact Box & Safety Confirmation */}
+                  {syncData.diferenca === 0 ? (
+                    <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 text-center space-y-1">
+                      <p className="text-xs font-semibold text-emerald-400">
+                        ✅ A quantidade registrada do código <span className="font-mono">{syncData.sku}</span> já é rigorosamente igual à quantidade no mapeamento físico ({syncData.saldoMapeado} pçs).
+                      </p>
+                      <p className="text-[11px] text-slate-500">Nenhum ajuste adicional é necessário.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3.5 bg-slate-950/90 border border-slate-800 p-4 rounded-2xl">
+                      <div className="flex items-start gap-2.5 text-amber-300 text-xs leading-relaxed bg-amber-500/10 border border-amber-500/20 p-3 rounded-xl">
+                        <AlertCircle size={18} className="flex-shrink-0 mt-0.5 text-amber-400" />
+                        <div>
+                          <p className="font-bold text-amber-200">Confirmação de Segurança Requerida</p>
+                          <p className="text-[11px] text-amber-300/90 mt-0.5">
+                            Será inserido um registro de <strong className="underline">{syncData.diferenca > 0 ? 'ENTRADA' : 'SAÍDA'}</strong> de <strong className="font-mono text-white font-bold">{Math.abs(syncData.diferenca)} peças</strong> na data de hoje ({format(new Date(), 'dd/MM/yyyy')}) com origem &quot;Ajuste&quot; para equiparar os saldos.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2 pt-1">
+                        <label className="text-[11px] font-medium text-slate-400 block">
+                          Para autorizar e executar este ajuste, digite o código do SKU (<strong className="text-slate-200 font-mono">{syncData.sku}</strong>):
+                        </label>
+                        <input
+                          type="text"
+                          placeholder={`Digite ${syncData.sku}`}
+                          value={syncConfirmCode}
+                          onChange={(e) => setSyncConfirmCode(e.target.value.toUpperCase())}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs font-mono text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-500 transition-colors uppercase"
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleExecuteSync}
+                        disabled={
+                          syncExecuting ||
+                          syncConfirmCode.trim().toUpperCase() !== syncData.sku.toUpperCase()
+                        }
+                        className={cn(
+                          "w-full py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer",
+                          syncConfirmCode.trim().toUpperCase() === syncData.sku.toUpperCase()
+                            ? "bg-amber-600 hover:bg-amber-500 text-white shadow-amber-600/25 active:scale-[0.99]"
+                            : "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700/50"
+                        )}
+                      >
+                        {syncExecuting ? (
+                          <>
+                            <Loader2 className="animate-spin" size={16} />
+                            Executando Ajuste...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 size={16} />
+                            Executar Ajuste de Registro ({syncData.diferenca > 0 ? '+' : '-'}{Math.abs(syncData.diferenca)} pçs)
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </motion.div>
+              )}
             </motion.div>
           </div>
         )}

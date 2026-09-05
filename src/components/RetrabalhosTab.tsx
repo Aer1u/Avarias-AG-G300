@@ -287,8 +287,8 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
 
   const importConfirmadosRef = useRef<HTMLInputElement>(null)
   const [isConfirmadosModalOpen, setIsConfirmadosModalOpen] = useState(false)
-  const [confirmadosRows, setConfirmadosRows] = useState<{ a501: string, g501: string }[]>(
-    Array.from({ length: 20 }, () => ({ a501: '', g501: '' }))
+  const [confirmadosRows, setConfirmadosRows] = useState<{ reserva: string }[]>(
+    Array.from({ length: 20 }, () => ({ reserva: '' }))
   )
   const [processingConfirmados, setProcessingConfirmados] = useState(false)
 
@@ -322,65 +322,23 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
           return undefined
         }
 
-        const colA = findCol(['a501', 'reserva a', 'reserva a501', 'nr a', 'numero a'])
-        const colG = findCol(['g501', 'reserva g', 'reserva g501', 'nr g', 'numero g'])
+        const colReserva = findCol(['reserva', 'a501', 'g501', 'nr', 'numero', 'codigo'])
 
-        if (!colA && !colG) {
-          alert('Nenhuma coluna A501 ou G501 encontrada na planilha.')
+        if (!colReserva) {
+          alert('Nenhuma coluna de Reserva (A501/G501) encontrada na planilha.')
           return
         }
 
-        let confirmadosA = 0, confirmadosG = 0, registrosCriados = 0
-        const today = new Date().toISOString().slice(0, 10)
-
+        const extractedCodes: string[] = []
         for (const row of rows) {
-          const valA = colA ? String(row[colA] || '').trim().toUpperCase() : ''
-          const valG = colG ? String(row[colG] || '').trim().toUpperCase() : ''
-
-          // Busca registros que batem
-          const matchA = valA ? records.find(r => (r.reserva_a501 || '').trim().toUpperCase() === valA) : null
-          const matchG = valG ? records.find(r => (r.reserva_g501 || '').trim().toUpperCase() === valG) : null
-
-          // Atualiza A501
-          if (matchA && matchA.situacao_a501 !== 'CONFIRMADO') {
-            await supabase.from('retrabalhos').update({ situacao_a501: 'CONFIRMADO' }).eq('id', matchA.id)
-            setRecords(prev => prev.map(r => r.id === matchA.id ? { ...r, situacao_a501: 'CONFIRMADO' } : r))
-            confirmadosA++
-          }
-
-          // Atualiza G501
-          if (matchG && matchG.situacao_g501 !== 'CONFIRMADO') {
-            await supabase.from('retrabalhos').update({ situacao_g501: 'CONFIRMADO' }).eq('id', matchG.id)
-            setRecords(prev => prev.map(r => r.id === matchG.id ? { ...r, situacao_g501: 'CONFIRMADO' } : r))
-            confirmadosG++
-          }
-
-          // Cria Registro em Monitoramento quando os dois do mesmo item são confirmados
-          const targetRecord = matchA ?? matchG
-          if (targetRecord) {
-            const aConfirmed = (matchA?.id === targetRecord.id && matchA.situacao_a501 !== 'CONFIRMADO') || targetRecord.situacao_a501 === 'CONFIRMADO'
-            const gConfirmed = (matchG?.id === targetRecord.id && matchG.situacao_g501 !== 'CONFIRMADO') || targetRecord.situacao_g501 === 'CONFIRMADO'
-            const willBothConfirmed =
-              (valA && matchA?.id === targetRecord.id ? true : aConfirmed) &&
-              (valG && matchG?.id === targetRecord.id ? true : gConfirmed)
-
-            if (willBothConfirmed) {
-              const { error } = await supabase.from('Registros').insert({
-                Data: today,
-                Produto: targetRecord.codigo || '',
-                'Saída': targetRecord.quantidade_enviada || 0,
-                Entrada: null,
-                Origem: 'Retrabalho',
-                tipo_avaria: 'Sem Avaria',
-                turno: 1,
-                Observação: `Confirmado via importação — Lote ${targetRecord.lote}`,
-              })
-              if (!error) registrosCriados++
-            }
-          }
+          const val = String(row[colReserva] || '').trim()
+          if (val) extractedCodes.push(val)
         }
 
-        alert(`✅ Importação concluída!\nA501 confirmados: ${confirmadosA}\nG501 confirmados: ${confirmadosG}\nRegistros criados em Monitoramento: ${registrosCriados}`)
+        const newModalRows = extractedCodes.map(c => ({ reserva: c }))
+        while (newModalRows.length < 20) newModalRows.push({ reserva: '' })
+        setConfirmadosRows(newModalRows)
+        alert(`✅ ${extractedCodes.length} reservas carregadas na tabela! Clique em 'Confirmar Reservas' para processar.`)
       } catch (err: any) {
         alert('Erro ao processar planilha: ' + err.message)
       }
@@ -390,67 +348,89 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
   }
 
   const handleProcessConfirmadosTable = async () => {
-    const validRows = confirmadosRows.filter(r => r.a501.trim() || r.g501.trim())
-    if (validRows.length === 0) {
+    const validCodes = confirmadosRows
+      .map(r => r.reserva.trim().toUpperCase())
+      .filter(Boolean)
+
+    if (validCodes.length === 0) {
       alert('Insira pelo menos uma reserva na tabela.')
       return
     }
+
     setProcessingConfirmados(true)
     try {
       let confirmadosA = 0, confirmadosG = 0, registrosCriados = 0
       const today = new Date().toISOString().slice(0, 10)
 
-      // 1. Identificar quais linhas serão totalmente confirmadas e agrupar demanda por SKU
-      const toConfirm: {
+      // Identificar quais registros bateram com as reservas informadas (A501 ou G501)
+      const recordMatchesMap = new Map<number, {
         record: any
-        confirmA: boolean
-        confirmG: boolean
-        willBothConfirmed: boolean
-        matchA: any
-        matchG: any
-      }[] = []
+        willConfirmA: boolean
+        willConfirmG: boolean
+      }>()
 
-      const requiredQtyPerProduct: Record<string, number> = {}
+      for (const code of validCodes) {
+        let matchA = records.find(r => (r.reserva_a501 || '').trim().toUpperCase() === code)
+        let matchG = records.find(r => (r.reserva_g501 || '').trim().toUpperCase() === code)
 
-      for (const row of validRows) {
-        const valA = row.a501.trim().toUpperCase()
-        const valG = row.g501.trim().toUpperCase()
+        if (code.startsWith('A') && matchA) {
+          matchG = undefined
+        } else if (code.startsWith('G') && matchG) {
+          matchA = undefined
+        }
 
-        const matchA = valA ? records.find(r => (r.reserva_a501 || '').trim().toUpperCase() === valA) : null
-        const matchG = valG ? records.find(r => (r.reserva_g501 || '').trim().toUpperCase() === valG) : null
-
-        const targetRecord = matchA ?? matchG
-        if (targetRecord) {
-          const aConfirmed = (matchA?.id === targetRecord.id && matchA.situacao_a501 !== 'CONFIRMADO') || targetRecord.situacao_a501 === 'CONFIRMADO'
-          const gConfirmed = (matchG?.id === targetRecord.id && matchG.situacao_g501 !== 'CONFIRMADO') || targetRecord.situacao_g501 === 'CONFIRMADO'
-
-          const willAConfirm = !!(valA && matchA?.id === targetRecord.id && matchA.situacao_a501 !== 'CONFIRMADO')
-          const willGConfirm = !!(valG && matchG?.id === targetRecord.id && matchG.situacao_g501 !== 'CONFIRMADO')
-
-          const willBothConfirmed =
-            (valA && matchA?.id === targetRecord.id ? true : aConfirmed) &&
-            (valG && matchG?.id === targetRecord.id ? true : gConfirmed)
-
-          toConfirm.push({
-            record: targetRecord,
-            confirmA: willAConfirm,
-            confirmG: willGConfirm,
-            willBothConfirmed,
-            matchA,
-            matchG
-          })
-
-          if (willBothConfirmed) {
-            const sku = String(targetRecord.codigo || '').trim().toUpperCase()
-            const qty = Math.round(Number(targetRecord.quantidade_enviada) || 0)
-            if (sku && qty > 0) {
-              requiredQtyPerProduct[sku] = (requiredQtyPerProduct[sku] || 0) + qty
-            }
+        if (matchA) {
+          const existing = recordMatchesMap.get(matchA.id) || {
+            record: matchA,
+            willConfirmA: false,
+            willConfirmG: false
           }
+          if (matchA.situacao_a501 !== 'CONFIRMADO') {
+            existing.willConfirmA = true
+          }
+          recordMatchesMap.set(matchA.id, existing)
+        }
+
+        if (matchG) {
+          const existing = recordMatchesMap.get(matchG.id) || {
+            record: matchG,
+            willConfirmA: false,
+            willConfirmG: false
+          }
+          if (matchG.situacao_g501 !== 'CONFIRMADO') {
+            existing.willConfirmG = true
+          }
+          recordMatchesMap.set(matchG.id, existing)
         }
       }
 
-      // 2. Verificar o estoque disponível na posição Chão no Mapeamento
+      if (recordMatchesMap.size === 0) {
+        alert('⚠️ Nenhuma das reservas informadas foi encontrada no sistema.')
+        setProcessingConfirmados(false)
+        return
+      }
+
+      // Agrupar demanda por SKU dos itens que ficarão completamente confirmados
+      const requiredQtyPerProduct: Record<string, number> = {}
+
+      recordMatchesMap.forEach(({ record, willConfirmA, willConfirmG }) => {
+        const isAlreadyA = record.situacao_a501 === 'CONFIRMADO'
+        const isAlreadyG = record.situacao_g501 === 'CONFIRMADO'
+
+        const willBothBeConfirmed =
+          (isAlreadyA || willConfirmA) &&
+          (isAlreadyG || willConfirmG)
+
+        if (willBothBeConfirmed) {
+          const sku = String(record.codigo || '').trim().toUpperCase()
+          const qty = Math.round(Number(record.quantidade_enviada) || 0)
+          if (sku && qty > 0) {
+            requiredQtyPerProduct[sku] = (requiredQtyPerProduct[sku] || 0) + qty
+          }
+        }
+      })
+
+      // Verificar estoque no Chão
       const errorsList: string[] = []
       const productStocks: Record<string, { id: number, Quantidade: number }[]> = {}
 
@@ -478,23 +458,30 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
         return
       }
 
-      // 3. Processar confirmações e consumir o estoque do Chão
-      for (const item of toConfirm) {
-        if (item.confirmA) {
-          await supabase.from('retrabalhos').update({ situacao_a501: 'CONFIRMADO' }).eq('id', item.matchA.id)
-          setRecords(prev => prev.map(r => r.id === item.matchA.id ? { ...r, situacao_a501: 'CONFIRMADO' } : r))
+      // Processar confirmações e consumir o Chão
+      for (const [id, { record, willConfirmA, willConfirmG }] of recordMatchesMap.entries()) {
+        const isAlreadyA = record.situacao_a501 === 'CONFIRMADO'
+        const isAlreadyG = record.situacao_g501 === 'CONFIRMADO'
+
+        const willBothBeConfirmed =
+          (isAlreadyA || willConfirmA) &&
+          (isAlreadyG || willConfirmG)
+
+        if (willConfirmA) {
+          await supabase.from('retrabalhos').update({ situacao_a501: 'CONFIRMADO' }).eq('id', id)
+          setRecords(prev => prev.map(r => r.id === id ? { ...r, situacao_a501: 'CONFIRMADO' } : r))
           confirmadosA++
         }
 
-        if (item.confirmG) {
-          await supabase.from('retrabalhos').update({ situacao_g501: 'CONFIRMADO' }).eq('id', item.matchG.id)
-          setRecords(prev => prev.map(r => r.id === item.matchG.id ? { ...r, situacao_g501: 'CONFIRMADO' } : r))
+        if (willConfirmG) {
+          await supabase.from('retrabalhos').update({ situacao_g501: 'CONFIRMADO' }).eq('id', id)
+          setRecords(prev => prev.map(r => r.id === id ? { ...r, situacao_g501: 'CONFIRMADO' } : r))
           confirmadosG++
         }
 
-        if (item.willBothConfirmed) {
-          const sku = String(item.record.codigo || '').trim().toUpperCase()
-          const qtyToConsume = Math.round(Number(item.record.quantidade_enviada) || 0)
+        if (willBothBeConfirmed) {
+          const sku = String(record.codigo || '').trim().toUpperCase()
+          const qtyToConsume = Math.round(Number(record.quantidade_enviada) || 0)
           
           if (sku && qtyToConsume > 0) {
             let remainingToConsume = qtyToConsume
@@ -521,13 +508,13 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
 
           const { error } = await supabase.from('Registros').insert({
             Data: today,
-            Produto: item.record.codigo || '',
-            'Saída': item.record.quantidade_enviada || 0,
+            Produto: record.codigo || '',
+            'Saída': record.quantidade_enviada || 0,
             Entrada: null,
             Origem: 'Retrabalho',
             tipo_avaria: 'Sem Avaria',
             turno: 1,
-            Observação: `Confirmado via tabela — Lote ${item.record.lote}`,
+            Observação: `Confirmado via tabela — Lote ${record.lote}`,
           })
           if (!error) registrosCriados++
         }
@@ -535,7 +522,7 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
 
       await fetchData()
       setIsConfirmadosModalOpen(false)
-      setConfirmadosRows(Array.from({ length: 20 }, () => ({ a501: '', g501: '' })))
+      setConfirmadosRows(Array.from({ length: 20 }, () => ({ reserva: '' })))
       alert(`✅ Importação concluída!\nA501 confirmados: ${confirmadosA}\nG501 confirmados: ${confirmadosG}\nRegistros criados em Monitoramento: ${registrosCriados}`)
     } catch (err: any) {
       alert('Erro ao processar: ' + err.message)
@@ -2223,9 +2210,11 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                                     "inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider",
                                                     item.situacao_a501 === 'CONFIRMADO'
                                                       ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                                      : item.situacao_a501 === 'CANCELADO'
+                                                      ? "bg-rose-500/20 text-rose-400 border border-rose-500/30"
                                                       : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
                                                   )}>
-                                                    {item.situacao_a501 === 'CONFIRMADO' ? 'CONFIRMADO' : 'PENDENTE'}
+                                                    {item.situacao_a501 === 'CONFIRMADO' ? 'CONFIRMADO' : item.situacao_a501 === 'CANCELADO' ? 'CANCELADO' : 'PENDENTE'}
                                                   </span>
                                                 </div>
 
@@ -2235,9 +2224,11 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                                     "inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider",
                                                     item.situacao_g501 === 'CONFIRMADO'
                                                       ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                                      : item.situacao_g501 === 'CANCELADO'
+                                                      ? "bg-rose-500/20 text-rose-400 border border-rose-500/30"
                                                       : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
                                                   )}>
-                                                    {item.situacao_g501 === 'CONFIRMADO' ? 'CONFIRMADO' : 'PENDENTE'}
+                                                    {item.situacao_g501 === 'CONFIRMADO' ? 'CONFIRMADO' : item.situacao_g501 === 'CANCELADO' ? 'CANCELADO' : 'PENDENTE'}
                                                   </span>
                                                 </div>
 
@@ -2861,25 +2852,51 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                                 </td>
                                 {/* Sit. A */}
                                 <td className="px-2 py-1 text-center border-r border-slate-700/40" onClick={e => e.stopPropagation()}>
-                                  <span className={cn(
-                                    "inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider",
-                                    item.situacao_a501 === 'CONFIRMADO'
-                                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                                      : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                                  )}>
-                                    {item.situacao_a501 === 'CONFIRMADO' ? 'CONFIRMADO' : 'PENDENTE'}
-                                  </span>
+                                  <select
+                                    value={item.situacao_a501 || 'PENDENTE'}
+                                    onChange={e => {
+                                      const val = e.target.value;
+                                      updateLocalViagemItem(item.id, "situacao_a501", val);
+                                      updateReservaField(item.id, "situacao_a501", val);
+                                      saveReservaFieldToDb(item.id, "situacao_a501", val);
+                                    }}
+                                    className={cn(
+                                      "px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-slate-900 focus:outline-none cursor-pointer border transition-colors",
+                                      item.situacao_a501 === 'CONFIRMADO'
+                                        ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                                        : item.situacao_a501 === 'CANCELADO'
+                                        ? "bg-rose-500/20 text-rose-400 border-rose-500/30"
+                                        : "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                                    )}
+                                  >
+                                    <option value="PENDENTE" className="bg-slate-900 text-amber-400 font-bold">PENDENTE</option>
+                                    <option value="CONFIRMADO" className="bg-slate-900 text-emerald-400 font-bold">CONFIRMADO</option>
+                                    <option value="CANCELADO" className="bg-slate-900 text-rose-400 font-bold">CANCELADO</option>
+                                  </select>
                                 </td>
                                 {/* Sit. G */}
                                 <td className="px-2 py-1 text-center border-r border-slate-700/40" onClick={e => e.stopPropagation()}>
-                                  <span className={cn(
-                                    "inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider",
-                                    item.situacao_g501 === 'CONFIRMADO'
-                                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                                      : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                                  )}>
-                                    {item.situacao_g501 === 'CONFIRMADO' ? 'CONFIRMADO' : 'PENDENTE'}
-                                  </span>
+                                  <select
+                                    value={item.situacao_g501 || 'PENDENTE'}
+                                    onChange={e => {
+                                      const val = e.target.value;
+                                      updateLocalViagemItem(item.id, "situacao_g501", val);
+                                      updateReservaField(item.id, "situacao_g501", val);
+                                      saveReservaFieldToDb(item.id, "situacao_g501", val);
+                                    }}
+                                    className={cn(
+                                      "px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-slate-900 focus:outline-none cursor-pointer border transition-colors",
+                                      item.situacao_g501 === 'CONFIRMADO'
+                                        ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                                        : item.situacao_g501 === 'CANCELADO'
+                                        ? "bg-rose-500/20 text-rose-400 border-rose-500/30"
+                                        : "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                                    )}
+                                  >
+                                    <option value="PENDENTE" className="bg-slate-900 text-amber-400 font-bold">PENDENTE</option>
+                                    <option value="CONFIRMADO" className="bg-slate-900 text-emerald-400 font-bold">CONFIRMADO</option>
+                                    <option value="CANCELADO" className="bg-slate-900 text-rose-400 font-bold">CANCELADO</option>
+                                  </select>
                                 </td>
 
                                 {/* Excluir */}
@@ -2966,7 +2983,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                     </h3>
                     <button
                       type="button"
-                      onClick={() => setConfirmadosRows(Array.from({ length: 20 }, () => ({ a501: '', g501: '' })))}
+                      onClick={() => setConfirmadosRows(Array.from({ length: 20 }, () => ({ reserva: '' })))}
                       className="text-[9px] font-semibold text-rose-500/70 hover:text-rose-400 uppercase tracking-widest flex items-center gap-1 transition-colors"
                     >
                       <Trash2 size={11} /> Limpar
@@ -2975,65 +2992,49 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
 
                   <div className="border border-white/[0.06] rounded-sm overflow-hidden bg-[#0B1120]">
                     {/* Header */}
-                    <div className="grid grid-cols-[40px_1fr_1fr] border-b border-white/[0.06] bg-white/[0.03]">
+                    <div className="grid grid-cols-[40px_1fr] border-b border-white/[0.06] bg-white/[0.03]">
                       <div className="px-3 py-2.5 text-[9px] font-semibold text-slate-500 uppercase tracking-widest text-center border-r border-white/[0.06]">#</div>
-                      <div className="px-4 py-2.5 text-[9px] font-semibold text-slate-500 uppercase tracking-widest border-r border-white/[0.06]">Reserva A501</div>
-                      <div className="px-4 py-2.5 text-[9px] font-semibold text-slate-500 uppercase tracking-widest">Reserva G501</div>
+                      <div className="px-4 py-2.5 text-[9px] font-semibold text-slate-500 uppercase tracking-widest">Nº da Reserva (A501 ou G501)</div>
                     </div>
 
                     {/* Body */}
-                    <div className="max-h-[40vh] overflow-y-auto custom-scrollbar">
+                    <div className="max-h-[40vh] overflow-y-auto custom-scrollbar divide-y divide-white/[0.04]">
                       {confirmadosRows.map((row, idx) => {
-                        const handleSmartPaste = (e: React.ClipboardEvent<HTMLInputElement>, startCol: number) => {
+                        const handleSmartPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
                           const text = e.clipboardData.getData('text')
                           const lines = text.split(/\r?\n/).filter(l => l.trim() !== '')
-                          const isTSV = lines.some(l => l.includes('\t'))
-                          const isCSV = !isTSV && lines.some(l => l.includes(';'))
-                          const isMultiCol = isTSV || isCSV
-                          if (!isMultiCol && lines.length === 1) return
+                          if (lines.length === 0) return
                           e.preventDefault()
-                          const sep = isTSV ? '\t' : ';'
+
+                          const pastedCodes: string[] = []
+                          lines.forEach(line => {
+                            const cells = line.split(/[\t;,]/).map(c => c.trim()).filter(Boolean)
+                            cells.forEach(c => pastedCodes.push(c))
+                          })
+
                           const newRows = [...confirmadosRows]
-                          lines.forEach((line, lineOffset) => {
-                            const cells = line.split(sep).map(c => c.trim())
-                            const targetIdx = idx + lineOffset
-                            while (newRows.length <= targetIdx) newRows.push({ a501: '', g501: '' })
-                            const cols: (keyof typeof newRows[0])[] = ['a501', 'g501']
-                            cells.forEach((val, colOffset) => {
-                              const colIdx = startCol + colOffset
-                              if (colIdx < cols.length) newRows[targetIdx][cols[colIdx]] = val
-                            })
+                          pastedCodes.forEach((code, offset) => {
+                            const targetIdx = idx + offset
+                            while (newRows.length <= targetIdx) newRows.push({ reserva: '' })
+                            newRows[targetIdx] = { reserva: code }
                           })
                           setConfirmadosRows(newRows)
                         }
 
                         return (
-                          <div key={idx} className="grid grid-cols-[40px_1fr_1fr] border-b border-white/[0.04] hover:bg-white/[0.015] transition-colors">
-                            <div className="flex items-center justify-center border-r border-white/[0.06] text-[10px] font-mono text-slate-600">{idx + 1}</div>
-                            <div className="border-r border-white/[0.06]">
-                              <input
-                                value={row.a501}
-                                onChange={(e) => {
-                                  const newRows = [...confirmadosRows]
-                                  newRows[idx].a501 = e.target.value
-                                  setConfirmadosRows(newRows)
-                                }}
-                                onPaste={(e) => handleSmartPaste(e, 0)}
-                                placeholder="Digitar..."
-                                className="w-full bg-transparent px-4 py-2 text-[11px] font-mono text-slate-200 focus:outline-none placeholder:text-slate-700"
-                              />
-                            </div>
+                          <div key={idx} className="grid grid-cols-[40px_1fr] hover:bg-white/[0.015] transition-colors">
+                            <div className="flex items-center justify-center border-r border-white/[0.06] text-[10px] font-mono text-slate-600 py-1.5">{idx + 1}</div>
                             <div>
                               <input
-                                value={row.g501}
+                                value={row.reserva}
                                 onChange={(e) => {
                                   const newRows = [...confirmadosRows]
-                                  newRows[idx].g501 = e.target.value
+                                  newRows[idx].reserva = e.target.value
                                   setConfirmadosRows(newRows)
                                 }}
-                                onPaste={(e) => handleSmartPaste(e, 1)}
-                                placeholder="Digitar..."
-                                className="w-full bg-transparent px-4 py-2 text-[11px] font-mono text-slate-200 focus:outline-none placeholder:text-slate-700"
+                                onPaste={handleSmartPaste}
+                                placeholder="Digitar ou colar reserva A501 ou G501..."
+                                className="w-full bg-transparent px-4 py-2 text-[11px] font-mono text-slate-200 focus:outline-none placeholder:text-slate-700 uppercase"
                               />
                             </div>
                           </div>
@@ -3044,7 +3045,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
                     {/* Add Line */}
                     <button
                       type="button"
-                      onClick={() => setConfirmadosRows([...confirmadosRows, { a501: '', g501: '' }])}
+                      onClick={() => setConfirmadosRows([...confirmadosRows, { reserva: '' }])}
                       className="w-full py-2.5 text-center text-[9px] font-semibold text-slate-600 uppercase tracking-widest hover:text-slate-400 hover:bg-white/[0.02] transition-colors border-t border-white/[0.04]"
                     >
                       + Adicionar Linha

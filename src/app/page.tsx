@@ -3239,35 +3239,40 @@ function DashboardPage() {
                 <div>
                   <h1 className="text-[16px] font-semibold uppercase tracking-tight">Manifesto de Conferência de Drive - G300</h1>
                   {(() => {
-                    const uniqueSkus = Array.from(new Set(printData.map(item => String(item.produto || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')).filter(Boolean)))
+                    const totalMapeado = printData.reduce((acc, curr) => acc + (Number(curr.quantidade_total || curr.quantidade) || 0), 0);
+                    const uniqueSkus = Array.from(new Set(printData.map(item => String(item.produto || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')).filter(Boolean)));
                     if (uniqueSkus.length === 1) {
-                      const sku = uniqueSkus[0]
-                      const qty = a501PrintMap[sku] || 0
+                      const sku = uniqueSkus[0];
+                      const qty = a501PrintMap[sku] || 0;
                       return (
                         <p className="text-[10.5px] font-bold text-slate-800 uppercase mt-0.5">
-                          Produto: {sku} • Saldo A501: {fmtNum(qty)} UN
+                          Produto: {sku} • Total Mapeado: {fmtNum(totalMapeado)} UN • Saldo A501: {fmtNum(qty)} UN
                         </p>
-                      )
+                      );
                     } else if (uniqueSkus.length > 1 && uniqueSkus.length <= 5) {
                       return (
                         <p className="text-[9px] font-semibold text-slate-800 uppercase mt-0.5">
-                          Saldo A501: {uniqueSkus.map(sku => `${sku} (${fmtNum(a501PrintMap[sku] || 0)})`).join(' | ')}
+                          Total Mapeado: {fmtNum(totalMapeado)} UN | Saldo A501: {uniqueSkus.map(sku => `${sku} (${fmtNum(a501PrintMap[sku] || 0)})`).join(' | ')}
                         </p>
-                      )
+                      );
                     } else if (uniqueSkus.length > 5) {
-                      const totalA501 = uniqueSkus.reduce((sum, sku) => sum + (a501PrintMap[sku] || 0), 0)
+                      const totalA501 = uniqueSkus.reduce((sum, sku) => sum + (a501PrintMap[sku] || 0), 0);
                       return (
                         <p className="text-[10px] font-bold text-slate-800 uppercase mt-0.5">
-                          Total Saldo A501: {fmtNum(totalA501)} UN
+                          Total Mapeado: {fmtNum(totalMapeado)} UN • Total Saldo A501: {fmtNum(totalA501)} UN
                         </p>
-                      )
+                      );
                     }
-                    return null
+                    return (
+                      <p className="text-[10.5px] font-bold text-slate-800 uppercase mt-0.5">
+                        Total Mapeado: {fmtNum(totalMapeado)} UN
+                      </p>
+                    );
                   })()}
                 </div>
                 <div className="text-right">
                   <p className="text-[8px] font-medium text-slate-500 uppercase">{new Date().toLocaleString('pt-BR')}</p>
-                  <p className="text-[8px] font-bold text-blue-600 uppercase">{printData.length} Registros</p>
+                  <p className="text-[8px] font-bold text-blue-600 uppercase">({printData.length} Registros)</p>
                 </div>
               </div>
 
@@ -7423,19 +7428,19 @@ function DashboardPage() {
 
                   <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-4">
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="flex flex-col items-center justify-center border border-slate-200 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-800/30 rounded-xl p-4 transition-colors shadow-sm">
-                        <div className="flex items-center gap-1.5 mb-1.5">
+                      <div className="flex flex-col items-center justify-center border border-slate-200 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-800/30 rounded-xl p-3.5 transition-colors shadow-sm text-center">
+                        <div className="flex items-center gap-1 mb-1">
                           <span className="text-[10px] font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Qtd Física</span>
-                          {selectedConfrontoItem.teve_ajuste && <span className="text-[9px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded-md font-bold leading-none">+ Ajuste</span>}
+                          {selectedConfrontoItem.teve_ajuste && <span className="text-[8px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-1 py-0.5 rounded font-bold leading-none">+Ajuste</span>}
                         </div>
-                        <span className="text-3xl font-semibold text-slate-800 dark:text-slate-100">{fmtNum(selectedConfrontoItem.qtd_fisica)}</span>
+                        <span className="text-2xl font-bold text-slate-800 dark:text-slate-100">{fmtNum(selectedConfrontoItem.qtd_fisica)}</span>
                         {selectedConfrontoItem.teve_ajuste && (
-                          <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500 mt-1">Orig: {fmtNum(selectedConfrontoItem.qtd_fisica_original)}</span>
+                          <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500 mt-0.5">Orig: {fmtNum(selectedConfrontoItem.qtd_fisica_original)}</span>
                         )}
                       </div>
-                      <div className="flex flex-col items-center justify-center border border-slate-200 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-800/30 rounded-xl p-4 transition-colors shadow-sm">
-                        <span className="text-[10px] font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Qtd Sistema</span>
-                        <span className="text-3xl font-semibold text-slate-800 dark:text-slate-100">{fmtNum(selectedConfrontoItem.qtd_sistema)}</span>
+                      <div className="flex flex-col items-center justify-center border border-slate-200 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-800/30 rounded-xl p-3.5 transition-colors shadow-sm text-center">
+                        <span className="text-[10px] font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Qtd Sistema</span>
+                        <span className="text-2xl font-bold text-slate-800 dark:text-slate-100">{fmtNum(selectedConfrontoItem.qtd_sistema)}</span>
                       </div>
                     </div>
 

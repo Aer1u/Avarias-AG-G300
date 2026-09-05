@@ -20,6 +20,7 @@ interface AddPalletModalProps {
   nextId: string;
   destinationLevel: number | null;
   destinationDepth: number | null;
+  selectedSlotsCount?: number;
 }
 
 export function AddPalletModal({
@@ -29,7 +30,8 @@ export function AddPalletModal({
   availableStocks = [],
   nextId,
   destinationLevel,
-  destinationDepth
+  destinationDepth,
+  selectedSlotsCount = 1
 }: AddPalletModalProps) {
   const [items, setItems] = useState<PalletItemForm[]>([
     { id: '1', sku: '', qty: '', qtyWet: '', qtyTilted: '', descricao: '' }
@@ -38,6 +40,8 @@ export function AddPalletModal({
   const [activeSearchIndex, setActiveSearchIndex] = useState<number | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const dropdownRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  const slotsCount = selectedSlotsCount > 0 ? selectedSlotsCount : 1;
 
   useEffect(() => {
     if (isOpen) {
@@ -88,11 +92,12 @@ export function AddPalletModal({
     
     let sanitized: number | '' = typeof numVal === 'number' && isNaN(numVal) ? '' : numVal;
     
-    // Validation against floor stock (only for Total Qty)
+    // Validation against floor stock (multiplied by slots count)
     if (field === 'qty' && typeof sanitized === 'number') {
         const stockInfo = availableStocks.find(s => s.produto === item.sku);
-        const max = stockInfo ? stockInfo.available : 0; 
-        if (sanitized > max) sanitized = max;
+        const totalAvailable = stockInfo ? stockInfo.available : 0; 
+        const maxPerCell = Math.floor(totalAvailable / slotsCount);
+        if (sanitized > maxPerCell) sanitized = maxPerCell;
         if (sanitized < 0) sanitized = 0;
     }
 
@@ -108,8 +113,9 @@ export function AddPalletModal({
 
   const handleSave = () => {
     const validItems = items.filter(i => {
-        const stockExists = availableStocks.some(s => s.produto === i.sku);
-        return i.sku.trim() !== '' && stockExists && typeof i.qty === 'number' && i.qty > 0;
+        const stockInfo = availableStocks.find(s => s.produto === i.sku);
+        const totalReq = (typeof i.qty === 'number' ? i.qty : 0) * slotsCount;
+        return i.sku.trim() !== '' && stockInfo && typeof i.qty === 'number' && i.qty > 0 && totalReq <= stockInfo.available;
     });
     if (validItems.length === 0) return;
     
@@ -117,10 +123,11 @@ export function AddPalletModal({
     onSave(validItems, isMix ? nextId : "");
   };
 
-  // Valid if there is at least 1 fully filled item AND its SKU exists in available stock AND qty <= available
+  // Valid if there is at least 1 fully filled item AND its SKU exists in available stock AND totalReq <= available
   const hasAtLeastOneValid = items.some(i => {
     const stockInfo = availableStocks.find(s => s.produto === i.sku);
-    return i.sku.trim() !== '' && stockInfo && typeof i.qty === 'number' && i.qty > 0 && i.qty <= stockInfo.available;
+    const totalReq = (typeof i.qty === 'number' ? i.qty : 0) * slotsCount;
+    return i.sku.trim() !== '' && stockInfo && typeof i.qty === 'number' && i.qty > 0 && totalReq <= stockInfo.available;
   });
   
   return (
@@ -148,9 +155,14 @@ export function AddPalletModal({
               </div>
               <div>
                 <h2 className="text-sm font-semibold text-slate-900 dark:text-white tracking-tight">Adicionar Palete</h2>
-                <span className="text-[10px] font-medium text-slate-400">
-                  Nível {destinationLevel} · Prof. {destinationDepth}
-                  {isMix && <span className="ml-2 text-blue-500 font-semibold">· MIX {nextId}</span>}
+                <span className="text-[10px] font-medium text-slate-400 flex items-center gap-2">
+                  <span>Nível {destinationLevel} · Prof. {destinationDepth}</span>
+                  {slotsCount > 1 && (
+                    <span className="text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full text-[9px] uppercase tracking-wider">
+                      Mapeando em {slotsCount} células selecionadas
+                    </span>
+                  )}
+                  {isMix && <span className="text-blue-500 font-semibold">· MIX {nextId}</span>}
                 </span>
               </div>
             </div>
@@ -263,13 +275,20 @@ export function AddPalletModal({
 
                       {/* DISP. */}
                       <td className="px-2 py-2 text-center">
-                        <span className={cn(
-                          "text-xs font-semibold tabular-nums",
-                          !stockInfo ? "text-slate-300 dark:text-slate-700" :
-                          stockInfo.available > 0 ? "text-slate-600 dark:text-slate-300" : "text-red-500"
-                        )}>
-                          {stockInfo ? stockInfo.available : '—'}
-                        </span>
+                        <div className="flex flex-col items-center">
+                          <span className={cn(
+                            "text-xs font-semibold tabular-nums",
+                            !stockInfo ? "text-slate-300 dark:text-slate-700" :
+                            stockInfo.available > 0 ? "text-slate-600 dark:text-slate-300" : "text-red-500"
+                          )}>
+                            {stockInfo ? stockInfo.available : '—'}
+                          </span>
+                          {slotsCount > 1 && stockInfo && stockInfo.available > 0 && (
+                            <span className="text-[8px] font-bold text-emerald-600 dark:text-emerald-400">
+                              (máx {Math.floor(stockInfo.available / slotsCount)}/célula)
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* TOTAL */}
