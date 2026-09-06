@@ -949,7 +949,7 @@ ${autoPrint ? `<script>window.onload=()=>{window.print()}</script>` : ''}
     <div className={cn("flex min-h-screen transition-colors duration-500", theme === "dark" ? "bg-[#020617]" : "bg-[#f8fafc]")}>
 
       {/* ─── Sidebar ─────────────────────────────────────────────────────── */}
-      <aside className="group/sidebar fixed left-0 top-0 z-50 flex h-full w-24 flex-col items-center border-none bg-white/80 py-8 backdrop-blur-xl dark:bg-slate-900/80 transition-all duration-300 hover:w-64 overflow-hidden">
+      <aside className="group/sidebar hidden md:flex fixed left-0 top-0 z-50 flex h-full w-24 flex-col items-center border-none bg-white/80 py-8 backdrop-blur-xl dark:bg-slate-900/80 transition-all duration-300 hover:w-64 overflow-hidden">
 
         {/* Branding */}
         <div 
@@ -1046,7 +1046,7 @@ ${autoPrint ? `<script>window.onload=()=>{window.print()}</script>` : ''}
       </aside>
 
       {/* ─── Main Content ────────────────────────────────────────────────── */}
-      <main className="ml-24 flex-1 p-4 md:p-8 lg:p-12">
+      <main className="ml-0 md:ml-24 flex-1 p-2 sm:p-4 md:p-8 lg:p-12">
         <div className="mx-auto max-w-[1920px] w-full space-y-8">
 
           {activeTab === "formacao_paletes" && (

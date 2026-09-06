@@ -441,6 +441,7 @@ function DashboardPage() {
   const [sortMode, setSortMode] = useState<SortType>("none")
   const [modalFilter, setModalFilter] = useState(false)
   const [theme, setTheme] = useState<"light" | "dark">("dark")
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [scrollRequested, setScrollRequested] = useState(false)
   const [showExportMenu, setShowExportMenu] = useState(false)
   const [showExportConfigModal, setShowExportConfigModal] = useState(false)
@@ -3616,9 +3617,135 @@ function DashboardPage() {
         }
       ` }} />
 
-      <div className="flex min-h-screen bg-[#f8fafc] dark:bg-[#020617] transition-colors duration-500 no-print relative">
-        {/* Minimalist SideMenu */}
-        <aside className="group/sidebar fixed left-0 top-0 z-50 flex h-full w-24 flex-col items-center border-none bg-white/80 py-8 backdrop-blur-xl dark:bg-slate-900/80 transition-all duration-300 hover:w-64 overflow-hidden">
+      <div className="flex flex-col md:flex-row min-h-screen bg-[#f8fafc] dark:bg-[#020617] transition-colors duration-500 no-print relative">
+        {/* Mobile Top Header (< md screens) */}
+        <div className="md:hidden sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-3 py-2.5 flex flex-col gap-2 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-600 shadow-md text-white">
+                <Package size={18} />
+              </div>
+              <div>
+                <h1 className="text-xs font-bold text-slate-900 dark:text-white leading-tight">Portal <span className="text-blue-500">AG</span></h1>
+                <p className="text-[8px] font-semibold text-slate-400 uppercase tracking-widest">G300 Operacional</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              {/* Online/Offline status badge */}
+              <div className={cn(
+                "px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider flex items-center gap-1 border",
+                syncStatus === "online" ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" :
+                syncStatus === "syncing" ? "bg-amber-500/10 text-amber-500 border-amber-500/20 animate-pulse" :
+                "bg-rose-500/10 text-rose-500 border-rose-500/20"
+              )}>
+                <span className={cn("w-1.5 h-1.5 rounded-full", syncStatus === "online" ? "bg-emerald-500" : syncStatus === "syncing" ? "bg-amber-500" : "bg-rose-500")} />
+                {syncStatus === "online" ? "Online" : syncStatus === "syncing" ? "Sync" : "Offline"}
+              </div>
+
+              {/* Theme Toggle Button */}
+              <button
+                onClick={toggleTheme}
+                className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800"
+              >
+                {theme === "light" ? <Moon size={16} /> : <Sun size={16} />}
+              </button>
+
+              {/* Mobile Menu Hamburger */}
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="p-1.5 rounded-lg text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+              >
+                {mobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
+              </button>
+            </div>
+          </div>
+
+          {/* Scrollable Horizontal Tab Bar */}
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5 border-t border-slate-100 dark:border-slate-800/60">
+            {[
+              { id: 'geral', label: 'Dashboard', icon: Layout },
+              { id: 'mapeamento', label: 'Mapeamento', icon: MapPin },
+              { id: 'produtos', label: 'Produtos', icon: Box },
+              { id: 'confrontos', label: 'Confrontos', icon: GitCompare },
+              ...(user ? [{ id: 'registros', label: 'Monitoramento', icon: History }] : []),
+              { id: 'retrabalhos', label: 'Retrabalhos', icon: RefreshCw },
+              { id: 'embalagens', label: 'Embalagens', icon: Package },
+              ...(user ? [{ id: 'relatorio_recebimento', label: 'Rec. Mensal', icon: Droplet }] : []),
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  setTopTab(tab.id as any);
+                  if (tab.id === 'produtos') setActiveView('produtos');
+                  else if (tab.id === 'geral') setActiveView('geral');
+                  else if (tab.id === 'mapeamento') {
+                    if (displayMode === "nao_alocados") setActiveView("nao_alocados");
+                    else if (displayMode === "quarentena") setActiveView("quarentena");
+                    else setActiveView("geral");
+                  }
+                }}
+                className={cn(
+                  "flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap shrink-0 transition-all",
+                  topTab === tab.id
+                    ? "bg-blue-600 text-white shadow-sm shadow-blue-500/20"
+                    : "bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400"
+                )}
+              >
+                <tab.icon size={13} />
+                <span>{tab.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Mobile Drawer Menu Overlay */}
+        <AnimatePresence>
+          {mobileMenuOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="md:hidden fixed inset-x-0 top-[90px] z-40 bg-white/98 dark:bg-slate-900/98 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 p-4 shadow-2xl space-y-3"
+            >
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Módulos e Ações</span>
+                <button
+                  onClick={() => { setShowModuleModal(true); setMobileMenuOpen(false); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                >
+                  <Repeat2 size={14} />
+                  <span>Trocar Módulo</span>
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Usuário:</span>
+                {user ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 truncate max-w-[160px]">{user.email}</span>
+                    <button
+                      onClick={handleLogout}
+                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-500/10 text-rose-500"
+                    >
+                      Sair
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => { setShowLoginModal(true); setMobileMenuOpen(false); }}
+                    className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-blue-600 text-white"
+                  >
+                    Fazer Login
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Minimalist SideMenu (Desktop only) */}
+        <aside className="group/sidebar hidden md:flex fixed left-0 top-0 z-50 flex h-full w-24 flex-col items-center border-none bg-white/80 py-8 backdrop-blur-xl dark:bg-slate-900/80 transition-all duration-300 hover:w-64 overflow-hidden">
           {/* Sidebar Branding (Combined) */}
           <div className="mb-12 flex flex-col items-center gap-4 px-4 w-full text-center">
             <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[1.5rem] bg-blue-600 shadow-xl shadow-blue-500/30">
@@ -3736,7 +3863,7 @@ function DashboardPage() {
           </div>
         </aside>
 
-        <main className={cn("ml-24 flex-1 overflow-x-hidden", (topTab === 'registros' || topTab === 'relatorio_recebimento' || topTab === 'retrabalhos' || topTab === 'embalagens') ? "flex flex-col h-screen p-2 md:p-4 lg:p-6" : "p-4 md:p-8 lg:p-12")}>
+        <main className={cn("ml-0 md:ml-24 flex-1 overflow-x-hidden", (topTab === 'registros' || topTab === 'relatorio_recebimento' || topTab === 'retrabalhos' || topTab === 'embalagens') ? "flex flex-col h-screen p-2 md:p-4 lg:p-6" : "p-2 sm:p-4 md:p-8 lg:p-12")}>
           <div className={cn("mx-auto space-y-6 md:space-y-10", (topTab === 'registros' || topTab === 'relatorio_recebimento' || topTab === 'retrabalhos' || topTab === 'embalagens') ? "max-w-[1920px] w-full flex-1 flex flex-col px-4" : "max-w-7xl")}>
 
             {/* Header - Simple & Clean */}
