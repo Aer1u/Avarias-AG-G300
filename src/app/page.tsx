@@ -75,9 +75,11 @@ import RetrabalhosTab from "@/components/RetrabalhosTab"
 import RelatorioRecebimentoTab from "@/components/RelatorioRecebimentoTab"
 import EmbalagensTab from "@/components/EmbalagensTab"
 import { OriginDonutChart } from "@/components/OriginDonutChart"
+import { saveSnapshot, getSnapshot, setMetadata, getMetadata } from "@/lib/offlineDb"
+import { syncManager, ConnectionStatus } from "@/lib/syncManager"
 
-type ViewType = "geral" | "posicoes" | "nao_alocados" | "produtos" | "molhados" | "quarentena"
-type DisplayMode = "mapa" | "tabela" | "misto" | "nao_alocados" | "quarentena"
+type ViewType = "geral" | "posicoes" | "nao_alocados" | "produtos" | "molhados" | "quarentena" | "retrabalho"
+type DisplayMode = "mapa" | "tabela" | "misto" | "nao_alocados" | "quarentena" | "retrabalho"
 type SortType = "none" | "qty_desc" | "qty_asc" | "alpha_asc"
 
 let nextTempId = 1;
@@ -387,9 +389,38 @@ function DashboardPage() {
   const [data, setData] = useState<any[]>([])
   const [movimentosRaw, setMovimentosRaw] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [isOffline, setIsOffline] = useState(false)
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null)
+  const [syncStatus, setSyncStatus] = useState<ConnectionStatus>("online")
+  const [pendingCount, setPendingCount] = useState<number>(0)
 
   useEffect(() => {
     setMounted(true)
+    const unsubscribeSync = syncManager.subscribe((status, count) => {
+      setSyncStatus(status);
+      setPendingCount(count);
+      if (status === "offline") setIsOffline(true);
+      else if (status === "online") setIsOffline(false);
+    });
+
+    const handleOnline = () => {
+      console.log("[Network] Conexão restabelecida. Sincronizando fila...");
+      setIsOffline(false);
+      syncManager.syncPendingQueue().then(() => fetchData());
+    };
+    const handleOffline = () => {
+      console.log("[Network] Conexão perdida. Modo offline ativado.");
+      setIsOffline(true);
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      unsubscribeSync();
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
   }, [])
   const [search, setSearch] = useState("")
   const [activeView, setActiveView] = useState<ViewType>("geral")
@@ -1004,7 +1035,58 @@ function DashboardPage() {
   const commitChanges = async () => {
     if (pendingChanges.length === 0) return;
     setIsCommitting(true);
+
+    const isConnected = await syncManager.checkRealConnection();
+
     try {
+      if (!isConnected) {
+        for (const change of pendingChanges) {
+          if (change.type === 'ADD') {
+            await syncManager.addOperation({
+              type: 'ADD',
+              table: 'mapeamento',
+              changes: change.payload,
+              audit: change.audit
+            });
+          } else if (change.type === 'DELETE') {
+            await syncManager.addOperation({
+              type: 'DELETE',
+              table: 'mapeamento',
+              recordId: change.id,
+              changes: change.payload,
+              audit: change.audit
+            });
+          } else if (change.type === 'UPDATE') {
+            const newQty = change.payload?.['Quantidade'];
+            const oldQty = change.audit?.quantidade_anterior;
+            if (newQty !== undefined && oldQty !== undefined) {
+              const delta = Number(newQty) - Number(oldQty);
+              await syncManager.addOperation({
+                type: 'QUANTITY_DELTA',
+                table: 'mapeamento',
+                recordId: change.payload?.id || change.id,
+                field: 'Quantidade',
+                delta,
+                changes: change.payload,
+                original: { Quantidade: oldQty },
+                audit: change.audit
+              });
+            } else {
+              await syncManager.addOperation({
+                type: 'UPDATE_FIELD',
+                table: 'mapeamento',
+                recordId: change.payload?.id || change.id,
+                changes: change.payload,
+                audit: change.audit
+              });
+            }
+          }
+        }
+        setPendingChanges([]);
+        alert("Modo Offline: Alteração gravada no celular! Será sincronizada com o servidor assim que a conexão for reestabelecida.");
+        return;
+      }
+
       // Group by SKU to minimize floor records operations
       const adds = pendingChanges.filter(c => c.type === 'ADD');
       const deletes = pendingChanges.filter(c => c.type === 'DELETE');
@@ -1067,9 +1149,10 @@ function DashboardPage() {
         const { error: delErr } = await supabase.from('mapeamento').delete().eq('id', change.payload.id);
         if (delErr) throw delErr;
 
-        // Return to Floor
+        // Return to Retrabalho position
+        const targetPos = change.targetPosition || change.payload?.targetPosition || 'Retrabalho';
         const { error: insErr } = await supabase.from('mapeamento').insert({
-          'Posição': 'Chão',
+          'Posição': targetPos,
           'Código': change.payload['Código'],
           'Quantidade': change.payload['Quantidade'],
           'Nível': 0,
@@ -1420,7 +1503,21 @@ function DashboardPage() {
       const posicoesRaw = posicoesRes.data || [];
       const mapeamentoRaw = mapeamentoRes.data || [];
 
+      // Save snapshots to IndexedDB (Fase 2)
+      saveSnapshot('mapeamento', mapeamentoRaw);
+      saveSnapshot('posicoes', posicoesRaw);
+      if (baseCodigosRes.data) saveSnapshot('produtos', baseCodigosRes.data);
+      
+      const nowIso = new Date().toISOString();
+      setMetadata('lastSync', nowIso);
+      setMetadata('syncStatus', 'synced');
+      setLastSyncTime(nowIso);
+      setIsOffline(false);
+
       let historicoRaw = historicoRes.data || [];
+      if (historicoRaw.length > 0) {
+        saveSnapshot('registros', historicoRaw);
+      }
       // Robustness: Fallback to lowercase 'registros' if Title Case 'Registros' is empty or failed
       if (historicoRaw.length === 0) {
         console.log("Tentando buscar na tabela 'registros' (minúsculo)...");
@@ -1589,8 +1686,116 @@ function DashboardPage() {
 
 
     } catch (err: any) {
-      setError("Falha na conexão com o Supabase: " + err.message);
-      console.error(err);
+      console.warn("[Offline Cache] Conexão com Supabase indisponível. Carregando snapshot local do IndexedDB...", err);
+      try {
+        const cachedMapeamento = await getSnapshot('mapeamento');
+        const cachedPosicoes = await getSnapshot('posicoes');
+        const cachedProdutos = await getSnapshot('produtos');
+        const savedLastSync = await getMetadata<string>('lastSync');
+
+        if (cachedMapeamento.length > 0 || cachedPosicoes.length > 0) {
+          setIsOffline(true);
+          setLastSyncTime(savedLastSync);
+          setError(null);
+
+          const skuLookup = new Map();
+          cachedProdutos.forEach((c: any) => {
+            const rawCod = String(c['Código'] || c['Codigo'] || c['PRODUTO'] || "").trim();
+            const cod = rawCod.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            if (cod) {
+              skuLookup.set(cod, {
+                cod_original: rawCod,
+                descricao: c['Descrição'] || c['Descricao'] || c['NOME'] || '',
+                grade: c['Grade'] || '',
+                tipo: c['Tipo'] || ''
+              });
+            }
+          });
+
+          const posLookup = new Map();
+          cachedPosicoes.forEach((p: any) => {
+            const id = String(p['Posições'] || p.posicao || "").trim();
+            posLookup.set(id, {
+              posicao: id,
+              capacidade: Number(p['Capacidade']) || 0,
+              status: p['Status'] || 'Aberto',
+              observacao_pos: p['Observação'] || '',
+              is_unallocated_source: !id || id === 'S/P' || id.toUpperCase() === 'CHÃO'
+            });
+          });
+
+          const usedPalletIds = new Set();
+          const usedLocationSlots = new Set();
+          const combinedData: any[] = cachedMapeamento.map((m: any) => {
+            const posId = String(m['Posição'] || "").trim();
+            const posInfo = posLookup.get(posId) || {
+              posicao: posId || 'S/P',
+              capacidade: 0,
+              status: 'Aberto',
+              observacao_pos: '',
+              is_unallocated_source: !posId || posId === 'S/P' || posId.toUpperCase() === 'CHÃO'
+            };
+
+            const rawPalletId = m['Id Palete'];
+            const palletId = (rawPalletId && typeof rawPalletId === 'string')
+              ? rawPalletId.trim().toUpperCase()
+              : (rawPalletId !== null && rawPalletId !== undefined) ? String(rawPalletId).trim().toUpperCase() : null;
+
+            let isFirstOccurrence = false;
+            const isInvalidId = !palletId || palletId === "" || palletId === "NAN" || palletId === "-" || palletId === "S/ID" || palletId === "N/A";
+
+            if (!isInvalidId) {
+              if (!usedPalletIds.has(palletId)) {
+                usedPalletIds.add(palletId);
+                isFirstOccurrence = true;
+              }
+            } else {
+              const nivelVal = m['Nível'] !== undefined && m['Nível'] !== null ? m['Nível'] : '';
+              const profVal = m['Profundidade'] !== undefined && m['Profundidade'] !== null ? m['Profundidade'] : '';
+              const slotKey = `${posId}_N${nivelVal}_P${profVal}`;
+
+              if (nivelVal !== '' || profVal !== '') {
+                if (!usedLocationSlots.has(slotKey)) {
+                  usedLocationSlots.add(slotKey);
+                  isFirstOccurrence = true;
+                }
+              } else {
+                isFirstOccurrence = true;
+              }
+            }
+
+            const mSku = String(m['Código'] || m['Codigo'] || '').trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            let mDesc = "-";
+            if (skuLookup.has(mSku)) {
+              mDesc = skuLookup.get(mSku).descricao;
+            }
+
+            return {
+              id: m.id,
+              ...posInfo,
+              id_palete: m['Id Palete'],
+              produto: m['Código'],
+              descricao: mDesc,
+              quantidade_total: Number(m['Quantidade']) || 0,
+              nivel: m['Nível'],
+              profundidade: m['Profundidade'],
+              qtd_tombada: Number(m['Parte Tombada']) || 0,
+              qtd_molhado: Number(m['Parte Molhada']) || 0,
+              ultima_alteracao: m['Última Alteração'],
+              observacao: m['Observação'],
+              paletes: isFirstOccurrence ? 1 : 0,
+              fracao_paletes: isFirstOccurrence ? 1 : 0
+            };
+          });
+
+          setData(combinedData);
+          setBaseCodigosMap(skuLookup);
+        } else {
+          setError("Sem conexão com o servidor Supabase e sem dados gravados no celular.");
+        }
+      } catch (cacheErr) {
+        setError("Falha na conexão com o Supabase: " + err.message);
+      }
     } finally {
       setTimeout(() => {
         setLoading(false);
@@ -2169,6 +2374,11 @@ function DashboardPage() {
       baseData = effectiveData.filter(item => {
         const pos = String(item.posicao || "").toUpperCase()
         return pos.includes("QUARENTENA")
+      })
+    } else if (activeView === "retrabalho") {
+      baseData = effectiveData.filter(item => {
+        const pos = String(item.posicao || "").toUpperCase()
+        return pos === "RETRABALHO" || pos.includes("RETRABALHO")
       })
     } else {
       baseData = [...effectiveData]
@@ -5210,7 +5420,7 @@ function DashboardPage() {
 
                   {/* REFINED FILTER BAR */}
                   <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between py-6 border-y border-slate-100 dark:border-slate-800 transition-colors">
-                    <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-900 rounded-2xl w-fit border border-slate-200/50 dark:border-slate-800/50">
+                    <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-900 rounded-2xl w-fit max-w-full overflow-x-auto scrollbar-none border border-slate-200/50 dark:border-slate-800/50">
                       <button
                         onClick={() => { setDisplayMode("mapa"); setActiveView("geral"); }}
                         className={cn(
@@ -5247,6 +5457,15 @@ function DashboardPage() {
                       >
                         <AlertTriangle size={14} /> Quarentena
                       </button>
+                      <button
+                        onClick={() => { setDisplayMode("retrabalho"); setActiveView("retrabalho"); setSortMode("none"); setTableSort({ key: "produto", direction: "asc" }); }}
+                        className={cn(
+                          "flex items-center gap-2 rounded-xl px-4 py-2 text-[10px] uppercase font-semibold transition-all",
+                          displayMode === "retrabalho" ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                        )}
+                      >
+                        <RefreshCw size={14} /> Retrabalho
+                      </button>
                     </div>
 
                     {/* Middle Legend (Map Only with Counts) */}
@@ -5276,6 +5495,50 @@ function DashboardPage() {
                     </div>
 
                     <div className="flex items-center gap-4">
+                      {/* Connection Health Status & Sync Manager Badge */}
+                      <div className="shrink-0 flex items-center gap-2">
+                        {syncStatus === "syncing" ? (
+                          <div className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-blue-600 dark:text-blue-400 text-[10px] font-bold uppercase tracking-wider shadow-sm">
+                            <RefreshCw size={12} className="animate-spin" />
+                            <span>Sincronizando...</span>
+                          </div>
+                        ) : isOffline || syncStatus === "offline" ? (
+                          <div 
+                            title={lastSyncTime ? `Última sincronização: ${new Date(lastSyncTime).toLocaleTimeString('pt-BR')}` : 'Modo Offline'}
+                            className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-[10px] font-bold uppercase tracking-wider shadow-sm"
+                          >
+                            <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                            <span>Offline {pendingCount > 0 ? `(${pendingCount} pendente${pendingCount > 1 ? 's' : ''})` : ''}</span>
+                          </div>
+                        ) : syncStatus === "error" ? (
+                          <div className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-[10px] font-bold uppercase tracking-wider shadow-sm">
+                            <AlertCircle size={12} />
+                            <span>Atenção no Sync ({pendingCount})</span>
+                          </div>
+                        ) : (
+                          <div 
+                            title="Todos os dados sincronizados com o Supabase"
+                            className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold uppercase tracking-wider shadow-sm"
+                          >
+                            <div className="h-2 w-2 rounded-full bg-emerald-500" />
+                            <span>Online</span>
+                          </div>
+                        )}
+
+                        {pendingCount > 0 && (
+                          <button
+                            onClick={async () => {
+                              await syncManager.syncPendingQueue();
+                              await fetchData();
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold uppercase tracking-wider shadow-md shadow-blue-500/20 transition-all active:scale-95 cursor-pointer"
+                          >
+                            <RefreshCw size={12} className={syncStatus === "syncing" ? "animate-spin" : ""} />
+                            <span>Enviar ({pendingCount})</span>
+                          </button>
+                        )}
+                      </div>
+
                       {displayMode === "tabela" && (
                         <div className="flex items-center gap-2 p-1 bg-slate-100 dark:bg-slate-900 rounded-2xl border border-slate-200/50 dark:border-slate-800/50">
                           <button
@@ -5852,7 +6115,7 @@ function DashboardPage() {
                     </>
                   )}
                   {
-                    (displayMode === "nao_alocados" || displayMode === "quarentena") && (() => {
+                    (displayMode === "nao_alocados" || displayMode === "quarentena" || displayMode === "retrabalho") && (() => {
                       // --- Group items by pallet id ---
                       const INVALID = (v: any) => !v || v === "" || String(v).toUpperCase() === "NAN" || v === "-" || v === "S/ID" || v === "N/A";
                       const grouped: { key: string; label: string; isSimple: boolean; items: any[] }[] = [];
@@ -6066,6 +6329,26 @@ function DashboardPage() {
                                                     }
                                                     return null;
                                                   })()}
+                                                  {displayMode === "retrabalho" && (
+                                                    <button
+                                                      onClick={async (e) => {
+                                                        e.stopPropagation();
+                                                        if (!singleItem?.id) return;
+                                                        if (!window.confirm(`Mover ${singleItem.produto || 'item'} (${singleItem.quantidade_total || singleItem.quantidade || 0} un.) do Retrabalho para o Chão?`)) return;
+                                                        try {
+                                                          const { error } = await supabase.from('mapeamento').update({ 'Posição': 'Chão' }).eq('id', singleItem.id);
+                                                          if (error) throw error;
+                                                          await fetchData();
+                                                        } catch (err: any) {
+                                                          alert("Erro ao mover para o Chão: " + err.message);
+                                                        }
+                                                      }}
+                                                      className="mr-2 px-2 py-1 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 rounded-lg transition-colors flex items-center gap-1 uppercase tracking-wider"
+                                                      title="Mover do Retrabalho para o Chão"
+                                                    >
+                                                      <RefreshCw size={11} /> Mover p/ Chão
+                                                    </button>
+                                                  )}
                                                   <button
                                                     onClick={(e) => {
                                                       e.stopPropagation();
@@ -6122,7 +6405,27 @@ function DashboardPage() {
                                                 })()}
                                               </td>
                                               {user && (
-                                                <td className="px-3 py-2 text-center">
+                                                <td className="px-3 py-2 text-center flex items-center justify-end gap-1">
+                                                  {displayMode === "retrabalho" && (
+                                                    <button
+                                                      onClick={async (e) => {
+                                                        e.stopPropagation();
+                                                        if (!sub?.id) return;
+                                                        if (!window.confirm(`Mover ${sub.produto || 'item'} (${sub.quantidade_total || sub.quantidade || 0} un.) do Retrabalho para o Chão?`)) return;
+                                                        try {
+                                                          const { error } = await supabase.from('mapeamento').update({ 'Posição': 'Chão' }).eq('id', sub.id);
+                                                          if (error) throw error;
+                                                          await fetchData();
+                                                        } catch (err: any) {
+                                                          alert("Erro ao mover para o Chão: " + err.message);
+                                                        }
+                                                      }}
+                                                      className="px-2 py-0.5 text-[9px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 rounded-lg transition-colors flex items-center gap-1 uppercase tracking-wider"
+                                                      title="Mover do Retrabalho para o Chão"
+                                                    >
+                                                      <RefreshCw size={10} /> Mover p/ Chão
+                                                    </button>
+                                                  )}
                                                   <button
                                                     onClick={(e) => {
                                                       e.stopPropagation();
@@ -7819,10 +8122,10 @@ function DashboardPage() {
 
           <AnimatePresence>
             {selectedPosition && positionDetail && (
-              <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 md:p-6 transition-colors">
+              <div className="fixed inset-0 z-[120] flex items-center justify-center p-2 sm:p-4 md:p-6 transition-colors">
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedPosition(null)} className="absolute inset-0 bg-slate-900/40 dark:bg-slate-950/60 backdrop-blur-md" />
-                <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-7xl max-h-[92vh] rounded-3xl md:rounded-[3rem] bg-white dark:bg-slate-900 p-5 md:p-10 shadow-2xl border border-white/20 dark:border-slate-800 flex flex-col overflow-hidden transition-colors">
-                  <div className="flex items-center justify-between mb-6 md:mb-8">
+                <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-7xl max-h-[96vh] md:max-h-[92vh] rounded-2xl sm:rounded-3xl md:rounded-[3rem] bg-white dark:bg-slate-900 p-3 sm:p-5 md:p-10 shadow-2xl border border-white/20 dark:border-slate-800 flex flex-col overflow-hidden transition-colors">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 md:mb-8">
                     <div className="flex items-center gap-3 md:gap-4">
                       <div className="h-10 w-10 md:h-14 md:w-14 rounded-2xl md:rounded-3xl bg-blue-600 flex items-center justify-center text-white shadow-xl shadow-blue-200 dark:shadow-blue-900/20 transition-all"><MapPin size={20} className="md:w-6 md:h-6" /></div>
                       <div className="text-left">

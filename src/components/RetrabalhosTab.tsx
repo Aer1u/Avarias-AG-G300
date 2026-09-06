@@ -422,7 +422,8 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
           (isAlreadyG || willConfirmG)
 
         if (willBothBeConfirmed) {
-          const sku = String(record.codigo || '').trim().toUpperCase()
+          const config = lotesConfig.find(c => String(c.lote).trim() === String(record.lote).trim());
+          const sku = String(record.codigo || config?.codigo || '').trim().toUpperCase()
           const qty = Math.round(Number(record.quantidade_enviada) || 0)
           if (sku && qty > 0) {
             requiredQtyPerProduct[sku] = (requiredQtyPerProduct[sku] || 0) + qty
@@ -430,7 +431,7 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
         }
       })
 
-      // Verificar estoque no Chão
+      // Verificar estoque na posição Retrabalho
       const errorsList: string[] = []
       const productStocks: Record<string, { id: number, Quantidade: number }[]> = {}
 
@@ -438,7 +439,7 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
         const { data: floorStock, error: stockErr } = await supabase
           .from('mapeamento')
           .select('id, Quantidade')
-          .eq('Posição', 'Chão')
+          .eq('Posição', 'Retrabalho')
           .eq('Código', sku)
           .order('id', { ascending: true })
 
@@ -446,19 +447,19 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
 
         const totalFloor = (floorStock || []).reduce((acc, curr) => acc + (curr.Quantidade || 0), 0)
         if (totalFloor < reqQty) {
-          errorsList.push(`• ${sku}: necessário ${reqQty}, disponível ${totalFloor} no Chão.`)
+          errorsList.push(`• ${sku}: necessário ${reqQty}, disponível ${totalFloor} na posição 'Retrabalho'.`)
         } else {
           productStocks[sku] = floorStock || []
         }
       }
 
       if (errorsList.length > 0) {
-        alert("⚠️ Impeditivo de Salvar — Estoque Insuficiente no Chão:\n\n" + errorsList.join("\n") + "\n\nPor favor, aloque a quantidade necessária de peças no 'Chão' antes de registrar a saída.")
+        alert("⚠️ Impeditivo de Salvar — Estoque Insuficiente em 'Retrabalho':\n\n" + errorsList.join("\n") + "\n\nPor favor, aloque a quantidade necessária de peças na posição 'Retrabalho' antes de registrar a saída.")
         setProcessingConfirmados(false)
         return
       }
 
-      // Processar confirmações e consumir o Chão
+      // Processar confirmações e consumir a posição Retrabalho
       for (const [id, { record, willConfirmA, willConfirmG }] of recordMatchesMap.entries()) {
         const isAlreadyA = record.situacao_a501 === 'CONFIRMADO'
         const isAlreadyG = record.situacao_g501 === 'CONFIRMADO'
@@ -480,7 +481,9 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
         }
 
         if (willBothBeConfirmed) {
-          const sku = String(record.codigo || '').trim().toUpperCase()
+          const config = lotesConfig.find(c => String(c.lote).trim() === String(record.lote).trim());
+          const loteCodigo = String(record.codigo || config?.codigo || '').trim();
+          const sku = loteCodigo.toUpperCase();
           const qtyToConsume = Math.round(Number(record.quantidade_enviada) || 0)
           
           if (sku && qtyToConsume > 0) {
@@ -508,7 +511,7 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
 
           const { error } = await supabase.from('Registros').insert({
             Data: today,
-            Produto: record.codigo || '',
+            Produto: loteCodigo,
             'Saída': record.quantidade_enviada || 0,
             Entrada: null,
             Origem: 'Retrabalho',

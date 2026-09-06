@@ -89,6 +89,48 @@ export function DriveInGrid({
   const [addingCoords, setAddingCoords] = React.useState<{ lvl: number; d: number } | null>(null)
   const [editingProduct, setEditingProduct] = React.useState<LocalProduct | null>(null)
   const [isSelectingProductToEdit, setIsSelectingProductToEdit] = React.useState(false)
+  const [removeTargetModal, setRemoveTargetModal] = React.useState<{
+    title: string;
+    items: Product[];
+    onConfirm: (targetPos: 'Chão' | 'Retrabalho') => void;
+  } | null>(null)
+
+  const executeMoveProductsToDestination = (items: Product[], targetPos: 'Chão' | 'Retrabalho') => {
+    setIsSubmitting(true);
+    try {
+      const acao = targetPos === 'Retrabalho' ? 'ENVIAR_RETRABALHO' : 'MOVER_CHAO';
+      const newDeleteChanges = items.map(p => ({
+        id: p.id,
+        type: 'DELETE',
+        targetPosition: targetPos,
+        payload: {
+          id: p.id,
+          'Código': p.sku,
+          'Quantidade': p.quantidade,
+          'Parte Tombada': p.qtd_tombada || 0,
+          'Parte Molhada': p.qtd_molhado || 0,
+          sku: p.sku,
+          quantidade_total: p.quantidade,
+          targetPosition: targetPos
+        },
+        audit: {
+          acao: acao,
+          sku: p.sku,
+          posicao: positionId,
+          nivel: p.nivel,
+          profundidade: p.profundidade,
+          quantidade: p.quantidade
+        }
+      }));
+
+      setPendingChanges(prev => [...prev, ...newDeleteChanges]);
+    } catch (err) {
+      console.error("Move Destination Error:", err);
+    } finally {
+      setIsSubmitting(false);
+      setRemoveTargetModal(null);
+    }
+  };
 
   const toggleGapSelection = (lvl: number, d: number) => {
     const key = `${lvl}-${d}`
@@ -284,39 +326,14 @@ export function DriveInGrid({
       return;
     }
 
-    if (!window.confirm(`Mover ${itemsToMove.length} itens (de ${selectedGaps.size} grades) para o Chão?`)) return;
-
-    setIsSubmitting(true);
-    try {
-      const newDeleteChanges = itemsToMove.map(p => ({
-        id: p.id,
-        type: 'DELETE',
-        payload: {
-          id: p.id,
-          'Código': p.sku,
-          'Quantidade': p.quantidade,
-          'Parte Tombada': p.qtd_tombada || 0,
-          'Parte Molhada': p.qtd_molhado || 0,
-          sku: p.sku,
-          quantidade_total: p.quantidade
-        },
-        audit: {
-          acao: 'REMOVER',
-          sku: p.sku,
-          posicao: positionId,
-          nivel: p.nivel,
-          profundidade: p.profundidade,
-          quantidade: p.quantidade
-        }
-      }));
-
-      setPendingChanges(prev => [...prev, ...newDeleteChanges]);
-      setSelectedGaps(new Set());
-    } catch (err) {
-      console.error("Batch Move Error:", err);
-    } finally {
-      setIsSubmitting(false);
-    }
+    setRemoveTargetModal({
+      title: `Remover ${itemsToMove.length} item(ns) de ${selectedGaps.size} grade(s)`,
+      items: itemsToMove,
+      onConfirm: (targetPos) => {
+        executeMoveProductsToDestination(itemsToMove, targetPos);
+        setSelectedGaps(new Set());
+      }
+    });
   }
 
 
@@ -497,36 +514,11 @@ export function DriveInGrid({
        return;
     }
 
-    if (!window.confirm(`Mover ${product.sku} (qtd: ${product.quantidade}) para o Chão?`)) return;
-
-    setIsSubmitting(true);
-    try {
-      setPendingChanges(prev => [...prev, {
-        id: product.id,
-        type: 'DELETE',
-        payload: {
-          id: product.id,
-          'Código': product.sku,
-          'Quantidade': product.quantidade,
-          'Parte Tombada': product.qtd_tombada || 0,
-          'Parte Molhada': product.qtd_molhado || 0,
-          sku: product.sku,
-          quantidade_total: product.quantidade
-        },
-        audit: {
-          acao: 'REMOVER',
-          sku: product.sku,
-          posicao: positionId,
-          nivel: product.nivel,
-          profundidade: product.profundidade,
-          quantidade: product.quantidade
-        }
-      }]);
-    } catch (err: any) {
-      console.error('[Lixeira] Erro inesperado:', err);
-    } finally {
-      setIsSubmitting(false);
-    }
+    setRemoveTargetModal({
+      title: `Remover item ${product.sku} (qtd: ${product.quantidade})`,
+      items: [product],
+      onConfirm: (targetPos) => executeMoveProductsToDestination([product], targetPos)
+    });
   };
 
   const handleMoveCellToFloor = async (prods: Product[]) => {
@@ -536,38 +528,12 @@ export function DriveInGrid({
       alert("Erro: Nenhum item desta célula possui ID válido no banco de dados.");
       return;
     }
-    if (!window.confirm(`Esvaziar Célula: Mover todos os ${validProds.length} itens para o Chão?`)) return;
 
-    setIsSubmitting(true);
-    try {
-      const newDeleteChanges = validProds.map(p => ({
-        id: p.id,
-        type: 'DELETE',
-        payload: {
-          id: p.id,
-          'Código': p.sku,
-          'Quantidade': p.quantidade,
-          'Parte Tombada': p.qtd_tombada || 0,
-          'Parte Molhada': p.qtd_molhado || 0,
-          sku: p.sku,
-          quantidade_total: p.quantidade
-        },
-        audit: {
-          acao: 'REMOVER',
-          sku: p.sku,
-          posicao: positionId,
-          nivel: p.nivel,
-          profundidade: p.profundidade,
-          quantidade: p.quantidade
-        }
-      }));
-
-      setPendingChanges(prev => [...prev, ...newDeleteChanges]);
-    } catch (err) {
-      console.error("Move Cell Error:", err);
-    } finally {
-      setIsSubmitting(false);
-    }
+    setRemoveTargetModal({
+      title: `Esvaziar Célula: Remover ${validProds.length} item(ns)`,
+      items: validProds,
+      onConfirm: (targetPos) => executeMoveProductsToDestination(validProds, targetPos)
+    });
   };
 
 
@@ -1191,9 +1157,9 @@ export function DriveInGrid({
             initial={{ y: 50, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 50, opacity: 0 }}
-            className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[130] w-full max-w-xl px-4"
+            className="fixed bottom-4 sm:bottom-12 left-1/2 -translate-x-1/2 z-[130] w-[95vw] sm:w-full max-w-xl px-2 sm:px-4"
           >
-            <div className="bg-slate-900 shadow-2xl rounded-2xl p-3 border border-white/10 flex items-center justify-between gap-4 backdrop-blur-md">
+            <div className="bg-slate-900 shadow-2xl rounded-2xl p-2.5 sm:p-3 border border-white/10 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 sm:gap-4 backdrop-blur-md">
               <div className="flex items-center gap-4 pl-4 border-r border-white/10 pr-6">
                 <div className="h-10 w-10 rounded-xl bg-orange-600 flex items-center justify-center text-white font-semibold shadow-lg shadow-orange-500/30">
                   {selectedGaps.size}
@@ -1375,7 +1341,7 @@ export function DriveInGrid({
                           }}
                           className="w-full py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-500 dark:text-rose-400 font-semibold text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                         >
-                          <Trash2 size={13} /> Remover Item (Voltar para o Chão)
+                          <Trash2 size={13} /> Remover Item (Enviar para Chão / Retrabalho)
                         </button>
                       </div>
                     </div>
@@ -1383,6 +1349,57 @@ export function DriveInGrid({
                 })()}
               </form>
             ) : null}
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Escolha de Destino ao Remover */}
+      {removeTargetModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[99999] flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Trash2 className="text-rose-500" size={18} />
+                Escolha o Destino
+              </h3>
+              <button 
+                onClick={() => setRemoveTargetModal(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 font-medium">
+              {removeTargetModal.title}. Para onde deseja enviar o saldo?
+            </p>
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                onClick={() => removeTargetModal.onConfirm('Chão')}
+                className="flex flex-col items-center justify-center gap-2 p-4 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 font-semibold text-xs transition-all hover:scale-[1.02] cursor-pointer"
+              >
+                <Package size={24} className="text-amber-400" />
+                <span>Enviar para o Chão</span>
+              </button>
+
+              <button
+                onClick={() => removeTargetModal.onConfirm('Retrabalho')}
+                className="flex flex-col items-center justify-center gap-2 p-4 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-400 font-semibold text-xs transition-all hover:scale-[1.02] cursor-pointer"
+              >
+                <RefreshCw size={24} className="text-blue-400" />
+                <span>Enviar para Retrabalho</span>
+              </button>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setRemoveTargetModal(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>
       )}

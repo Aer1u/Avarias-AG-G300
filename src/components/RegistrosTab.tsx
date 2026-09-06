@@ -1270,7 +1270,6 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                 <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[80px]">Turno</th>
                 <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[80px]">Entrada</th>
                 <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[80px]">Saída</th>
-                <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[90px]">Qtd Molh.</th>
                 <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[130px]">Origem</th>
                 <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[130px]">Transp.</th>
                 <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest w-[100px]">NF</th>
@@ -1280,7 +1279,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
             <tbody className="border-none">
               {loading ? (
                 <tr>
-                  <td colSpan={11} className="py-20 text-center">
+                  <td colSpan={10} className="py-20 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <Loader2 className="animate-spin text-blue-500" size={32} />
                       <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Carregando registros...</p>
@@ -1289,7 +1288,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                 </tr>
               ) : filteredRegistros.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-20 text-center">
+                  <td colSpan={10} className="py-20 text-center">
                     <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Nenhum registro encontrado</p>
                   </td>
                 </tr>
@@ -1387,21 +1386,6 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                           "w-full bg-transparent border-none px-5 py-3.5 text-sm tabular-nums focus:ring-1 focus:outline-none transition-colors font-normal disabled:cursor-default",
                           (Number(row.Saída) > 0) 
                             ? "text-rose-600 dark:text-rose-400 focus:ring-rose-500/30" 
-                            : "text-slate-400 dark:text-slate-600 placeholder:text-slate-300 dark:placeholder:text-slate-700 focus:ring-blue-500/20"
-                        )}
-                      />
-                    </td>
-                    <td className="p-0">
-                      <input 
-                        type="text"
-                        value={row.qtd_molhada ?? ''}
-                        disabled={!isEditable}
-                        onChange={(e) => updateRow(idx, 'qtd_molhada', e.target.value ? Number(e.target.value) : null)}
-                        placeholder="0"
-                        className={cn(
-                          "w-full bg-transparent border-none px-5 py-3.5 text-sm tabular-nums focus:ring-1 focus:outline-none transition-colors font-normal disabled:cursor-default",
-                          (Number(row.qtd_molhada) > 0) 
-                            ? "text-blue-600 dark:text-blue-400 focus:ring-blue-500/30" 
                             : "text-slate-400 dark:text-slate-600 placeholder:text-slate-300 dark:placeholder:text-slate-700 focus:ring-blue-500/20"
                         )}
                       />
