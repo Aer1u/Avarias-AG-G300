@@ -74,9 +74,18 @@ export async function saveSnapshot<T extends Record<string, any>>(storeName: str
     const store = tx.objectStore(storeName);
 
     store.clear(); // Clear existing snapshot to keep database fresh
-    items.forEach((item) => {
+    items.forEach((item, idx) => {
       if (item && typeof item === "object") {
-        store.put(item);
+        const itemToSave: any = { ...item };
+        if (storeName === "posicoes") {
+          itemToSave.id = itemToSave.id || itemToSave['Posições'] || itemToSave.posicao || `pos_${idx}`;
+        } else if (storeName === "produtos") {
+          itemToSave.produto = itemToSave.produto || itemToSave['Código'] || itemToSave['Codigo'] || itemToSave.id || `prod_${idx}`;
+          itemToSave.id = itemToSave.id || itemToSave.produto;
+        } else if (storeName === "mapeamento" || storeName === "registros") {
+          itemToSave.id = itemToSave.id !== undefined && itemToSave.id !== null ? itemToSave.id : idx + 1;
+        }
+        store.put(itemToSave);
       }
     });
 

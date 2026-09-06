@@ -777,7 +777,7 @@ export function DriveInGrid({
                                 }
                               }}
                               className={cn(
-                                "w-28 h-28 rounded-xl border relative group flex items-center justify-center p-2 text-center transition-all duration-200 cursor-pointer",
+                                "w-20 h-20 sm:w-28 sm:h-28 rounded-xl border relative group flex items-center justify-center p-1.5 sm:p-2 text-center transition-all duration-200 cursor-pointer shrink-0",
                                 isEmpty 
                                   ? "bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:border-slate-800"
                                   : "bg-white dark:bg-slate-900 dark:bg-slate-800 border-slate-200 dark:border-slate-700 dark:border-slate-700",
@@ -969,7 +969,7 @@ export function DriveInGrid({
             {/* Footer Row: Numeric Indicators (No P) */}
             <div className="flex gap-4 ml-14 mb-4">
               {depths.map(d => (
-                <div key={`head-${d}`} className="w-28 shrink-0 text-center">
+                <div key={`head-${d}`} className="w-20 sm:w-28 shrink-0 text-center">
                   <span className="text-[11px] font-semibold text-slate-900 dark:text-white dark:text-white uppercase tracking-tighter">
                     {d}
                   </span>

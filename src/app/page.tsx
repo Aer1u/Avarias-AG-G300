@@ -403,6 +403,8 @@ function DashboardPage() {
       else if (status === "online") setIsOffline(false);
     });
 
+    syncManager.handleNetworkChange();
+
     const handleOnline = () => {
       console.log("[Network] Conexão restabelecida. Sincronizando fila...");
       setIsOffline(false);
@@ -1688,6 +1690,8 @@ function DashboardPage() {
 
     } catch (err: any) {
       console.warn("[Offline Cache] Conexão com Supabase indisponível. Carregando snapshot local do IndexedDB...", err);
+      setIsOffline(true);
+      setSyncStatus("offline");
       try {
         const cachedMapeamento = await getSnapshot('mapeamento');
         const cachedPosicoes = await getSnapshot('posicoes');
@@ -1696,6 +1700,7 @@ function DashboardPage() {
 
         if (cachedMapeamento.length > 0 || cachedPosicoes.length > 0) {
           setIsOffline(true);
+          setSyncStatus("offline");
           setLastSyncTime(savedLastSync);
           setError(null);
 
@@ -8251,7 +8256,7 @@ function DashboardPage() {
             {selectedPosition && positionDetail && (
               <div className="fixed inset-0 z-[120] flex items-center justify-center p-2 sm:p-4 md:p-6 transition-colors">
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedPosition(null)} className="absolute inset-0 bg-slate-900/40 dark:bg-slate-950/60 backdrop-blur-md" />
-                <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-7xl max-h-[96vh] md:max-h-[92vh] rounded-2xl sm:rounded-3xl md:rounded-[3rem] bg-white dark:bg-slate-900 p-3 sm:p-5 md:p-10 shadow-2xl border border-white/20 dark:border-slate-800 flex flex-col overflow-hidden transition-colors">
+                <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-7xl max-h-[96vh] md:max-h-[92vh] rounded-2xl sm:rounded-3xl md:rounded-[3rem] bg-white dark:bg-slate-900 p-3 sm:p-5 md:p-10 shadow-2xl border border-white/20 dark:border-slate-800 flex flex-col overflow-y-auto custom-scrollbar transition-colors">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 md:mb-8">
                     <div className="flex items-center gap-3 md:gap-4">
                       <div className="h-10 w-10 md:h-14 md:w-14 rounded-2xl md:rounded-3xl bg-blue-600 flex items-center justify-center text-white shadow-xl shadow-blue-200 dark:shadow-blue-900/20 transition-all"><MapPin size={20} className="md:w-6 md:h-6" /></div>
