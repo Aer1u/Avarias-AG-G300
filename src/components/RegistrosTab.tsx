@@ -23,7 +23,8 @@ import {
   Edit2,
   FilterX,
   FileText,
-  Settings
+  Settings,
+  RefreshCw
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
@@ -67,6 +68,25 @@ interface HistoricoDriveIn {
   nivel_destino: number | null;
   prof_destino: number | null;
   quantidade: number;
+}
+
+interface OfflineSyncItem {
+  id: number;
+  criado_em: string;
+  sincronizado_em: string;
+  tipo_operacao: string;
+  tabela: string;
+  record_id?: string | null;
+  campo?: string | null;
+  delta?: number | null;
+  sku?: string | null;
+  posicao?: string | null;
+  nivel?: number | null;
+  profundidade?: number | null;
+  quantidade_anterior?: number | null;
+  quantidade_nova?: number | null;
+  status: string;
+  error_message?: string | null;
 }
 
 const ORIGEM_OPTIONS = [
@@ -211,7 +231,8 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
   const [saving, setSaving] = useState(false);
   const [registros, setRegistros] = useState<Registro[]>([]);
   const [historicoDriveIn, setHistoricoDriveIn] = useState<HistoricoDriveIn[]>([]);
-  const [viewMode, setViewMode] = useState<'geral' | 'drivein'>('geral');
+  const [offlineSyncLogs, setOfflineSyncLogs] = useState<OfflineSyncItem[]>([]);
+  const [viewMode, setViewMode] = useState<'geral' | 'drivein' | 'sync'>('geral');
   const [searchTerm, setSearchTerm] = useState('');
   const [toast, setToast] = useState<ToastState>({ show: false, message: '', type: 'info' });
   const [obsModalTarget, setObsModalTarget] = useState<{ index: number, isNew: boolean, value: string } | null>(null);
@@ -640,11 +661,41 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
     }
   };
 
+  const fetchOfflineSyncLogs = async () => {
+    setLoading(true);
+    try {
+      let query = supabase.from('offline_sync_log').select('*');
+
+      if (dateMode === 'week') {
+        const startDate = format(currentWeekStart, 'yyyy-MM-dd') + 'T00:00:00Z';
+        const endDate = format(addDays(weekEnd, 1), 'yyyy-MM-dd') + 'T00:00:00Z';
+        query = query.gte('sincronizado_em', startDate).lt('sincronizado_em', endDate);
+      } else if (dateMode === 'custom') {
+        if (customStartDate) query = query.gte('sincronizado_em', customStartDate + 'T00:00:00Z');
+        if (customEndDate) query = query.lt('sincronizado_em', customEndDate + 'T23:59:59Z');
+      }
+
+      const { data, error } = await query.order('sincronizado_em', { ascending: false });
+
+      if (error) {
+        console.warn('Erro ao buscar log de sync offline:', error);
+        return;
+      }
+      setOfflineSyncLogs(data || []);
+    } catch (err: any) {
+      console.warn('Erro de código ao buscar log de sync offline:', err?.message || err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (viewMode === 'geral') {
       fetchRegistros();
-    } else {
+    } else if (viewMode === 'drivein') {
       fetchHistoricoDriveIn();
+    } else if (viewMode === 'sync') {
+      fetchOfflineSyncLogs();
     }
   }, [currentWeekStart, dateMode, customStartDate, customEndDate, viewMode]);
   const handleAddRow = () => {
@@ -896,6 +947,17 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
     );
   }, [historicoDriveIn, searchTerm]);
 
+  const filteredOfflineSync = useMemo(() => {
+    if (!searchTerm) return offlineSyncLogs;
+    const lowSearch = searchTerm.toLowerCase();
+    return offlineSyncLogs.filter(s => 
+      (s.sku || '').toLowerCase().includes(lowSearch) ||
+      (s.posicao || '').toLowerCase().includes(lowSearch) ||
+      (s.tipo_operacao || '').toLowerCase().includes(lowSearch) ||
+      (s.status || '').toLowerCase().includes(lowSearch)
+    );
+  }, [offlineSyncLogs, searchTerm]);
+
   return (
     <div className="flex flex-col h-full bg-transparent p-0">
       <Toast {...toast} onClose={() => setToast({ ...toast, show: false })} />
@@ -925,6 +987,18 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
           >
             <ArrowRight size={14} />
             Histórico Drive-In
+          </button>
+          <button 
+            onClick={() => setViewMode('sync')}
+            className={cn(
+              "px-5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2",
+              viewMode === 'sync' 
+                ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm ring-1 ring-slate-200/50 dark:ring-slate-700/50" 
+                : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+            )}
+          >
+            <RefreshCw size={14} />
+            Sync Offline
           </button>
         </div>
 
@@ -1482,13 +1556,13 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                         )}
                       </div>
                     </td>
-                  </tr>
+                </tr>
                   );
                 })
               )}
             </tbody>
           </table>
-        ) : (
+        ) : viewMode === 'drivein' ? (
           <div className="p-0">
             <table className="w-full text-left min-w-[1000px] border-none">
               <thead className="sticky top-0 z-20 bg-slate-100/80 dark:bg-slate-900/80 border-none">
@@ -1557,63 +1631,96 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
               </tbody>
             </table>
           </div>
-        )}
-      </div>
-
-      <AnimatePresence>
-        {obsModalTarget && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800"
-            >
-              <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50">
-                <h3 className="text-sm font-semibold uppercase tracking-widest text-slate-800 dark:text-white flex items-center gap-2">
-                  <MessageSquare size={18} className="text-blue-500" />
-                  Observação do Registro
-                </h3>
-                <button 
-                  onClick={() => setObsModalTarget(null)}
-                  className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-all"
-                >
-                  <X size={18} className="text-slate-400" />
-                </button>
-              </div>
-              <div className="p-6">
-                <textarea 
-                  autoFocus
-                  disabled={!obsModalTarget.isNew}
-                  value={obsModalTarget.value}
-                  onChange={(e) => setObsModalTarget({ ...obsModalTarget, value: e.target.value })}
-                  placeholder="Digite aqui observações relevantes sobre este registro..."
-                  className="w-full h-40 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all resize-none placeholder:text-slate-400 dark:placeholder:text-slate-600 disabled:opacity-60"
-                />
-                <div className="mt-6 flex justify-end gap-3">
-                  <button 
-                    onClick={() => setObsModalTarget(null)}
-                    className="px-6 py-2.5 text-xs font-normal text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-all"
-                  >
-                    {obsModalTarget.isNew ? "Cancelar" : "Fechar"}
-                  </button>
-                  {obsModalTarget.isNew && (
-                    <button 
-                      onClick={() => {
-                        updateRow(obsModalTarget.index, 'Observação', obsModalTarget.value);
-                        setObsModalTarget(null);
-                      }}
-                      className="px-8 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold uppercase tracking-widest shadow-lg shadow-blue-500/20 transition-all active:scale-95"
-                    >
-                      Salvar Observação
-                    </button>
-                  )}
-                </div>
-              </div>
-            </motion.div>
+        ) : (
+          /* View Mode === 'sync' */
+          <div className="p-0">
+            <table className="w-full text-left min-w-[1000px] border-none">
+              <thead className="sticky top-0 z-20 bg-slate-100/80 dark:bg-slate-900/80 border-none">
+                <tr>
+                  <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest">Data/Hora Sync</th>
+                  <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest">Operação</th>
+                  <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest">SKU</th>
+                  <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest">Posição</th>
+                  <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest">Nível / Prof.</th>
+                  <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest">Alteração Chão</th>
+                  <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest">Status</th>
+                </tr>
+              </thead>
+              <tbody className="border-none">
+                {loading ? (
+                  <tr>
+                    <td colSpan={7} className="py-20 text-center">
+                      <div className="flex flex-col items-center gap-3">
+                        <Loader2 className="animate-spin text-blue-500" size={32} />
+                        <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Carregando logs de sync offline...</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : filteredOfflineSync.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-20 text-center">
+                      <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Nenhuma sincronização offline registrada</p>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredOfflineSync.map((s) => {
+                    const deltaVal = s.delta ?? 0;
+                    return (
+                      <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all border-none">
+                        <td className="px-5 py-4 text-sm font-mono text-slate-500">
+                          {s.sincronizado_em ? format(parseISO(s.sincronizado_em), 'dd/MM/yyyy HH:mm') : '—'}
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className={cn(
+                            "px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider",
+                            s.tipo_operacao === 'QUANTITY_DELTA' ? "bg-amber-500/10 text-amber-500 border border-amber-500/20" :
+                            s.tipo_operacao === 'ADD' ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" :
+                            s.tipo_operacao === 'DELETE' ? "bg-rose-500/10 text-rose-500 border border-rose-500/20" :
+                            "bg-blue-500/10 text-blue-500 border border-blue-500/20"
+                          )}>
+                            {s.tipo_operacao === 'QUANTITY_DELTA' ? 'Ajuste Qtd' : s.tipo_operacao}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4 text-sm font-bold text-blue-600 dark:text-blue-400">
+                          {s.sku || '—'}
+                        </td>
+                        <td className="px-5 py-4 text-sm text-slate-700 dark:text-slate-200 font-semibold">
+                          {s.posicao || '—'}
+                        </td>
+                        <td className="px-5 py-4 text-sm text-slate-500">
+                          {s.nivel !== null && s.nivel !== undefined ? `N${s.nivel} · P${s.profundidade}` : '—'}
+                        </td>
+                        <td className="px-5 py-4 text-sm font-semibold">
+                          {deltaVal < 0 ? (
+                            <span className="text-emerald-600 dark:text-emerald-400">
+                              +{Math.abs(deltaVal)} un (Devolvido ao Chão)
+                            </span>
+                          ) : deltaVal > 0 ? (
+                            <span className="text-amber-600 dark:text-amber-400">
+                              -{deltaVal} un (Consumido do Chão)
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className={cn(
+                            "px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 w-max border",
+                            s.status === 'synced' ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-rose-500/10 text-rose-500 border-rose-500/20"
+                          )}>
+                            <span className={cn("w-1.5 h-1.5 rounded-full", s.status === 'synced' ? "bg-emerald-500" : "bg-rose-500")} />
+                            {s.status === 'synced' ? 'Sincronizado' : 'Erro'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         )}
-      </AnimatePresence>
+      </div>
 
       {/* Modal de Importar Recebimentos (Copiar e Colar) */}
       <AnimatePresence>
