@@ -777,7 +777,7 @@ export function DriveInGrid({
                                 }
                               }}
                               className={cn(
-                                "w-14 h-14 sm:w-28 sm:h-28 md:w-28 md:h-28 rounded-lg md:rounded-xl border relative group flex items-center justify-center p-1 sm:p-2 text-center transition-all duration-200 cursor-pointer shrink-0",
+                                "w-16 h-16 sm:w-28 sm:h-28 md:w-28 md:h-28 rounded-lg md:rounded-xl border relative group flex items-center justify-center p-0.5 sm:p-2 text-center transition-all duration-200 cursor-pointer shrink-0",
                                 isEmpty 
                                   ? "bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:border-slate-800"
                                   : "bg-white dark:bg-slate-900 dark:bg-slate-800 border-slate-200 dark:border-slate-700 dark:border-slate-700",
@@ -893,42 +893,42 @@ export function DriveInGrid({
                                   )}
                                 >
                                   {/* Absolute Status Icons - Top Right */}
-                                  <div className="absolute top-1.5 right-1.5 flex gap-1 z-20">
+                                  <div className="absolute top-0.5 right-0.5 sm:top-1.5 sm:right-1.5 flex gap-0.5 sm:gap-1 z-20">
                                       {hasWet && (
-                                          <div className="h-4 w-4 rounded-full bg-blue-500 flex items-center justify-center shadow-lg">
-                                              <Droplet size={10} className="text-white fill-white" />
+                                          <div className="h-3 w-3 sm:h-4 sm:w-4 rounded-full bg-blue-500 flex items-center justify-center shadow-lg">
+                                              <Droplet size={8} className="text-white fill-white sm:w-2.5 sm:h-2.5" />
                                           </div>
                                       )}
                                       {hasTilted && (
-                                          <div className="h-4 w-4 rounded-full bg-red-500 flex items-center justify-center shadow-lg">
-                                              <AlertCircle size={10} className="text-white fill-white" />
+                                          <div className="h-3 w-3 sm:h-4 sm:w-4 rounded-full bg-red-500 flex items-center justify-center shadow-lg">
+                                              <AlertCircle size={8} className="text-white fill-white sm:w-2.5 sm:h-2.5" />
                                           </div>
                                       )}
                                       {isMixedCell && !hasWet && !hasTilted && (
-                                          <div className="px-1.5 h-3.5 rounded-full bg-amber-500 flex items-center justify-center shadow-lg">
-                                              <span className="text-[8px] font-semibold text-white uppercase">Mix</span>
+                                          <div className="px-1 sm:px-1.5 h-3 sm:h-3.5 rounded-full bg-amber-500 flex items-center justify-center shadow-lg">
+                                              <span className="text-[6px] sm:text-[8px] font-semibold text-white uppercase">Mix</span>
                                           </div>
                                       )}
                                   </div>
 
                                   {/* The 3D Box & Pallet Graphic */}
-                                  <div className="flex-1 flex flex-col items-center justify-center w-full mt-2">
+                                  <div className="flex-1 flex flex-col items-center justify-center w-full mt-0.5 sm:mt-2">
                                     <div className="relative group-hover:-translate-y-0.5 transition-transform duration-300 flex flex-col items-center">
                                       {/* Box */}
-                                      <span className="text-[32px] drop-shadow-md inline-block relative z-10 leading-none">📦</span>
+                                      <span className="text-sm sm:text-2xl md:text-[32px] drop-shadow-md inline-block relative z-10 leading-none">📦</span>
                                       {/* Subdued Pallet */}
-                                      <div className="w-11 h-[5px] bg-[#8B5A2B] rounded-sm mx-auto flex justify-around items-end pt-[2px] relative z-0 -mt-[2px] shadow-sm">
-                                        <div className="w-[5px] h-[3px] bg-[#4A2E12] rounded-t-[1px]"></div>
-                                        <div className="w-[5px] h-[3px] bg-[#4A2E12] rounded-t-[1px]"></div>
-                                        <div className="w-[5px] h-[3px] bg-[#4A2E12] rounded-t-[1px]"></div>
+                                      <div className="w-6 sm:w-11 h-[3px] sm:h-[5px] bg-[#8B5A2B] rounded-sm mx-auto flex justify-around items-end pt-[1px] sm:pt-[2px] relative z-0 -mt-[1px] sm:-mt-[2px] shadow-sm">
+                                        <div className="w-[3px] sm:w-[5px] h-[2px] sm:h-[3px] bg-[#4A2E12] rounded-t-[1px]"></div>
+                                        <div className="w-[3px] sm:w-[5px] h-[2px] sm:h-[3px] bg-[#4A2E12] rounded-t-[1px]"></div>
+                                        <div className="w-[3px] sm:w-[5px] h-[2px] sm:h-[3px] bg-[#4A2E12] rounded-t-[1px]"></div>
                                       </div>
                                     </div>
                                   </div>
 
                                   {/* The Dark Information Pill */}
-                                  <div className="w-[88%] bg-[#0B1120] rounded-lg py-1.5 flex flex-col items-center justify-center mb-1.5 border border-white/5 shadow-inner">
-                                    <span className="text-[12px] leading-tight font-bold text-white tracking-widest">{sku}</span>
-              <span className="text-[10px] leading-tight text-slate-400 font-medium">{qty.toLocaleString('pt-BR')} peças</span>
+                                  <div className="w-[96%] sm:w-[88%] bg-[#0B1120] rounded sm:rounded-lg py-0.5 sm:py-1.5 flex flex-col items-center justify-center mb-0.5 sm:mb-1.5 border border-white/5 shadow-inner px-0.5">
+                                    <span className="text-[8px] sm:text-[12px] leading-tight font-bold text-white tracking-tight sm:tracking-widest truncate max-w-full">{sku}</span>
+                                    <span className="text-[7px] sm:text-[10px] leading-tight text-slate-400 font-medium whitespace-nowrap">{qty.toLocaleString('pt-BR')} un</span>
                                   </div>
                                 </motion.div>
                               ) : (
@@ -969,7 +969,7 @@ export function DriveInGrid({
             {/* Footer Row: Numeric Indicators (No P) */}
             <div className="flex gap-1.5 md:gap-4 ml-8 md:ml-14 mb-2 md:mb-4">
               {depths.map(d => (
-                <div key={`head-${d}`} className="w-14 sm:w-28 md:w-28 shrink-0 text-center">
+                <div key={`head-${d}`} className="w-16 sm:w-28 md:w-28 shrink-0 text-center">
                   <span className="text-[11px] font-semibold text-slate-900 dark:text-white dark:text-white uppercase tracking-tighter">
                     {d}
                   </span>

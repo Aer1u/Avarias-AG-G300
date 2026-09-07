@@ -132,7 +132,7 @@ export function AddPalletModal({
   
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-hidden">
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 overflow-hidden">
         {/* Backdrop */}
         <motion.div
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -145,29 +145,29 @@ export function AddPalletModal({
           initial={{ opacity: 0, scale: 0.97, y: 16 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.97, y: 16 }}
-          className="bg-white dark:bg-[#0d131f] w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col relative z-10 border border-slate-200 dark:border-slate-800/80"
+          className="bg-white dark:bg-[#0d131f] w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col relative z-10 border border-slate-200 dark:border-slate-800/80 max-h-[92vh] overflow-y-auto"
         >
           {/* ── Header ── */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/20 rounded-t-2xl">
-            <div className="flex items-center gap-3">
-              <div className="h-8 w-8 rounded-lg bg-blue-100 dark:bg-blue-500/20 text-blue-600 flex items-center justify-center">
-                <Box size={16} strokeWidth={2.5} />
+          <div className="flex items-center justify-between px-3 py-3 sm:px-5 sm:py-4 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/20 rounded-t-2xl">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-blue-100 dark:bg-blue-500/20 text-blue-600 flex items-center justify-center shrink-0">
+                <Box size={14} className="sm:w-4 sm:h-4" strokeWidth={2.5} />
               </div>
               <div>
-                <h2 className="text-sm font-semibold text-slate-900 dark:text-white tracking-tight">Adicionar Palete</h2>
-                <span className="text-[10px] font-medium text-slate-400 flex items-center gap-2">
+                <h2 className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white tracking-tight">Adicionar Palete</h2>
+                <span className="text-[9px] sm:text-[10px] font-medium text-slate-400 flex flex-wrap items-center gap-1 sm:gap-2">
                   <span>Nível {destinationLevel} · Prof. {destinationDepth}</span>
                   {slotsCount > 1 && (
-                    <span className="text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full text-[9px] uppercase tracking-wider">
-                      Mapeando em {slotsCount} células selecionadas
+                    <span className="text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full text-[8px] sm:text-[9px] uppercase tracking-wider">
+                      Mapeando em {slotsCount} células
                     </span>
                   )}
                   {isMix && <span className="text-blue-500 font-semibold">· MIX {nextId}</span>}
                 </span>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="text-[10px] font-mono text-slate-400 tabular-nums">{currentTime}</span>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <span className="text-[9px] sm:text-[10px] font-mono text-slate-400 tabular-nums hidden sm:inline">{currentTime}</span>
               <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
                 <X size={16} />
               </button>
@@ -175,8 +175,8 @@ export function AddPalletModal({
           </div>
 
           {/* ── Table ── */}
-          <div className="w-full">
-            <table className="w-full text-sm border-collapse">
+          <div className="w-full overflow-x-auto custom-scrollbar">
+            <table className="w-full min-w-[480px] sm:min-w-0 text-sm border-collapse">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-700/50">
                   <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-400 uppercase tracking-widest w-[40%]">Código</th>
