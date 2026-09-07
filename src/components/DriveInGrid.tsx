@@ -716,14 +716,14 @@ export function DriveInGrid({
         )}
       </AnimatePresence>
       {/* Unified Edit Bar intentionally removed to simplify workflow */}
-      <div className="w-full flex flex-col lg:flex-row gap-8 pb-4 relative">
+      <div className="w-full flex flex-col lg:flex-row gap-2 md:gap-8 pb-1 md:pb-4 relative">
       {/* Grid Section */}
       <div className="flex-1 overflow-x-auto custom-scrollbar pt-2">
         <div className="flex flex-col items-center min-w-full p-4">
           <div className="relative inline-block">
             {/* Axis Labels Header Row (Levels Only) */}
             <div className="flex mb-4">
-               <div className="w-14 shrink-0 pr-4 text-right">
+               <div className="w-8 md:w-14 shrink-0 pr-1 md:pr-4 text-right">
                   <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
                     NÍVEL
                   </span>
@@ -733,7 +733,7 @@ export function DriveInGrid({
             {/* Main Grid Area (Levels + Front Indicator) */}
             <div className="flex items-start">
               {/* Grid Rows: Levels */}
-              <div className="space-y-4 mb-8 pr-4">
+              <div className="space-y-1.5 md:space-y-4 mb-4 md:mb-8 pr-2 md:pr-4">
                 {levels.map(lvl => {
                   const val = parseFloat(String(lvl))
                   const displayLvl = isNaN(val) ? lvl : Math.floor(val).toString()
@@ -741,14 +741,14 @@ export function DriveInGrid({
                   return (
                     <div key={`row-${lvl}`} className="flex items-center">
                       {/* Level Label (Y-Axis) */}
-                      <div className="w-14 shrink-0 pr-4 text-right">
+                       <div className="w-8 md:w-14 shrink-0 pr-1 md:pr-4 text-right">
                         <span className="text-[13px] font-semibold text-slate-900 dark:text-white dark:text-white uppercase tracking-tighter">
                           {displayLvl}
                         </span>
                       </div>
 
                       {/* Cells */}
-                      <div className="flex gap-4">
+                      <div className="flex gap-1.5 md:gap-4">
                         {depths.map(d => {
                           const cellProducts = grid[lvl][d]
                           const isEmpty = cellProducts.length === 0
@@ -777,7 +777,7 @@ export function DriveInGrid({
                                 }
                               }}
                               className={cn(
-                                "w-20 h-20 sm:w-28 sm:h-28 rounded-xl border relative group flex items-center justify-center p-1.5 sm:p-2 text-center transition-all duration-200 cursor-pointer shrink-0",
+                                "w-14 h-14 sm:w-28 sm:h-28 md:w-28 md:h-28 rounded-lg md:rounded-xl border relative group flex items-center justify-center p-1 sm:p-2 text-center transition-all duration-200 cursor-pointer shrink-0",
                                 isEmpty 
                                   ? "bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:border-slate-800"
                                   : "bg-white dark:bg-slate-900 dark:bg-slate-800 border-slate-200 dark:border-slate-700 dark:border-slate-700",
@@ -967,9 +967,9 @@ export function DriveInGrid({
             </div>
 
             {/* Footer Row: Numeric Indicators (No P) */}
-            <div className="flex gap-4 ml-14 mb-4">
+            <div className="flex gap-1.5 md:gap-4 ml-8 md:ml-14 mb-2 md:mb-4">
               {depths.map(d => (
-                <div key={`head-${d}`} className="w-20 sm:w-28 shrink-0 text-center">
+                <div key={`head-${d}`} className="w-14 sm:w-28 md:w-28 shrink-0 text-center">
                   <span className="text-[11px] font-semibold text-slate-900 dark:text-white dark:text-white uppercase tracking-tighter">
                     {d}
                   </span>
@@ -978,7 +978,7 @@ export function DriveInGrid({
             </div>
 
             {/* Footer Axis Label Header */}
-            <div className="flex ml-14 pt-2 border-t border-slate-100 dark:border-slate-800/50">
+            <div className="flex ml-8 md:ml-14 pt-2 border-t border-slate-100 dark:border-slate-800/50">
                <div className="flex-1 flex justify-center">
                   <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
                     PROFUNDIDADE
@@ -995,9 +995,9 @@ export function DriveInGrid({
         animate={{ opacity: 1, x: 0 }}
         className="w-full lg:w-72 shrink-0 transition-all duration-500"
       >
-        <div className="bg-white dark:bg-slate-900 dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/60 rounded-[2rem] p-5 shadow-xl shadow-slate-200/40 dark:shadow-none sticky top-4">
+        <div className="bg-white dark:bg-slate-900 dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/60 rounded-[2rem] p-3 md:p-5 shadow-xl shadow-slate-200/40 dark:shadow-none sticky top-4">
           {selectedProduct ? (
-            <div className="space-y-5">
+            <div className="space-y-3 md:space-y-5">
               <div className="flex justify-between items-start">
                 <div>
                   <span className="text-[10px] font-medium text-blue-500/80 uppercase tracking-widest mb-0.5 block">
@@ -1026,7 +1026,7 @@ export function DriveInGrid({
                 </div>
               </div>
 
-              <div className="max-h-[60vh] overflow-y-auto pr-1 custom-scrollbar">
+              <div className="max-h-[35vh] md:max-h-[60vh] overflow-y-auto pr-1 custom-scrollbar">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-slate-200 dark:border-slate-700 dark:border-slate-700/50">

@@ -8256,14 +8256,14 @@ function DashboardPage() {
             {selectedPosition && positionDetail && (
               <div className="fixed inset-0 z-[120] flex items-center justify-center p-2 sm:p-4 md:p-6 transition-colors">
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedPosition(null)} className="absolute inset-0 bg-slate-900/40 dark:bg-slate-950/60 backdrop-blur-md" />
-                <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-7xl max-h-[96vh] md:max-h-[92vh] rounded-2xl sm:rounded-3xl md:rounded-[3rem] bg-white dark:bg-slate-900 p-3 sm:p-5 md:p-10 shadow-2xl border border-white/20 dark:border-slate-800 flex flex-col overflow-y-auto md:overflow-hidden custom-scrollbar transition-colors">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 md:mb-8">
-                    <div className="flex items-center gap-3 md:gap-4">
-                      <div className="h-10 w-10 md:h-14 md:w-14 rounded-2xl md:rounded-3xl bg-blue-600 flex items-center justify-center text-white shadow-xl shadow-blue-200 dark:shadow-blue-900/20 transition-all"><MapPin size={20} className="md:w-6 md:h-6" /></div>
+                <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-7xl max-h-[96vh] md:max-h-[92vh] rounded-2xl sm:rounded-3xl md:rounded-[3rem] bg-white dark:bg-slate-900 p-2 sm:p-5 md:p-10 shadow-2xl border border-white/20 dark:border-slate-800 flex flex-col overflow-y-auto md:overflow-hidden custom-scrollbar transition-colors">
+                  <div className="flex flex-row items-center justify-between gap-2 mb-2 md:mb-8">
+                    <div className="flex items-center gap-2 md:gap-4">
+                      <div className="h-7 w-7 md:h-14 md:w-14 rounded-xl md:rounded-3xl bg-blue-600 flex items-center justify-center text-white shadow-xl shadow-blue-200 dark:shadow-blue-900/20 transition-all shrink-0"><MapPin size={14} className="md:w-6 md:h-6" /></div>
                       <div className="text-left">
-                        <h3 className="text-xl md:text-3xl font-light text-slate-900 dark:text-white transition-colors">{selectedPosition}</h3>
-                        <div className="flex items-center gap-2 mt-0.5 md:mt-1">
-                          <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.2em] animate-in fade-in slide-in-from-left duration-700">
+                        <h3 className="text-sm md:text-3xl font-light text-slate-900 dark:text-white transition-colors leading-tight">{selectedPosition}</h3>
+                        <div className="flex items-center gap-2 mt-0 md:mt-1">
+                          <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.15em] hidden sm:inline">
                             {fmtNum(positionDetail.occupied)} / {positionDetail.capacidade} Paletes • {Math.round(positionDetail.level_count)} Níveis (0-{Math.round(positionDetail.level_count) - 1})
                           </span>
                           {positionDetail.isOverflow && (
@@ -8274,16 +8274,16 @@ function DashboardPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => {
                           window.print();
                         }}
                         title="Imprimir Mapa de Mapeamento"
-                        className="h-10 px-4 md:h-12 md:px-5 rounded-xl md:rounded-2xl flex items-center justify-center gap-2 transition-all border bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
+                        className="h-8 w-8 md:h-12 md:px-5 md:w-auto md:px-5 rounded-lg md:rounded-2xl flex items-center justify-center gap-2 transition-all border bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
                       >
-                        <Printer size={16} />
-                        <span className="text-[10px] md:text-xs font-semibold uppercase tracking-widest hidden sm:inline">Imprimir Mapa</span>
+                        <Printer size={14} className="md:w-4 md:h-4" />
+                        <span className="text-[10px] md:text-xs font-semibold uppercase tracking-widest hidden md:inline">Imprimir Mapa</span>
                       </button>
 
                       {!!user && (
@@ -8293,16 +8293,16 @@ function DashboardPage() {
                             window.dispatchEvent(event);
                           }}
                           title="Editar Posição"
-                          className="h-10 px-4 md:h-12 md:px-5 rounded-xl md:rounded-2xl flex items-center justify-center gap-2 transition-all border bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900/50 hover:bg-blue-200 dark:hover:bg-blue-800 cursor-pointer"
+                          className="h-8 px-2.5 md:h-12 md:px-5 rounded-lg md:rounded-2xl flex items-center justify-center gap-2 transition-all border bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900/50 hover:bg-blue-200 dark:hover:bg-blue-800 cursor-pointer"
                         >
                           <span className="text-[10px] md:text-xs font-semibold uppercase tracking-widest">Editar</span>
                         </button>
                       )}
                       <button
                         onClick={() => setSelectedPosition(null)}
-                        className="h-10 w-10 md:h-12 md:w-12 rounded-xl md:rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-400 dark:text-slate-500 flex items-center justify-center hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-500 transition-all border border-slate-100 dark:border-slate-800"
+                        className="h-8 w-8 md:h-12 md:w-12 rounded-lg md:rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-400 dark:text-slate-500 flex items-center justify-center hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-500 transition-all border border-slate-100 dark:border-slate-800"
                       >
-                        <X size={20} className="md:w-6 md:h-6" />
+                        <X size={16} className="md:w-6 md:h-6" />
                       </button>
                     </div>
                   </div>
