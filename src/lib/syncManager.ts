@@ -53,15 +53,11 @@ class SyncManager {
       return false;
     }
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
-      
-      const { error } = await supabase
-        .from("posicoes")
-        .select("id", { head: true, count: "exact" })
+      const { data, error } = await supabase
+        .from("mapeamento")
+        .select("id")
         .limit(1);
 
-      clearTimeout(timeoutId);
       return !error;
     } catch {
       return false;
@@ -152,7 +148,35 @@ class SyncManager {
 
   /** Smart conflict resolution processor for individual items */
   private async processItem(item: SyncQueueItem): Promise<void> {
-    const { table, type, recordId, field, delta, changes, original } = item;
+    const { table, type, recordId, field, delta, changes } = item;
+
+    const ALLOWED_MAP_COLUMNS = [
+      'Posição',
+      'Id Palete',
+      'Código',
+      'Quantidade',
+      'Nível',
+      'Profundidade',
+      'Parte Tombada',
+      'Parte Molhada',
+      'Observação',
+      'Última Alteração'
+    ];
+
+    const sanitizeMapPayload = (payload: Record<string, any>) => {
+      const clean: Record<string, any> = {};
+      ALLOWED_MAP_COLUMNS.forEach(col => {
+        if (payload[col] !== undefined) {
+          clean[col] = payload[col];
+        }
+      });
+      if (!clean['Código'] && (payload.sku || payload.produto)) clean['Código'] = payload.sku || payload.produto;
+      if (!clean['Posição'] && (payload.posicao || payload.targetPosition)) clean['Posição'] = payload.posicao || payload.targetPosition;
+      if (clean['Quantidade'] === undefined && (payload.quantidade !== undefined || payload.quantidade_total !== undefined)) {
+        clean['Quantidade'] = payload.quantidade !== undefined ? payload.quantidade : payload.quantidade_total;
+      }
+      return clean;
+    };
 
     if (type === "QUANTITY_DELTA" && recordId && field && delta !== undefined) {
       // Delta Operation: Read live server record, calculate new value from delta
@@ -176,32 +200,33 @@ class SyncManager {
         if (updErr) throw updErr;
       }
     } else if (type === "UPDATE_FIELD" && recordId && changes) {
-      // Absolute Field Update with Last-Write-Wins
+      const payloadToUpdate = table === 'mapeamento' ? sanitizeMapPayload(changes) : changes;
       const { error: updErr } = await supabase
         .from(table)
-        .update(changes)
+        .update(payloadToUpdate)
         .eq("id", recordId);
 
       if (updErr) throw updErr;
     } else if (type === "ADD" && changes) {
-      // New Record Insertion
-      const cleanPayload = { ...changes };
-      delete cleanPayload.id; // Let DB generate ID if temporary local ID was used
+      const rawPayload = table === 'mapeamento' ? sanitizeMapPayload(changes) : changes;
+      const cleanPayload = { ...rawPayload };
+      delete cleanPayload.id;
 
       const { error: insErr } = await supabase.from(table).insert(cleanPayload);
       if (insErr) throw insErr;
     } else if (type === "DELETE" && recordId) {
-      // Record Deletion / Move to Floor or Retrabalho
       const { error: delErr } = await supabase.from(table).delete().eq("id", recordId);
       if (delErr) throw delErr;
 
-      // Handle re-insertion into target position if specified
       if (changes && (changes.targetPosition || changes['Posição'])) {
         const targetPos = changes.targetPosition || changes['Posição'];
+        const skuCode = changes['Código'] || changes.sku || changes.produto;
+        const qtyVal = changes['Quantidade'] || changes.quantidade || changes.quantidade_total || 0;
+
         const { error: insErr } = await supabase.from(table).insert({
           'Posição': targetPos,
-          'Código': changes['Código'] || changes.sku,
-          'Quantidade': changes['Quantidade'] || changes.quantidade || 0,
+          'Código': skuCode,
+          'Quantidade': qtyVal,
           'Nível': 0,
           'Profundidade': 1,
           'Parte Tombada': changes['Parte Tombada'] || 0,
