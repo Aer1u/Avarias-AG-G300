@@ -6327,108 +6327,108 @@ function DashboardPage() {
                                 {isEmptyText}
                               </div>
                             ) : (
-                              <table className="w-full min-w-[500px] text-left">
-                                <thead className="sticky top-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm z-10">
-                                  <tr className="border-b border-slate-100 dark:border-slate-800">
-                                    <th className="px-3 py-3 text-[9px] font-semibold uppercase tracking-widest text-slate-400 w-6"></th>
-                                    <th className="px-3 py-3 text-[9px] font-semibold uppercase tracking-widest text-slate-400">ID Palete</th>
-                                    <th className="px-3 py-3 text-[9px] font-semibold uppercase tracking-widest text-slate-400">Produto</th>
-                                    <th className="px-3 py-3 text-[9px] font-semibold uppercase tracking-widest text-slate-400">Descrição</th>
-                                    <th className="px-3 py-3 text-[9px] font-semibold uppercase tracking-widest text-slate-400 text-right">Qtd</th>
-                                    <th className="px-3 py-3 text-[9px] font-semibold uppercase tracking-widest text-slate-400">Obs</th>
-                                     {user && <th className="px-3 py-3 text-[9px] font-semibold uppercase tracking-widest text-slate-400 text-center whitespace-nowrap">Ação</th>}
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {groupData.map((group, gi) => {
-                                    const isExpanded = expandedPallets.has(group.key);
-                                    const totalQty = group.items.reduce((s: number, i: any) => s + (Number(i.quantidade_total) || 0), 0);
-                                    const isComposite = !group.isSimple;
-                                    const singleItem = group.items[0];
-                                    return (
-                                      <React.Fragment key={group.key}>
-                                        <tr 
-                                            key={group.key} 
-                                            onClick={() => isComposite && togglePallet(group.key)}
-                                            onDragOver={(e) => {
-                                              if (draggedItem && draggedItem.id !== singleItem?.id && group.label !== draggedItem.id_palete) {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                handleDragOver(e, group.key);
-                                              }
-                                            }}
-                                            onDragLeave={handleDragLeave}
-                                            onDrop={(e) => {
-                                              if (draggedItem && draggedItem.id !== singleItem?.id && group.label !== draggedItem.id_palete) {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                if (isComposite) {
-                                                  handleDrop(e, 'mix', group.label, group);
-                                                } else {
-                                                  handleDrop(e, 'new_mix', null, singleItem);
-                                                }
-                                              }
-                                            }}
-                                            draggable={!isComposite}
-                                            onDragStart={!isComposite ? (e: any) => handleDragStart(e, singleItem) : undefined}
-                                            onDragEnd={(e: any) => handleDragEnd(e)}
-                                            className={cn(
-                                              "group transition-all duration-200 relative",
-                                              isComposite ? "border-b-2 border-slate-200 dark:border-slate-700/50" : "border-b border-slate-100 dark:border-slate-800",
-                                              isComposite ? "cursor-pointer hover:bg-blue-50/50 dark:hover:bg-blue-500/5" : "hover:bg-slate-50/50 dark:hover:bg-slate-800/30",
-                                              dragOverTarget === group.key ? "bg-blue-100/50 dark:bg-blue-900/30 ring-2 ring-blue-400 z-10" : "",
-                                              draggedItem?.id === singleItem?.id ? "opacity-50" : ""
-                                            )}
-                                          >
+                               <table className="w-full min-w-[500px] text-left">
+                                 <thead className="sticky top-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm z-10">
+                                   <tr className="border-b border-slate-100 dark:border-slate-800">
+                                     <th className="px-1 py-2 text-[8px] font-semibold uppercase tracking-widest text-slate-400 w-5"></th>
+                                     <th className="px-2 py-2 text-[8px] font-semibold uppercase tracking-widest text-slate-400">ID Palete</th>
+                                     <th className="px-2 py-2 text-[8px] font-semibold uppercase tracking-widest text-slate-400">Produto</th>
+                                     <th className="px-2 py-2 text-[8px] font-semibold uppercase tracking-widest text-slate-400">Descrição</th>
+                                     <th className="px-2 py-2 text-[8px] font-semibold uppercase tracking-widest text-slate-400 text-right">Qtd</th>
+                                     <th className="px-2 py-2 text-[8px] font-semibold uppercase tracking-widest text-slate-400">Obs</th>
+                                      {user && <th className="px-2 py-2 text-[8px] font-semibold uppercase tracking-widest text-slate-400 text-center whitespace-nowrap">Ação</th>}
+                                   </tr>
+                                 </thead>
+                                 <tbody>
+                                   {groupData.map((group, gi) => {
+                                     const isExpanded = expandedPallets.has(group.key);
+                                     const totalQty = group.items.reduce((s: number, i: any) => s + (Number(i.quantidade_total) || 0), 0);
+                                     const isComposite = !group.isSimple;
+                                     const singleItem = group.items[0];
+                                     return (
+                                       <React.Fragment key={group.key}>
+                                         <tr 
+                                             key={group.key} 
+                                             onClick={() => isComposite && togglePallet(group.key)}
+                                             onDragOver={(e) => {
+                                               if (draggedItem && draggedItem.id !== singleItem?.id && group.label !== draggedItem.id_palete) {
+                                                 e.preventDefault();
+                                                 e.stopPropagation();
+                                                 handleDragOver(e, group.key);
+                                               }
+                                             }}
+                                             onDragLeave={handleDragLeave}
+                                             onDrop={(e) => {
+                                               if (draggedItem && draggedItem.id !== singleItem?.id && group.label !== draggedItem.id_palete) {
+                                                 e.preventDefault();
+                                                 e.stopPropagation();
+                                                 if (isComposite) {
+                                                   handleDrop(e, 'mix', group.label, group);
+                                                 } else {
+                                                   handleDrop(e, 'new_mix', null, singleItem);
+                                                 }
+                                               }
+                                             }}
+                                             draggable={!isComposite}
+                                             onDragStart={!isComposite ? (e: any) => handleDragStart(e, singleItem) : undefined}
+                                             onDragEnd={(e: any) => handleDragEnd(e)}
+                                             className={cn(
+                                               "group transition-all duration-200 relative",
+                                               isComposite ? "border-b-2 border-slate-200 dark:border-slate-700/50" : "border-b border-slate-100 dark:border-slate-800",
+                                               isComposite ? "cursor-pointer hover:bg-blue-50/50 dark:hover:bg-blue-500/5" : "hover:bg-slate-50/50 dark:hover:bg-slate-800/30",
+                                               dragOverTarget === group.key ? "bg-blue-100/50 dark:bg-blue-900/30 ring-2 ring-blue-400 z-10" : "",
+                                               draggedItem?.id === singleItem?.id ? "opacity-50" : ""
+                                             )}
+                                           >
                                           {/* Expand toggle */}
-                                          <td className="px-2 py-3 w-6">
+                                          <td className="px-1 py-1.5 w-5">
                                             {isComposite ? (
-                                              <span className={cn("inline-flex items-center justify-center h-5 w-5 rounded-full text-blue-500 bg-blue-50 dark:bg-blue-500/10 transition-transform", isExpanded && "rotate-90")}>
-                                                <ChevronRight size={12} strokeWidth={3} />
+                                              <span className={cn("inline-flex items-center justify-center h-4 w-4 rounded-full text-blue-500 bg-blue-50 dark:bg-blue-500/10 transition-transform", isExpanded && "rotate-90")}>
+                                                <ChevronRight size={10} strokeWidth={3} />
                                               </span>
                                             ) : null}
                                           </td>
                                           {/* ID Palete */}
-                                          <td className="px-3 py-3">
+                                          <td className="px-2 py-1.5">
                                             {group.isSimple ? (
-                                              <span className="text-[10px] italic text-slate-400 whitespace-nowrap">S/ ALOCAÇÃO</span>
+                                              <span className="text-[9px] italic text-slate-400 whitespace-nowrap">S/ ALOCAÇÃO</span>
                                             ) : (
-                                              <div className="flex items-center gap-1.5 flex-wrap">
-                                                <span className="text-[10px] font-semibold text-blue-500 dark:text-blue-300 tracking-wide">{group.label}</span>
+                                              <div className="flex items-center gap-1 flex-nowrap">
+                                                <span className="text-[9px] font-semibold text-blue-500 dark:text-blue-300 tracking-wide whitespace-nowrap">{group.label}</span>
                                                 {isComposite && (
-                                                  <span className="text-[8px] font-medium text-blue-400 bg-blue-50 dark:bg-blue-500/10 px-1.5 py-0.5 rounded-full whitespace-nowrap">{group.items.length} SKUs</span>
+                                                  <span className="text-[8px] font-medium text-blue-400 bg-blue-50 dark:bg-blue-500/10 px-1 py-0.5 rounded-full whitespace-nowrap">{group.items.length} SKUs</span>
                                                 )}
                                               </div>
                                             )}
                                           </td>
                                           {/* Produto */}
-                                          <td className="px-3 py-3">
+                                          <td className="px-2 py-1.5">
                                             {isComposite ? (
-                                              <span className="text-[10px] text-slate-300 dark:text-slate-600 italic">—</span>
+                                              <span className="text-[9px] text-slate-300 dark:text-slate-600 italic">—</span>
                                             ) : (
-                                              <span className="text-xs font-normal text-slate-700 dark:text-slate-300 tracking-tight">{singleItem.produto || "—"}</span>
+                                              <span className="text-[10px] font-normal text-slate-700 dark:text-slate-300 tracking-tight">{singleItem.produto || "—"}</span>
                                             )}
                                           </td>
                                           {/* Descrição */}
-                                          <td className="px-3 py-3 max-w-[150px]">
+                                          <td className="px-2 py-1.5 max-w-[120px]">
                                             {isComposite ? (
-                                              <span className="text-[9px] text-slate-400 italic">Palete misto com {group.items.length} itens</span>
+                                              <span className="text-[8px] text-slate-400 italic">Misto c/ {group.items.length} itens</span>
                                             ) : (
-                                              <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase truncate block max-w-[150px]">{singleItem.descricao || "—"}</span>
+                                              <span className="text-[9px] text-slate-400 dark:text-slate-500 uppercase truncate block max-w-[120px]">{singleItem.descricao || "—"}</span>
                                             )}
                                           </td>
                                           {/* Qtd Total */}
-                                          <td className="px-3 py-3 text-right">
-                                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">{fmtNum(totalQty)}</span>
+                                          <td className="px-2 py-1.5 text-right">
+                                            <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">{fmtNum(totalQty)}</span>
                                           </td>
                                           {/* Observação */}
-                                          <td className="px-3 py-3">
+                                          <td className="px-2 py-1.5">
                                             {!isComposite && (() => {
                                               const obs = singleItem.observacao;
                                               const strObs = obs && obs !== 0 ? String(obs) : "-";
                                               const isCrit = strObs.endsWith("!");
                                               return (
-                                                <span className={cn("text-[10px] italic truncate block max-w-[100px] px-1.5 py-0.5 rounded w-fit",
+                                                <span className={cn("text-[9px] italic truncate block max-w-[80px] px-1 py-0.5 rounded w-fit",
                                                   isCrit ? "text-red-500 bg-red-50 dark:bg-red-950/30 border border-red-100 not-italic" : "text-slate-400"
                                                 )}>{strObs}</span>
                                               );
@@ -6436,9 +6436,9 @@ function DashboardPage() {
                                           </td>
                                           {/* Ação */}
                                           {user && (
-                                            <td className="px-3 py-3 text-center whitespace-nowrap">
+                                            <td className="px-2 py-1.5 text-center whitespace-nowrap">
                                               {!isComposite && (
-                                                <div className="flex items-center justify-center gap-1">
+                                                <div className="flex items-center justify-center gap-0.5">
                                                   {/* Dividir: só aparece quando qty > 1 */}
                                                   {(Number(singleItem.quantidade_total) > 1) && (
                                                     <button
@@ -6448,10 +6448,10 @@ function DashboardPage() {
                                                         setSplitQtyPerPallet("");
                                                         setSplitModalOpen(true);
                                                       }}
-                                                      className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"
+                                                      className="p-1 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded transition-colors"
                                                       title="Retirar peças"
                                                     >
-                                                      <Scissors size={13} />
+                                                      <Scissors size={11} />
                                                     </button>
                                                   )}
                                                   {/* Juntar: só aparece quando há mais de 1 linha do mesmo SKU na lista livre */}
@@ -6472,10 +6472,10 @@ function DashboardPage() {
                                                             setSelectedMergeIds(new Set(ids));
                                                             setMergeModalOpen(true);
                                                           }}
-                                                          className="p-1.5 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-colors"
+                                                          className="p-1 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded transition-colors"
                                                           title="Mover peças"
                                                         >
-                                                          <GitMerge size={13} />
+                                                          <GitMerge size={11} />
                                                         </button>
                                                       );
                                                     }
@@ -6495,10 +6495,10 @@ function DashboardPage() {
                                                           alert("Erro ao mover para o Chão: " + err.message);
                                                         }
                                                       }}
-                                                      className="px-2 py-1 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 rounded-lg transition-colors flex items-center gap-1 uppercase tracking-wider whitespace-nowrap shrink-0"
+                                                      className="px-1.5 py-0.5 text-[8px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 rounded transition-colors flex items-center gap-0.5 uppercase whitespace-nowrap"
                                                       title="Mover do Retrabalho para o Chão"
                                                     >
-                                                      <RefreshCw size={11} /> Mover p/ Chão
+                                                      <RefreshCw size={9} /> p/ Chão
                                                     </button>
                                                   )}
                                                   {displayMode === "nao_alocados" && (
@@ -6515,10 +6515,10 @@ function DashboardPage() {
                                                           alert("Erro ao mover para o Retrabalho: " + err.message);
                                                         }
                                                       }}
-                                                      className="px-2 py-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 rounded-lg transition-colors flex items-center gap-1 uppercase tracking-wider whitespace-nowrap shrink-0"
+                                                      className="px-1.5 py-0.5 text-[8px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 rounded transition-colors flex items-center gap-0.5 uppercase whitespace-nowrap"
                                                       title="Mover do Chão para o Retrabalho"
                                                     >
-                                                      <RefreshCw size={11} /> Mover p/ Retrabalho
+                                                      <RefreshCw size={9} /> p/ Retrab.
                                                     </button>
                                                   )}
                                                   <button
@@ -6527,10 +6527,10 @@ function DashboardPage() {
                                                       setDeleteTarget(singleItem);
                                                       setDeleteQuantity(String(singleItem.quantidade_total || "0"));
                                                     }}
-                                                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                                                    className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded transition-colors"
                                                     title="Excluir"
                                                   >
-                                                    <Trash2 size={13} />
+                                                    <Trash2 size={11} />
                                                   </button>
                                                 </div>
                                               )}
@@ -6554,30 +6554,30 @@ function DashboardPage() {
                                                   draggedItem?.id === sub.id ? "opacity-50" : ""
                                                 )}
                                               >
-                                              <td className="px-2 py-2">
+                                              <td className="px-1 py-1">
                                                 <div className="w-px h-full bg-blue-200 dark:bg-blue-700 mx-auto opacity-50"></div>
                                               </td>
-                                              <td className="px-3 py-2">
-                                                <span className="text-[9px] font-medium text-blue-500 dark:text-blue-400 pl-2 border-l-2 border-blue-200">╰ sub-item</span>
+                                              <td className="px-2 py-1">
+                                                <span className="text-[8px] font-medium text-blue-500 dark:text-blue-400 pl-1.5 border-l-2 border-blue-200">╰ sub</span>
                                               </td>
-                                              <td className="px-3 py-2">
-                                                <span className="text-[11px] font-medium text-slate-700 dark:text-slate-300">{sub.produto || "—"}</span>
+                                              <td className="px-2 py-1">
+                                                <span className="text-[10px] font-medium text-slate-700 dark:text-slate-300">{sub.produto || "—"}</span>
                                               </td>
-                                              <td className="px-3 py-2 max-w-[150px]">
-                                                <span className="text-[9px] text-slate-400 uppercase truncate block max-w-[150px]">{sub.descricao || "—"}</span>
+                                              <td className="px-2 py-1 max-w-[120px]">
+                                                <span className="text-[8px] text-slate-400 uppercase truncate block max-w-[120px]">{sub.descricao || "—"}</span>
                                               </td>
-                                              <td className="px-3 py-2 text-right">
-                                                <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400">{fmtNum(sub.quantidade_total)}</span>
+                                              <td className="px-2 py-1 text-right">
+                                                <span className="text-[10px] font-medium text-slate-600 dark:text-slate-400">{fmtNum(sub.quantidade_total)}</span>
                                               </td>
-                                              <td className="px-3 py-2">
+                                              <td className="px-2 py-1">
                                                 {(() => {
                                                   const obs = sub.observacao;
                                                   const strObs = obs && obs !== 0 ? String(obs) : "-";
-                                                  return <span className="text-[9px] text-slate-400 truncate block max-w-[80px]">{strObs}</span>;
+                                                  return <span className="text-[8px] text-slate-400 truncate block max-w-[70px]">{strObs}</span>;
                                                 })()}
                                               </td>
                                               {user && (
-                                                <td className="px-3 py-2 text-center flex items-center justify-end gap-1 whitespace-nowrap">
+                                                <td className="px-2 py-1 text-center flex items-center justify-end gap-0.5 whitespace-nowrap">
                                                   {displayMode === "retrabalho" && (
                                                     <button
                                                       onClick={async (e) => {
@@ -6592,10 +6592,10 @@ function DashboardPage() {
                                                           alert("Erro ao mover para o Chão: " + err.message);
                                                         }
                                                       }}
-                                                      className="px-2 py-0.5 text-[9px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 rounded-lg transition-colors flex items-center gap-1 uppercase tracking-wider whitespace-nowrap shrink-0"
+                                                      className="px-1.5 py-0.5 text-[8px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 rounded transition-colors flex items-center gap-0.5 uppercase whitespace-nowrap"
                                                       title="Mover do Retrabalho para o Chão"
                                                     >
-                                                      <RefreshCw size={10} /> Mover p/ Chão
+                                                      <RefreshCw size={9} /> p/ Chão
                                                     </button>
                                                   )}
                                                   {displayMode === "nao_alocados" && (
@@ -6612,10 +6612,10 @@ function DashboardPage() {
                                                           alert("Erro ao mover para o Retrabalho: " + err.message);
                                                         }
                                                       }}
-                                                      className="px-2 py-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 rounded-lg transition-colors flex items-center gap-1 uppercase tracking-wider whitespace-nowrap shrink-0"
+                                                      className="px-1.5 py-0.5 text-[8px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 rounded transition-colors flex items-center gap-0.5 uppercase whitespace-nowrap"
                                                       title="Mover do Chão para o Retrabalho"
                                                     >
-                                                      <RefreshCw size={10} /> Mover p/ Retrabalho
+                                                      <RefreshCw size={9} /> p/ Retrab.
                                                     </button>
                                                   )}
                                                   <button
@@ -6624,10 +6624,10 @@ function DashboardPage() {
                                                       setDeleteTarget(sub);
                                                       setDeleteQuantity(String(sub.quantidade_total || "0"));
                                                     }}
-                                                    className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                                                    className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded transition-colors"
                                                     title="Excluir sub-item"
                                                   >
-                                                    <Trash2 size={12} />
+                                                    <Trash2 size={10} />
                                                   </button>
                                                 </td>
                                               )}
