@@ -6501,6 +6501,26 @@ function DashboardPage() {
                                                       <RefreshCw size={11} /> Mover p/ Chão
                                                     </button>
                                                   )}
+                                                  {displayMode === "nao_alocados" && (
+                                                    <button
+                                                      onClick={async (e) => {
+                                                        e.stopPropagation();
+                                                        if (!singleItem?.id) return;
+                                                        if (!window.confirm(`Mover ${singleItem.produto || 'item'} (${singleItem.quantidade_total || singleItem.quantidade || 0} un.) do Chão para o Retrabalho?`)) return;
+                                                        try {
+                                                          const { error } = await supabase.from('mapeamento').update({ 'Posição': 'Retrabalho' }).eq('id', singleItem.id);
+                                                          if (error) throw error;
+                                                          await fetchData();
+                                                        } catch (err: any) {
+                                                          alert("Erro ao mover para o Retrabalho: " + err.message);
+                                                        }
+                                                      }}
+                                                      className="mr-2 px-2 py-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 rounded-lg transition-colors flex items-center gap-1 uppercase tracking-wider"
+                                                      title="Mover do Chão para o Retrabalho"
+                                                    >
+                                                      <RefreshCw size={11} /> Mover p/ Retrabalho
+                                                    </button>
+                                                  )}
                                                   <button
                                                     onClick={(e) => {
                                                       e.stopPropagation();
@@ -6576,6 +6596,26 @@ function DashboardPage() {
                                                       title="Mover do Retrabalho para o Chão"
                                                     >
                                                       <RefreshCw size={10} /> Mover p/ Chão
+                                                    </button>
+                                                  )}
+                                                  {displayMode === "nao_alocados" && (
+                                                    <button
+                                                      onClick={async (e) => {
+                                                        e.stopPropagation();
+                                                        if (!sub?.id) return;
+                                                        if (!window.confirm(`Mover ${sub.produto || 'item'} (${sub.quantidade_total || sub.quantidade || 0} un.) do Chão para o Retrabalho?`)) return;
+                                                        try {
+                                                          const { error } = await supabase.from('mapeamento').update({ 'Posição': 'Retrabalho' }).eq('id', sub.id);
+                                                          if (error) throw error;
+                                                          await fetchData();
+                                                        } catch (err: any) {
+                                                          alert("Erro ao mover para o Retrabalho: " + err.message);
+                                                        }
+                                                      }}
+                                                      className="px-2 py-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 rounded-lg transition-colors flex items-center gap-1 uppercase tracking-wider"
+                                                      title="Mover do Chão para o Retrabalho"
+                                                    >
+                                                      <RefreshCw size={10} /> Mover p/ Retrabalho
                                                     </button>
                                                   )}
                                                   <button
@@ -8613,6 +8653,28 @@ function DashboardPage() {
                   <span className="text-sm font-semibold uppercase tracking-[0.1em]">Agrupar Mix</span>
                 </button>
                 
+                <button 
+                  onClick={async () => {
+                    if (!selectedNaoAlocados || selectedNaoAlocados.size === 0) return;
+                    if (window.confirm(`Mover os ${selectedNaoAlocados.size} itens selecionados do Chão para o Retrabalho?`)) {
+                      try {
+                        const idsToMove = Array.from(selectedNaoAlocados);
+                        const { error } = await supabase.from('mapeamento').update({ 'Posição': 'Retrabalho' }).in('id', idsToMove);
+                        if (error) throw error;
+                        setSelectedNaoAlocados(new Set());
+                        await fetchData();
+                      } catch (err: any) {
+                        alert("Erro ao mover para o Retrabalho: " + err.message);
+                      }
+                    }
+                  }} 
+                  disabled={isProcessingGroup}
+                  className="h-12 px-6 bg-amber-600 hover:bg-amber-500 text-white rounded-2xl flex items-center gap-3 transition-all active:scale-95 disabled:opacity-50 group/btn cursor-pointer"
+                >
+                  <RefreshCw size={18}/>
+                  <span className="text-sm font-semibold uppercase tracking-[0.1em]">Mover p/ Retrabalho</span>
+                </button>
+
                 <button 
                   onClick={() => {
                     if(window.confirm(`Deseja realmente desagrupar os ${selectedNaoAlocados.size} itens selecionados?`)) {
