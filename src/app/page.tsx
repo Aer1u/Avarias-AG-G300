@@ -1085,6 +1085,26 @@ function DashboardPage() {
             }
           }
         }
+
+        // --- LOCAL-FIRST PERSISTENCE ---
+        // 1. Update React state data so the UI immediately reflects offline changes
+        const updatedLocalData = effectiveData;
+        setData(updatedLocalData);
+
+        // 2. Persist updated mapping snapshot to IndexedDB store 'mapeamento'
+        const snapshotToSave = updatedLocalData.map((item, idx) => ({
+          id: item.id !== undefined && item.id !== null ? item.id : idx + 1,
+          'Posição': item.posicao,
+          'Código': item.sku,
+          'Quantidade': item.quantidade_total,
+          'Nível': item.nivel,
+          'Profundidade': item.profundidade,
+          'Parte Tombada': item.qtd_tombada || 0,
+          'Parte Molhada': item.qtd_molhado || 0,
+          'Id Palete': item.id_palete || null
+        }));
+        await saveSnapshot('mapeamento', snapshotToSave);
+
         setPendingChanges([]);
         alert("Modo Offline: Alteração gravada no celular! Será sincronizada com o servidor assim que a conexão for reestabelecida.");
         return;

@@ -250,8 +250,9 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
     }))
   );
 
-  // Disguised Gear SKU Sync Modal State
+  // Disguised Gear SKU Sync Modal State (Individual + Batch)
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [syncMode, setSyncMode] = useState<'individual' | 'batch'>('individual');
   const [syncSkuInput, setSyncSkuInput] = useState('');
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncData, setSyncData] = useState<{
@@ -263,6 +264,19 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
   } | null>(null);
   const [syncConfirmCode, setSyncConfirmCode] = useState('');
   const [syncExecuting, setSyncExecuting] = useState(false);
+
+  // Batch Sync State
+  const [batchRawInput, setBatchRawInput] = useState('');
+  const [batchLoading, setBatchLoading] = useState(false);
+  const [batchItems, setBatchItems] = useState<{
+    sku: string;
+    saldoRegistrado: number;
+    saldoMapeado: number;
+    diferenca: number;
+    selected: boolean;
+  }[]>([]);
+  const [batchConfirmCode, setBatchConfirmCode] = useState('');
+  const [batchExecuting, setBatchExecuting] = useState(false);
 
   const uniqueSkusList = useMemo(() => {
     const set = new Set<string>();
@@ -348,8 +362,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
         tipo_avaria: 'Sem Avaria',
         turno: 1,
         Observação: `Ajuste automático de sincronização com mapeamento (Mapeado: ${syncData.saldoMapeado}, Registrado ant: ${syncData.saldoRegistrado})`,
-        'Movimentação Sistema': false,
-        Molhado: false
+        'Movimentação Sistema': false
       };
 
       const { error } = await supabase.from('Registros').insert([payload]);
@@ -368,6 +381,152 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
       showToast(`Erro ao registrar ajuste: ${err.message || 'Falha de conexão'}`, 'error');
     } finally {
       setSyncExecuting(false);
+    }
+  };
+
+  const handleCalculateBatchSync = async (mode: 'all' | 'customList') => {
+    setBatchLoading(true);
+    try {
+      const { data: regRows, error: regErr } = await supabase.from('Registros').select('*');
+      if (regErr) throw regErr;
+
+      const { data: mapRows, error: mapErr } = await supabase.from('mapeamento').select('*');
+      if (mapErr) throw mapErr;
+
+      const normSku = (s: string) => String(s || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+      const regMap = new Map<string, { originalSku: string, ent: number, sai: number }>();
+      (regRows || []).forEach(r => {
+        const raw = r.Produto || '';
+        const sku = normSku(raw);
+        if (!sku) return;
+        if (!regMap.has(sku)) regMap.set(sku, { originalSku: raw.trim().toUpperCase(), ent: 0, sai: 0 });
+        const entry = regMap.get(sku)!;
+        entry.ent += Number(r.Entrada) || 0;
+        entry.sai += Number(r.Saída) || 0;
+      });
+
+      const mapStockMap = new Map<string, { originalSku: string, qty: number }>();
+      (mapRows || []).forEach(r => {
+        const raw = r['Código'] || r.produto || r.sku || '';
+        const sku = normSku(raw);
+        if (!sku) return;
+        if (!mapStockMap.has(sku)) mapStockMap.set(sku, { originalSku: raw.trim().toUpperCase(), qty: 0 });
+        const entry = mapStockMap.get(sku)!;
+        entry.qty += Number(r.Quantidade) || 0;
+      });
+
+      let targetSkusSet = new Set<string>();
+
+      if (mode === 'customList') {
+        const parsed = batchRawInput
+          .split(/[\n,\s;]+/)
+          .map(s => s.trim().toUpperCase())
+          .filter(Boolean);
+
+        if (parsed.length === 0) {
+          showToast('Cole ou digite ao menos um código SKU válido.', 'error');
+          setBatchLoading(false);
+          return;
+        }
+
+        parsed.forEach(s => targetSkusSet.add(s));
+      } else {
+        regMap.forEach((_, sku) => targetSkusSet.add(sku));
+        mapStockMap.forEach((_, sku) => targetSkusSet.add(sku));
+      }
+
+      const results: {
+        sku: string;
+        saldoRegistrado: number;
+        saldoMapeado: number;
+        diferenca: number;
+        selected: boolean;
+      }[] = [];
+
+      targetSkusSet.forEach(rawSku => {
+        const key = normSku(rawSku);
+        const regInfo = regMap.get(key);
+        const mapInfo = mapStockMap.get(key);
+
+        const displaySku = regInfo?.originalSku || mapInfo?.originalSku || rawSku;
+        const saldoRegistrado = regInfo ? (regInfo.ent - regInfo.sai) : 0;
+        const saldoMapeado = mapInfo ? mapInfo.qty : 0;
+        const diferenca = saldoMapeado - saldoRegistrado;
+
+        if (diferenca !== 0) {
+          results.push({
+            sku: displaySku,
+            saldoRegistrado,
+            saldoMapeado,
+            diferenca,
+            selected: true
+          });
+        }
+      });
+
+      results.sort((a, b) => Math.abs(b.diferenca) - Math.abs(a.diferenca));
+
+      setBatchItems(results);
+      setBatchConfirmCode('');
+
+      if (results.length === 0) {
+        showToast('Nenhuma divergência encontrada entre Registro e Mapeamento para os SKUs verificados!', 'info');
+      } else {
+        showToast(`Foram encontradas ${results.length} divergências de saldo.`, 'success');
+      }
+    } catch (err: any) {
+      console.error('Erro ao calcular lote:', err);
+      showToast('Erro ao buscar saldos do banco.', 'error');
+    } finally {
+      setBatchLoading(false);
+    }
+  };
+
+  const handleExecuteBatchSync = async () => {
+    const selectedToSync = batchItems.filter(i => i.selected && i.diferenca !== 0);
+    if (selectedToSync.length === 0) {
+      showToast('Nenhum item divergente selecionado.', 'error');
+      return;
+    }
+
+    if (batchConfirmCode.trim().toUpperCase() !== 'CONFIRMAR') {
+      showToast('Digite "CONFIRMAR" para autorizar o ajuste em massa.', 'error');
+      return;
+    }
+
+    setBatchExecuting(true);
+    try {
+      const todayIso = format(new Date(), 'yyyy-MM-dd');
+
+      const payloads = selectedToSync.map(item => ({
+        Data: todayIso,
+        Produto: item.sku,
+        Entrada: item.diferenca > 0 ? item.diferenca : null,
+        Saída: item.diferenca < 0 ? Math.abs(item.diferenca) : null,
+        Origem: 'Ajuste',
+        tipo_avaria: 'Sem Avaria',
+        turno: 1,
+        Observação: `Ajuste em massa para igualar Registro (${item.saldoRegistrado}) ao Mapeamento (${item.saldoMapeado})`,
+        'Movimentação Sistema': false
+      }));
+
+      const { error } = await supabase.from('Registros').insert(payloads);
+      if (error) throw error;
+
+      showToast(`✅ ${payloads.length} ajustes de saldo inseridos em massa com sucesso!`, 'success');
+
+      setIsSyncModalOpen(false);
+      setBatchItems([]);
+      setBatchRawInput('');
+      setBatchConfirmCode('');
+      fetchRegistros();
+      onRefresh?.();
+    } catch (err: any) {
+      console.error('Erro ao executar lote:', err);
+      showToast(`Erro ao registrar ajustes em massa: ${err.message || 'Falha de conexão'}`, 'error');
+    } finally {
+      setBatchExecuting(false);
     }
   };
 
@@ -532,7 +691,6 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
         tipo_avaria: 'Sem Avaria',
         turno: 1,
         'Movimentação Sistema': false,
-        Molhado: false,
         isNew: true,
         isDirty: true
       };
@@ -710,7 +868,6 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
       tipo_avaria: '',
       turno: null,
       'Movimentação Sistema': false,
-      Molhado: false,
       isNew: true,
       isDirty: true,
     };
@@ -790,7 +947,6 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
           responsavel: row.responsavel,
           tipo_avaria: row.tipo_avaria,
           turno: row.turno,
-          'Quantidade Molhada': row.qtd_molhada,
           transportadora: row.transportadora,
           nota_fiscal: row.nota_fiscal,
           placa: row.placa,
@@ -1993,146 +2149,353 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                 </button>
               </div>
 
-              {/* SKU Selection & Search */}
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider block">
-                  Código do Produto / SKU:
-                </label>
-                <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <input
-                      type="text"
-                      list="unique-skus-sync-list"
-                      placeholder="Ex: 7040-01, 5615-03, 8843-03..."
-                      value={syncSkuInput}
-                      onChange={(e) => {
-                        setSyncSkuInput(e.target.value.toUpperCase());
-                        setSyncData(null);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleCalculateSync();
-                      }}
-                      className="w-full bg-slate-950 border border-slate-700/80 rounded-xl px-4 py-2.5 text-sm font-mono text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500 transition-colors uppercase"
-                    />
-                    <datalist id="unique-skus-sync-list">
-                      {uniqueSkusList.map(sku => (
-                        <option key={sku} value={sku} />
-                      ))}
-                    </datalist>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleCalculateSync()}
-                    disabled={syncLoading || !syncSkuInput.trim()}
-                    className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold transition-all flex items-center gap-2"
-                  >
-                    {syncLoading ? <Loader2 className="animate-spin" size={16} /> : <Search size={16} />}
-                    Verificar
-                  </button>
-                </div>
+              {/* Mode Selector Tabs */}
+              <div className="flex items-center gap-2 bg-slate-950 p-1 rounded-2xl border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setSyncMode('individual')}
+                  className={cn(
+                    "flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all text-center flex items-center justify-center gap-2 cursor-pointer",
+                    syncMode === 'individual'
+                      ? "bg-slate-800 text-white shadow-sm ring-1 ring-slate-700"
+                      : "text-slate-400 hover:text-slate-200"
+                  )}
+                >
+                  <Search size={14} />
+                  Ajuste Individual (1 SKU)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSyncMode('batch')}
+                  className={cn(
+                    "flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all text-center flex items-center justify-center gap-2 cursor-pointer",
+                    syncMode === 'batch'
+                      ? "bg-amber-600 text-white shadow-sm ring-1 ring-amber-500"
+                      : "text-slate-400 hover:text-slate-200"
+                  )}
+                >
+                  <Database size={14} />
+                  Ajuste em Massa (Vários SKUs)
+                </button>
               </div>
 
-              {/* Calculation Summary & Comparison */}
-              {syncData && syncData.hasCalculated && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="space-y-4"
-                >
-                  {/* KPI Row */}
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-3.5 text-center">
-                      <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1">Saldo Registrado</span>
-                      <span className="text-xl font-bold text-slate-200">{syncData.saldoRegistrado}</span>
-                      <span className="text-[9px] text-slate-500 block mt-0.5">Histórico Geral</span>
-                    </div>
-
-                    <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-3.5 text-center">
-                      <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1">Saldo Mapeado</span>
-                      <span className="text-xl font-bold text-blue-400">{syncData.saldoMapeado}</span>
-                      <span className="text-[9px] text-slate-500 block mt-0.5">Físico Drive-In</span>
-                    </div>
-
-                    <div className={cn(
-                      "border rounded-2xl p-3.5 text-center transition-colors",
-                      syncData.diferenca > 0
-                        ? "bg-emerald-950/30 border-emerald-500/40 text-emerald-400"
-                        : syncData.diferenca < 0
-                        ? "bg-rose-950/30 border-rose-500/40 text-rose-400"
-                        : "bg-slate-950/70 border-slate-800 text-slate-400"
-                    )}>
-                      <span className="text-[10px] font-medium uppercase tracking-wider block mb-1">Ajuste Necessário</span>
-                      <span className="text-xl font-bold">
-                        {syncData.diferenca > 0 ? `+${syncData.diferenca}` : syncData.diferenca}
-                      </span>
-                      <span className="text-[9px] font-semibold block mt-0.5">
-                        {syncData.diferenca > 0 ? "ENTRADA" : syncData.diferenca < 0 ? "SAÍDA" : "Já Alinhado"}
-                      </span>
+              {/* INDIVIDUAL MODE */}
+              {syncMode === 'individual' && (
+                <>
+                  {/* SKU Selection & Search */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider block">
+                      Código do Produto / SKU:
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <input
+                          type="text"
+                          list="unique-skus-sync-list"
+                          placeholder="Ex: 7040-01, 5615-03, 8843-03..."
+                          value={syncSkuInput}
+                          onChange={(e) => {
+                            setSyncSkuInput(e.target.value.toUpperCase());
+                            setSyncData(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleCalculateSync();
+                          }}
+                          className="w-full bg-slate-950 border border-slate-700/80 rounded-xl px-4 py-2.5 text-sm font-mono text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500 transition-colors uppercase"
+                        />
+                        <datalist id="unique-skus-sync-list">
+                          {uniqueSkusList.map(sku => (
+                            <option key={sku} value={sku} />
+                          ))}
+                        </datalist>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleCalculateSync()}
+                        disabled={syncLoading || !syncSkuInput.trim()}
+                        className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold transition-all flex items-center gap-2 cursor-pointer"
+                      >
+                        {syncLoading ? <Loader2 className="animate-spin" size={16} /> : <Search size={16} />}
+                        Verificar
+                      </button>
                     </div>
                   </div>
 
-                  {/* Operational Impact Box & Safety Confirmation */}
-                  {syncData.diferenca === 0 ? (
-                    <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 text-center space-y-1">
-                      <p className="text-xs font-semibold text-emerald-400">
-                        ✅ A quantidade registrada do código <span className="font-mono">{syncData.sku}</span> já é rigorosamente igual à quantidade no mapeamento físico ({syncData.saldoMapeado} pçs).
-                      </p>
-                      <p className="text-[11px] text-slate-500">Nenhum ajuste adicional é necessário.</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3.5 bg-slate-950/90 border border-slate-800 p-4 rounded-2xl">
-                      <div className="flex items-start gap-2.5 text-amber-300 text-xs leading-relaxed bg-amber-500/10 border border-amber-500/20 p-3 rounded-xl">
-                        <AlertCircle size={18} className="flex-shrink-0 mt-0.5 text-amber-400" />
-                        <div>
-                          <p className="font-bold text-amber-200">Confirmação de Segurança Requerida</p>
-                          <p className="text-[11px] text-amber-300/90 mt-0.5">
-                            Será inserido um registro de <strong className="underline">{syncData.diferenca > 0 ? 'ENTRADA' : 'SAÍDA'}</strong> de <strong className="font-mono text-white font-bold">{Math.abs(syncData.diferenca)} peças</strong> na data de hoje ({format(new Date(), 'dd/MM/yyyy')}) com origem &quot;Ajuste&quot; para equiparar os saldos.
-                          </p>
+                  {/* Calculation Summary & Comparison */}
+                  {syncData && syncData.hasCalculated && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="space-y-4"
+                    >
+                      {/* KPI Row */}
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-3.5 text-center">
+                          <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1">Saldo Registrado</span>
+                          <span className="text-xl font-bold text-slate-200">{syncData.saldoRegistrado}</span>
+                          <span className="text-[9px] text-slate-500 block mt-0.5">Histórico Geral</span>
+                        </div>
+
+                        <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-3.5 text-center">
+                          <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1">Saldo Mapeado</span>
+                          <span className="text-xl font-bold text-blue-400">{syncData.saldoMapeado}</span>
+                          <span className="text-[9px] text-slate-500 block mt-0.5">Físico Drive-In</span>
+                        </div>
+
+                        <div className={cn(
+                          "border rounded-2xl p-3.5 text-center transition-colors",
+                          syncData.diferenca > 0
+                            ? "bg-emerald-950/30 border-emerald-500/40 text-emerald-400"
+                            : syncData.diferenca < 0
+                            ? "bg-rose-950/30 border-rose-500/40 text-rose-400"
+                            : "bg-slate-950/70 border-slate-800 text-slate-400"
+                        )}>
+                          <span className="text-[10px] font-medium uppercase tracking-wider block mb-1">Ajuste Necessário</span>
+                          <span className="text-xl font-bold">
+                            {syncData.diferenca > 0 ? `+${syncData.diferenca}` : syncData.diferenca}
+                          </span>
+                          <span className="text-[9px] font-semibold block mt-0.5">
+                            {syncData.diferenca > 0 ? "ENTRADA" : syncData.diferenca < 0 ? "SAÍDA" : "Já Alinhado"}
+                          </span>
                         </div>
                       </div>
 
-                      <div className="space-y-2 pt-1">
-                        <label className="text-[11px] font-medium text-slate-400 block">
-                          Para autorizar e executar este ajuste, digite o código do SKU (<strong className="text-slate-200 font-mono">{syncData.sku}</strong>):
-                        </label>
-                        <input
-                          type="text"
-                          placeholder={`Digite ${syncData.sku}`}
-                          value={syncConfirmCode}
-                          onChange={(e) => setSyncConfirmCode(e.target.value.toUpperCase())}
-                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs font-mono text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-500 transition-colors uppercase"
-                        />
-                      </div>
+                      {/* Operational Impact Box & Safety Confirmation */}
+                      {syncData.diferenca === 0 ? (
+                        <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 text-center space-y-1">
+                          <p className="text-xs font-semibold text-emerald-400">
+                            ✅ A quantidade registrada do código <span className="font-mono">{syncData.sku}</span> já é rigorosamente igual à quantidade no mapeamento físico ({syncData.saldoMapeado} pçs).
+                          </p>
+                          <p className="text-[11px] text-slate-500">Nenhum ajuste adicional é necessário.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3.5 bg-slate-950/90 border border-slate-800 p-4 rounded-2xl">
+                          <div className="flex items-start gap-2.5 text-amber-300 text-xs leading-relaxed bg-amber-500/10 border border-amber-500/20 p-3 rounded-xl">
+                            <AlertCircle size={18} className="flex-shrink-0 mt-0.5 text-amber-400" />
+                            <div>
+                              <p className="font-bold text-amber-200">Confirmação de Segurança Requerida</p>
+                              <p className="text-[11px] text-amber-300/90 mt-0.5">
+                                Será inserido um registro de <strong className="underline">{syncData.diferenca > 0 ? 'ENTRADA' : 'SAÍDA'}</strong> de <strong className="font-mono text-white font-bold">{Math.abs(syncData.diferenca)} peças</strong> na data de hoje ({format(new Date(), 'dd/MM/yyyy')}) com origem &quot;Ajuste&quot; para equiparar os saldos.
+                              </p>
+                            </div>
+                          </div>
 
+                          <div className="space-y-2 pt-1">
+                            <label className="text-[11px] font-medium text-slate-400 block">
+                              Para autorizar e executar este ajuste, digite o código do SKU (<strong className="text-slate-200 font-mono">{syncData.sku}</strong>):
+                            </label>
+                            <input
+                              type="text"
+                              placeholder={`Digite ${syncData.sku}`}
+                              value={syncConfirmCode}
+                              onChange={(e) => setSyncConfirmCode(e.target.value.toUpperCase())}
+                              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs font-mono text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-500 transition-colors uppercase"
+                            />
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={handleExecuteSync}
+                            disabled={
+                              syncExecuting ||
+                              syncConfirmCode.trim().toUpperCase() !== syncData.sku.toUpperCase()
+                            }
+                            className={cn(
+                              "w-full py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer",
+                              syncConfirmCode.trim().toUpperCase() === syncData.sku.toUpperCase()
+                                ? "bg-amber-600 hover:bg-amber-500 text-white shadow-amber-600/25 active:scale-[0.99]"
+                                : "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700/50"
+                            )}
+                          >
+                            {syncExecuting ? (
+                              <>
+                                <Loader2 className="animate-spin" size={16} />
+                                Executando Ajuste...
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle2 size={16} />
+                                Executar Ajuste de Registro ({syncData.diferenca > 0 ? '+' : '-'}{Math.abs(syncData.diferenca)} pçs)
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
+                </>
+              )}
+
+              {/* BATCH MODE */}
+              {syncMode === 'batch' && (
+                <div className="space-y-4">
+                  {/* Action buttons */}
+                  <div className="flex flex-col sm:flex-row items-stretch gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleCalculateBatchSync('all')}
+                      disabled={batchLoading}
+                      className="flex-1 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                    >
+                      {batchLoading ? <Loader2 className="animate-spin" size={16} /> : <Search size={16} />}
+                      Escanear Todas as Divergências no Banco
+                    </button>
+                  </div>
+
+                  {/* Optional Custom Paste Area */}
+                  <div className="space-y-1.5 bg-slate-950/60 p-3 rounded-2xl border border-slate-800">
+                    <label className="text-[11px] font-semibold text-slate-400 block uppercase tracking-wider">
+                      Ou Cole uma Lista de SKUs (Separados por vírgula, espaço ou linha):
+                    </label>
+                    <div className="flex gap-2">
+                      <textarea
+                        rows={2}
+                        placeholder="Ex: 7040-01, 5615-03, 8843-03..."
+                        value={batchRawInput}
+                        onChange={(e) => setBatchRawInput(e.target.value)}
+                        className="flex-1 bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs font-mono text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-500 custom-scrollbar uppercase"
+                      />
                       <button
                         type="button"
-                        onClick={handleExecuteSync}
-                        disabled={
-                          syncExecuting ||
-                          syncConfirmCode.trim().toUpperCase() !== syncData.sku.toUpperCase()
-                        }
-                        className={cn(
-                          "w-full py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer",
-                          syncConfirmCode.trim().toUpperCase() === syncData.sku.toUpperCase()
-                            ? "bg-amber-600 hover:bg-amber-500 text-white shadow-amber-600/25 active:scale-[0.99]"
-                            : "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700/50"
-                        )}
+                        onClick={() => handleCalculateBatchSync('customList')}
+                        disabled={batchLoading || !batchRawInput.trim()}
+                        className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 text-xs font-bold transition-all self-end h-full cursor-pointer"
                       >
-                        {syncExecuting ? (
-                          <>
-                            <Loader2 className="animate-spin" size={16} />
-                            Executando Ajuste...
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 size={16} />
-                            Executar Ajuste de Registro ({syncData.diferenca > 0 ? '+' : '-'}{Math.abs(syncData.diferenca)} pçs)
-                          </>
-                        )}
+                        Verificar Lista
                       </button>
                     </div>
+                  </div>
+
+                  {/* Batch Divergent Table */}
+                  {batchItems.length > 0 && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
+                      <div className="flex items-center justify-between px-1">
+                        <span className="text-xs font-bold text-slate-300">
+                          {batchItems.length} SKUs com divergência ({batchItems.filter(i => i.selected).length} selecionados)
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const allSel = batchItems.every(i => i.selected);
+                              setBatchItems(prev => prev.map(i => ({ ...i, selected: !allSel })));
+                            }}
+                            className="text-[11px] font-semibold text-blue-400 hover:underline cursor-pointer"
+                          >
+                            {batchItems.every(i => i.selected) ? 'Desmarcar Todos' : 'Marcar Todos'}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="max-h-56 overflow-y-auto custom-scrollbar border border-slate-800 rounded-2xl bg-slate-950/80">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-900 border-b border-slate-800 sticky top-0 z-10 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                            <tr>
+                              <th className="p-2.5 text-center w-10">
+                                <input
+                                  type="checkbox"
+                                  checked={batchItems.length > 0 && batchItems.every(i => i.selected)}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    setBatchItems(prev => prev.map(i => ({ ...i, selected: checked })));
+                                  }}
+                                  className="rounded border-slate-700 text-amber-500 focus:ring-amber-500 bg-slate-900 cursor-pointer"
+                                />
+                              </th>
+                              <th className="p-2.5">SKU / Código</th>
+                              <th className="p-2.5 text-center">Registrado</th>
+                              <th className="p-2.5 text-center">Mapeado</th>
+                              <th className="p-2.5 text-center">Ajuste</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/60 font-mono">
+                            {batchItems.map((item, idx) => (
+                              <tr key={idx} className="hover:bg-slate-900/60 transition-colors">
+                                <td className="p-2.5 text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={item.selected}
+                                    onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      setBatchItems(prev => prev.map((it, i) => i === idx ? { ...it, selected: checked } : it));
+                                    }}
+                                    className="rounded border-slate-700 text-amber-500 focus:ring-amber-500 bg-slate-900 cursor-pointer"
+                                  />
+                                </td>
+                                <td className="p-2.5 font-bold text-white">{item.sku}</td>
+                                <td className="p-2.5 text-center text-slate-300">{item.saldoRegistrado}</td>
+                                <td className="p-2.5 text-center text-blue-400">{item.saldoMapeado}</td>
+                                <td className="p-2.5 text-center font-bold">
+                                  <span className={cn(
+                                    "px-2 py-0.5 rounded text-[10px]",
+                                    item.diferenca > 0 ? "bg-emerald-950/60 text-emerald-400 border border-emerald-500/30" : "bg-rose-950/60 text-rose-400 border border-rose-500/30"
+                                  )}>
+                                    {item.diferenca > 0 ? `+${item.diferenca} (ENTRADA)` : `${item.diferenca} (SAÍDA)`}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Batch Confirmation Box */}
+                      <div className="space-y-3 bg-slate-950/90 border border-slate-800 p-4 rounded-2xl">
+                        <div className="flex items-start gap-2.5 text-amber-300 text-xs leading-relaxed bg-amber-500/10 border border-amber-500/20 p-3 rounded-xl">
+                          <AlertCircle size={18} className="flex-shrink-0 mt-0.5 text-amber-400" />
+                          <div>
+                            <p className="font-bold text-amber-200">Confirmação de Ajuste em Massa</p>
+                            <p className="text-[11px] text-amber-300/90 mt-0.5">
+                              Serão lançadas movimentações oficiais para os <strong className="text-white font-bold">{batchItems.filter(i => i.selected).length} SKUs selecionados</strong> para equiparar os saldos de Registro ao Mapeamento.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-medium text-slate-400 block">
+                            Para autorizar os lançamentos em massa, digite <strong className="text-white font-bold">CONFIRMAR</strong> abaixo:
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Digite CONFIRMAR"
+                            value={batchConfirmCode}
+                            onChange={(e) => setBatchConfirmCode(e.target.value.toUpperCase())}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs font-mono text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-500 transition-colors uppercase"
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={handleExecuteBatchSync}
+                          disabled={
+                            batchExecuting ||
+                            batchItems.filter(i => i.selected).length === 0 ||
+                            batchConfirmCode.trim().toUpperCase() !== 'CONFIRMAR'
+                          }
+                          className={cn(
+                            "w-full py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer",
+                            batchConfirmCode.trim().toUpperCase() === 'CONFIRMAR' && batchItems.filter(i => i.selected).length > 0
+                              ? "bg-amber-600 hover:bg-amber-500 text-white shadow-amber-600/25 active:scale-[0.99]"
+                              : "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700/50"
+                          )}
+                        >
+                          {batchExecuting ? (
+                            <>
+                              <Loader2 className="animate-spin" size={16} />
+                              Executando Ajustes em Massa...
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 size={16} />
+                              Executar Ajuste em Massa ({batchItems.filter(i => i.selected).length} SKUs)
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </motion.div>
                   )}
-                </motion.div>
+                </div>
               )}
             </motion.div>
           </div>
