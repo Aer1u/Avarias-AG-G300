@@ -6515,10 +6515,10 @@ function DashboardPage() {
                                                           alert("Erro ao mover para o Retrabalho: " + err.message);
                                                         }
                                                       }}
-                                                      className="px-1.5 py-0.5 text-[8px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 rounded transition-colors flex items-center gap-0.5 uppercase whitespace-nowrap"
+                                                       className="p-1 text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10 rounded transition-colors"
                                                       title="Mover do Chão para o Retrabalho"
                                                     >
-                                                      <RefreshCw size={9} /> p/ Retrab.
+                                                      <RefreshCw size={11} />
                                                     </button>
                                                   )}
                                                   <button
@@ -6612,10 +6612,10 @@ function DashboardPage() {
                                                           alert("Erro ao mover para o Retrabalho: " + err.message);
                                                         }
                                                       }}
-                                                      className="px-1.5 py-0.5 text-[8px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 rounded transition-colors flex items-center gap-0.5 uppercase whitespace-nowrap"
+                                                       className="p-1 text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10 rounded transition-colors"
                                                       title="Mover do Chão para o Retrabalho"
                                                     >
-                                                      <RefreshCw size={9} /> p/ Retrab.
+                                                      <RefreshCw size={11} />
                                                     </button>
                                                   )}
                                                   <button
