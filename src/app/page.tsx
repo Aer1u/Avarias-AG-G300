@@ -6336,7 +6336,7 @@ function DashboardPage() {
                                     <th className="px-3 py-3 text-[9px] font-semibold uppercase tracking-widest text-slate-400">Descrição</th>
                                     <th className="px-3 py-3 text-[9px] font-semibold uppercase tracking-widest text-slate-400 text-right">Qtd</th>
                                     <th className="px-3 py-3 text-[9px] font-semibold uppercase tracking-widest text-slate-400">Obs</th>
-                                    {user && <th className="px-3 py-3 text-[9px] font-semibold uppercase tracking-widest text-slate-400 text-center w-8">Ação</th>}
+                                     {user && <th className="px-3 py-3 text-[9px] font-semibold uppercase tracking-widest text-slate-400 text-center whitespace-nowrap">Ação</th>}
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -6391,7 +6391,7 @@ function DashboardPage() {
                                           {/* ID Palete */}
                                           <td className="px-3 py-3">
                                             {group.isSimple ? (
-                                              <span className="text-[10px] italic text-slate-400">S/ ALOCAÇÃO</span>
+                                              <span className="text-[10px] italic text-slate-400 whitespace-nowrap">S/ ALOCAÇÃO</span>
                                             ) : (
                                               <div className="flex items-center gap-1.5 flex-wrap">
                                                 <span className="text-[10px] font-semibold text-blue-500 dark:text-blue-300 tracking-wide">{group.label}</span>
@@ -6436,7 +6436,7 @@ function DashboardPage() {
                                           </td>
                                           {/* Ação */}
                                           {user && (
-                                            <td className="px-3 py-3 text-center">
+                                            <td className="px-3 py-3 text-center whitespace-nowrap">
                                               {!isComposite && (
                                                 <div className="flex items-center justify-center gap-1">
                                                   {/* Dividir: só aparece quando qty > 1 */}
@@ -6495,7 +6495,7 @@ function DashboardPage() {
                                                           alert("Erro ao mover para o Chão: " + err.message);
                                                         }
                                                       }}
-                                                      className="mr-2 px-2 py-1 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 rounded-lg transition-colors flex items-center gap-1 uppercase tracking-wider"
+                                                      className="px-2 py-1 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 rounded-lg transition-colors flex items-center gap-1 uppercase tracking-wider whitespace-nowrap shrink-0"
                                                       title="Mover do Retrabalho para o Chão"
                                                     >
                                                       <RefreshCw size={11} /> Mover p/ Chão
@@ -6515,7 +6515,7 @@ function DashboardPage() {
                                                           alert("Erro ao mover para o Retrabalho: " + err.message);
                                                         }
                                                       }}
-                                                      className="mr-2 px-2 py-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 rounded-lg transition-colors flex items-center gap-1 uppercase tracking-wider"
+                                                      className="px-2 py-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 rounded-lg transition-colors flex items-center gap-1 uppercase tracking-wider whitespace-nowrap shrink-0"
                                                       title="Mover do Chão para o Retrabalho"
                                                     >
                                                       <RefreshCw size={11} /> Mover p/ Retrabalho
@@ -6577,7 +6577,7 @@ function DashboardPage() {
                                                 })()}
                                               </td>
                                               {user && (
-                                                <td className="px-3 py-2 text-center flex items-center justify-end gap-1">
+                                                <td className="px-3 py-2 text-center flex items-center justify-end gap-1 whitespace-nowrap">
                                                   {displayMode === "retrabalho" && (
                                                     <button
                                                       onClick={async (e) => {
@@ -6592,7 +6592,7 @@ function DashboardPage() {
                                                           alert("Erro ao mover para o Chão: " + err.message);
                                                         }
                                                       }}
-                                                      className="px-2 py-0.5 text-[9px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 rounded-lg transition-colors flex items-center gap-1 uppercase tracking-wider"
+                                                      className="px-2 py-0.5 text-[9px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 rounded-lg transition-colors flex items-center gap-1 uppercase tracking-wider whitespace-nowrap shrink-0"
                                                       title="Mover do Retrabalho para o Chão"
                                                     >
                                                       <RefreshCw size={10} /> Mover p/ Chão
@@ -6612,7 +6612,7 @@ function DashboardPage() {
                                                           alert("Erro ao mover para o Retrabalho: " + err.message);
                                                         }
                                                       }}
-                                                      className="px-2 py-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 rounded-lg transition-colors flex items-center gap-1 uppercase tracking-wider"
+                                                      className="px-2 py-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 rounded-lg transition-colors flex items-center gap-1 uppercase tracking-wider whitespace-nowrap shrink-0"
                                                       title="Mover do Chão para o Retrabalho"
                                                     >
                                                       <RefreshCw size={10} /> Mover p/ Retrabalho
