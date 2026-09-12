@@ -959,11 +959,14 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
         if (!cleanRow.Data || !cleanRow.Produto) continue;
 
         if (row.isNew) {
+          // Determina a posição no mapeamento com base na Origem
+          const posicaoMapeamento = row.Origem === 'Retrabalho' ? 'Retrabalho' : 'Chão';
+
           if (row.Saída && row.Saída > 0) {
             const { data: floorStock, error: stockErr } = await supabase
               .from('mapeamento')
               .select('id, Quantidade')
-              .eq('Posição', 'Chão')
+              .eq('Posição', posicaoMapeamento)
               .eq('Código', row.Produto)
               .order('id', { ascending: true });
 
@@ -972,7 +975,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
             const totalFloor = (floorStock || []).reduce((acc, curr) => acc + (curr.Quantidade || 0), 0);
             
             if (totalFloor < row.Saída) {
-              throw new Error(`Estoque insuficiente no CHÃO para ${row.Produto}. Disponível: ${totalFloor}`);
+              throw new Error(`Estoque insuficiente em ${posicaoMapeamento} para ${row.Produto}. Disponível: ${totalFloor}`);
             }
 
             let remainingToConsume = row.Saída;
@@ -994,7 +997,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
 
           if (row.Entrada && row.Entrada > 0) {
             const { error: mapErr } = await supabase.from('mapeamento').insert([{
-              'Posição': 'Chão',
+              'Posição': posicaoMapeamento,
               'Código': row.Produto,
               'Quantidade': row.Entrada,
               'Nível': 0,
@@ -1006,7 +1009,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
               usuario: row.responsavel || 'Sistema',
               tipo_acao: 'ENTRADA',
               sku: row.Produto,
-              posicao: 'Chão',
+              posicao: posicaoMapeamento,
               quantidade: row.Entrada
             }]);
           }
