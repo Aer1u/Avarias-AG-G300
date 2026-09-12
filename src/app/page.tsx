@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import React, { useState, useEffect, useMemo } from "react"
 import {
@@ -7131,23 +7131,35 @@ function DashboardPage() {
 
                           {/* Filtros e Busca Funcionais Estilo UI Premium */}
                           {(() => {
+                            const baMap = new Map<string, number>();
+                            (baRawList || []).forEach((item: any) => {
+                              const rawSku = String(item.Produto || item.Código || item.Codigo || '').trim().toUpperCase();
+                              const sku = normalizeSku(rawSku);
+                              if (sku) {
+                                baMap.set(sku, (baMap.get(sku) || 0) + Number(item.Quantidade || item.quantidade || 0));
+                              }
+                            });
+
                             const counts = confrontosData.dados.reduce((acc: any, c: any) => {
                               const skuNormal = normalizeSku(c.produto);
-                              const ajusteSoma = confrontoType === "fisico_x_a501" ? ajustesConfronto.filter(a => normalizeSku(a.produto) === skuNormal).reduce((x, curr) => x + curr.quantidade, 0) : 0
-                              const qtdFisicaAjustada = c.qtd_fisica + ajusteSoma
-                              const diferenca = qtdFisicaAjustada - c.qtd_sistema
+                              const ajusteSoma = confrontoType === "fisico_x_a501" ? ajustesConfronto.filter(a => normalizeSku(a.produto) === skuNormal).reduce((x, curr) => x + curr.quantidade, 0) : 0;
+                              const baQty = confrontoType === "fisico_x_a501" ? (baMap.get(skuNormal) || 0) : 0;
+                              const teveAjuste = (ajusteSoma !== 0) || (baQty > 0);
 
-                              acc.all++
-                              if (ajusteSoma !== 0) acc.adjusted++
+                              const qtdFisicaAjustada = c.qtd_fisica + ajusteSoma;
+                              const diferenca = qtdFisicaAjustada - c.qtd_sistema;
+
+                              acc.all++;
+                              if (teveAjuste) acc.adjusted++;
                               if (diferenca === 0) {
-                                acc.match++
+                                acc.match++;
                               } else {
-                                acc.divergent++
-                                if (diferenca > 0) acc.excess++
-                                else acc.missing++
+                                acc.divergent++;
+                                if (diferenca > 0) acc.excess++;
+                                else acc.missing++;
                               }
-                              return acc
-                            }, { all: 0, divergent: 0, excess: 0, missing: 0, match: 0, adjusted: 0 })
+                              return acc;
+                            }, { all: 0, divergent: 0, excess: 0, missing: 0, match: 0, adjusted: 0 });
 
                             return (
                               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
@@ -7249,20 +7261,34 @@ function DashboardPage() {
                                   className="divide-y divide-slate-200 dark:divide-slate-800/50"
                                 >
                                   {(() => {
+                                    const baMapLocal = new Map<string, number>();
+                                    (baRawList || []).forEach((item: any) => {
+                                      const rawSku = String(item.Produto || item.Código || item.Codigo || '').trim().toUpperCase();
+                                      const sku = normalizeSku(rawSku);
+                                      if (sku) baMapLocal.set(sku, (baMapLocal.get(sku) || 0) + Number(item.Quantidade || item.quantidade || 0));
+                                    });
                                     const dadosAjustados = confrontosData.dados.map((c: any) => {
                                       const skuNormal = normalizeSku(c.produto);
                                       const itemAdjustments = confrontoType === "fisico_x_a501" ? ajustesConfronto.filter((a: any) => normalizeSku(a.produto) === skuNormal) : [];
                                       const ajusteSoma = itemAdjustments.reduce((acc, curr) => acc + curr.quantidade, 0);
                                       const qtdFisicaAjustada = c.qtd_fisica + ajusteSoma;
-                                      const diferencaAjustada = qtdFisicaAjustada - c.qtd_sistema
+                                      const diferencaAjustada = qtdFisicaAjustada - c.qtd_sistema;
+                                      const baQty = confrontoType === "fisico_x_a501" ? (baMapLocal.get(skuNormal) || 0) : 0;
+                                      const teveAjusteManual = ajusteSoma !== 0;
+                                      const teveAjusteBA = baQty > 0;
+                                      const teveAjuste = teveAjusteManual || teveAjusteBA;
+                                      let motivo = itemAdjustments.map((a: any) => a.motivo).join('; ');
+                                      if (teveAjusteBA) motivo = motivo ? `${motivo}; BA: ${baQty} un.` : `Estoque BA: ${baQty} un.`;
                                       return {
                                         ...c,
                                         qtd_fisica_original: c.qtd_fisica,
                                         qtd_fisica: qtdFisicaAjustada,
                                         diferenca: diferencaAjustada,
-                                        teve_ajuste: ajusteSoma !== 0,
+                                        teve_ajuste: teveAjuste,
+                                        teve_ajuste_ba: teveAjusteBA,
+                                        teve_ajuste_manual: teveAjusteManual,
                                         ajuste_quantidade: ajusteSoma,
-                                        motivo_ajuste: itemAdjustments.map(a => a.motivo).join('; ')
+                                        motivo_ajuste: motivo
                                       }
                                     });
 
@@ -7313,9 +7339,14 @@ function DashboardPage() {
                                       <tr key={i} onClick={() => setSelectedConfrontoItem(c)} className="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all hover:scale-[1.01] hover:shadow-lg group cursor-pointer relative z-0 hover:z-10">
                                         <td className="px-5 py-3.5">
                                           <span className="text-sm font-normal text-slate-800 dark:text-slate-200 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">{c.produto}</span>
-                                          {c.teve_ajuste && (
+                                          {c.teve_ajuste_manual && (
                                             <span className="ml-2 inline-flex border border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[8px] font-bold px-1.5 py-0.5 rounded-md align-middle shadow-sm" title={c.motivo_ajuste}>
                                               AJUSTADO
+                                            </span>
+                                          )}
+                                          {c.teve_ajuste_ba && (
+                                            <span className="ml-1 inline-flex border border-purple-500/30 bg-purple-500/10 text-purple-600 dark:text-purple-400 text-[8px] font-bold px-1.5 py-0.5 rounded-md align-middle shadow-sm" title={c.motivo_ajuste}>
+                                              BA
                                             </span>
                                           )}
                                         </td>
@@ -7353,14 +7384,23 @@ function DashboardPage() {
 
                           {/* Confrontos Pagination */}
                           {(() => {
+                            const baMapLocal2 = new Map<string, number>();
+                            (baRawList || []).forEach((item: any) => {
+                              const rawSku = String(item.Produto || item.Código || item.Codigo || '').trim().toUpperCase();
+                              const sku = normalizeSku(rawSku);
+                              if (sku) baMapLocal2.set(sku, (baMapLocal2.get(sku) || 0) + Number(item.Quantidade || item.quantidade || 0));
+                            });
                             const dadosAjustados = confrontosData.dados.map((c: any) => {
                               const skuNormal = normalizeSku(c.produto);
                               const itemAdjustments = confrontoType === "fisico_x_a501" ? ajustesConfronto.filter((a: any) => normalizeSku(a.produto) === skuNormal) : [];
                               const ajusteSoma = itemAdjustments.reduce((acc, curr) => acc + curr.quantidade, 0);
-                              const qtdFisicaAjustada = c.qtd_fisica + ajusteSoma
+                              const qtdFisicaAjustada = c.qtd_fisica + ajusteSoma;
+                              const baQty = confrontoType === "fisico_x_a501" ? (baMapLocal2.get(skuNormal) || 0) : 0;
+                              const teveAjuste = ajusteSoma !== 0 || baQty > 0;
                               return {
                                 ...c,
-                                teve_ajuste: ajusteSoma !== 0,
+                                teve_ajuste: teveAjuste,
+                                teve_ajuste_ba: baQty > 0,
                                 diferenca: qtdFisicaAjustada - c.qtd_sistema
                               }
                             });
