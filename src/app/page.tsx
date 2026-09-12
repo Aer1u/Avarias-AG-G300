@@ -22,6 +22,7 @@ import {
   PieChart,
   Info,
   Layers,
+  Database,
   Zap,
   Trash2,
   Star,
@@ -464,7 +465,7 @@ function DashboardPage() {
   const [mapMenuOpen, setMapMenuOpen] = useState(false)
   const [selectionModeActive, setSelectionModeActive] = useState(false)
   const [selectedPositions, setSelectedPositions] = useState<Set<string>>(new Set())
-  const [topTab, setTopTab] = useState<"geral" | "mapeamento" | "produtos" | "confrontos" | "registros" | "retrabalhos" | "relatorio_recebimento" | "embalagens">("geral")
+  const [topTab, setTopTab] = useState<"geral" | "mapeamento" | "produtos" | "confrontos" | "registros" | "retrabalhos" | "relatorio_recebimento" | "embalagens" | "estoque_ba">("geral")
   const relatorioRef = React.useRef<any>(null);
   const [showDivergences, setShowDivergences] = useState(false)
   const [confrontosData, setConfrontosData] = useState<any>(null)
@@ -1296,6 +1297,13 @@ function DashboardPage() {
   const [importTextG501, setImportTextG501] = useState("")
   const [isImportingG501, setIsImportingG501] = useState(false)
 
+  // -- ESTADOS PARA IMPORTAÇÍO DE BA30001V9601 (ESTOQUE BA) --
+  const [modalImportBAOpen, setModalImportBAOpen] = useState(false)
+  const [importTextBA, setImportTextBA] = useState("")
+  const [isImportingBA, setIsImportingBA] = useState(false)
+  const [baRawList, setBaRawList] = useState<any[]>([])
+  const [baSearch, setBaSearch] = useState("")
+
   const handleExportAjustes = () => {
     try {
       const jsonStr = JSON.stringify(ajustesConfronto)
@@ -1435,7 +1443,7 @@ function DashboardPage() {
     setError(null);
     try {
       // 1. Fetch ALL from Supabase tables (pagination bypass)
-      const [posicoesRes, mapeamentoRes, historicoRes, baseCodigosRes, ajustesRes, a501Res, g501Res, paletesRes] = await Promise.all([
+      const [posicoesRes, mapeamentoRes, historicoRes, baseCodigosRes, ajustesRes, a501Res, g501Res, baRes, paletesRes] = await Promise.all([
         fetchAllSupabaseData('posicoes'),
         fetchAllSupabaseData('mapeamento'),
         fetchAllSupabaseData('Registros'),
@@ -1443,6 +1451,7 @@ function DashboardPage() {
         fetchAllSupabaseData('Ajuste'),
         fetchAllSupabaseData('A501'),
         fetchAllSupabaseData('G501'),
+        fetchAllSupabaseData('BA30001V9601'),
         supabase.from('Paletes').select('*').order('created_at', { ascending: false }).limit(20)
       ]);
 
@@ -1454,6 +1463,7 @@ function DashboardPage() {
       if (ajustesRes.error) console.warn("Tabela Ajuste inacessível:", ajustesRes.error);
       if (a501Res.error) console.warn("Tabela A501 inacessível:", a501Res.error);
       if (g501Res.error) console.warn("Tabela G501 inacessível:", g501Res.error);
+      if (baRes.error) console.warn("Tabela BA30001V9601 inacessível:", baRes.error);
       if (paletesRes.error) console.warn("Tabela Paletes inacessível:", paletesRes.error);
       else if (paletesRes.data) {
         const recordsByDate: Record<string, { t14?: number, t17?: number, t22?: number }> = {};
@@ -1558,6 +1568,13 @@ function DashboardPage() {
       const ajustesRaw = ajustesRes.data || [];
       const a501Raw = a501Res.data || [];
       const g501Raw = g501Res.data || [];
+
+      let baRawData = baRes?.data || [];
+      if (!baRawData || baRawData.length === 0) {
+        const altBa = await fetchAllSupabaseData('BA');
+        if (altBa.data && altBa.data.length > 0) baRawData = altBa.data;
+      }
+      setBaRawList(baRawData || []);
 
       // Sincronizar ajustes no estado
       const finalAjustes: AjusteManal[] = (ajustesRaw || []).map((a: any) => ({
@@ -1950,10 +1967,16 @@ function DashboardPage() {
     try {
       const { data: a501Raw, error: a501Err } = await supabase.from('A501').select('*');
       const { data: g501Raw, error: g501Err } = await supabase.from('G501').select('*');
+      let { data: baRaw, error: baErr } = await supabase.from('BA30001V9601').select('*');
+      if (baErr || !baRaw || baRaw.length === 0) {
+        const alt = await supabase.from('BA').select('*');
+        if (alt.data) baRaw = alt.data;
+      }
       const { data: ajustesRaw, error: ajustesErr } = await supabase.from('Ajuste').select('*');
 
       if (a501Err) console.warn("Erro ao buscar A501 de Supabase:", a501Err);
       if (g501Err) console.warn("Erro ao buscar G501 de Supabase:", g501Err);
+      if (baErr) console.warn("Erro ao buscar BA30001V9601 de Supabase:", baErr);
       if (ajustesErr) console.warn("Erro ao buscar Ajuste de Supabase:", ajustesErr);
 
       // Sincronizar ajustes no estado (sempre pegar os mais recentes antes do cálculo)
@@ -2001,6 +2024,21 @@ function DashboardPage() {
       // Group Supabase tables (Use 'Descrição' or 'Descricao' if available)
       const a501Grouped = groupData(a501Raw || [], 'Produto', 'Quantidade', 'Descrição');
       const g501Grouped = groupData(g501Raw || [], 'Produto', 'Quantidade', 'Descrição');
+      const baGrouped = groupData(baRaw || [], 'Produto', 'Quantidade', 'Descrição');
+
+      // Combine A501 + BA into sistemaGrouped for Físico vs Sistema confrontation
+      const sistemaGrouped = new Map();
+      const allSystemSkus = new Set([...a501Grouped.keys(), ...baGrouped.keys()]);
+      allSystemSkus.forEach(sku => {
+        const a501Item = a501Grouped.get(sku) || { qty: 0, desc: "-" };
+        const baItem = baGrouped.get(sku) || { qty: 0, desc: "-" };
+        const desc = a501Item.desc !== "-" ? a501Item.desc : baItem.desc;
+
+        sistemaGrouped.set(sku, {
+          qty: (a501Item.qty || 0) + (baItem.qty || 0),
+          desc: desc || "-"
+        });
+      });
 
       // Group Inventory data (Physical Source: Movements Balance from Registros)
       const fisGrouped = new Map();
@@ -2069,7 +2107,7 @@ function DashboardPage() {
       };
 
       const results = {
-        fisico_x_a501: processResults(fisGrouped, a501Grouped),
+        fisico_x_a501: processResults(fisGrouped, sistemaGrouped),
         a501_x_g501: processResults(a501Grouped, g501Grouped)
       };
 
@@ -3696,6 +3734,7 @@ function DashboardPage() {
               ...(user ? [{ id: 'registros', label: 'Monitoramento', icon: History }] : []),
               { id: 'retrabalhos', label: 'Retrabalhos', icon: RefreshCw },
               { id: 'embalagens', label: 'Embalagens', icon: Package },
+              { id: 'estoque_ba', label: 'Estoque BA', icon: Database },
               ...(user ? [{ id: 'relatorio_recebimento', label: 'Rec. Mensal', icon: Droplet }] : []),
             ].map((tab) => (
               <button
@@ -3791,6 +3830,7 @@ function DashboardPage() {
               ...(user ? [{ id: 'registros', label: 'Monitoramento', icon: History }] : []),
               { id: 'retrabalhos', label: 'Retrabalhos', icon: RefreshCw },
               { id: 'embalagens', label: 'Embalagens', icon: Package },
+              { id: 'estoque_ba', label: 'Estoque BA', icon: Database },
               ...(user ? [{ id: 'relatorio_recebimento', label: 'Rec. Mensal', icon: Droplet }] : []),
             ].map((tab) => (
               <button
@@ -3888,8 +3928,8 @@ function DashboardPage() {
           </div>
         </aside>
 
-        <main className={cn("ml-0 md:ml-24 flex-1 overflow-x-hidden", (topTab === 'registros' || topTab === 'relatorio_recebimento' || topTab === 'retrabalhos' || topTab === 'embalagens') ? "flex flex-col h-screen p-2 md:p-4 lg:p-6" : "p-2 sm:p-4 md:p-8 lg:p-12")}>
-          <div className={cn("mx-auto space-y-6 md:space-y-10", (topTab === 'registros' || topTab === 'relatorio_recebimento' || topTab === 'retrabalhos' || topTab === 'embalagens') ? "max-w-[1920px] w-full flex-1 flex flex-col px-4" : "max-w-7xl")}>
+        <main className={cn("ml-0 md:ml-24 flex-1 overflow-x-hidden", (topTab === 'registros' || topTab === 'relatorio_recebimento' || topTab === 'retrabalhos' || topTab === 'embalagens' || topTab === 'estoque_ba') ? "flex flex-col h-screen p-2 md:p-4 lg:p-6" : "p-2 sm:p-4 md:p-8 lg:p-12")}>
+          <div className={cn("mx-auto space-y-6 md:space-y-10", (topTab === 'registros' || topTab === 'relatorio_recebimento' || topTab === 'retrabalhos' || topTab === 'embalagens' || topTab === 'estoque_ba') ? "max-w-[1920px] w-full flex-1 flex flex-col px-4" : "max-w-7xl")}>
 
             {/* Header - Simple & Clean */}
             <header className={cn(
@@ -4185,6 +4225,27 @@ function DashboardPage() {
                                   <div>
                                     <p className="text-xs font-normal text-slate-700 dark:text-slate-200 leading-none mb-1">Importar G501</p>
                                     <p className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">Atualizar base de vistoria</p>
+                                  </div>
+                                </div>
+                              </button>
+                            )}
+
+                            {/* Importar BA (BA30001V9601) */}
+                            {(topTab === 'confrontos' || topTab === 'estoque_ba') && (
+                              <button
+                                onClick={() => {
+                                  setShowAjustesMenu(false)
+                                  setModalImportBAOpen(true)
+                                }}
+                                className="w-full flex items-center justify-between px-4 py-3 rounded-2xl hover:bg-white dark:hover:bg-slate-800 transition-colors group text-left"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="h-8 w-8 rounded-xl bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform">
+                                    <Database size={14} />
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-normal text-slate-700 dark:text-slate-200 leading-none mb-1">Importar BA (BA30001V9601)</p>
+                                    <p className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">Atualizar estoque BA</p>
                                   </div>
                                 </div>
                               </button>
@@ -6812,6 +6873,118 @@ function DashboardPage() {
                 </motion.div>
               )}
 
+              { topTab === "estoque_ba" && (() => {
+                // Compute filtered list and description from system base_codigos
+                const filteredBaList = (baRawList || []).map((item: any) => {
+                  const codigo = String(item.Produto || item.Código || item.Codigo || '').trim().toUpperCase();
+                  const normCod = codigo.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                  const prodInfo = (effectiveData || []).find((p: any) => (p.produto || '').trim().toUpperCase() === normCod);
+                  const descricao = prodInfo?.descricao || item.Descrição || item.Descricao || '-';
+                  const quantidade = Number(item.Quantidade || item.quantidade || 0);
+                  return { id: item.id || codigo, codigo, descricao, quantidade };
+                }).filter(i => {
+                  if (!baSearch.trim()) return true;
+                  const s = baSearch.toLowerCase();
+                  return i.codigo.toLowerCase().includes(s) || i.descricao.toLowerCase().includes(s);
+                });
+
+                const totalBaQty = filteredBaList.reduce((acc, curr) => acc + curr.quantidade, 0);
+
+                return (
+                  <motion.div
+                    key="estoque-ba-content"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="flex-1 overflow-auto space-y-6"
+                  >
+                    {/* Header / KPI Card */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-xl">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Estoque BA30001V9601</h2>
+                          <span className="text-[10px] font-semibold text-purple-600 bg-purple-50 dark:bg-purple-500/10 px-2.5 py-1 rounded-full border border-purple-200 dark:border-purple-800">
+                            {filteredBaList.length} SKUs
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Base de estoque BA (somada ao A501 no Confronto com o Físico)
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-3 flex-wrap">
+                        {/* Total Pieces KPI */}
+                        <div className="px-4 py-2 bg-purple-50 dark:bg-purple-500/10 rounded-2xl border border-purple-100 dark:border-purple-900/30 flex flex-col">
+                          <span className="text-[9px] font-semibold uppercase tracking-wider text-purple-600 dark:text-purple-400">Total Peças BA</span>
+                          <span className="text-base font-bold text-slate-900 dark:text-white">{fmtNum(totalBaQty)} un</span>
+                        </div>
+
+                        {/* Search Input */}
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                          <input
+                            type="text"
+                            placeholder="Buscar por código ou descrição..."
+                            value={baSearch}
+                            onChange={(e) => setBaSearch(e.target.value)}
+                            className="pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-purple-500 w-48 sm:w-64"
+                          />
+                        </div>
+
+                        {/* Import Button */}
+                        {user && (
+                          <button
+                            onClick={() => setModalImportBAOpen(true)}
+                            className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-2xl text-xs font-semibold shadow-lg shadow-purple-500/20 transition-all active:scale-95"
+                          >
+                            <PlusSquare size={14} />
+                            <span>Importar BA</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Table of BA Stock */}
+                    <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-xl overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 text-[9px] font-semibold uppercase tracking-widest text-slate-400">
+                              <th className="px-5 py-4">Código (SKU)</th>
+                              <th className="px-5 py-4">Descrição (Sistema de Produtos)</th>
+                              <th className="px-5 py-4 text-right">Quantidade BA</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-xs">
+                            {filteredBaList.length === 0 ? (
+                              <tr>
+                                <td colSpan={3} className="px-5 py-12 text-center text-slate-400 italic">
+                                  Nenhum registro encontrado no Estoque BA30001V9601.
+                                </td>
+                              </tr>
+                            ) : (
+                              filteredBaList.map((item: any, idx: number) => (
+                                <tr key={item.id || idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                                  <td className="px-5 py-3.5 font-bold text-blue-600 dark:text-blue-400 tracking-wide">
+                                    {item.codigo}
+                                  </td>
+                                  <td className="px-5 py-3.5 text-slate-700 dark:text-slate-300 font-medium">
+                                    {item.descricao}
+                                  </td>
+                                  <td className="px-5 py-3.5 text-right font-bold text-slate-900 dark:text-white">
+                                    {fmtNum(item.quantidade)}
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })()}
+
 
               { topTab === "relatorio_recebimento" && (
                 <motion.div
@@ -7705,6 +7878,132 @@ function DashboardPage() {
                             Processando...
                           </>
                         ) : "Confirmar e Sobrescrever Base G501"}
+                      </button>
+                    </div>
+                  )}
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
+
+          {/* Modal de Importação em Massa BA30001V9601 */}
+          <AnimatePresence>
+            {modalImportBAOpen && (
+              <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setModalImportBAOpen(false)} className="absolute inset-0 bg-slate-900/40 dark:bg-slate-900/60 backdrop-blur-sm" />
+                <motion.div initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 10 }} className="relative w-full max-w-2xl rounded-3xl bg-white dark:bg-slate-900 p-8 shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]">
+
+                  <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-xl font-medium text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      <Database size={20} className="text-purple-600" />
+                      Importar Dados BA30001V9601 (Estoque BA)
+                    </h3>
+                    <button onClick={() => setModalImportBAOpen(false)} className="text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white transition-colors">
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  {!user ? (
+                    <div className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 text-center">
+                      <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">Você precisa estar logado para atualizar a base de estoque BA.</p>
+                      <button onClick={() => { setModalImportBAOpen(false); setShowLoginModal(true); }} className="px-6 py-2 bg-purple-600 text-white rounded-xl text-xs font-medium uppercase tracking-wider">Fazer Login</button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col flex-1 min-h-0 gap-6">
+                      <div className="space-y-2">
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Cole os dados do Excel/Sheets abaixo. Ordem esperada: <span className="font-bold text-slate-700 dark:text-slate-200">Código | Descrição | Quantidade</span> (separadas por TAB).</p>
+                        <div className="relative flex-1 min-h-[300px]">
+                          <textarea
+                            value={importTextBA}
+                            onChange={(e) => setImportTextBA(e.target.value)}
+                            className="w-full h-full min-h-[300px] bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-4 text-xs font-mono text-slate-800 dark:text-slate-300 focus:outline-none focus:border-purple-500 resize-none overflow-y-auto custom-scrollbar"
+                            placeholder="Ex:&#10;5487-02	CAIXA AMPLIFICADA CM-150 BIVOLT	2170&#10;8998-01	CAIXA AMPLIFICADA CM-400-L	402"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="p-4 bg-amber-50 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/20 rounded-2xl flex items-start gap-3">
+                        <AlertTriangle className="text-amber-600 flex-shrink-0" size={18} />
+                        <p className="text-[10px] text-amber-800 dark:text-amber-400 leading-relaxed font-medium">
+                          <span className="font-semibold uppercase">Atenção:</span> Esta operação irá <span className="font-semibold underline italic">APAGAR TODOS</span> os registros atuais da base BA30001V9601 e substituí-los pelo conteúdo acima.
+                        </p>
+                      </div>
+
+                      <button
+                        disabled={isImportingBA || !importTextBA.trim()}
+                        onClick={async () => {
+                          let lines = importTextBA.trim().split('\n').filter(l => l.trim());
+                          if (lines.length === 0) return;
+
+                          const firstLineLower = lines[0].toLowerCase();
+                          if (firstLineLower.includes("código") || firstLineLower.includes("codigo") || firstLineLower.includes("descrição") || firstLineLower.includes("descricao")) {
+                            lines = lines.slice(1);
+                          }
+
+                          if (lines.length === 0) {
+                            alert("Nenhum dado válido encontrado.");
+                            return;
+                          }
+
+                          if (!confirm(`Confirmar importação de ${lines.length} itens? Isso substituirá a base BA30001V9601 atual.`)) return;
+
+                          setIsImportingBA(true);
+                          try {
+                            const dataToInsert = lines.map(line => {
+                              const cols = line.split('\t');
+                              let rawQty = String(cols[2] || cols[1] || '0').trim();
+                              if (cols.length === 2) {
+                                rawQty = String(cols[1] || '0').trim();
+                              }
+                              const cleanQty = rawQty.split('.').join('').replace(',', '.');
+                              return {
+                                'Produto': String(cols[0] || '').trim().toUpperCase(),
+                                'Código': String(cols[0] || '').trim().toUpperCase(),
+                                'Descrição': cols.length >= 3 ? String(cols[1] || '-').trim() : '-',
+                                'Quantidade': Number(cleanQty) || 0
+                              };
+                            });
+
+                            let targetTable = 'BA30001V9601';
+                            let { error: delErr } = await supabase.from(targetTable).delete().neq('Produto', 'xyz_placeholder');
+                            if (delErr) {
+                              targetTable = 'BA';
+                              const res2 = await supabase.from(targetTable).delete().neq('Produto', 'xyz_placeholder');
+                              if (res2.error) throw delErr;
+                            }
+
+                            const chunkSize = 200;
+                            for (let i = 0; i < dataToInsert.length; i += chunkSize) {
+                              const chunk = dataToInsert.slice(i, i + chunkSize);
+                              const { error: insErr } = await supabase.from(targetTable).insert(chunk);
+                              if (insErr) throw insErr;
+                            }
+
+                            alert("Importação do Estoque BA realizada com sucesso!");
+                            setImportTextBA("");
+                            setModalImportBAOpen(false);
+                            await fetchData();
+                            await fetchConfrontos();
+                          } catch (err: any) {
+                            console.error("Erro na importação BA:", err);
+                            alert("Falha ao importar: " + err.message);
+                          } finally {
+                            setIsImportingBA(false);
+                          }
+                        }}
+                        className={cn(
+                          "w-full py-4 rounded-2xl font-semibold text-xs uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3",
+                          isImportingBA
+                            ? "bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-wait"
+                            : "bg-purple-600 hover:bg-purple-500 text-white shadow-xl shadow-purple-500/20 active:scale-[0.98]"
+                        )}
+                      >
+                        {isImportingBA ? (
+                          <>
+                            <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} className="h-4 w-4 border-2 border-slate-400 border-t-white rounded-full" />
+                            Processando...
+                          </>
+                        ) : "Confirmar e Sobrescrever Base BA30001V9601"}
                       </button>
                     </div>
                   )}
