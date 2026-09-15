@@ -480,7 +480,8 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
           confirmadosG++
         }
 
-        if (willBothBeConfirmed) {
+        const isNewlyCompleted = willBothBeConfirmed && (willConfirmA || willConfirmG)
+        if (isNewlyCompleted) {
           const config = lotesConfig.find(c => String(c.lote).trim() === String(record.lote).trim());
           const loteCodigo = String(record.codigo || config?.codigo || '').trim();
           const sku = loteCodigo.toUpperCase();
