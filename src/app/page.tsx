@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import React, { useState, useEffect, useMemo } from "react"
 import {
@@ -509,6 +509,7 @@ function DashboardPage() {
   // -- ESTADOS PARA ALTERAÇÕES PENDENTES (SALVAMENTO COM CONFIRMAÇÃO) --
   const [pendingChanges, setPendingChanges] = useState<any[]>([])
   const [isCommitting, setIsCommitting] = useState(false)
+  const [blockingError, setBlockingError] = useState<string | null>(null)
 
   // -- APLICAÇÃO DE ALTERAÇÕES PENDENTES NO ESTADO GLOBAL --
   const effectiveData = useMemo(() => {
@@ -1138,56 +1139,50 @@ function DashboardPage() {
           }
         });
 
-        const { error } = await supabase.from('mapeamento').insert(cleanPayload);
-        if (error) throw error;
-        
-        // ONLY consume from floor if we are adding to a specific position (not null)
         const targetPos = cleanPayload['Posição'];
         if (targetPos && targetPos !== 'Chão') {
-          const skuCode = cleanPayload['Código'];
-          const qty = cleanPayload['Quantidade'];
-          const { data: floorData, error: floorFetchErr } = await supabase.from('mapeamento')
-            .select('id, Quantidade')
-            .eq('Posição', 'Chão')
-            .eq('Código', skuCode)
-            .limit(1);
-          
-          if (floorFetchErr) throw floorFetchErr;
-
-          if (floorData && floorData.length > 0) {
-            const rec = floorData[0];
-            const rem = rec.Quantidade - qty;
-            if (rem <= 0) {
-              const { error: delErr } = await supabase.from('mapeamento').delete().eq('id', rec.id);
-              if (delErr) throw delErr;
-            } else {
-              const { error: updErr } = await supabase.from('mapeamento').update({ 'Quantidade': rem }).eq('id', rec.id);
-              if (updErr) throw updErr;
-            }
-          }
+          // ATOMIC RPC: Insert into position and consume from floor in a single PostgreSQL transaction
+          const rpcPayload = {
+            "Posicao": cleanPayload['Posição'],
+            "Codigo": cleanPayload['Código'],
+            "Quantidade": Number(cleanPayload['Quantidade']) || 0,
+            "Nivel": cleanPayload['Nível'] ?? 0,
+            "Profundidade": cleanPayload['Profundidade'] ?? 1,
+            "ParteTombada": cleanPayload['Parte Tombada'] ?? 0,
+            "ParteMolhada": cleanPayload['Parte Molhada'] ?? 0,
+            "IdPalete": cleanPayload['Id Palete'] ?? null,
+            "Observacao": cleanPayload['Observação'] ?? null,
+          };
+          const { error: rpcErr } = await supabase.rpc('rpc_add_to_position', { payload: rpcPayload });
+          if (rpcErr) throw new Error(`[ERRO ATÔMICO ADICIONAR] ${rpcErr.message}`);
+        } else {
+          const { error } = await supabase.from('mapeamento').insert(cleanPayload);
+          if (error) throw error;
         }
       }
 
       // 2. Process Deletions
       for (const change of deletes) {
-        const { error: delErr } = await supabase.from('mapeamento').delete().eq('id', change.payload.id);
-        if (delErr) throw delErr;
-
-        // Return to Retrabalho position
         const targetPos = change.targetPosition || change.payload?.targetPosition || 'Retrabalho';
-        const { error: insErr } = await supabase.from('mapeamento').insert({
-          'Posição': targetPos,
-          'Código': change.payload['Código'],
-          'Quantidade': change.payload['Quantidade'],
-          'Nível': 0,
-          'Profundidade': 1,
-          'Parte Tombada': change.payload['Parte Tombada'] || 0,
-          'Parte Molhada': change.payload['Parte Molhada'] || 0,
-          'Id Palete': null
-        });
-        if (insErr) throw insErr;
-      }
+        const recordId = change.payload?.id || change.id;
+        const skuCode = change.payload?.['Código'] || change.payload?.sku || change.audit?.sku || '';
+        const qtyVal = Number(change.payload?.['Quantidade'] || change.payload?.quantidade || change.audit?.quantidade || 0);
+        const tombada = Number(change.payload?.['Parte Tombada'] || 0);
+        const molhada = Number(change.payload?.['Parte Molhada'] || 0);
 
+        if (typeof recordId === 'number' || (typeof recordId === 'string' && !recordId.startsWith('temp_'))) {
+          // ATOMIC RPC: Delete from position and return to target in single PostgreSQL transaction
+          const { error: rpcErr } = await supabase.rpc('rpc_delete_from_position', {
+            p_record_id: Number(recordId),
+            p_target_pos: targetPos,
+            p_sku: skuCode,
+            p_qty: qtyVal,
+            p_tombada: tombada,
+            p_molhada: molhada,
+          });
+          if (rpcErr) throw new Error(`[ERRO ATÔMICO REMOVER] ${rpcErr.message}`);
+        }
+      }
 
       // 3. Process Updates
       for (const change of updates) {
@@ -1199,36 +1194,29 @@ function DashboardPage() {
           }
         });
 
-        const { error: updErr } = await supabase.from('mapeamento').update(cleanPayload).eq('id', id);
-        if (updErr) throw updErr;
+        const newQty = Number(cleanPayload['Quantidade']) ?? change.audit?.quantidade ?? 0;
+        const oldQty = change.audit?.quantidade_anterior ?? newQty;
+        const skuCode = cleanPayload['Código'] || change.audit?.sku || '';
+        const position = cleanPayload['Posição'] || change.audit?.posicao || '';
 
-        // Adjustment of floor stock if quantity changed
-        if (change.audit?.quantidade !== undefined && change.audit?.quantidade_anterior !== undefined) {
-           const diff = change.audit.quantidade - change.audit.quantidade_anterior;
-           const skuCode = change.audit.sku;
-           if (diff !== 0) {
-              if (diff > 0) {
-                 const { data: floorData, error: fFetchErr } = await supabase.from('mapeamento').select('id, Quantidade').eq('Posição', 'Chão').eq('Código', skuCode).limit(1);
-                 if (fFetchErr) throw fFetchErr;
-
-                 if (floorData && floorData.length > 0) {
-                    const rec = floorData[0];
-                    const rem = rec.Quantidade - diff;
-                    if (rem <= 0) {
-                       const { error: fDelErr } = await supabase.from('mapeamento').delete().eq('id', rec.id);
-                       if (fDelErr) throw fDelErr;
-                    } else {
-                       const { error: fUpdErr } = await supabase.from('mapeamento').update({ 'Quantidade': rem }).eq('id', rec.id);
-                       if (fUpdErr) throw fUpdErr;
-                    }
-                 }
-              } else {
-                 const { error: fInsErr } = await supabase.from('mapeamento').insert({
-                    'Posição': 'Chão', 'Código': skuCode, 'Quantidade': Math.abs(diff), 'Nível': 0, 'Profundidade': 1, 'Id Palete': null
-                 });
-                 if (fInsErr) throw fInsErr;
-              }
-           }
+        if (typeof id === 'number' || (typeof id === 'string' && !id.startsWith('temp_'))) {
+          const extraJson = {
+            "Nivel": cleanPayload['Nível'],
+            "Profundidade": cleanPayload['Profundidade'],
+            "ParteTombada": cleanPayload['Parte Tombada'],
+            "ParteMolhada": cleanPayload['Parte Molhada'],
+            "IdPalete": cleanPayload['Id Palete'],
+          };
+          // ATOMIC RPC: Update pallet qty and adjust floor stock in single PostgreSQL transaction
+          const { error: rpcErr } = await supabase.rpc('rpc_update_quantity', {
+            p_record_id: Number(id),
+            p_new_qty: newQty,
+            p_old_qty: oldQty,
+            p_sku: skuCode,
+            p_position: position,
+            p_extra: extraJson
+          });
+          if (rpcErr) throw new Error(`[ERRO ATÔMICO ATUALIZAR] ${rpcErr.message}`);
         }
       }
 
@@ -1249,7 +1237,6 @@ function DashboardPage() {
       const { error: histErr } = await supabase.from('historico_mapeamento').insert(historyEntries);
       if (histErr) {
         // Audit log failure should not block the actual save.
-        // Most common cause: RLS policy missing on historico_mapeamento.
         console.warn("⚠️ Histórico não registrado (RLS ou permissão):", histErr.message);
       }
 
@@ -1262,7 +1249,8 @@ function DashboardPage() {
       }
     } catch (err: any) {
       console.error(err);
-      alert("Erro ao persistir alterações: " + err.message);
+      const msg = err.message || "Erro desconhecido ao salvar alterações.";
+      setBlockingError(`⚠️ IMPEDITIVO DE ATOMICIDADE SALVANDO NO BANCO:\n\n${msg}\n\nNenhuma alteração parcial foi gravada no banco de dados. Resolva o problema antes de tentar novamente.`);
     } finally {
       setIsCommitting(false);
     }
@@ -10017,6 +10005,48 @@ function DashboardPage() {
                 className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-white/40 hover:text-white transition-colors"
               >
                 <X size={16} />
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* MODAL BLOQUEANTE DE ERRO CRÍTICO / ATOMICIDADE */}
+        {blockingError && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-slate-900 border-2 border-red-500/80 rounded-2xl max-w-lg w-full p-6 shadow-2xl shadow-red-500/20 text-white relative flex flex-col gap-4"
+            >
+              <div className="flex items-center gap-3 text-red-400 border-b border-red-500/30 pb-3">
+                <AlertCircle className="w-8 h-8 text-red-500 flex-shrink-0 animate-bounce" />
+                <div>
+                  <h3 className="text-lg font-bold text-red-400 uppercase tracking-wide">
+                    Erro Crítico de Operação
+                  </h3>
+                  <p className="text-xs text-slate-400">Atomicidade Garantida — Ação Interrompida</p>
+                </div>
+              </div>
+
+              <div className="bg-red-950/40 border border-red-800/50 rounded-xl p-4 text-sm font-mono text-red-200 whitespace-pre-wrap max-h-60 overflow-y-auto leading-relaxed">
+                {blockingError}
+              </div>
+
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Nenhuma alteração foi gravada em metade no servidor. Todas as ações nesta transação foram revertidas para manter a integridade dos dados.
+              </p>
+
+              <button
+                onClick={() => setBlockingError(null)}
+                className="w-full py-3 px-4 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-red-600/30 hover:shadow-red-500/50 flex items-center justify-center gap-2"
+              >
+                Ciente / Entendi
               </button>
             </motion.div>
           </motion.div>

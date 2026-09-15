@@ -1,4 +1,4 @@
-﻿import { supabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import {
   getSyncQueue,
   removeSyncQueueItem,
@@ -213,19 +213,25 @@ class SyncManager {
       if (liveData) {
         const currentLiveQty = Number(liveData[field]) || 0;
         const newCalculatedQty = Math.max(0, currentLiveQty + delta);
-        const { error: updErr } = await supabase.from(table).update({ [field]: newCalculatedQty }).eq("id", recordId);
-        if (updErr) throw updErr;
 
-        // Business rule: adjust Chão stock
-        if (table === "mapeamento" && liveData["Posição"] !== "Chão" && liveData["Posição"] !== "Retrabalho") {
-          const skuCode = liveData["Código"] || changes?.["Código"] || item.audit?.sku;
-          if (skuCode) {
-            if (delta < 0) {
-              await this.returnToFloor(skuCode, Math.abs(delta));
-            } else if (delta > 0) {
-              await this.consumeFromFloor(skuCode, delta);
-            }
-          }
+        const isFloorOrRetrabalho = liveData["Posição"] === "Chão" || liveData["Posição"] === "Retrabalho";
+        const skuCode = liveData["Código"] || changes?.["Código"] || item.audit?.sku;
+
+        if (table === "mapeamento" && !isFloorOrRetrabalho && skuCode && delta !== 0) {
+          // ATOMIC: update qty + adjust floor in one PostgreSQL transaction
+          const { error: rpcErr } = await supabase.rpc("rpc_update_quantity", {
+            p_record_id: Number(recordId),
+            p_new_qty: newCalculatedQty,
+            p_old_qty: currentLiveQty,
+            p_sku: skuCode,
+            p_position: liveData["Posição"],
+            p_extra: {}
+          });
+          if (rpcErr) throw new Error(`[DELTA atômico] ${rpcErr.message}`);
+        } else {
+          // Plain update (Chão/Retrabalho positions or other tables)
+          const { error: updErr } = await supabase.from(table).update({ [field]: newCalculatedQty }).eq("id", recordId);
+          if (updErr) throw updErr;
         }
       }
       await this.logToAuditTable(item, "synced");
@@ -240,36 +246,57 @@ class SyncManager {
       const rawPayload = table === "mapeamento" ? sanitizeMapPayload(changes) : changes;
       const cleanPayload = { ...rawPayload };
       delete cleanPayload.id;
-      const { error: insErr } = await supabase.from(table).insert(cleanPayload);
-      if (insErr) throw insErr;
 
-      // Business rule: consume from Chão when adding to a real position
       if (table === "mapeamento") {
         const targetPos = cleanPayload["Posição"];
-        if (targetPos && targetPos !== "Chão" && targetPos !== "Retrabalho") {
-          const skuCode = cleanPayload["Código"];
-          const qty = Number(cleanPayload["Quantidade"]) || 0;
-          if (skuCode && qty > 0) await this.consumeFromFloor(skuCode, qty);
+        if (targetPos && targetPos !== "Chão") {
+          // ATOMIC: insert + consume floor in one PostgreSQL transaction
+          const rpcPayload = {
+            "Posicao": cleanPayload["Posição"],
+            "Codigo": cleanPayload["Código"],
+            "Quantidade": Number(cleanPayload["Quantidade"]) || 0,
+            "Nivel": cleanPayload["Nível"] ?? 0,
+            "Profundidade": cleanPayload["Profundidade"] ?? 1,
+            "Parte Tombada": cleanPayload["Parte Tombada"] ?? 0,
+            "Parte Molhada": cleanPayload["Parte Molhada"] ?? 0,
+            "Id Palete": cleanPayload["Id Palete"] ?? null,
+            "Observacao": cleanPayload["Observação"] ?? null,
+          };
+          const { error: rpcErr } = await supabase.rpc("rpc_add_to_position", { payload: rpcPayload });
+          if (rpcErr) throw new Error(`[ADD atômico] ${rpcErr.message}`);
+        } else {
+          // Adding directly to Chão — plain insert
+          const { error: insErr } = await supabase.from(table).insert(cleanPayload);
+          if (insErr) throw insErr;
         }
+      } else {
+        const { error: insErr } = await supabase.from(table).insert(cleanPayload);
+        if (insErr) throw insErr;
       }
       await this.logToAuditTable(item, "synced");
 
     } else if (type === "DELETE" && recordId) {
-      const { error: delErr } = await supabase.from(table).delete().eq("id", recordId);
-      if (delErr) throw delErr;
+      if (table === "mapeamento" && changes) {
+        const targetPos = changes.targetPosition || changes["Posição"] || "Retrabalho";
+        const skuCode = changes["Código"] || changes.sku || changes.produto || "";
+        const qtyVal = Number(changes["Quantidade"] || changes.quantidade || changes.quantidade_total || 0);
+        const tombada = Number(changes["Parte Tombada"] || 0);
+        const molhada = Number(changes["Parte Molhada"] || 0);
 
-      if (changes && (changes.targetPosition || changes["Posição"])) {
-        const targetPos = changes.targetPosition || changes["Posição"];
-        const skuCode = changes["Código"] || changes.sku || changes.produto;
-        const qtyVal = changes["Quantidade"] || changes.quantidade || changes.quantidade_total || 0;
-        const { error: insErr } = await supabase.from(table).insert({
-          "Posição": targetPos, "Código": skuCode, "Quantidade": qtyVal,
-          "Nível": 0, "Profundidade": 1,
-          "Parte Tombada": changes["Parte Tombada"] || 0,
-          "Parte Molhada": changes["Parte Molhada"] || 0,
-          "Id Palete": null,
+        // ATOMIC: delete from position + return to target in one PostgreSQL transaction
+        const { error: rpcErr } = await supabase.rpc("rpc_delete_from_position", {
+          p_record_id: Number(recordId),
+          p_target_pos: targetPos,
+          p_sku: skuCode,
+          p_qty: qtyVal,
+          p_tombada: tombada,
+          p_molhada: molhada,
         });
-        if (insErr) throw insErr;
+        if (rpcErr) throw new Error(`[DELETE atômico] ${rpcErr.message}`);
+      } else {
+        // Non-mapeamento table: plain delete
+        const { error: delErr } = await supabase.from(table).delete().eq("id", recordId);
+        if (delErr) throw delErr;
       }
       await this.logToAuditTable(item, "synced");
     }
