@@ -1143,15 +1143,15 @@ function DashboardPage() {
         if (targetPos && targetPos !== 'Chão') {
           // ATOMIC RPC: Insert into position and consume from floor in a single PostgreSQL transaction
           const rpcPayload = {
-            "Posicao": cleanPayload['Posição'],
-            "Codigo": cleanPayload['Código'],
+            "Posição": cleanPayload['Posição'],
+            "Código": cleanPayload['Código'],
             "Quantidade": Number(cleanPayload['Quantidade']) || 0,
-            "Nivel": cleanPayload['Nível'] ?? 0,
+            "Nível": cleanPayload['Nível'] ?? 0,
             "Profundidade": cleanPayload['Profundidade'] ?? 1,
-            "ParteTombada": cleanPayload['Parte Tombada'] ?? 0,
-            "ParteMolhada": cleanPayload['Parte Molhada'] ?? 0,
-            "IdPalete": cleanPayload['Id Palete'] ?? null,
-            "Observacao": cleanPayload['Observação'] ?? null,
+            "Parte Tombada": cleanPayload['Parte Tombada'] ?? 0,
+            "Parte Molhada": cleanPayload['Parte Molhada'] ?? 0,
+            "Id Palete": cleanPayload['Id Palete'] ?? null,
+            "Observação": cleanPayload['Observação'] ?? null,
           };
           const { error: rpcErr } = await supabase.rpc('rpc_add_to_position', { payload: rpcPayload });
           if (rpcErr) throw new Error(`[ERRO ATÔMICO ADICIONAR] ${rpcErr.message}`);
@@ -1201,11 +1201,11 @@ function DashboardPage() {
 
         if (typeof id === 'number' || (typeof id === 'string' && !id.startsWith('temp_'))) {
           const extraJson = {
-            "Nivel": cleanPayload['Nível'],
+            "Nível": cleanPayload['Nível'],
             "Profundidade": cleanPayload['Profundidade'],
-            "ParteTombada": cleanPayload['Parte Tombada'],
-            "ParteMolhada": cleanPayload['Parte Molhada'],
-            "IdPalete": cleanPayload['Id Palete'],
+            "Parte Tombada": cleanPayload['Parte Tombada'],
+            "Parte Molhada": cleanPayload['Parte Molhada'],
+            "Id Palete": cleanPayload['Id Palete'],
           };
           // ATOMIC RPC: Update pallet qty and adjust floor stock in single PostgreSQL transaction
           const { error: rpcErr } = await supabase.rpc('rpc_update_quantity', {
@@ -1708,7 +1708,17 @@ function DashboardPage() {
         }
       });
 
-      setData(combinedData);
+      // Filter out invalid/corrupted ghost items (quantity <= 0 without real position allocation)
+      const validCombinedData = combinedData.filter((d: any) => {
+        if (d.is_empty) return true;
+        const qty = Number(d.quantidade_total) || 0;
+        const hasNoSku = !d.produto || d.produto === '-' || d.produto.trim() === '';
+        const isUnallocated = !d.posicao || d.posicao === 'S/P' || d.posicao.toUpperCase() === 'CHÃO' || d.is_unallocated_source;
+        if (qty <= 0 && (hasNoSku || isUnallocated)) return false;
+        return true;
+      });
+
+      setData(validCombinedData);
       setBaseCodigosMap(skuLookup);
       // stats are now reactive via useMemo on effectiveData
 

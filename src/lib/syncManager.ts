@@ -252,15 +252,15 @@ class SyncManager {
         if (targetPos && targetPos !== "Chão") {
           // ATOMIC: insert + consume floor in one PostgreSQL transaction
           const rpcPayload = {
-            "Posicao": cleanPayload["Posição"],
-            "Codigo": cleanPayload["Código"],
+            "Posição": cleanPayload["Posição"],
+            "Código": cleanPayload["Código"],
             "Quantidade": Number(cleanPayload["Quantidade"]) || 0,
-            "Nivel": cleanPayload["Nível"] ?? 0,
+            "Nível": cleanPayload["Nível"] ?? 0,
             "Profundidade": cleanPayload["Profundidade"] ?? 1,
             "Parte Tombada": cleanPayload["Parte Tombada"] ?? 0,
             "Parte Molhada": cleanPayload["Parte Molhada"] ?? 0,
             "Id Palete": cleanPayload["Id Palete"] ?? null,
-            "Observacao": cleanPayload["Observação"] ?? null,
+            "Observação": cleanPayload["Observação"] ?? null,
           };
           const { error: rpcErr } = await supabase.rpc("rpc_add_to_position", { payload: rpcPayload });
           if (rpcErr) throw new Error(`[ADD atômico] ${rpcErr.message}`);
