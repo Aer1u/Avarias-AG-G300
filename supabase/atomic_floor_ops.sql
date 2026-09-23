@@ -1,5 +1,5 @@
 ﻿-- =============================================================
---  ATOMIC FLOOR / POSITION OPERATIONS (ACCENT-SAFE & ROBUST)
+--  ATOMIC FLOOR / POSITION OPERATIONS (MULTI-ROW CHÃO CONSUMPTION)
 --  Execute once in the Supabase SQL Editor.
 -- =============================================================
 
@@ -12,18 +12,19 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-  v_posicao    text := COALESCE(payload->>'Posição', payload->>'Posicao', payload->>'posicao');
-  v_codigo     text := COALESCE(payload->>'Código', payload->>'Codigo', payload->>'sku');
-  v_quantidade int  := COALESCE((payload->>'Quantidade')::int, (payload->>'quantidade')::int, 0);
-  v_nivel      int  := COALESCE((payload->>'Nível')::int, (payload->>'Nivel')::int, 0);
-  v_prof       int  := COALESCE((payload->>'Profundidade')::int, (payload->>'profundidade')::int, 1);
-  v_tombada    int  := COALESCE((payload->>'Parte Tombada')::int, (payload->>'ParteTombada')::int, 0);
-  v_molhada    int  := COALESCE((payload->>'Parte Molhada')::int, (payload->>'ParteMolhada')::int, 0);
-  v_id_palete  text := COALESCE(payload->>'Id Palete', payload->>'IdPalete');
-  v_observacao text := COALESCE(payload->>'Observação', payload->>'Observacao');
-  v_floor_id   bigint;
-  v_floor_qty  int;
-  v_remaining  int;
+  v_posicao         text := COALESCE(payload->>'Posição', payload->>'Posicao', payload->>'posicao');
+  v_codigo          text := COALESCE(payload->>'Código', payload->>'Codigo', payload->>'sku');
+  v_quantidade      int  := COALESCE((payload->>'Quantidade')::int, (payload->>'quantidade')::int, 0);
+  v_nivel           int  := COALESCE((payload->>'Nível')::int, (payload->>'Nivel')::int, 0);
+  v_prof            int  := COALESCE((payload->>'Profundidade')::int, (payload->>'profundidade')::int, 1);
+  v_tombada         int  := COALESCE((payload->>'Parte Tombada')::int, (payload->>'ParteTombada')::int, 0);
+  v_molhada         int  := COALESCE((payload->>'Parte Molhada')::int, (payload->>'ParteMolhada')::int, 0);
+  v_id_palete       text := COALESCE(payload->>'Id Palete', payload->>'IdPalete');
+  v_observacao      text := COALESCE(payload->>'Observação', payload->>'Observacao');
+
+  v_total_floor_qty int  := 0;
+  v_remaining       int  := 0;
+  r_floor           RECORD;
 BEGIN
   IF v_quantidade IS NULL OR v_quantidade <= 0 THEN
     RAISE EXCEPTION 'ATOMIC_ERROR: Quantidade invalida (%) para insercao na posicao %.', v_quantidade, v_posicao;
@@ -33,19 +34,21 @@ BEGIN
     RAISE EXCEPTION 'ATOMIC_ERROR: Esta funcao e apenas para posicoes (nao Chao).';
   END IF;
 
+  -- Validate total floor stock across ALL floor records for this SKU
   IF v_posicao != 'Retrabalho' THEN
-    SELECT id, "Quantidade" INTO v_floor_id, v_floor_qty
+    SELECT COALESCE(SUM("Quantidade"), 0)
+      INTO v_total_floor_qty
       FROM mapeamento
      WHERE ("Posição" = 'Chão' OR "Posição" = 'Chao')
-       AND ("Código" = v_codigo OR "Código" = UPPER(v_codigo))
-     ORDER BY id ASC LIMIT 1 FOR UPDATE;
+       AND ("Código" = v_codigo OR "Código" = UPPER(v_codigo));
 
-    IF NOT FOUND OR COALESCE(v_floor_qty, 0) < v_quantidade THEN
+    IF v_total_floor_qty < v_quantidade THEN
       RAISE EXCEPTION 'ATOMIC_ERROR: Saldo insuficiente no Chao para SKU %. Necessario: %, Disponivel: %.',
-        v_codigo, v_quantidade, COALESCE(v_floor_qty, 0);
+        v_codigo, v_quantidade, v_total_floor_qty;
     END IF;
   END IF;
 
+  -- Insert into target position
   INSERT INTO mapeamento (
     "Posição", "Código", "Quantidade", "Nível", "Profundidade",
     "Parte Tombada", "Parte Molhada", "Id Palete", "Observação"
@@ -54,13 +57,30 @@ BEGIN
     v_tombada, v_molhada, v_id_palete, v_observacao
   );
 
-  IF v_posicao != 'Retrabalho' AND v_floor_id IS NOT NULL THEN
-    v_remaining := v_floor_qty - v_quantidade;
-    IF v_remaining <= 0 THEN
-      DELETE FROM mapeamento WHERE id = v_floor_id;
-    ELSE
-      UPDATE mapeamento SET "Quantidade" = v_remaining WHERE id = v_floor_id;
-    END IF;
+  -- Multi-row floor consumption
+  IF v_posicao != 'Retrabalho' THEN
+    v_remaining := v_quantidade;
+
+    FOR r_floor IN (
+      SELECT id, "Quantidade"
+        FROM mapeamento
+       WHERE ("Posição" = 'Chão' OR "Posição" = 'Chao')
+         AND ("Código" = v_codigo OR "Código" = UPPER(v_codigo))
+       ORDER BY id ASC
+       FOR UPDATE
+    ) LOOP
+      EXIT WHEN v_remaining <= 0;
+
+      IF r_floor."Quantidade" <= v_remaining THEN
+        v_remaining := v_remaining - r_floor."Quantidade";
+        DELETE FROM mapeamento WHERE id = r_floor.id;
+      ELSE
+        UPDATE mapeamento
+           SET "Quantidade" = r_floor."Quantidade" - v_remaining
+         WHERE id = r_floor.id;
+        v_remaining := 0;
+      END IF;
+    END LOOP;
   END IF;
 END;
 $$;
@@ -81,16 +101,19 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-  v_diff      int := p_new_qty - p_old_qty;
-  v_abs_diff  int := ABS(v_diff);
-  v_nivel     int  := COALESCE((p_extra->>'Nível')::int, (p_extra->>'Nivel')::int, NULL);
-  v_prof      int  := COALESCE((p_extra->>'Profundidade')::int, NULL);
-  v_tombada   int  := COALESCE((p_extra->>'Parte Tombada')::int, (p_extra->>'ParteTombada')::int, NULL);
-  v_molhada   int  := COALESCE((p_extra->>'Parte Molhada')::int, (p_extra->>'ParteMolhada')::int, NULL);
-  v_id_palete text := COALESCE(p_extra->>'Id Palete', p_extra->>'IdPalete');
-  v_floor_id  bigint;
-  v_floor_qty int;
-  v_remaining int;
+  v_diff            int := p_new_qty - p_old_qty;
+  v_abs_diff        int := ABS(v_diff);
+  v_nivel           int  := COALESCE((p_extra->>'Nível')::int, (p_extra->>'Nivel')::int, NULL);
+  v_prof            int  := COALESCE((p_extra->>'Profundidade')::int, NULL);
+  v_tombada         int  := COALESCE((p_extra->>'Parte Tombada')::int, (p_extra->>'ParteTombada')::int, NULL);
+  v_molhada         int  := COALESCE((p_extra->>'Parte Molhada')::int, (p_extra->>'ParteMolhada')::int, NULL);
+  v_id_palete       text := COALESCE(p_extra->>'Id Palete', p_extra->>'IdPalete');
+
+  v_total_floor_qty int  := 0;
+  v_remaining       int  := 0;
+  v_floor_id        bigint;
+  v_floor_qty       int;
+  r_floor           RECORD;
 BEGIN
   IF p_new_qty < 0 THEN
     RAISE EXCEPTION 'ATOMIC_ERROR: Quantidade negativa (%) nao permitida.', p_new_qty;
@@ -114,23 +137,38 @@ BEGIN
   END IF;
 
   IF v_diff > 0 THEN
-    SELECT id, "Quantidade" INTO v_floor_id, v_floor_qty
+    SELECT COALESCE(SUM("Quantidade"), 0)
+      INTO v_total_floor_qty
       FROM mapeamento
      WHERE ("Posição" = 'Chão' OR "Posição" = 'Chao')
-       AND ("Código" = p_sku OR "Código" = UPPER(p_sku))
-     ORDER BY id ASC LIMIT 1 FOR UPDATE;
+       AND ("Código" = p_sku OR "Código" = UPPER(p_sku));
 
-    IF NOT FOUND OR COALESCE(v_floor_qty, 0) < v_diff THEN
+    IF v_total_floor_qty < v_diff THEN
       RAISE EXCEPTION 'ATOMIC_ERROR: Saldo insuficiente no Chao para aumentar SKU % em % un. Disponivel: %.',
-        p_sku, v_diff, COALESCE(v_floor_qty, 0);
+        p_sku, v_diff, v_total_floor_qty;
     END IF;
 
-    v_remaining := v_floor_qty - v_diff;
-    IF v_remaining <= 0 THEN
-      DELETE FROM mapeamento WHERE id = v_floor_id;
-    ELSE
-      UPDATE mapeamento SET "Quantidade" = v_remaining WHERE id = v_floor_id;
-    END IF;
+    v_remaining := v_diff;
+    FOR r_floor IN (
+      SELECT id, "Quantidade"
+        FROM mapeamento
+       WHERE ("Posição" = 'Chão' OR "Posição" = 'Chao')
+         AND ("Código" = p_sku OR "Código" = UPPER(p_sku))
+       ORDER BY id ASC
+       FOR UPDATE
+    ) LOOP
+      EXIT WHEN v_remaining <= 0;
+
+      IF r_floor."Quantidade" <= v_remaining THEN
+        v_remaining := v_remaining - r_floor."Quantidade";
+        DELETE FROM mapeamento WHERE id = r_floor.id;
+      ELSE
+        UPDATE mapeamento
+           SET "Quantidade" = r_floor."Quantidade" - v_remaining
+         WHERE id = r_floor.id;
+        v_remaining := 0;
+      END IF;
+    END LOOP;
   ELSE
     SELECT id, "Quantidade" INTO v_floor_id, v_floor_qty
       FROM mapeamento
@@ -192,9 +230,7 @@ BEGIN
 END;
 $$;
 
--- ---------------------------------------------------------
--- CLEANUP ORPHAN / 0-QTY ROWS
--- ---------------------------------------------------------
+-- Cleanup script for any corrupted 0-qty or empty-pos rows in Supabase
 DELETE FROM mapeamento
  WHERE "Quantidade" IS NULL OR "Quantidade" <= 0
     OR "Código" IS NULL OR "Código" = ''
