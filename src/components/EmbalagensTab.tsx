@@ -26,6 +26,10 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Wrench,
+  ClipboardList,
+  ArrowUp,
+  ArrowDown,
+  History,
 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { supabase } from "@/lib/supabase"
@@ -537,6 +541,30 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
   const [estoqueConserto, setEstoqueConserto] = useState<any[]>([])
   const [pedidosBa, setPedidosBa] = useState<any[]>([])
   const [togglingBa, setTogglingBa] = useState(false)
+
+  // ─── BA Confirm Modal (entry confirmation when marking Status BA) ───
+  interface BaConfirmModalData {
+    solicitacao: string; sku: string; codigoEmbalagem: string; descricaoEmbalagem: string
+    modeloProduto: string; quantidadePrevista: number; confirmQty: number; observacao: string; rowId: string
+  }
+  const [baConfirmModalItem, setBaConfirmModalItem] = useState<BaConfirmModalData | null>(null)
+  const [savingBaConfirm, setSavingBaConfirm] = useState(false)
+
+  // ─── Movement Modal (entrada/saída manual in Estoque G300) ───
+  interface MovimentacaoModalData { item?: any; codigoProduto?: string; tipo: 'ENTRADA' | 'SAÍDA'; quantidade: number; motivo: string }
+  const [movimentacaoModalItem, setMovimentacaoModalItem] = useState<MovimentacaoModalData | null>(null)
+  const [savingMovimentacao, setSavingMovimentacao] = useState(false)
+
+  // ─── Movement History ───
+  const [showMovimentacoesHistoryModal, setShowMovimentacoesHistoryModal] = useState(false)
+  const [movimentacoesEmbalagens, setMovimentacoesEmbalagens] = useState<any[]>([])
+  const [showAddMovForm, setShowAddMovForm] = useState(false)
+  const [addMovCodigo, setAddMovCodigo] = useState('')
+  const [addMovTipo, setAddMovTipo] = useState<'ENTRADA' | 'SAÍDA'>('ENTRADA')
+  const [addMovQty, setAddMovQty] = useState(1)
+  const [addMovMotivo, setAddMovMotivo] = useState('')
+
+
   
   const [subTab, setSubTab] = useState<"comparativo" | "pedidas" | "atuais" | "chegando" | "estoque_g300" | "conserto" | "ordem_pedido">("comparativo")
   const [search, setSearch] = useState("")
@@ -629,7 +657,122 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
     }
   };
 
-  const handleExcelUpload = (file: File) => {
+  // ─── Confirm BA Entry (called from BaConfirmModal) ───────────────────────────
+  const handleConfirmBaEntry = async (data: BaConfirmModalData) => {
+    if (data.confirmQty <= 0) { alert('Quantidade deve ser maior que zero.'); return; }
+    setSavingBaConfirm(true);
+    try {
+      // 1. Insert into pedidos_ba
+      const insertBa: any = {
+        solicitacao: data.solicitacao,
+        codigo_produto: data.sku,
+        codigo_embalagem: data.codigoEmbalagem,
+      };
+      if (data.rowId) insertBa.row_id = data.rowId;
+      const { error: baErr } = await supabase.from('pedidos_ba').insert([insertBa]);
+      if (baErr) throw baErr;
+
+      // 2. Update or insert estoque_g300 (match by codigo_embalagem + codigo_produto)
+      const existingRow = estoqueG300.find(
+        r => String(r.codigo_embalagem || '').trim().toUpperCase() === data.codigoEmbalagem.trim().toUpperCase() &&
+             String(r.codigo_produto || '').trim().toUpperCase() === data.sku.trim().toUpperCase()
+      );
+      if (existingRow) {
+        const { error: upErr } = await supabase
+          .from('estoque_g300')
+          .update({ cd: (Number(existingRow.cd) || 0) + data.confirmQty })
+          .eq('id', existingRow.id);
+        if (upErr) throw upErr;
+      } else {
+        const { error: insErr } = await supabase.from('estoque_g300').insert([{
+          codigo_embalagem: data.codigoEmbalagem,
+          descricao_embalagem: data.descricaoEmbalagem,
+          codigo_produto: data.sku,
+          modelo_produto: data.modeloProduto,
+          cd: data.confirmQty,
+          status: '',
+        }]);
+        if (insErr) throw insErr;
+      }
+
+      // 3. Insert movement record (with localStorage fallback)
+      const movRecord = {
+        tipo: 'ENTRADA',
+        codigo_produto: data.sku,
+        quantidade: data.confirmQty,
+        motivo: data.observacao || 'Entrada via Status BA',
+        data: new Date().toISOString(),
+        usuario: user?.email || 'sistema',
+      };
+      try {
+        await supabase.from('movimentacoes_embalagens').insert([movRecord]);
+      } catch {
+        const prev = JSON.parse(localStorage.getItem('movimentacoesEmbalagensHistory') || '[]');
+        localStorage.setItem('movimentacoesEmbalagensHistory', JSON.stringify([{ ...movRecord, id: Date.now() }, ...prev]));
+      }
+
+      setBaConfirmModalItem(null);
+      await fetchData();
+    } catch (err: any) {
+      alert('Erro ao confirmar entrada BA: ' + err.message);
+    } finally {
+      setSavingBaConfirm(false);
+    }
+  };
+
+  // ─── Save manual Movimento (Entrada / Saída) ─────────────────────────────────
+  const handleSaveMovimentacao = async (data: MovimentacaoModalData) => {
+    if (data.quantidade <= 0) { alert('Quantidade deve ser maior que zero.'); return; }
+    const codProd = (data.codigoProduto || data.item?.codigo_produto || '').trim().toUpperCase();
+    if (!codProd) { alert('Informe o código do produto.'); return; }
+
+    setSavingMovimentacao(true);
+    try {
+      const existing = data.item || estoqueG300.find(r => String(r.codigo_produto || '').trim().toUpperCase() === codProd);
+
+      if (existing?.id) {
+        const currentCd = Number(existing.cd) || 0;
+        const newCd = data.tipo === 'ENTRADA' ? currentCd + data.quantidade : Math.max(0, currentCd - data.quantidade);
+        const { error: upErr } = await supabase
+          .from('estoque_g300')
+          .update({ cd: newCd })
+          .eq('id', existing.id);
+        if (upErr) throw upErr;
+      } else {
+        const initialCd = data.tipo === 'ENTRADA' ? data.quantidade : 0;
+        const { error: insErr } = await supabase.from('estoque_g300').insert([{
+          codigo_produto: codProd,
+          cd: initialCd,
+          status: '',
+        }]);
+        if (insErr) throw insErr;
+      }
+
+      const movRecord = {
+        tipo: data.tipo,
+        codigo_produto: codProd,
+        quantidade: data.quantidade,
+        motivo: data.motivo || '',
+        data: new Date().toISOString(),
+        usuario: user?.email || 'sistema',
+      };
+      try {
+        await supabase.from('movimentacoes_embalagens').insert([movRecord]);
+      } catch {
+        const prev = JSON.parse(localStorage.getItem('movimentacoesEmbalagensHistory') || '[]');
+        localStorage.setItem('movimentacoesEmbalagensHistory', JSON.stringify([{ ...movRecord, id: Date.now() }, ...prev]));
+      }
+
+      setMovimentacaoModalItem(null);
+      await fetchData();
+    } catch (err: any) {
+      alert('Erro ao salvar movimentação: ' + err.message);
+    } finally {
+      setSavingMovimentacao(false);
+    }
+  };
+
+ const handleExcelUpload = (file: File) => {
     setImportedFileName(file.name)
     const ext = file.name.split('.').pop()?.toLowerCase()
     
@@ -920,6 +1063,15 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
         if (baRes.data) setPedidosBa(baRes.data)
       } catch (baErr) {
         console.error("Failed to load pedidos_ba:", baErr)
+      }
+      try {
+        const movRes = await supabase.from("movimentacoes_embalagens").select("*").order("data", { ascending: false })
+        const dbMovs = movRes.data || []
+        const localMovs = JSON.parse(localStorage.getItem('movimentacoesEmbalagensHistory') || '[]')
+        setMovimentacoesEmbalagens([...dbMovs, ...localMovs])
+      } catch {
+        const localMovs = JSON.parse(localStorage.getItem('movimentacoesEmbalagensHistory') || '[]')
+        setMovimentacoesEmbalagens(localMovs)
       }
     } catch (err) {
       console.error(err)
@@ -1748,18 +1900,20 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
         {subTab === "estoque_g300" && user && (
           <div className="ml-auto flex gap-2">
             <button
+              onClick={() => setShowMovimentacoesHistoryModal(true)}
+              className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 px-4 py-2.5 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition-all cursor-pointer"
+              title="Histórico de Movimentações"
+            >
+              <ClipboardList size={13} className="text-violet-400" /> Movimentações
+            </button>
+            <button
               onClick={exportarEstoqueG300}
               className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 px-4 py-2.5 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition-all cursor-pointer"
               title="Exportar Excel"
             >
               <FileText size={13} className="text-emerald-400" /> Exportar Excel
             </button>
-            <button
-              onClick={() => { setShowAddG300Modal(true); setAddG300Search(''); setSelectedBaItems(new Set()) }}
-              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition-all cursor-pointer"
-            >
-              <Plus size={13} /> Nova Linha
-            </button>
+
             <button
               onClick={saveRows}
               disabled={saving || !hasUnsaved}
@@ -2222,17 +2376,35 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
                                   </td>
                                   <td className="px-3 py-1.5 text-center">
                                     <button
-                                      disabled={togglingBa}
-                                      onClick={() => toggleBaixado(
-                                        row.p.solicitacao || '',
-                                        row.sku,
-                                        row.p.codigo_embalagem || '',
-                                        row.rowId
-                                      )}
-                                      title={row.isBa ? "Clique para desmarcar BA" : "Clique para marcar como chegou (BA)"}
+                                      disabled={togglingBa || savingBaConfirm}
+                                      onClick={() => {
+                                        if (row.isBa) {
+                                          // Unmark: toggle directly
+                                          toggleBaixado(
+                                            row.p.solicitacao || '',
+                                            row.sku,
+                                            row.p.codigo_embalagem || '',
+                                            row.rowId
+                                          )
+                                        } else {
+                                          // Mark BA: open confirmation modal
+                                          setBaConfirmModalItem({
+                                            solicitacao: row.p.solicitacao || '',
+                                            sku: row.sku,
+                                            codigoEmbalagem: row.p.codigo_embalagem || '',
+                                            descricaoEmbalagem: row.p.descricao_embalagem || '',
+                                            modeloProduto: row.p.modelo_produto || row.p.modelo || '',
+                                            quantidadePrevista: row.qty,
+                                            confirmQty: row.qty,
+                                            observacao: '',
+                                            rowId: String(row.rowId || ''),
+                                          })
+                                        }
+                                      }}
+                                      title={row.isBa ? "Clique para desmarcar BA" : "Clique para confirmar entrada (BA)"}
                                       className={cn(
                                         "px-2 py-0.5 rounded text-[9.5px] font-medium transition-all border",
-                                        togglingBa ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
+                                        (togglingBa || savingBaConfirm) ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
                                         row.isBa
                                           ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20"
                                           : "bg-transparent border-white/[0.06] text-slate-600 hover:text-slate-400 hover:border-white/[0.12]"
@@ -2392,12 +2564,16 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
                   <tr className="border-b border-white/[0.04] bg-white/[0.01]">
                     {(subTab === "estoque_g300" || subTab === "conserto") ? (
                       <>
-                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest w-[160px]">Cód. Embalagem</th>
-                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest w-[240px]">Descrição Embalagem</th>
+                        {subTab !== "estoque_g300" && (
+                          <>
+                            <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest w-[160px]">Cód. Embalagem</th>
+                            <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest w-[240px]">Descrição Embalagem</th>
+                          </>
+                        )}
                         <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest w-[110px]">Cód. Produto</th>
                         <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest">Modelo Produto</th>
                         <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest text-center w-[80px]">CD</th>
-                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest w-[180px]">Status</th>
+                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest w-[180px]">Observação</th>
                       </>
                     ) : (
                       <>
@@ -2407,20 +2583,22 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
                         <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest text-center w-[120px]">Quantidade</th>
                       </>
                     )}
-                    <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest text-right w-[70px]">Ação</th>
+                    {subTab !== "estoque_g300" && (
+                      <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest text-right w-[70px]">Ação</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/[0.03] bg-[#0B1120]">
                   {loading ? (
                     <tr>
-                      <td colSpan={(subTab === "estoque_g300" || subTab === "conserto") ? 7 : 5} className="px-8 py-10 text-center text-slate-500">
+                      <td colSpan={subTab === "conserto" ? 7 : subTab === "estoque_g300" ? 4 : 5} className="px-8 py-10 text-center text-slate-500">
                         <Loader2 className="animate-spin text-blue-500 mx-auto mb-2" size={20} />
                         Carregando...
                       </td>
                     </tr>
                   ) : activeList.length === 0 ? (
                     <tr>
-                      <td colSpan={(subTab === "estoque_g300" || subTab === "conserto") ? 7 : 5} className="px-8 py-10 text-center text-slate-600">
+                      <td colSpan={subTab === "conserto" ? 7 : subTab === "estoque_g300" ? 4 : 5} className="px-8 py-10 text-center text-slate-600">
                         <Inbox size={22} className="mx-auto mb-2" />
                         Nenhum lançamento. Clique em 'Nova Linha'.
                       </td>
@@ -2477,20 +2655,24 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
                       )}>
                         {(subTab === "estoque_g300" || subTab === "conserto") ? (
                           <>
-                            <td className="p-0">
-                              <input type="text" value={item.codigo_embalagem || ''}
-                                onChange={e => updateRow(idx, "codigo_embalagem", e.target.value)}
-                                onPaste={e => handleSmartPaste(e, 0)}
-                                placeholder="Cód. Embalagem..."
-                                className="w-full bg-transparent border-none px-3 py-1.5 text-[10.5px] text-white font-mono font-normal focus:bg-slate-900/60 focus:outline-none uppercase" />
-                            </td>
-                            <td className="p-0">
-                              <input type="text" value={item.descricao_embalagem || ''}
-                                onChange={e => updateRow(idx, "descricao_embalagem", e.target.value)}
-                                onPaste={e => handleSmartPaste(e, 1)}
-                                placeholder="Descrição..."
-                                className="w-full bg-transparent border-none px-3 py-1.5 text-[10.5px] text-slate-300 font-mono font-normal focus:bg-slate-900/60 focus:outline-none" />
-                            </td>
+                            {subTab !== "estoque_g300" && (
+                              <>
+                                <td className="p-0">
+                                  <input type="text" value={item.codigo_embalagem || ''}
+                                    onChange={e => updateRow(idx, "codigo_embalagem", e.target.value)}
+                                    onPaste={e => handleSmartPaste(e, 0)}
+                                    placeholder="Cód. Embalagem..."
+                                    className="w-full bg-transparent border-none px-3 py-1.5 text-[10.5px] text-white font-mono font-normal focus:bg-slate-900/60 focus:outline-none uppercase" />
+                                </td>
+                                <td className="p-0">
+                                  <input type="text" value={item.descricao_embalagem || ''}
+                                    onChange={e => updateRow(idx, "descricao_embalagem", e.target.value)}
+                                    onPaste={e => handleSmartPaste(e, 1)}
+                                    placeholder="Descrição..."
+                                    className="w-full bg-transparent border-none px-3 py-1.5 text-[10.5px] text-slate-300 font-mono font-normal focus:bg-slate-900/60 focus:outline-none" />
+                                </td>
+                              </>
+                            )}
                             <td className="p-0">
                               <input type="text" value={item.codigo_produto || ''}
                                 onChange={e => updateRow(idx, "codigo_produto", e.target.value)}
@@ -2516,7 +2698,7 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
                               <input type="text" value={item.status || ''}
                                 onChange={e => updateRow(idx, "status", e.target.value)}
                                 onPaste={e => handleSmartPaste(e, 5)}
-                                placeholder="Status..."
+                                placeholder="Observação..."
                                 className="w-full bg-transparent border-none px-3 py-1.5 text-[10.5px] text-slate-300 font-mono font-normal focus:bg-slate-900/60 focus:outline-none" />
                             </td>
                           </>
@@ -2583,25 +2765,26 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
                         )}
 
                         {/* Action Cell */}
-                        <td className="px-6 py-2 text-right">
-                          {item.isNew ? (
-                            <button onClick={() => removeRow(idx)} className="p-1.5 rounded-lg text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer" title="Cancelar">
-                              <X size={13} />
-                            </button>
-                          ) : (
-                            user && (
-                              <button onClick={() => deleteRecord(
-                                subTab === "conserto" ? "estoque_conserto"
-                                  : subTab === "estoque_g300" ? "estoque_g300"
-                                  : subTab === "atuais" ? "embalagens_atuais" : "embalagens_chegando",
-                                item.id!
-                              )}
-                                className="p-1.5 rounded-lg text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer" title="Excluir">
-                                <Trash2 size={13} />
+                        {subTab !== "estoque_g300" && (
+                          <td className="px-3 py-2 text-right">
+                            {item.isNew ? (
+                              <button onClick={() => removeRow(idx)} className="p-1.5 rounded-lg text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer" title="Cancelar">
+                                <X size={13} />
                               </button>
-                            )
-                          )}
-                        </td>
+                            ) : (
+                              user && (
+                                <button onClick={() => deleteRecord(
+                                  subTab === "conserto" ? "estoque_conserto"
+                                    : subTab === "atuais" ? "embalagens_atuais" : "embalagens_chegando",
+                                  item.id!
+                                )}
+                                  className="p-1.5 rounded-lg text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer" title="Excluir">
+                                  <Trash2 size={13} />
+                                </button>
+                              )
+                            )}
+                          </td>
+                        )}
                       </tr>
                     )
                   })}
@@ -3123,6 +3306,403 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ─── BA CONFIRM MODAL ─── */}
+      <AnimatePresence>
+        {baConfirmModalItem && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => { if (!savingBaConfirm) setBaConfirmModalItem(null) }}
+              className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              className="relative w-full max-w-md rounded-2xl bg-[#0D1523] p-6 shadow-2xl border border-white/[0.08] flex flex-col gap-4 text-slate-200"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                    <CheckCircle2 size={15} className="text-emerald-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-[12px] font-semibold text-white uppercase tracking-widest">Confirmar Entrada BA</h3>
+                    <p className="text-[9.5px] text-slate-500 mt-0.5">Solicitação #{baConfirmModalItem.solicitacao}</p>
+                  </div>
+                </div>
+                <button onClick={() => setBaConfirmModalItem(null)} disabled={savingBaConfirm} className="text-slate-500 hover:text-white transition-colors cursor-pointer">
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Info */}
+              <div className="rounded-xl bg-white/[0.03] border border-white/[0.05] p-3 space-y-1.5 text-[10.5px]">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Cód. Embalagem</span>
+                  <span className="font-mono text-blue-300">{baConfirmModalItem.codigoEmbalagem}</span>
+                </div>
+                {baConfirmModalItem.descricaoEmbalagem && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Descrição</span>
+                    <span className="text-slate-300 max-w-[200px] text-right truncate">{baConfirmModalItem.descricaoEmbalagem}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Cód. Produto</span>
+                  <span className="font-mono text-slate-300">{baConfirmModalItem.sku}</span>
+                </div>
+                {baConfirmModalItem.modeloProduto && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Modelo</span>
+                    <span className="text-slate-400 text-right truncate max-w-[200px]">{baConfirmModalItem.modeloProduto}</span>
+                  </div>
+                )}
+                <div className="flex justify-between border-t border-white/[0.05] pt-1.5">
+                  <span className="text-slate-500">Qtd. Prevista</span>
+                  <span className="font-mono text-amber-300">{baConfirmModalItem.quantidadePrevista.toLocaleString('pt-BR')}</span>
+                </div>
+              </div>
+
+              {/* Editable fields */}
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-[9.5px] font-semibold text-slate-400 uppercase tracking-widest mb-1">
+                    Quantidade Confirmada / Recebida
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={baConfirmModalItem.confirmQty}
+                    onChange={e => setBaConfirmModalItem(prev => prev ? { ...prev, confirmQty: Math.max(1, Number(e.target.value) || 0) } : prev)}
+                    className="w-full bg-[#111827] border border-white/[0.08] rounded-lg px-3 py-2 text-[11px] font-mono text-white focus:outline-none focus:border-emerald-500/40 focus:bg-[#0f1a2e]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9.5px] font-semibold text-slate-400 uppercase tracking-widest mb-1">
+                    Observação (opcional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={baConfirmModalItem.observacao}
+                    onChange={e => setBaConfirmModalItem(prev => prev ? { ...prev, observacao: e.target.value } : prev)}
+                    placeholder="Ex: Carga parcial, aguardando restante..."
+                    className="w-full bg-[#111827] border border-white/[0.08] rounded-lg px-3 py-2 text-[10.5px] text-slate-300 focus:outline-none focus:border-emerald-500/40 resize-none"
+                  />
+                </div>
+              </div>
+
+              {/* Buttons */}
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => setBaConfirmModalItem(null)}
+                  disabled={savingBaConfirm}
+                  className="flex-1 px-4 py-2 rounded-lg text-[10px] font-semibold text-slate-400 bg-white/[0.04] hover:bg-white/[0.07] border border-white/[0.06] transition-all cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => handleConfirmBaEntry(baConfirmModalItem)}
+                  disabled={savingBaConfirm || baConfirmModalItem.confirmQty <= 0}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-[10px] font-semibold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
+                >
+                  {savingBaConfirm ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+                  Confirmar Entrada & Marcar BA
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── MOVIMENTAÇÃO MODAL (Entrada / Saída manual) ─── */}
+      <AnimatePresence>
+        {movimentacaoModalItem && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => { if (!savingMovimentacao) setMovimentacaoModalItem(null) }}
+              className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              className="relative w-full max-w-md rounded-2xl bg-[#0D1523] p-6 shadow-2xl border border-white/[0.08] flex flex-col gap-4 text-slate-200"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={cn("p-1.5 rounded-lg border", movimentacaoModalItem.tipo === 'ENTRADA' ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-rose-500/10 border-rose-500/20')}>
+                    {movimentacaoModalItem.tipo === 'ENTRADA'
+                      ? <ArrowUp size={15} className="text-emerald-400" />
+                      : <ArrowDown size={15} className="text-rose-400" />
+                    }
+                  </div>
+                  <div>
+                    <h3 className="text-[12px] font-semibold text-white uppercase tracking-widest">
+                      {movimentacaoModalItem.tipo === 'ENTRADA' ? 'Registrar Entrada' : 'Registrar Saída'}
+                    </h3>
+                    <p className="text-[9.5px] text-slate-500 mt-0.5 font-mono">{movimentacaoModalItem.item.codigo_produto}</p>
+                  </div>
+                </div>
+                <button onClick={() => setMovimentacaoModalItem(null)} disabled={savingMovimentacao} className="text-slate-500 hover:text-white transition-colors cursor-pointer">
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="rounded-xl bg-white/[0.03] border border-white/[0.05] p-3 space-y-1 text-[10.5px]">
+                <div className="flex justify-between border-t border-white/[0.05] pt-1.5">
+                  <span className="text-slate-500">Saldo Atual (CD)</span>
+                  <span className="font-mono text-white">{(Number(movimentacaoModalItem.item.cd) || 0).toLocaleString('pt-BR')}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Saldo Após</span>
+                  <span className={cn("font-mono font-semibold", movimentacaoModalItem.tipo === 'ENTRADA' ? 'text-emerald-400' : 'text-rose-400')}>
+                    {movimentacaoModalItem.tipo === 'ENTRADA'
+                      ? ((Number(movimentacaoModalItem.item.cd) || 0) + movimentacaoModalItem.quantidade).toLocaleString('pt-BR')
+                      : Math.max(0, (Number(movimentacaoModalItem.item.cd) || 0) - movimentacaoModalItem.quantidade).toLocaleString('pt-BR')
+                    }
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-[9.5px] font-semibold text-slate-400 uppercase tracking-widest mb-1">Quantidade</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={movimentacaoModalItem.quantidade}
+                    onChange={e => setMovimentacaoModalItem(prev => prev ? { ...prev, quantidade: Math.max(1, Number(e.target.value) || 0) } : prev)}
+                    className="w-full bg-[#111827] border border-white/[0.08] rounded-lg px-3 py-2 text-[11px] font-mono text-white focus:outline-none focus:border-blue-500/40"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9.5px] font-semibold text-slate-400 uppercase tracking-widest mb-1">Motivo / Observação</label>
+                  <textarea
+                    rows={2}
+                    value={movimentacaoModalItem.motivo}
+                    onChange={e => setMovimentacaoModalItem(prev => prev ? { ...prev, motivo: e.target.value } : prev)}
+                    placeholder="Descreva o motivo da movimentação..."
+                    className="w-full bg-[#111827] border border-white/[0.08] rounded-lg px-3 py-2 text-[10.5px] text-slate-300 focus:outline-none focus:border-blue-500/40 resize-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => setMovimentacaoModalItem(null)}
+                  disabled={savingMovimentacao}
+                  className="flex-1 px-4 py-2 rounded-lg text-[10px] font-semibold text-slate-400 bg-white/[0.04] hover:bg-white/[0.07] border border-white/[0.06] transition-all cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => handleSaveMovimentacao(movimentacaoModalItem)}
+                  disabled={savingMovimentacao || movimentacaoModalItem.quantidade <= 0}
+                  className={cn(
+                    "flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-[10px] font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer",
+                    movimentacaoModalItem.tipo === 'ENTRADA' ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-rose-600 hover:bg-rose-500'
+                  )}
+                >
+                  {savingMovimentacao ? <Loader2 size={12} className="animate-spin" /> : (movimentacaoModalItem.tipo === 'ENTRADA' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
+                  Confirmar {movimentacaoModalItem.tipo}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── MOVIMENTAÇÕES HISTORY MODAL ─── */}
+      <AnimatePresence>
+        {showMovimentacoesHistoryModal && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setShowMovimentacoesHistoryModal(false)}
+              className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              className="relative w-full max-w-4xl rounded-2xl bg-[#0D1523] shadow-2xl border border-white/[0.08] flex flex-col max-h-[85vh] text-slate-200"
+            >
+              <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
+                <div className="flex items-center gap-2">
+                  <History size={16} className="text-violet-400" />
+                  <h3 className="text-[12px] font-semibold text-white uppercase tracking-widest">Histórico de Movimentações</h3>
+                  <span className="text-[9.5px] text-slate-500 ml-2">{movimentacoesEmbalagens.length} registro(s)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {user && (
+                    <button
+                      onClick={() => { setShowAddMovForm(v => !v); setAddMovCodigo(''); setAddMovTipo('ENTRADA'); setAddMovQty(1); setAddMovMotivo('') }}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-semibold transition-all cursor-pointer border",
+                        showAddMovForm
+                          ? "bg-white/[0.06] border-white/[0.1] text-slate-300"
+                          : "bg-violet-600/80 hover:bg-violet-600 border-violet-500/30 text-white"
+                      )}
+                    >
+                      <Plus size={11} /> Nova Movimentação
+                    </button>
+                  )}
+                  <button onClick={() => { setShowMovimentacoesHistoryModal(false); setShowAddMovForm(false) }} className="text-slate-500 hover:text-white transition-colors cursor-pointer">
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
+
+              {/* ─── Inline Nova Movimentação Form ─── */}
+              <AnimatePresence>
+                {showAddMovForm && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="overflow-hidden border-b border-white/[0.06]"
+                  >
+                    <div className="px-6 py-4 bg-white/[0.02] space-y-3">
+                      <p className="text-[9.5px] font-semibold text-slate-400 uppercase tracking-widest">Registrar Movimentação Manual</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* Produto input */}
+                        <div className="col-span-2 sm:col-span-1">
+                          <label className="block text-[9px] text-slate-500 uppercase tracking-widest mb-1">Código do Produto</label>
+                          <input
+                            type="text"
+                            list="g300-skus-list"
+                            value={addMovCodigo}
+                            onChange={e => setAddMovCodigo(e.target.value.toUpperCase())}
+                            placeholder="Digite ou selecione o código..."
+                            className="w-full bg-[#111827] border border-white/[0.08] rounded-lg px-3 py-2 text-[10.5px] font-mono text-white focus:outline-none focus:border-violet-500/40 uppercase"
+                          />
+                          <datalist id="g300-skus-list">
+                            {Array.from(new Set(estoqueG300.map(r => r.codigo_produto).filter(Boolean))).map(c => (
+                              <option key={String(c)} value={String(c)} />
+                            ))}
+                          </datalist>
+                        </div>
+                        {/* Tipo toggle */}
+                        <div>
+                          <label className="block text-[9px] text-slate-500 uppercase tracking-widest mb-1">Tipo</label>
+                          <div className="flex rounded-lg overflow-hidden border border-white/[0.08]">
+                            <button
+                              onClick={() => setAddMovTipo('ENTRADA')}
+                              className={cn("flex-1 py-2 text-[10px] font-semibold transition-all cursor-pointer flex items-center justify-center gap-1",
+                                addMovTipo === 'ENTRADA' ? "bg-emerald-600 text-white" : "bg-[#111827] text-slate-500 hover:text-slate-300")}
+                            >
+                              <ArrowUp size={10} /> Entrada
+                            </button>
+                            <button
+                              onClick={() => setAddMovTipo('SAÍDA')}
+                              className={cn("flex-1 py-2 text-[10px] font-semibold transition-all cursor-pointer flex items-center justify-center gap-1",
+                                addMovTipo === 'SAÍDA' ? "bg-rose-600 text-white" : "bg-[#111827] text-slate-500 hover:text-slate-300")}
+                            >
+                              <ArrowDown size={10} /> Saída
+                            </button>
+                          </div>
+                        </div>
+                        {/* Quantidade */}
+                        <div>
+                          <label className="block text-[9px] text-slate-500 uppercase tracking-widest mb-1">Quantidade</label>
+                          <input
+                            type="number" min={1} value={addMovQty}
+                            onChange={e => setAddMovQty(Math.max(1, Number(e.target.value) || 0))}
+                            className="w-full bg-[#111827] border border-white/[0.08] rounded-lg px-3 py-2 text-[10.5px] font-mono text-white focus:outline-none focus:border-violet-500/40"
+                          />
+                        </div>
+                        {/* Motivo */}
+                        <div className="col-span-2">
+                          <label className="block text-[9px] text-slate-500 uppercase tracking-widest mb-1">Motivo / Observação</label>
+                          <input
+                            type="text" value={addMovMotivo}
+                            onChange={e => setAddMovMotivo(e.target.value)}
+                            placeholder="Ex: Ajuste de inventário, devolução..."
+                            className="w-full bg-[#111827] border border-white/[0.08] rounded-lg px-3 py-2 text-[10.5px] text-slate-300 focus:outline-none focus:border-violet-500/40"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-2 pt-1">
+                        <button
+                          onClick={() => setShowAddMovForm(false)}
+                          className="px-4 py-1.5 rounded-lg text-[10px] font-semibold text-slate-400 bg-white/[0.04] hover:bg-white/[0.07] border border-white/[0.06] transition-all cursor-pointer"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          disabled={!addMovCodigo.trim() || addMovQty <= 0 || savingMovimentacao}
+                          onClick={async () => {
+                            if (!addMovCodigo.trim()) return
+                            await handleSaveMovimentacao({ codigoProduto: addMovCodigo.trim(), tipo: addMovTipo, quantidade: addMovQty, motivo: addMovMotivo })
+                            setShowAddMovForm(false)
+                            setAddMovCodigo('')
+                            setAddMovQty(1)
+                            setAddMovMotivo('')
+                          }}
+                          className={cn(
+                            "flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[10px] font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer",
+                            addMovTipo === 'ENTRADA' ? "bg-emerald-600 hover:bg-emerald-500" : "bg-rose-600 hover:bg-rose-500"
+                          )}
+                        >
+                          {savingMovimentacao ? <Loader2 size={11} className="animate-spin" /> : (addMovTipo === 'ENTRADA' ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
+                          Confirmar {addMovTipo}
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div className="overflow-y-auto flex-1">
+                {movimentacoesEmbalagens.length === 0 ? (
+                  <div className="px-8 py-16 text-center text-slate-600">
+                    <ClipboardList size={24} className="mx-auto mb-3" />
+                    <p className="text-[11px]">Nenhuma movimentação registrada ainda.</p>
+                    <p className="text-[9.5px] mt-1 text-slate-700">As entradas via BA e movimentos manuais aparecerão aqui.</p>
+                  </div>
+                ) : (
+                  <table className="w-full text-left border-collapse">
+                    <thead className="sticky top-0 z-10">
+                      <tr className="border-b border-white/[0.04] bg-[#0a1120]">
+                        <th className="px-3 py-2 text-[9px] font-semibold text-slate-400 uppercase tracking-widest">Data</th>
+                        <th className="px-3 py-2 text-[9px] font-semibold text-slate-400 uppercase tracking-widest w-[80px]">Tipo</th>
+                        <th className="px-3 py-2 text-[9px] font-semibold text-slate-400 uppercase tracking-widest">Cód. Produto</th>
+                        <th className="px-3 py-2 text-[9px] font-semibold text-slate-400 uppercase tracking-widest text-center w-[70px]">Qtd</th>
+                        <th className="px-3 py-2 text-[9px] font-semibold text-slate-400 uppercase tracking-widest">Motivo</th>
+                        <th className="px-3 py-2 text-[9px] font-semibold text-slate-400 uppercase tracking-widest">Usuário</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/[0.03]">
+                      {movimentacoesEmbalagens.map((mov: any, i: number) => (
+                        <tr key={mov.id || i} className="hover:bg-white/[0.015] transition-colors">
+                          <td className="px-3 py-1.5 text-[10px] font-mono text-slate-400 whitespace-nowrap">
+                            {mov.data ? new Date(mov.data).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                          </td>
+                          <td className="px-3 py-1.5">
+                            <span className={cn(
+                              "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold",
+                              mov.tipo === 'ENTRADA' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
+                            )}>
+                              {mov.tipo === 'ENTRADA' ? <ArrowUp size={9} /> : <ArrowDown size={9} />}
+                              {mov.tipo}
+                            </span>
+                          </td>
+                          <td className="px-3 py-1.5 font-mono text-[10px] text-blue-300">{mov.codigo_produto || '—'}</td>
+                          <td className="px-3 py-1.5 text-center font-mono text-[10.5px] font-semibold text-white">{(mov.quantidade || 0).toLocaleString('pt-BR')}</td>
+                          <td className="px-3 py-1.5 text-[10px] text-slate-500 max-w-[240px] truncate">{mov.motivo || '—'}</td>
+                          <td className="px-3 py-1.5 text-[9.5px] text-slate-600 truncate">{mov.usuario || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   )
 }
