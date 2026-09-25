@@ -1139,12 +1139,13 @@ function DashboardPage() {
           }
         });
 
-        const targetPos = cleanPayload['Posição'];
-        if (targetPos && targetPos !== 'Chão') {
+        const targetPos = String(cleanPayload['Posição'] || '').trim();
+        const isFloor = !targetPos || ['chão', 'chao'].includes(targetPos.toLowerCase());
+        if (!isFloor) {
           // ATOMIC RPC: Insert into position and consume from floor in a single PostgreSQL transaction
           const rpcPayload = {
-            "Posição": cleanPayload['Posição'],
-            "Código": cleanPayload['Código'],
+            "Posição": targetPos,
+            "Código": String(cleanPayload['Código'] || '').trim().toUpperCase(),
             "Quantidade": Number(cleanPayload['Quantidade']) || 0,
             "Nível": cleanPayload['Nível'] ?? 0,
             "Profundidade": cleanPayload['Profundidade'] ?? 1,
@@ -1708,13 +1709,13 @@ function DashboardPage() {
         }
       });
 
-      // Filter out invalid/corrupted ghost items (quantity <= 0 without real position allocation)
+      // Filter out invalid/corrupted ghost items (quantity <= 0 or missing product code)
       const validCombinedData = combinedData.filter((d: any) => {
         if (d.is_empty) return true;
         const qty = Number(d.quantidade_total) || 0;
+        if (qty <= 0) return false;
         const hasNoSku = !d.produto || d.produto === '-' || d.produto.trim() === '';
-        const isUnallocated = !d.posicao || d.posicao === 'S/P' || d.posicao.toUpperCase() === 'CHÃO' || d.is_unallocated_source;
-        if (qty <= 0 && (hasNoSku || isUnallocated)) return false;
+        if (hasNoSku) return false;
         return true;
       });
 
