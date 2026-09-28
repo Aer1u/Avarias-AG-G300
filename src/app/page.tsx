@@ -1195,8 +1195,11 @@ function DashboardPage() {
           }
         });
 
-        const newQty = Number(cleanPayload['Quantidade']) ?? change.audit?.quantidade ?? 0;
-        const oldQty = change.audit?.quantidade_anterior ?? newQty;
+        const rawQty = cleanPayload['Quantidade'];
+        const newQty = (rawQty !== undefined && rawQty !== null && !isNaN(Number(rawQty)))
+          ? Number(rawQty)
+          : (change.audit?.quantidade ?? 0);
+        const oldQty = change.audit?.quantidade_anterior ?? change.audit?.quantidade ?? newQty;
         const skuCode = cleanPayload['Código'] || change.audit?.sku || '';
         const position = cleanPayload['Posição'] || change.audit?.posicao || '';
 
@@ -3927,8 +3930,8 @@ function DashboardPage() {
           </div>
         </aside>
 
-        <main className={cn("ml-0 md:ml-24 flex-1 overflow-x-hidden", (topTab === 'registros' || topTab === 'relatorio_recebimento' || topTab === 'retrabalhos' || topTab === 'embalagens' || topTab === 'estoque_ba') ? "flex flex-col h-screen p-2 md:p-4 lg:p-6" : "p-2 sm:p-4 md:p-8 lg:p-12")}>
-          <div className={cn("mx-auto space-y-6 md:space-y-10", (topTab === 'registros' || topTab === 'relatorio_recebimento' || topTab === 'retrabalhos' || topTab === 'embalagens' || topTab === 'estoque_ba') ? "max-w-[1920px] w-full flex-1 flex flex-col px-4" : "max-w-7xl")}>
+        <main className={cn("ml-0 md:ml-24 flex-1 overflow-x-hidden", (topTab === 'registros' || topTab === 'relatorio_recebimento' || topTab === 'retrabalhos' || topTab === 'embalagens' || topTab === 'estoque_ba') ? "flex flex-col min-h-screen p-2 md:p-3 lg:p-4" : "p-2 sm:p-4 md:p-8 lg:p-12")}>
+          <div className={cn("mx-auto space-y-6 md:space-y-10", (topTab === 'registros' || topTab === 'relatorio_recebimento' || topTab === 'retrabalhos' || topTab === 'embalagens' || topTab === 'estoque_ba') ? "w-full max-w-none flex-1 flex flex-col px-2 md:px-3" : "max-w-7xl")}>
 
             {/* Header - Simple & Clean */}
             <header className={cn(
