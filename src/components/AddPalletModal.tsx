@@ -92,9 +92,11 @@ export function AddPalletModal({
     
     let sanitized: number | '' = typeof numVal === 'number' && isNaN(numVal) ? '' : numVal;
     
+    const normSku = (s: string) => String(s || '').trim().toUpperCase().replace(/[\s\-_]/g, '');
+
     // Validation against floor stock (multiplied by slots count)
     if (field === 'qty' && typeof sanitized === 'number') {
-        const stockInfo = availableStocks.find(s => s.produto === item.sku);
+        const stockInfo = availableStocks.find(s => normSku(s.produto) === normSku(item.sku));
         const totalAvailable = stockInfo ? stockInfo.available : 0; 
         const maxPerCell = Math.floor(totalAvailable / slotsCount);
         if (sanitized > maxPerCell) sanitized = maxPerCell;
@@ -111,9 +113,11 @@ export function AddPalletModal({
     setItems(prev => prev.map(i => i.id === id ? { ...i, [field]: sanitized } : i));
   };
 
+  const normSku = (s: string) => String(s || '').trim().toUpperCase().replace(/[\s\-_]/g, '');
+
   const handleSave = () => {
     const validItems = items.filter(i => {
-        const stockInfo = availableStocks.find(s => s.produto === i.sku);
+        const stockInfo = availableStocks.find(s => normSku(s.produto) === normSku(i.sku));
         const totalReq = (typeof i.qty === 'number' ? i.qty : 0) * slotsCount;
         return i.sku.trim() !== '' && stockInfo && typeof i.qty === 'number' && i.qty > 0 && totalReq <= stockInfo.available;
     });
@@ -125,7 +129,7 @@ export function AddPalletModal({
 
   // Valid if there is at least 1 fully filled item AND its SKU exists in available stock AND totalReq <= available
   const hasAtLeastOneValid = items.some(i => {
-    const stockInfo = availableStocks.find(s => s.produto === i.sku);
+    const stockInfo = availableStocks.find(s => normSku(s.produto) === normSku(i.sku));
     const totalReq = (typeof i.qty === 'number' ? i.qty : 0) * slotsCount;
     return i.sku.trim() !== '' && stockInfo && typeof i.qty === 'number' && i.qty > 0 && totalReq <= stockInfo.available;
   });

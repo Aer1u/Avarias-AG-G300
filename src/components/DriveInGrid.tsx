@@ -218,9 +218,11 @@ export function DriveInGrid({
         }
       });
 
+      const normSku = (s: string) => String(s || '').trim().toUpperCase().replace(/[\s\-_]/g, '');
+
       const floorStockErrors: string[] = [];
       for (const [sku, totalReq] of Object.entries(requiredTotalPerSku)) {
-        const stockInfo = availableStocks.find(s => s.produto.toUpperCase() === sku);
+        const stockInfo = availableStocks.find(s => normSku(s.produto) === normSku(sku));
         const availableInFloor = stockInfo ? stockInfo.available : 0;
 
         if (totalReq > availableInFloor) {
@@ -458,7 +460,8 @@ export function DriveInGrid({
       const originalQty = originalProduct ? (Number(originalProduct.quantidade) || 0) : newQty;
       const diff = newQty - originalQty;
 
-      const floorStock = availableStocks.find(s => s.produto === editingProduct.sku)?.available || 0;
+      const normSku = (s: string) => String(s || '').trim().toUpperCase().replace(/[\s\-_]/g, '');
+      const floorStock = availableStocks.find(s => normSku(s.produto) === normSku(editingProduct.sku))?.available || 0;
 
       if (diff > floorStock) {
         alert(`⚠️ Impeditivo: Saldo insuficiente no Chão para aumentar a quantidade em ${diff} un. Saldo disponível no Chão para o SKU ${editingProduct.sku}: ${floorStock} un.`);
@@ -1247,7 +1250,8 @@ export function DriveInGrid({
                 {(() => {
                   const originalProduct = products.find(p => String(p.id) === String(editingProduct.id));
                   const originalQty = originalProduct ? (Number(originalProduct.quantidade) || 0) : Number(editingProduct.quantidade) || 0;
-                  const floorStock = availableStocks.find(s => s.produto === editingProduct.sku)?.available || 0;
+                  const normSku = (s: string) => String(s || '').trim().toUpperCase().replace(/[\s\-_]/g, '');
+                  const floorStock = availableStocks.find(s => normSku(s.produto) === normSku(editingProduct.sku))?.available || 0;
                   const currentInputQty = Number(editingProduct.quantidade) || 0;
                   const diff = currentInputQty - originalQty;
                   const isOverFloor = diff > floorStock;
