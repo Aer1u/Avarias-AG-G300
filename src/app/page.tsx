@@ -1922,8 +1922,7 @@ function DashboardPage() {
         const { error: updErr } = await supabase
           .from('mapeamento')
           .update({ 
-            "Id Palete": "", 
-            "Posição": "Chão" 
+            "Id Palete": ""
           })
           .eq('id', targetId);
           
