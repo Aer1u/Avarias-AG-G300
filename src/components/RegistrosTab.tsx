@@ -926,12 +926,19 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
     const rowsToSave = registros.filter(r => r.isDirty);
     if (rowsToSave.length === 0) return;
 
+    // Bloqueia salvar se qualquer linha (nova ou importada) não tiver Origem definida
+    const semOrigem = rowsToSave.find(r => !r.Origem || r.Origem.trim() === '');
+    if (semOrigem) {
+      showToast(`Não é possível salvar sem definir a Origem! (Produto: ${semOrigem.Produto || '?'})`, 'error');
+      return;
+    }
+
     const checkValidation = rowsToSave.find(r => 
-      r.isNew && (!r.Origem || !r.tipo_avaria || r.tipo_avaria === '')
+      r.isNew && (!r.tipo_avaria || r.tipo_avaria === '')
     );
 
     if (checkValidation) {
-      showToast('Atenção: Origem e Tipo de Avaria são obrigatórios!', 'error');
+      showToast('Atenção: Tipo de Avaria é obrigatório!', 'error');
       return;
     }
 
@@ -1623,7 +1630,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ onRefresh }) => {
                         )}
                       />
                     </td>
-                    <td className="p-0">
+                    <td className={cn("p-0", row.isDirty && !row.Origem && "ring-2 ring-inset ring-rose-500/60 rounded-sm bg-rose-500/5")}>
                       <CustomSelect
                         value={row.Origem ?? ''}
                         disabled={!isEditable}
