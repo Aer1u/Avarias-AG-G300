@@ -246,6 +246,7 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
   const [modalSearch, setModalSearch] = useState("")
   const [activeStatus, setActiveStatus] = useState("all")
   const [activeSituacao, setActiveSituacao] = useState("all")
+  const [activeDriveFilter, setActiveDriveFilter] = useState("all")
   const [expandedLotes, setExpandedLotes] = useState<Set<number>>(new Set())
   const [user, setUser] = useState<any>(null)
   const [isNewLoteModalOpen, setIsNewLoteModalOpen] = useState(false)
@@ -771,22 +772,40 @@ printWindow.document.write(html);
 printWindow.document.close();
 };
     
+  const fetchAllPages = async (tableName: string, query?: string) => {
+    let allData: any[] = [];
+    let from = 0;
+    const step = 1000;
+    let hasMore = true;
+    while (hasMore) {
+      const req = supabase.from(tableName).select(query || '*').range(from, from + step - 1);
+      const { data, error } = await req;
+      if (error) { console.error(`[RetrabalhosTab] Erro ao buscar ${tableName}:`, error); break; }
+      if (data && data.length > 0) {
+        allData = [...allData, ...data];
+        from += step;
+        if (data.length < step) hasMore = false;
+      } else { hasMore = false; }
+    }
+    return allData;
+  };
+
   const fetchData = async () => {
     setLoading(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
       setUser(session?.user || null)
 
-      const [retrabalhosRes, lotesRes, baseRes, registrosRes] = await Promise.all([
-        supabase.from('retrabalhos').select('*'),
-        supabase.from('lotes_config').select('*'),
-        supabase.from('base_codigos').select('*'),
-        supabase.from('Registros').select('Entrada, Saída')
+      const [retrabalhosData, lotesData, baseData, registrosData] = await Promise.all([
+        fetchAllPages('retrabalhos'),
+        fetchAllPages('lotes_config'),
+        fetchAllPages('base_codigos'),
+        fetchAllPages('Registros', 'Entrada, "Saída"')
       ])
-      setRecords(retrabalhosRes.data || [])
-      setLotesConfig(lotesRes.data || [])
-      setBaseCodigos(baseRes.data || [])
-      setRegistrosData(registrosRes.data || [])
+      setRecords(retrabalhosData)
+      setLotesConfig(lotesData)
+      setBaseCodigos(baseData)
+      setRegistrosData(registrosData)
     } catch (err) {
       console.error("Erro na busca:", err)
     } finally {
@@ -1028,13 +1047,16 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
   return [...fromRecords, ...fromConfig].sort((a, b) => a.lote - b.lote)
 }
 
-    const groups: { [key: number]: GroupedLote } = {}
+    const groups: { [key: string]: GroupedLote } = {}
     records.forEach(item => {
-      const loteIdRaw = String(item.lote).trim()
-      const loteId = Number(loteIdRaw)
-      if (isNaN(loteId)) return
+      const loteIdRaw = String(item.lote ?? '').trim()
+      if (!loteIdRaw || loteIdRaw === 'null' || loteIdRaw === 'undefined') return
 
-      if (!groups[loteId]) {
+      // Use numeric key if numeric, else use raw string
+      const loteKey = loteIdRaw
+      const loteId = isNaN(Number(loteIdRaw)) ? loteIdRaw as any : Number(loteIdRaw)
+
+      if (!groups[loteKey]) {
         const config = lotesConfig.find(c => String(c.lote).trim() === loteIdRaw)
         const codigo = config?.codigo || "---"
         const masterStatus = (config?.status || config?.Status || item.status || "Aguardando").toUpperCase()
@@ -1043,7 +1065,7 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
         const embalagensMaster = config?.embalagens || 0
         const gradeValue = base?.["Grade"] ? Number(base["Grade"]) : 0
 
-        groups[loteId] = {
+        groups[loteKey] = {
           lote: loteId,
           codigo: codigo,
           descricao: descricao,
@@ -1061,23 +1083,24 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
       
       const situacaoNormalizada = (item.situacao || '').toLowerCase();
       if (['entregues ao conserto', 'entregues ao cd', 'armazenado', 'retornado ao g300'].includes(situacaoNormalizada)) {
-        groups[loteId].totalEnviado += item.quantidade_enviada || 0
+        groups[loteKey].totalEnviado += item.quantidade_enviada || 0
       }
-      groups[loteId].totalRetornado += item.quantidade_retornada || 0
-      groups[loteId].totalRejeitado += item.quantidade_rejeitada || 0
-      groups[loteId].totalAvarias += item.embalagens_avariadas || 0
-      groups[loteId].items.push(item)
+      groups[loteKey].totalRetornado += item.quantidade_retornada || 0
+      groups[loteKey].totalRejeitado += item.quantidade_rejeitada || 0
+      groups[loteKey].totalAvarias += item.embalagens_avariadas || 0
+      groups[loteKey].items.push(item)
     })
 
     lotesConfig.forEach(config => {
-      const loteId = Number(String(config.lote).trim())
-      if (isNaN(loteId) || groups[loteId]) return
+      const loteKey = String(config.lote ?? '').trim()
+      if (!loteKey || loteKey === 'null' || groups[loteKey]) return
+      const loteId = isNaN(Number(loteKey)) ? loteKey as any : Number(loteKey)
 
       const codigo = config.codigo || "---"
       const masterStatus = (config.status || config.Status || "Aguardando").toUpperCase()
       const base = baseCodigos.find(b => String(b["Código"]).trim() === String(codigo).trim())
 
-      groups[loteId] = {
+      groups[loteKey] = {
         lote: loteId,
         codigo,
         descricao: base?.["Descrição"] || `Produto ${codigo}`,
@@ -1116,6 +1139,49 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
       })
     }))
   }, [records, lotesConfig, baseCodigos, search, activeStatus, activeSituacao])
+
+  const getDriveForLote = useCallback((lote: GroupedLote): string => {
+    const firstItemUnidade = lote.items.find(i => i.unidade && i.unidade.trim())?.unidade?.trim()
+    if (firstItemUnidade) {
+      const u = firstItemUnidade.toUpperCase()
+      if (u.includes('G300')) return 'Drive G300'
+      if (u.includes('A501')) return 'Drive A501'
+      if (u.includes('G501')) return 'Drive G501'
+      return firstItemUnidade
+    }
+    const regMatch = registrosData.find(r => String(r.Produto || r.Código || '').trim().toUpperCase() === lote.codigo.toUpperCase())
+    if (regMatch?.Posição) {
+      const pos = String(regMatch.Posição).trim().toUpperCase()
+      if (pos.startsWith('G300')) {
+        const m = pos.match(/G300(\d{2})/i)
+        return m ? `Drive G300-${m[1]}` : 'Drive G300'
+      }
+      if (pos.startsWith('A501')) return 'Drive A501'
+      if (pos.startsWith('G501')) return 'Drive G501'
+    }
+    return 'Drive Geral'
+  }, [registrosData])
+
+  const driveOptions = useMemo(() => {
+    const set = new Set<string>()
+    groupedData.forEach(lote => {
+      const d = getDriveForLote(lote)
+      if (d) set.add(d)
+    })
+    return ['all', ...Array.from(set).sort()]
+  }, [groupedData, getDriveForLote])
+
+  const filteredByDriveData = useMemo(() => {
+    if (activeDriveFilter === 'all') return groupedData
+    return groupedData.filter(lote => getDriveForLote(lote) === activeDriveFilter)
+  }, [groupedData, activeDriveFilter, getDriveForLote])
+
+  const sectionsData = useMemo(() => {
+    const emAndamento = filteredByDriveData.filter(l => l.status === 'EM ANDAMENTO' || l.status === 'EM FILA')
+    const aguardando = filteredByDriveData.filter(l => l.status === 'AGUARDANDO' || l.status === 'PAUSADO')
+    const finalizados = filteredByDriveData.filter(l => l.status === 'FINALIZADO')
+    return { emAndamento, aguardando, finalizados }
+  }, [filteredByDriveData])
 
   const formatPallets = (total: number, grade: number, abbreviated = false) => {
     if (!grade || grade <= 0 || !total || total <= 0) return null
@@ -1316,16 +1382,34 @@ if (activeStatus?.toUpperCase() === 'EM FILA') {
   return (
     <div className="space-y-4 pb-12">
       <GlobalStyles />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {[
-          { label: "Qtd Retrabalhada", value: totalRetrabalhado, icon: TrendingUp, color: "text-emerald-400" },
-          { label: "% Retrabalhado", value: `${percentualRetrabalhado}%`, icon: Sparkles, color: "text-blue-400" },
+          { label: "Qtd Retrabalhada", value: totalRetrabalhado, icon: TrendingUp, accent: "emerald" as const },
+          { label: "% Retrabalhado", value: `${percentualRetrabalhado}%`, icon: Sparkles, accent: "blue" as const },
         ].map((stat, i) => (
-          <motion.div key={stat.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm flex items-center gap-4">
-            <div className={cn("p-2 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10", stat.color)}><stat.icon size={16} /></div>
-            <div>
-              <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest block">{stat.label}</span>
-              <span className="text-xl font-semibold text-slate-900 dark:text-white font-mono">{stat.value}</span>
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.05 }}
+            className="relative p-4 bg-[#0B1120] border border-white/[0.06] rounded-2xl flex items-center gap-4 overflow-hidden"
+          >
+            <div className={cn(
+              "absolute inset-0 opacity-100 pointer-events-none",
+              stat.accent === "emerald" ? "bg-gradient-to-br from-emerald-500/[0.06] to-transparent" : "bg-gradient-to-br from-blue-500/[0.06] to-transparent"
+            )} />
+            <div className={cn(
+              "relative p-2.5 rounded-xl border",
+              stat.accent === "emerald" ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" : "bg-blue-500/10 border-blue-500/20 text-blue-400"
+            )}>
+              <stat.icon size={15} />
+            </div>
+            <div className="relative">
+              <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest block mb-0.5">{stat.label}</span>
+              <span className={cn(
+                "text-2xl font-bold font-mono",
+                stat.accent === "emerald" ? "text-emerald-300" : "text-blue-300"
+              )}>{stat.value}</span>
             </div>
           </motion.div>
         ))}
