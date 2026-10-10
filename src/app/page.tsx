@@ -476,6 +476,7 @@ function DashboardPage() {
   const [confrontoSearch, setConfrontoSearch] = useState("")
   const [confrontoSortDir, setConfrontoSortDir] = useState<"asc" | "desc">("asc")
   const [confrontoType, setConfrontoType] = useState<"fisico_x_a501" | "a501_x_g501">("fisico_x_a501")
+  const [retrabalhoConfrontoData, setRetrabalhoConfrontoData] = useState<{ reservasMap: Map<string, number>; mapeamentoMap: Map<string, number> }>({ reservasMap: new Map(), mapeamentoMap: new Map() })
   const [exportFilter, setExportFilter] = useState<"tudo" | "positivado" | "negativado" | "batendo" | "divergente">("tudo")
   const [selectedConfrontoItem, setSelectedConfrontoItem] = useState<any>(null)
   const [confrontoCurrentPage, setConfrontoCurrentPage] = useState(1)
@@ -1974,6 +1975,26 @@ function DashboardPage() {
         if (alt.data) baRaw = alt.data;
       }
       const { data: ajustesRaw, error: ajustesErr } = await supabase.from('Ajuste').select('*');
+      const { data: reservasProgRaw } = await supabase.from('reservas_programacao').select('qtd_necessaria, quantidade_diferenca, programacao_itens(produto, status)');
+      const { data: mapRetrabRaw } = await supabase.from('mapeamento').select('Código, Quantidade').eq('Posição', 'Retrabalho');
+
+      const resProgMap = new Map<string, number>();
+      (reservasProgRaw || []).forEach((r: any) => {
+        const item = r.programacao_itens;
+        if (!item || item.status === 'Concluído') return;
+        if (Number(r.quantidade_diferenca) > 0) {
+          const sku = normalizeSku(item.produto || '');
+          if (sku) resProgMap.set(sku, (resProgMap.get(sku) || 0) + (Number(r.qtd_necessaria) || 0));
+        }
+      });
+
+      const mapRetrabMap = new Map<string, number>();
+      (mapRetrabRaw || []).forEach((m: any) => {
+        const sku = normalizeSku(m['Código'] || m['codigo'] || m['Produto'] || '');
+        if (sku) mapRetrabMap.set(sku, (mapRetrabMap.get(sku) || 0) + (Number(m['Quantidade'] || m['quantidade']) || 0));
+      });
+
+      setRetrabalhoConfrontoData({ reservasMap: resProgMap, mapeamentoMap: mapRetrabMap });
 
       if (a501Err) console.warn("Erro ao buscar A501 de Supabase:", a501Err);
       if (g501Err) console.warn("Erro ao buscar G501 de Supabase:", g501Err);
@@ -7350,6 +7371,23 @@ function DashboardPage() {
                                               BA
                                             </span>
                                           )}
+                                          {(() => {
+                                            const skuNorm = normalizeSku(c.produto);
+                                            const resAberta = retrabalhoConfrontoData.reservasMap.get(skuNorm) || 0;
+                                            const mapRetrab = retrabalhoConfrontoData.mapeamentoMap.get(skuNorm) || 0;
+                                            const temRetrab = resAberta > 0 || mapRetrab > 0;
+                                            if (!temRetrab) return null;
+                                            const bateu = resAberta === mapRetrab;
+                                            return bateu ? (
+                                              <span className="ml-1 inline-flex border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[8px] font-bold px-1.5 py-0.5 rounded-md align-middle shadow-sm" title={`Reservas Abertas (${resAberta}) = Retrabalho Mapeamento (${mapRetrab})`}>
+                                                RETRABALHO OK
+                                              </span>
+                                            ) : (
+                                              <span className="ml-1 inline-flex border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 text-[8px] font-bold px-1.5 py-0.5 rounded-md align-middle shadow-sm" title={`Divergência: Reservas Abertas: ${resAberta} un. | Mapeamento Retrabalho: ${mapRetrab} un.`}>
+                                                ⚠️ RETRABALHO ({resAberta} vs {mapRetrab})
+                                              </span>
+                                            );
+                                          })()}
                                         </td>
                                         <td className="px-5 py-3.5">
                                           <p className="text-xs font-normal text-slate-500 dark:text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors truncate max-w-[250px]">{c.descricao}</p>

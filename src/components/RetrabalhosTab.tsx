@@ -1,120 +1,47 @@
 "use client"
 
-import React, { useState, useEffect, useMemo, useRef, useCallback } from "react"
-import ReactDOM from "react-dom"
-
-import { 
-  Truck,
-  Search, 
-  ChevronDown,
-  Package,
-  CheckCircle2,
-  AlertCircle,
-  Layers,
-  Hash,
-  Box,
-  TrendingUp,
-  Clock,
-  ChevronRight,
-  Sparkles,
-  PauseCircle,
-  PlayCircle,
-  ListTodo,
-  Hourglass,
-  Plus,
-  LayoutGrid,
-  List,
-  RefreshCw,
-  ArrowRight,
-  ListMusic,
-  X,
-  Calendar,
-  Save,
-  Check,
-  Edit3,
-  Database,
-  Info,
-  ArrowRightLeft,
-  ListFilter,
-  Repeat,
-  Filter,
-  Printer,
-  QrCode,
-  CheckSquare,
-  Hammer,
-  Warehouse,
-  PackageCheck,
-  BarChart3,
-  Activity,
-  FileText,
-  ExternalLink,
-  ChevronUp,
-  Table,
-  Clipboard,
-  Trash2
+import React, { useState, useEffect, useMemo, useRef } from "react"
+import {
+  Plus, Search, X, ChevronDown, ChevronRight,
+  Calendar, Package, CheckCircle2, Clock,
+  PlayCircle, Upload, Printer, Trash2, RefreshCw,
+  AlertTriangle, Save, FileSpreadsheet, Layers,
+  BarChart3, ArrowRight, PauseCircle, Hammer
 } from "lucide-react"
-
-const GlobalStyles = () => (
-  <style dangerouslySetInnerHTML={{ __html: `
-    .no-spinner::-webkit-inner-spin-button,
-    .no-spinner::-webkit-outer-spin-button {
-      -webkit-appearance: none;
-      margin: 0;
-    }
-    .no-spinner {
-      -moz-appearance: textfield;
-    }
-    .custom-scrollbar::-webkit-scrollbar {
-      display: none;
-    }
-    .custom-scrollbar {
-      -ms-overflow-style: none;
-      scrollbar-width: none;
-    }
-  `}} />
-)
-
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
+import * as XLSX from 'xlsx'
 
-interface RetrabalhoRecord {
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface Programacao {
   id: number
-  lote: any
-  quantidade_enviada: number
-  data_inicio: string | null
-  data_fim: string | null
-  quantidade_retornada: number
-  reserva_a501: string
-  reserva_g501: string
-  estorno_a501: string
-  estorno_g501: string
-  quantidade_rejeitada: number
-  status: string
-  embalagens_avariadas: number
-  codigo?: string
-  desc_produto?: string
-  cliente?: string
-  unidade?: string
-  situacao?: string | null
-  situacao_a501?: string | null
-  situacao_g501?: string | null
-  Sistema?: boolean
-  enviado_ao_cd?: string | null
-  enviado_ao_conserto?: string | null
-  enviado_ao_g300?: string | null
-  armazenado?: string | null
-  numero_da_viagem?: number | null
-  turno_da_viagem?: number | null
-  created_at?: string | null
+  data: string
+  descricao: string | null
+  created_at: string
 }
 
-interface LoteConfig {
-  lote: any
-  codigo: string
-  status?: string
-  Status?: string 
-  embalagens?: number
+interface ProgramacaoItem {
+  id: number
+  programacao_id: number
+  produto: string
+  embalagens: number
+  status: string
+  confirmado_em: string | null
+  created_at: string
+}
+
+interface Reserva {
+  id: number
+  programacao_item_id: number
+  numero_reserva: string
+  data_necessidade: string | null
+  deposito: string | null
+  deposito_receptor: string | null
+  qtd_necessaria: number
+  quantidade_diferenca: number
+  created_at: string
 }
 
 interface BaseCodigo {
@@ -123,3080 +50,1035 @@ interface BaseCodigo {
   "Grade"?: string | number
 }
 
-interface GroupedLote {
-  lote: number
-  displayId?: string
-  codigo: string
-  descricao: string
-  grade: number
-  totalEmbalagens: number
-  totalEnviado: number
-  totalRetornado: number
-  totalRejeitado: number
-  totalAvarias: number
-  items: RetrabalhoRecord[]
-  status: string
-  progresso: number
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const calcPaletes = (embalagens: number, grade: number) => {
+  if (!grade || grade <= 0) return { paletes: 0, sobra: embalagens }
+  const paletes = Math.floor(embalagens / grade)
+  const sobra = embalagens - paletes * grade
+  return { paletes, sobra }
 }
 
-const STATUS_OPTIONS = [
-  { id: 'all', label: 'Todos', icon: Layers, color: 'text-slate-400' },
-  { id: 'Aguardando', label: 'Aguardando', icon: Hourglass, color: 'text-amber-400' },
-  { id: 'EM ANDAMENTO', label: 'Em andamento', icon: PlayCircle, color: 'text-blue-400' },
-  { id: 'PAUSADO', label: 'Pausado', icon: PauseCircle, color: 'text-rose-400' },
-  { id: 'FINALIZADO', label: 'Finalizado', icon: CheckCircle2, color: 'text-emerald-400' },
-  { id: 'EM FILA', label: 'Em Fila', icon: ListMusic, color: 'text-purple-400' },
-]
+const getProgramacaoStatus = (itens: ProgramacaoItem[]) => {
+  if (itens.length === 0) return 'Aguardando'
+  if (itens.every(i => i.status === 'Concluído')) return 'Concluído'
+  if (itens.some(i => i.status === 'Em andamento' || i.status === 'Pausado')) return 'Em andamento'
+  return 'Aguardando'
+}
 
-const SITUACAO_OPTIONS = [
-  { value: 'Em preparação', label: 'Em preparação', color: 'bg-slate-400' },
-  { value: 'Pendentes', label: 'Pendentes', color: 'bg-amber-400' },
-  { value: 'Entregues ao conserto', label: 'No Conserto', color: 'bg-purple-400' },
-  { value: 'Entregues ao CD', label: 'No CD', color: 'bg-blue-400' },
-  { value: 'Retrabalhados', label: 'Retrabalhados', color: 'bg-emerald-400' },
-  { value: 'Armazenado', label: 'Armazenado', color: 'bg-emerald-500' },
-]
+const STATUS_STYLE: Record<string, string> = {
+  'Concluído':     'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+  'Em andamento':  'text-blue-400 bg-blue-500/10 border-blue-500/20',
+  'Pausado':       'text-amber-400 bg-amber-500/10 border-amber-500/20',
+  'Aguardando':    'text-slate-400 bg-slate-500/10 border-slate-500/20',
+}
 
-const CompactList = ({ text, colorClass = "text-white" }: { text: string | null | undefined, colorClass?: string }) => {
-  const [expanded, setExpanded] = useState(false);
-  const [pos, setPos] = useState({ top: 0, left: 0 });
-  const triggerRef = React.useRef<HTMLDivElement>(null);
-  
-  if (!text || text === '---') return <span className="text-slate-600 font-mono text-[11px]">---</span>;
-  
-  const items = text.split(/[\s\n,]+/).filter(Boolean);
-  
-  if (items.length <= 1) {
-    return (
-      <div className="overflow-hidden w-full">
-        <span className={cn("text-[12px] font-bold font-mono truncate block", colorClass)} title={text || ''}>
-          {text}
-        </span>
-      </div>
-    );
-  }
+const STATUS_ICON: Record<string, React.ReactNode> = {
+  'Concluído':    <CheckCircle2 size={11} />,
+  'Em andamento': <PlayCircle size={11} />,
+  'Pausado':      <PauseCircle size={11} />,
+  'Aguardando':   <Clock size={11} />,
+}
 
-  const handleMouseEnter = () => {
-    if (triggerRef.current) {
-      const rect = triggerRef.current.getBoundingClientRect();
-      setPos({
-        top: rect.bottom + window.scrollY + 8,
-        left: rect.left + window.scrollX + rect.width / 2,
-      });
-    }
-    setExpanded(true);
-  };
+const fmtDate = (d: string | null) => {
+  if (!d) return '—'
+  const [y, m, day] = d.split('-')
+  return `${day}/${m}/${y}`
+}
 
-  const tooltip = expanded ? (
-    <div
-      style={{
-        position: 'fixed',
-        top: pos.top - window.scrollY,
-        left: pos.left,
-        transform: 'translateX(-50%)',
-        zIndex: 999999,
-        pointerEvents: 'none',
-      }}
-    >
-      <div className="w-max min-w-[140px] max-w-[250px] p-1.5 bg-[#111827] border border-white/20 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.9)]">
-        <div className="flex flex-col gap-0.5 max-h-[200px] overflow-y-auto">
-          {items.map((item, i) => (
-            <div key={`${item}-${i}`} className="flex items-center gap-2 px-2 py-1.5 rounded-lg">
-              <span className="text-[10px] text-slate-500 font-mono w-4 text-right select-none">{i + 1}.</span>
-              <span className={cn("text-[12px] font-bold font-mono tracking-wider", colorClass.replace(/\/50|\/90/, ''))}>
-                {item}
-              </span>
-            </div>
-          ))}
-        </div>
-        {/* Arrow */}
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 -mb-px border-[6px] border-transparent border-b-white/20">
-          <div className="absolute top-full left-1/2 -translate-x-1/2 border-[5px] border-transparent border-b-[#111827]" />
-        </div>
-      </div>
-    </div>
-  ) : null;
+const fmtNum = (n: number | null | undefined) =>
+  n == null ? '—' : n.toLocaleString('pt-BR')
 
-  return (
-    <div className="relative inline-flex items-center" onMouseLeave={() => setExpanded(false)}>
-      <div 
-        ref={triggerRef}
-        className={cn("px-2 py-1 rounded-md border border-white/10 bg-white/[0.03] inline-flex items-center justify-center cursor-pointer hover:bg-white/[0.08] transition-all", colorClass, expanded && "bg-white/[0.08] border-white/20")}
-        onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
-        onMouseEnter={handleMouseEnter}
-      >
-        <span className="text-[9px] font-semibold tracking-widest">{items.length} ITENS</span>
-      </div>
+const normCol = (s: string) =>
+  s.trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[º°]/g, 'o').replace(/[\s._-]+/g, '')
 
-      {typeof window !== 'undefined' && expanded && 
-        ReactDOM.createPortal(tooltip, document.body)
-      }
-    </div>
-  );
-};
-
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: boolean } = {}) {
-  const [records, setRecords] = useState<RetrabalhoRecord[]>([])
-  const [lotesConfig, setLotesConfig] = useState<LoteConfig[]>([])
+
+  // ── State ──────────────────────────────────────────────────────────────────
+  const [programacoes, setProgramacoes] = useState<Programacao[]>([])
+  const [itens, setItens] = useState<ProgramacaoItem[]>([])
+  const [reservas, setReservas] = useState<Reserva[]>([])
   const [baseCodigos, setBaseCodigos] = useState<BaseCodigo[]>([])
-  const [registrosData, setRegistrosData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState("")
-  const [modalSearch, setModalSearch] = useState("")
-  const [activeStatus, setActiveStatus] = useState("all")
-  const [activeSituacao, setActiveSituacao] = useState("all")
-  const [activeDriveFilter, setActiveDriveFilter] = useState("all")
-  const [expandedLotes, setExpandedLotes] = useState<Set<number>>(new Set())
-  const [user, setUser] = useState<any>(null)
-  const [isNewLoteModalOpen, setIsNewLoteModalOpen] = useState(false)
-  const [isNewReservaModalOpen, setIsNewReservaModalOpen] = useState(false)
-  const [selectedLoteForReserva, setSelectedLoteForReserva] = useState<number | null>(null)
-  const [editingReserva, setEditingReserva] = useState<RetrabalhoRecord | null>(null)
-  const [viewMode, setViewMode] = useState<"list" | "grid">("list")
-  const [docRows, setDocRows] = useState<{ a501: string, g501: string }[]>(
-    Array.from({ length: 15 }, () => ({ a501: '', g501: '' }))
-  )
+  const [search, setSearch] = useState('')
 
-  const [editingLote, setEditingLote] = useState<GroupedLote | null>(null)
-  const [selectedLoteDetail, setSelectedLoteDetail] = useState<GroupedLote | null>(null)
-  const [tempStatus, setTempStatus] = useState<string>("")
-  const [tempSituacao, setTempSituacao] = useState<string>("")
-  const [isStatusOpen, setIsStatusOpen] = useState(false)
-  const [isSituacaoOpen, setIsSituacaoOpen] = useState(false)
-  const [modalSituacaoFilter, setModalSituacaoFilter] = useState("all")
-  const [selectedReservas, setSelectedReservas] = useState<Set<number>>(new Set())
+  const [expandedProg, setExpandedProg] = useState<Set<number>>(new Set())
+  const [expandedItem, setExpandedItem] = useState<Set<number>>(new Set())
 
-  const [selectionMode, setSelectionMode] = useState(false)
-  const [expandedViagens, setExpandedViagens] = useState<string | null>(null)
+  // Modais
+  const [isNewProgOpen, setIsNewProgOpen] = useState(false)
+  const [isNewItemOpen, setIsNewItemOpen] = useState(false)
+  const [selectedProgForItem, setSelectedProgForItem] = useState<Programacao | null>(null)
+  const [isImportOpen, setIsImportOpen] = useState(false)
+  const [importTarget, setImportTarget] = useState<{ item: ProgramacaoItem; prog: Programacao } | null>(null)
+  const [isConsolidarOpen, setIsConsolidarOpen] = useState(false)
+  const [consolidarTarget, setConsolidarTarget] = useState<ProgramacaoItem | null>(null)
 
-  const [isViagemModalOpen, setIsViagemModalOpen] = useState(false)
-  const [confirmingViagem, setConfirmingViagem] = useState(false)
-  const [editingViagemGroup, setEditingViagemGroup] = useState<{ number: string, items: RetrabalhoRecord[] } | null>(null)
-  const [excelRows, setExcelRows] = useState<{ a501: string, g501: string, qtd: string }[]>(
-    Array.from({ length: 20 }, () => ({ a501: '', g501: '', qtd: '' }))
-  )
+  const [saving, setSaving] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [consolidating, setConsolidating] = useState(false)
 
-  // Scanner States
-  const [scanBuffer, setScanBuffer] = useState("")
-  const [lastScanTime, setLastScanTime] = useState(0)
-  const [scanToast, setScanToast] = useState<{ show: boolean, message: string, type: 'success' | 'error' }>({
-    show: false,
-    message: "",
-    type: 'success'
-  })
-
-  const importConfirmadosRef = useRef<HTMLInputElement>(null)
-  const [isConfirmadosModalOpen, setIsConfirmadosModalOpen] = useState(false)
-  const [confirmadosRows, setConfirmadosRows] = useState<{ reserva: string }[]>(
-    Array.from({ length: 20 }, () => ({ reserva: '' }))
-  )
-  const [processingConfirmados, setProcessingConfirmados] = useState(false)
-
-  const handleImportConfirmados = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    const XLSX = await import('xlsx')
-    const reader = new FileReader()
-    reader.onload = async (evt) => {
-      try {
-        const data = evt.target?.result
-        const wb = XLSX.read(data, { type: 'binary' })
-        const ws = wb.Sheets[wb.SheetNames[0]]
-        const rows = XLSX.utils.sheet_to_json<any>(ws, { raw: false })
-
-        if (rows.length === 0) { alert('Planilha vazia.'); return }
-
-        const headers = Object.keys(rows[0] || {})
-        const norm = (s: string) => s.trim().toLowerCase()
-          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-          .replace(/[º°]/g, 'o').replace(/\s+/g, ' ')
-
-        const findCol = (aliases: string[]) => {
-          for (const a of aliases) {
-            const m = headers.find(h => norm(h) === norm(a)); if (m) return m
-          }
-          for (const a of aliases) {
-            const m = headers.find(h => norm(h).includes(norm(a))); if (m) return m
-          }
-          return undefined
-        }
-
-        const colReserva = findCol(['reserva', 'a501', 'g501', 'nr', 'numero', 'codigo'])
-
-        if (!colReserva) {
-          alert('Nenhuma coluna de Reserva (A501/G501) encontrada na planilha.')
-          return
-        }
-
-        const extractedCodes: string[] = []
-        for (const row of rows) {
-          const val = String(row[colReserva] || '').trim()
-          if (val) extractedCodes.push(val)
-        }
-
-        const newModalRows = extractedCodes.map(c => ({ reserva: c }))
-        while (newModalRows.length < 20) newModalRows.push({ reserva: '' })
-        setConfirmadosRows(newModalRows)
-        alert(`✅ ${extractedCodes.length} reservas carregadas na tabela! Clique em 'Confirmar Reservas' para processar.`)
-      } catch (err: any) {
-        alert('Erro ao processar planilha: ' + err.message)
-      }
-    }
-    reader.readAsBinaryString(file)
-    e.target.value = ''
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 4500)
   }
 
-  const handleProcessConfirmadosTable = async () => {
-    const validCodes = confirmadosRows
-      .map(r => r.reserva.trim().toUpperCase())
-      .filter(Boolean)
+  const importFileRef = useRef<HTMLInputElement>(null)
 
-    if (validCodes.length === 0) {
-      alert('Insira pelo menos uma reserva na tabela.')
-      return
+  // ── Fetch ──────────────────────────────────────────────────────────────────
+  const fetchAllPages = async (table: string, cols = '*') => {
+    let all: any[] = [], from = 0
+    while (true) {
+      const { data, error } = await supabase.from(table).select(cols).range(from, from + 999)
+      if (error) { console.error(`[Retrabalho] Erro ${table}:`, error); break }
+      if (!data || data.length === 0) break
+      all = [...all, ...data]; from += 1000
+      if (data.length < 1000) break
     }
-
-    setProcessingConfirmados(true)
-    try {
-      let confirmadosA = 0, confirmadosG = 0, registrosCriados = 0
-      const today = new Date().toISOString().slice(0, 10)
-
-      // Identificar quais registros bateram com as reservas informadas (A501 ou G501)
-      const recordMatchesMap = new Map<number, {
-        record: any
-        willConfirmA: boolean
-        willConfirmG: boolean
-      }>()
-
-      for (const code of validCodes) {
-        let matchA = records.find(r => (r.reserva_a501 || '').trim().toUpperCase() === code)
-        let matchG = records.find(r => (r.reserva_g501 || '').trim().toUpperCase() === code)
-
-        if (code.startsWith('A') && matchA) {
-          matchG = undefined
-        } else if (code.startsWith('G') && matchG) {
-          matchA = undefined
-        }
-
-        if (matchA) {
-          const existing = recordMatchesMap.get(matchA.id) || {
-            record: matchA,
-            willConfirmA: false,
-            willConfirmG: false
-          }
-          if (matchA.situacao_a501 !== 'CONFIRMADO') {
-            existing.willConfirmA = true
-          }
-          recordMatchesMap.set(matchA.id, existing)
-        }
-
-        if (matchG) {
-          const existing = recordMatchesMap.get(matchG.id) || {
-            record: matchG,
-            willConfirmA: false,
-            willConfirmG: false
-          }
-          if (matchG.situacao_g501 !== 'CONFIRMADO') {
-            existing.willConfirmG = true
-          }
-          recordMatchesMap.set(matchG.id, existing)
-        }
-      }
-
-      if (recordMatchesMap.size === 0) {
-        alert('⚠️ Nenhuma das reservas informadas foi encontrada no sistema.')
-        setProcessingConfirmados(false)
-        return
-      }
-
-      // Agrupar demanda por SKU dos itens que ficarão completamente confirmados
-      const requiredQtyPerProduct: Record<string, number> = {}
-
-      recordMatchesMap.forEach(({ record, willConfirmA, willConfirmG }) => {
-        const isAlreadyA = record.situacao_a501 === 'CONFIRMADO'
-        const isAlreadyG = record.situacao_g501 === 'CONFIRMADO'
-
-        const willBothBeConfirmed =
-          (isAlreadyA || willConfirmA) &&
-          (isAlreadyG || willConfirmG)
-
-        if (willBothBeConfirmed) {
-          const config = lotesConfig.find(c => String(c.lote).trim() === String(record.lote).trim());
-          const sku = String(record.codigo || config?.codigo || '').trim().toUpperCase()
-          const qty = Math.round(Number(record.quantidade_enviada) || 0)
-          if (sku && qty > 0) {
-            requiredQtyPerProduct[sku] = (requiredQtyPerProduct[sku] || 0) + qty
-          }
-        }
-      })
-
-      // Verificar estoque na posição Retrabalho
-      const errorsList: string[] = []
-      const productStocks: Record<string, { id: number, Quantidade: number }[]> = {}
-
-      for (const [sku, reqQty] of Object.entries(requiredQtyPerProduct)) {
-        const { data: floorStock, error: stockErr } = await supabase
-          .from('mapeamento')
-          .select('id, Quantidade')
-          .eq('Posição', 'Retrabalho')
-          .eq('Código', sku)
-          .order('id', { ascending: true })
-
-        if (stockErr) throw stockErr
-
-        const totalFloor = (floorStock || []).reduce((acc, curr) => acc + (curr.Quantidade || 0), 0)
-        if (totalFloor < reqQty) {
-          errorsList.push(`• ${sku}: necessário ${reqQty}, disponível ${totalFloor} na posição 'Retrabalho'.`)
-        } else {
-          productStocks[sku] = floorStock || []
-        }
-      }
-
-      if (errorsList.length > 0) {
-        alert("⚠️ Impeditivo de Salvar — Estoque Insuficiente em 'Retrabalho':\n\n" + errorsList.join("\n") + "\n\nPor favor, aloque a quantidade necessária de peças na posição 'Retrabalho' antes de registrar a saída.")
-        setProcessingConfirmados(false)
-        return
-      }
-
-      // Processar confirmações e consumir a posição Retrabalho
-      for (const [id, { record, willConfirmA, willConfirmG }] of recordMatchesMap.entries()) {
-        const isAlreadyA = record.situacao_a501 === 'CONFIRMADO'
-        const isAlreadyG = record.situacao_g501 === 'CONFIRMADO'
-
-        const willBothBeConfirmed =
-          (isAlreadyA || willConfirmA) &&
-          (isAlreadyG || willConfirmG)
-
-        if (willConfirmA) {
-          await supabase.from('retrabalhos').update({ situacao_a501: 'CONFIRMADO' }).eq('id', id)
-          setRecords(prev => prev.map(r => r.id === id ? { ...r, situacao_a501: 'CONFIRMADO' } : r))
-          confirmadosA++
-        }
-
-        if (willConfirmG) {
-          await supabase.from('retrabalhos').update({ situacao_g501: 'CONFIRMADO' }).eq('id', id)
-          setRecords(prev => prev.map(r => r.id === id ? { ...r, situacao_g501: 'CONFIRMADO' } : r))
-          confirmadosG++
-        }
-
-        const isNewlyCompleted = willBothBeConfirmed && (willConfirmA || willConfirmG)
-        if (isNewlyCompleted) {
-          const config = lotesConfig.find(c => String(c.lote).trim() === String(record.lote).trim());
-          const loteCodigo = String(record.codigo || config?.codigo || '').trim();
-          const sku = loteCodigo.toUpperCase();
-          const qtyToConsume = Math.round(Number(record.quantidade_enviada) || 0)
-          
-          if (sku && qtyToConsume > 0) {
-            let remainingToConsume = qtyToConsume
-            const pallets = productStocks[sku] || []
-
-            for (const pallet of pallets) {
-              if (remainingToConsume <= 0) break
-              const palletQty = pallet.Quantidade || 0
-              if (palletQty <= 0) continue
-
-              if (palletQty <= remainingToConsume) {
-                const { error: delErr } = await supabase.from('mapeamento').delete().eq('id', pallet.id)
-                if (delErr) throw delErr
-                remainingToConsume -= palletQty
-                pallet.Quantidade = 0
-              } else {
-                const { error: updErr } = await supabase.from('mapeamento').update({ Quantidade: palletQty - remainingToConsume }).eq('id', pallet.id)
-                if (updErr) throw updErr
-                pallet.Quantidade = palletQty - remainingToConsume
-                remainingToConsume = 0
-              }
-            }
-          }
-
-          const { error } = await supabase.from('Registros').insert({
-            Data: today,
-            Produto: loteCodigo,
-            'Saída': record.quantidade_enviada || 0,
-            Entrada: null,
-            Origem: 'Retrabalho',
-            tipo_avaria: 'Sem Avaria',
-            turno: 1,
-            Observação: `Confirmado via tabela — Lote ${record.lote}`,
-          })
-          if (!error) registrosCriados++
-        }
-      }
-
-      await fetchData()
-      setIsConfirmadosModalOpen(false)
-      setConfirmadosRows(Array.from({ length: 20 }, () => ({ reserva: '' })))
-      alert(`✅ Importação concluída!\nA501 confirmados: ${confirmadosA}\nG501 confirmados: ${confirmadosG}\nRegistros criados em Monitoramento: ${registrosCriados}`)
-    } catch (err: any) {
-      alert('Erro ao processar: ' + err.message)
-    } finally {
-      setProcessingConfirmados(false)
-    }
+    return all
   }
-
-  const handleDeleteReserva = async (id: number, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    if (!confirm("Tem certeza que deseja excluir esta reserva?")) return;
-    try {
-      const { error } = await supabase.from('retrabalhos').delete().eq('id', id);
-      if (error) throw error;
-      setRecords(prev => prev.filter(r => r.id !== id));
-      setLocalViagemItems(prev => prev.filter(r => r.id !== id));
-      if (selectedLoteDetail) {
-        setSelectedLoteDetail(prev => prev ? {
-          ...prev,
-          items: prev.items.filter(i => i.id !== id)
-        } : null);
-      }
-    } catch (err: any) {
-      alert("Erro ao excluir reserva: " + err.message);
-    }
-  };
-
-  // ──────────────────────────────────────────────────────────────
-  // PERFORMANCE FIX: salva somente no onBlur, não por keystroke
-  // ──────────────────────────────────────────────────────────────
-  const updateReservaField = useCallback(async (id: number, field: string, value: any) => {
-    // Atualiza estado local imediatamente (sem DB call)
-    setRecords(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
-    if (selectedLoteDetail) {
-      setSelectedLoteDetail(prev => prev ? {
-        ...prev,
-        items: prev.items.map(i => i.id === id ? { ...i, [field]: value } : i)
-      } : null);
-    }
-  }, [selectedLoteDetail]);
-
-  const saveReservaFieldToDb = useCallback(async (id: number, field: string, value: any) => {
-    let finalValue = value;
-    if (field === 'quantidade_enviada' || field === 'quantidade_retornada') {
-      finalValue = Number(value) || 0;
-    }
-    const { error } = await supabase.from('retrabalhos').update({ [field]: finalValue }).eq('id', id);
-    if (error) console.error(`Erro ao salvar ${field}:`, error);
-  }, []);
-
-  // ──────────────────────────────────────────────────────────────
-  // EXCEL-LIKE: local state for viagem modal table
-  // ──────────────────────────────────────────────────────────────
-  const [localViagemItems, setLocalViagemItems] = useState<RetrabalhoRecord[]>([])
-  const [viagemDirty, setViagemDirty] = useState<Set<number>>(new Set()) // IDs modificados
-  const [isSavingViagem, setIsSavingViagem] = useState(false)
-  const anchorRowRef = useRef<number | null>(null) // index da linha âncora para shift-click
-
-  useEffect(() => {
-    if (editingViagemGroup) {
-      setLocalViagemItems(editingViagemGroup.items || []);
-      setViagemDirty(new Set());
-    } else {
-      setLocalViagemItems([]);
-      setViagemDirty(new Set());
-    }
-  }, [editingViagemGroup]);
-
-  // Atualiza célula local sem ir ao banco (imediato, estilo Excel)
-  const updateLocalViagemItem = useCallback((id: number, field: string, value: string) => {
-    setLocalViagemItems(prev => prev.map(r => r.id === id ? { ...r, [field]: value.toUpperCase() } : r));
-    setViagemDirty(prev => { const s = new Set(prev); s.add(id); return s; });
-  }, []);
-
-  // Salva todas as linhas modificadas de uma vez
-  const saveAllViagemChanges = useCallback(async () => {
-    if (viagemDirty.size === 0) return;
-    setIsSavingViagem(true);
-    const dirtyItems = localViagemItems.filter(r => viagemDirty.has(r.id));
-    try {
-      await Promise.all(dirtyItems.map(item =>
-        supabase.from('retrabalhos').update({
-          reserva_a501: item.reserva_a501,
-          reserva_g501: item.reserva_g501,
-          quantidade_enviada: Number(item.quantidade_enviada) || 0,
-          quantidade_retornada: Number(item.quantidade_retornada) || 0,
-          situacao_a501: item.situacao_a501 ?? 'PENDENTE',
-          situacao_g501: item.situacao_g501 ?? 'PENDENTE',
-          situacao: item.situacao,
-        }).eq('id', item.id)
-      ));
-      // Propaga para estado global
-      setRecords(prev => {
-        const map = new Map(localViagemItems.map(r => [r.id, r]));
-        return prev.map(r => map.get(r.id) ?? r);
-      });
-      setViagemDirty(new Set());
-    } catch (err: any) {
-      alert('Erro ao salvar: ' + err.message);
-    } finally {
-      setIsSavingViagem(false);
-    }
-  }, [localViagemItems, viagemDirty]);
-
-  // Seleção Excel-like: click simples, shift+click (range), ctrl+click (toggle)
-  const handleViagemRowClick = useCallback((e: React.MouseEvent, idx: number, id: number) => {
-    if (e.shiftKey && anchorRowRef.current !== null) {
-      const from = Math.min(anchorRowRef.current, idx);
-      const to   = Math.max(anchorRowRef.current, idx);
-      setSelectedReservas(prev => {
-        const s = new Set(prev);
-        for (let i = from; i <= to; i++) s.add(localViagemItems[i].id);
-        return s;
-      });
-    } else if (e.ctrlKey || e.metaKey) {
-      setSelectedReservas(prev => {
-        const s = new Set(prev);
-        s.has(id) ? s.delete(id) : s.add(id);
-        return s;
-      });
-      anchorRowRef.current = idx;
-    } else {
-      setSelectedReservas(new Set([id]));
-      anchorRowRef.current = idx;
-    }
-  }, [localViagemItems]);
-
-  // Ctrl+V: colar tabela do Excel (Tab-separated, newline por linha)
-  const handleViagemPaste = useCallback((e: React.ClipboardEvent, startIdx: number, startField: string) => {
-    e.preventDefault();
-    const text = e.clipboardData.getData('text/plain');
-    const rows = text.trim().split(/\r?\n/).map(r => r.split('\t'));
-    const FIELDS: (keyof RetrabalhoRecord)[] = ['reserva_a501', 'reserva_g501', 'quantidade_enviada', 'estorno_a501', 'estorno_g501', 'quantidade_retornada'];
-    const startFieldIdx = FIELDS.indexOf(startField as keyof RetrabalhoRecord);
-    if (startFieldIdx < 0) return;
-    setLocalViagemItems(prev => {
-      const updated = [...prev];
-      rows.forEach((rowData, ri) => {
-        const rowIdx = startIdx + ri;
-        if (rowIdx >= updated.length) return;
-        const item = { ...updated[rowIdx] };
-        rowData.forEach((val, ci) => {
-          const fieldIdx = startFieldIdx + ci;
-          if (fieldIdx < FIELDS.length) {
-            (item as any)[FIELDS[fieldIdx]] = val.trim().toUpperCase();
-          }
-        });
-        updated[rowIdx] = item;
-        setViagemDirty(prev2 => { const s = new Set(prev2); s.add(item.id); return s; });
-      });
-      return updated;
-    });
-  }, []);
-
-
-
-
-
-  const toggleViagem = (viagem: string) => {
-    setExpandedViagens(prev => prev === viagem ? null : viagem);
-  };
-
-
-const handlePrintQR = () => {
-  if (!selectedLoteDetail) return;
-  const selectedItems = selectedLoteDetail.items.filter(item => selectedReservas.has(item.id));
-  if (selectedItems.length === 0) return;
-
-  const printWindow = window.open('', '_blank');
-  if (!printWindow) return;
-
-  const content = selectedItems.map(item => {
-    const reservaA = item.reserva_a501 || '---';
-    const reservaG = item.reserva_g501 || '---';
-    const viagemNum = item.numero_da_viagem || '---';
-    const loteNum = item.lote || '---';
-    const sku = selectedLoteDetail.codigo || '---';
-    const desc = selectedLoteDetail.descricao || '---';
-    const qtd = item.quantidade_enviada || 0;
-
-    const qrUrlA = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(reservaA)}`;
-    const qrUrlG = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(reservaG)}`;
-    
-    // URL dinâmica para a página de confirmação
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-    const qrActivate = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(baseUrl + '/confirmar?id=' + item.id)}`;
-
-    const renderCard = (title: string, resNum: string, qrUrl: string) => `
-      <div style="border: 2px solid #000; width: 500px; padding: 20px; text-align: center; border-radius: 12px; background: white; margin-bottom: 20px;">
-        <h2 style="margin: 0 0 10px 0; font-size: 18px; text-transform: uppercase; font-weight: 900; color: #000; border-bottom: 2px solid #000; padding-bottom: 5px;">${title}</h2>
-        <div style="display: flex; align-items: center; gap: 20px; margin-top: 10px; text-align: left;">
-          <img src="${qrUrl}" style="width: 150px; height: 150px;" />
-          <div style="flex: 1;">
-            <div style="font-size: 26px; font-weight: 900; color: #000; margin-bottom: 8px; font-family: monospace;">${resNum}</div>
-            <div style="margin-bottom: 4px; font-size: 13px;"><strong>CÓD:</strong> ${sku}</div>
-            <div style="margin-bottom: 4px; font-size: 11px; color: #444; line-height: 1.2;">${desc}</div>
-            <div style="margin-bottom: 4px; font-size: 13px;"><strong>QTD:</strong> ${qtd}</div>
-          </div>
-        </div>
-      </div>
-    `;
-
-    return `
-      <div style="page-break-after: always; display: flex; flex-direction: column; align-items: center; padding: 30px; font-family: 'Inter', -apple-system, sans-serif; min-height: 95vh; box-sizing: border-box;">
-        
-        <!-- TOPO DA PÁGINA: Informações da Viagem -->
-        <div style="text-align: center; margin-bottom: 30px; border-bottom: 4px solid #000; padding-bottom: 15px; width: 100%; max-width: 550px;">
-          <div style="font-size: 42px; font-weight: 900; color: #000; text-transform: uppercase; letter-spacing: -1px;">VIAGEM #${viagemNum} - G300</div>
-          <div style="font-size: 14px; font-weight: 800; color: #444; text-transform: uppercase; margin-top: 5px; letter-spacing: 1px;">
-            LOTE #${loteNum} &nbsp; | &nbsp; CÓDIGO: ${sku}
-          </div>
-        </div>
-
-        <!-- MEIO: Cards de Reserva -->
-        <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 10px;">
-           ${renderCard('RESERVA A501', reservaA, qrUrlA)}
-           ${renderCard('RESERVA G501', reservaG, qrUrlG)}
-        </div>
-
-      </div>
-    `;
-  }).join('');
-
-  const html = '<html>' +
-  '<head>' +
-    '<title>Imprimir Etiquetas - G300</title>' +
-    '<style>' +
-      '@page { size: A4; margin: 0; }' +
-      'body { margin: 0; padding: 0; background: #fff; }' +
-      '@media print {' +
-        '.no-print { display: none; }' +
-        'body { -webkit-print-color-adjust: exact; }' +
-      '}' +
-    '</style>' +
-  '</head>' +
-  '<body onload="setTimeout(() => { window.print(); window.close(); }, 500);">' +
-    content +
-  '</body>' +
-'</html>';
-
-printWindow.document.write(html);
-printWindow.document.close();
-};
-    
-  const fetchAllPages = async (tableName: string, query?: string) => {
-    let allData: any[] = [];
-    let from = 0;
-    const step = 1000;
-    let hasMore = true;
-    while (hasMore) {
-      const req = supabase.from(tableName).select(query || '*').range(from, from + step - 1);
-      const { data, error } = await req;
-      if (error) { console.error(`[RetrabalhosTab] Erro ao buscar ${tableName}:`, error); break; }
-      if (data && data.length > 0) {
-        allData = [...allData, ...data];
-        from += step;
-        if (data.length < step) hasMore = false;
-      } else { hasMore = false; }
-    }
-    return allData;
-  };
 
   const fetchData = async () => {
     setLoading(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      setUser(session?.user || null)
-
-      const [retrabalhosData, lotesData, baseData, registrosData] = await Promise.all([
-        fetchAllPages('retrabalhos'),
-        fetchAllPages('lotes_config'),
+      const [progData, itensData, reservasData, baseData] = await Promise.all([
+        fetchAllPages('programacoes'),
+        fetchAllPages('programacao_itens'),
+        fetchAllPages('reservas_programacao'),
         fetchAllPages('base_codigos'),
-        fetchAllPages('Registros', 'Entrada, "Saída"')
       ])
-      setRecords(retrabalhosData)
-      setLotesConfig(lotesData)
+      setProgramacoes(progData)
+      setItens(itensData)
+      setReservas(reservasData)
       setBaseCodigos(baseData)
-      setRegistrosData(registrosData)
     } catch (err) {
-      console.error("Erro na busca:", err)
+      console.error("Erro fetchData retrabalho:", err)
     } finally {
-      setTimeout(() => setLoading(false), 400)
+      setTimeout(() => setLoading(false), 300)
     }
   }
 
-  useEffect(() => {
-    fetchData()
-    
-    const { data: { subscription: authSub } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user || null)
-    })
+  useEffect(() => { fetchData() }, [])
+  useEffect(() => { if (refreshTrigger) fetchData() }, [refreshTrigger])
 
-    // Realtime subscription for automatic updates
-    const channel = supabase
-      .channel('retrabalhos-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'retrabalhos' },
-        (payload) => {
-          console.log('Realtime update received:', payload);
-          // If it's an update, we can update the specific record in state
-          if (payload.eventType === 'UPDATE') {
-            setRecords(prev => prev.map(r => r.id === payload.new.id ? { ...r, ...payload.new } : r));
-          } else {
-            // For other events (INSERT, DELETE), refetch everything to be safe
-            fetchData();
+  // ── Computed maps ──────────────────────────────────────────────────────────
+  const baseMap = useMemo(() => {
+    const m = new Map<string, BaseCodigo>()
+    baseCodigos.forEach(b => m.set(String(b["Código"]).trim().toUpperCase(), b))
+    return m
+  }, [baseCodigos])
+
+  const reservasByItem = useMemo(() => {
+    const m = new Map<number, Reserva[]>()
+    reservas.forEach(r => {
+      if (!m.has(r.programacao_item_id)) m.set(r.programacao_item_id, [])
+      m.get(r.programacao_item_id)!.push(r)
+    })
+    return m
+  }, [reservas])
+
+  const itensByProg = useMemo(() => {
+    const m = new Map<number, ProgramacaoItem[]>()
+    itens.forEach(item => {
+      if (!m.has(item.programacao_id)) m.set(item.programacao_id, [])
+      m.get(item.programacao_id)!.push(item)
+    })
+    return m
+  }, [itens])
+
+  const filteredProgramacoes = useMemo(() => {
+    const low = search.toLowerCase()
+    return [...programacoes]
+      .filter(p => {
+        if (!low) return true
+        if (fmtDate(p.data).includes(low)) return true
+        if ((p.descricao || '').toLowerCase().includes(low)) return true
+        const its = itensByProg.get(p.id) || []
+        return its.some(i => i.produto.toLowerCase().includes(low))
+      })
+      .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
+  }, [programacoes, itensByProg, search])
+
+  // ── Item stats helpers ─────────────────────────────────────────────────────
+  const getItemStats = (item: ProgramacaoItem) => {
+    const rs = reservasByItem.get(item.id) || []
+    const abertas = rs.filter(r => r.quantidade_diferenca > 0)
+    const confirmadas = rs.filter(r => r.quantidade_diferenca === 0)
+    const qtdAberta = abertas.reduce((s, r) => s + (r.qtd_necessaria || 0), 0)
+    const qtdConfirmada = confirmadas.reduce((s, r) => s + (r.qtd_necessaria || 0), 0)
+    const qtdRetrabalhada = rs.reduce((s, r) => s + (r.qtd_necessaria || 0), 0)
+    const base = baseMap.get(item.produto.toUpperCase())
+    const grade = base?.["Grade"] ? Number(base["Grade"]) : 0
+    const { paletes, sobra } = calcPaletes(item.embalagens, grade)
+    return { rs, abertas, confirmadas, qtdAberta, qtdConfirmada, qtdRetrabalhada, grade, paletes, sobra, base }
+  }
+
+  // ── Create Programação ─────────────────────────────────────────────────────
+  const handleCreateProgramacao = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget as HTMLFormElement)
+    const data = fd.get('data') as string
+    const descricao = (fd.get('descricao') as string || '').trim() || null
+    if (!data) return
+    setSaving(true)
+    const { data: created, error } = await supabase.from('programacoes').insert([{ data, descricao }]).select().single()
+    setSaving(false)
+    if (error) { showToast('Erro: ' + error.message, 'error'); return }
+    await fetchData()
+    setIsNewProgOpen(false)
+    // Auto-expand new programação
+    if (created) setExpandedProg(prev => new Set([...prev, created.id]))
+    showToast('Programação criada!')
+  }
+
+  // ── Create Item ────────────────────────────────────────────────────────────
+  const handleCreateItem = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedProgForItem) return
+    const fd = new FormData(e.currentTarget as HTMLFormElement)
+    const produto = (fd.get('produto') as string || '').trim().toUpperCase()
+    const embalagens = Number(fd.get('embalagens') || 0)
+    if (!produto || embalagens <= 0) { showToast('Produto e Embalagens são obrigatórios', 'error'); return }
+    setSaving(true)
+    const { error } = await supabase.from('programacao_itens').insert([{
+      programacao_id: selectedProgForItem.id,
+      produto,
+      embalagens,
+      status: 'Em andamento'
+    }])
+    setSaving(false)
+    if (error) { showToast('Erro: ' + error.message, 'error'); return }
+    await fetchData()
+    setIsNewItemOpen(false)
+    setSelectedProgForItem(null)
+    showToast('Item adicionado!')
+  }
+
+  // ── Import Planilha ────────────────────────────────────────────────────────
+  const handleImportFile = async (file: File) => {
+    if (!importTarget) return
+    const { item, prog } = importTarget
+
+    // Item already concluded → skip
+    if (item.status === 'Concluído') {
+      showToast('Este item já está Concluído — importação bloqueada.', 'error')
+      return
+    }
+
+    setImporting(true)
+    try {
+      const ab = await file.arrayBuffer()
+      const wb = XLSX.read(ab)
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json<any>(ws, { raw: false, defval: '' })
+      if (rows.length === 0) { showToast('Planilha vazia!', 'error'); return }
+
+      const headers = Object.keys(rows[0] || {})
+      const findCol = (aliases: string[]) => {
+        for (const a of aliases) {
+          const m = headers.find(h => normCol(h) === normCol(a)); if (m) return m
+        }
+        for (const a of aliases) {
+          const m = headers.find(h => normCol(h).includes(normCol(a))); if (m) return m
+        }
+        return null
+      }
+
+      const cNrReserva  = findCol(['Nº reserva', 'No reserva', 'numero reserva', 'nreserva'])
+      const cDataNec    = findCol(['Data da necessidade', 'Data necessidade', 'datanecessidade'])
+      const cDeposito   = findCol(['Depósito', 'Deposito'])
+      const cDepRec     = findCol(['Depósito receptor', 'Deposito receptor', 'depositoreceptor'])
+      const cMaterial   = findCol(['Material'])
+      const cQtdNec     = findCol(['Qtd.necessária', 'Qtd necessaria', 'Quantidade necessaria', 'qtdnecessaria'])
+      const cQtdDif     = findCol(['Quantidade diferença', 'Quantidade diferenca', 'qtddiferenca'])
+
+      if (!cNrReserva || !cMaterial) {
+        showToast('Colunas obrigatórias não encontradas: "Nº reserva" e "Material"', 'error')
+        return
+      }
+
+      const progDate = new Date(prog.data + 'T00:00:00')
+      const existing = reservasByItem.get(item.id) || []
+      const existingMap = new Map(existing.map(r => [r.numero_reserva, r]))
+
+      let inserted = 0, updated = 0, skipped = 0
+
+      for (const row of rows) {
+        const material = String(row[cMaterial] || '').trim().toUpperCase()
+        if (material !== item.produto.toUpperCase()) { skipped++; continue }
+
+        const dep = cDeposito ? String(row[cDeposito] || '').trim().toUpperCase() : ''
+        const depRec = cDepRec ? String(row[cDepRec] || '').trim().toUpperCase() : ''
+        if (!['A501', 'G501'].includes(dep)) { skipped++; continue }
+        if (!['A560', 'G560'].includes(depRec)) { skipped++; continue }
+
+        // Date filter
+        if (cDataNec) {
+          const rawDate = String(row[cDataNec] || '').trim()
+          if (rawDate) {
+            let dateNec: Date
+            if (rawDate.includes('/')) {
+              const parts = rawDate.split('/')
+              // Could be DD/MM/YYYY or MM/DD/YYYY — assume DD/MM/YYYY (Brazilian)
+              dateNec = new Date(`${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}T00:00:00`)
+            } else {
+              dateNec = new Date(rawDate + 'T00:00:00')
+            }
+            if (!isNaN(dateNec.getTime()) && dateNec < progDate) { skipped++; continue }
           }
         }
-      )
-      .subscribe();
 
-    return () => {
-      authSub.unsubscribe();
-      supabase.removeChannel(channel);
-    }
-  }, [])
+        const nrReserva = String(row[cNrReserva] || '').trim()
+        if (!nrReserva) { skipped++; continue }
 
-  useEffect(() => {
-    if (editingReserva) {
-      setTempStatus(editingReserva.status?.toUpperCase() || "AGUARDANDO");
-      setTempSituacao(editingReserva.situacao || "Em preparação");
-    }
-  }, [editingReserva])
+        const qtdNec = cQtdNec ? parseFloat(String(row[cQtdNec] || '0').replace(',', '.')) || 0 : 0
+        const qtdDif = cQtdDif ? parseFloat(String(row[cQtdDif] || '0').replace(',', '.')) || 0 : 0
 
-  useEffect(() => {
-    if (refreshTrigger) {
-      fetchData()
-    }
-  }, [refreshTrigger])
-
-  // Global Scanner Listener
-  useEffect(() => {
-    const handleKeyDown = async (e: KeyboardEvent) => {
-      // Ignorar se for apenas teclas de modificação
-      if (['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return;
-
-      const now = Date.now()
-      const timeDiff = now - lastScanTime
-      
-      // Se demorar muito entre teclas, provavelmente é digitação manual
-      // Mas se o prefixo já estiver lá, continuamos aceitando (caso o scanner seja lento)
-      if (timeDiff > 100 && !scanBuffer.startsWith("SISTEMA_")) {
-        setScanBuffer(e.key === "Enter" ? "" : e.key)
-      } else {
-        if (e.key === "Enter") {
-          // Detectar link de confirmação ou prefixo direto
-          if (scanBuffer.includes("/confirmar?id=")) {
-            const parts = scanBuffer.split("id=")
-            const itemId = parts[parts.length - 1].trim()
-            if (itemId) await handleAutomatedScan(itemId)
-          } else if (scanBuffer.startsWith("SISTEMA_")) {
-            const itemId = scanBuffer.replace("SISTEMA_", "").trim()
-            if (itemId) {
-              await handleAutomatedScan(itemId)
+        // Parse data_necessidade
+        let dataNecessidade: string | null = null
+        if (cDataNec) {
+          const rawDate = String(row[cDataNec] || '').trim()
+          if (rawDate) {
+            if (rawDate.includes('/')) {
+              const parts = rawDate.split('/')
+              dataNecessidade = `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`
+            } else {
+              dataNecessidade = rawDate
             }
           }
-          setScanBuffer("")
+        }
+
+        const payload = {
+          programacao_item_id: item.id,
+          numero_reserva: nrReserva,
+          data_necessidade: dataNecessidade,
+          deposito: dep,
+          deposito_receptor: depRec,
+          qtd_necessaria: qtdNec,
+          quantidade_diferenca: qtdDif,
+        }
+
+        if (existingMap.has(nrReserva)) {
+          const ex = existingMap.get(nrReserva)!
+          await supabase.from('reservas_programacao')
+            .update({ qtd_necessaria: qtdNec, quantidade_diferenca: qtdDif })
+            .eq('id', ex.id)
+          updated++
         } else {
-          if (e.key.length === 1) {
-            setScanBuffer(prev => prev + e.key)
-          }
+          const { error } = await supabase.from('reservas_programacao').insert([payload])
+          if (!error) inserted++
         }
       }
-      setLastScanTime(now)
+
+      await fetchData()
+      setIsImportOpen(false)
+      setImportTarget(null)
+      showToast(`Importação concluída! ${inserted} novas, ${updated} atualizadas, ${skipped} ignoradas.`)
+    } catch (err: any) {
+      showToast('Erro ao importar: ' + err.message, 'error')
+    } finally {
+      setImporting(false)
     }
+  }
 
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [scanBuffer, lastScanTime])
+  // ── Toggle Item Status ─────────────────────────────────────────────────────
+  const handleToggleItemStatus = async (item: ProgramacaoItem, newStatus: string) => {
+    await supabase.from('programacao_itens').update({ status: newStatus }).eq('id', item.id)
+    await fetchData()
+  }
 
-  const handleAutomatedScan = async (id: string) => {
+  // ── Consolidar ─────────────────────────────────────────────────────────────
+  const handleConsolidar = async () => {
+    const item = consolidarTarget
+    if (!item) return
+    setConsolidating(true)
     try {
-      const now = new Date();
-      const isoDate = now.toISOString().split('T')[0];
+      const today = new Date().toISOString().split('T')[0]
+      let remaining = item.embalagens
 
-      const { error } = await supabase
-        .from('retrabalhos')
-        .update({ 
-          Sistema: true,
-          situacao: 'Entregues ao conserto',
-          enviado_ao_conserto: isoDate
-        })
-        .eq('id', Number(id))
+      // Abate do mapeamento (posição Retrabalho)
+      const { data: pallets, error: stockErr } = await supabase
+        .from('mapeamento').select('id, Quantidade')
+        .eq('Posição', 'Retrabalho').eq('Código', item.produto)
+        .order('id', { ascending: true })
+      if (stockErr) throw stockErr
 
-      if (error) throw error
-
-      setScanToast({
-        show: true,
-        message: `ENTREGA CONFIRMADA (#${id})`,
-        type: 'success'
-      })
-      
-      fetchData()
-      
-      setTimeout(() => setScanToast(prev => ({ ...prev, show: false })), 3000)
-    } catch (err) {
-      console.error("Erro no scanner:", err)
-      setScanToast({
-        show: true,
-        message: `ERRO AO ATUALIZAR ITEM #${id}`,
-        type: 'error'
-      })
-      setTimeout(() => setScanToast(prev => ({ ...prev, show: false })), 4000)
-    }
-  }
-
-  // Sync selectedLoteDetail whenever records change (after optimistic updates)
-useEffect(() => {
-  if (!selectedLoteDetail) return;
-
-  const loteId = selectedLoteDetail.lote;
-  const loteItems = records.filter(r => Number(String(r.lote).trim()) === loteId);
-  if (loteItems.length === 0) return;
-
-  // Só atualiza se algo realmente mudou
-  const itemsChanged = loteItems.some(newItem => {
-    const oldItem = selectedLoteDetail.items.find(i => i.id === newItem.id);
-    return !oldItem || JSON.stringify(oldItem) !== JSON.stringify(newItem);
-  });
-
-  if (!itemsChanged) return;
-
-  const config = lotesConfig.find(c => String(c.lote).trim() === String(loteId).trim());
-  const embalagensMaster = config?.embalagens || selectedLoteDetail.totalEmbalagens;
-
-  let totalEnviado = 0, totalRetornado = 0, totalRejeitado = 0, totalAvarias = 0;
-  loteItems.forEach(item => {
-    const sit = (item.situacao || '').toLowerCase();
-    if (['entregues ao conserto', 'entregues ao cd', 'armazenado', 'retornado ao g300'].includes(sit)) {
-      totalEnviado += item.quantidade_enviada || 0;
-    }
-    totalRetornado += item.quantidade_retornada || 0;
-    totalRejeitado += item.quantidade_rejeitada || 0;
-    totalAvarias += item.embalagens_avariadas || 0;
-  });
-
-  setSelectedLoteDetail(prev => prev ? ({
-    ...prev,
-    totalEmbalagens: embalagensMaster,
-    totalEnviado,
-    totalRetornado,
-    totalRejeitado,
-    totalAvarias,
-    progresso: Math.min(100, (totalRetornado / (totalEnviado || 1)) * 100),
-    items: [...loteItems].sort((a, b) => {
-      const dA = a.data_inicio ? new Date(a.data_inicio).getTime() : 0;
-      const dB = b.data_inicio ? new Date(b.data_inicio).getTime() : 0;
-      return dA - dB;
-    })
-  }) : null);
-}, [records, lotesConfig]);
-
-  const groupedData = useMemo(() => {
-if (activeStatus?.toUpperCase() === 'EM FILA') {
-  // Lotes de retrabalhos com status EM FILA
-  const fromRecords = records.filter(item => {
-    const itemStatus = (item.status || "Aguardando").trim().toUpperCase()
-    const matchesSearch = item.codigo?.toLowerCase().includes(search.toLowerCase()) ||
-                         item.desc_produto?.toLowerCase().includes(search.toLowerCase()) ||
-                         item.lote?.toString().includes(search)
-    return (itemStatus === 'EM FILA' || itemStatus === 'FILA') && matchesSearch
-  }).map(item => {
-    const config = lotesConfig.find(c => String(c.lote).trim() === String(item.lote).trim())
-    const cleanCodigo = (item.codigo || config?.codigo || '---').trim();
-    const base = baseCodigos.find(b => String(b["Código"]).trim() === cleanCodigo);
-    return {
-      lote: item.lote,
-      displayId: `FILA-${item.id}`,
-      status: item.status || 'EM FILA',
-      codigo: cleanCodigo,
-      descricao: item.desc_produto || base?.["Descrição"] || `Produto ${cleanCodigo}`,
-      grade: base?.["Grade"] ? Number(base["Grade"]) : 0,
-      totalEmbalagens: item.quantidade_enviada || 0,
-      totalEnviado: item.quantidade_enviada || 0,
-      totalRetornado: item.quantidade_retornada || 0,
-      totalRejeitado: item.quantidade_rejeitada || 0,
-      totalAvarias: item.embalagens_avariadas || 0,
-      progresso: item.quantidade_enviada > 0 ? (item.quantidade_retornada / item.quantidade_enviada) * 100 : 0,
-      items: [item]
-    }
-  })
-
-  // Lotes de lotes_config com status Em fila mas sem records ainda
-  const fromConfig = lotesConfig
-    .filter(config => {
-      const s = (config.status || config.Status || '').trim().toUpperCase()
-      if (s !== 'EM FILA' && s !== 'FILA') return false
-      const loteId = Number(String(config.lote).trim())
-      const alreadyInRecords = fromRecords.some(r => r.lote === loteId)
-      if (alreadyInRecords) return false
-      const matchesSearch = !search ||
-        config.codigo?.toLowerCase().includes(search.toLowerCase()) ||
-        String(config.lote).includes(search)
-      return matchesSearch
-    })
-    .map(config => {
-      const loteId = Number(String(config.lote).trim())
-      const codigo = config.codigo || '---'
-      const base = baseCodigos.find(b => String(b["Código"]).trim() === codigo)
-      return {
-        lote: loteId,
-        displayId: `FILA-CONFIG-${loteId}`,
-        status: 'EM FILA',
-        codigo,
-        descricao: base?.["Descrição"] || `Produto ${codigo}`,
-        grade: base?.["Grade"] ? Number(base["Grade"]) : 0,
-        totalEmbalagens: config.embalagens || 0,
-        totalEnviado: 0,
-        totalRetornado: 0,
-        totalRejeitado: 0,
-        totalAvarias: 0,
-        progresso: 0,
-        items: []
+      const totalStock = (pallets || []).reduce((s: number, p: any) => s + (p.Quantidade || 0), 0)
+      if (totalStock < item.embalagens) {
+        showToast(`Estoque insuficiente em Retrabalho: disponível ${totalStock}, necessário ${item.embalagens}`, 'error')
+        return
       }
-    })
 
-  return [...fromRecords, ...fromConfig].sort((a, b) => a.lote - b.lote)
-}
-
-    const groups: { [key: string]: GroupedLote } = {}
-    records.forEach(item => {
-      const loteIdRaw = String(item.lote ?? '').trim()
-      if (!loteIdRaw || loteIdRaw === 'null' || loteIdRaw === 'undefined') return
-
-      // Use numeric key if numeric, else use raw string
-      const loteKey = loteIdRaw
-      const loteId = isNaN(Number(loteIdRaw)) ? loteIdRaw as any : Number(loteIdRaw)
-
-      if (!groups[loteKey]) {
-        const config = lotesConfig.find(c => String(c.lote).trim() === loteIdRaw)
-        const codigo = config?.codigo || "---"
-        const masterStatus = (config?.status || config?.Status || item.status || "Aguardando").toUpperCase()
-        const base = baseCodigos.find(b => String(b["Código"]).trim() === String(codigo).trim())
-        const descricao = base?.["Descrição"] || (config ? `Produto ${codigo}` : "Lote não configurado")
-        const embalagensMaster = config?.embalagens || 0
-        const gradeValue = base?.["Grade"] ? Number(base["Grade"]) : 0
-
-        groups[loteKey] = {
-          lote: loteId,
-          codigo: codigo,
-          descricao: descricao,
-          grade: gradeValue,
-          totalEmbalagens: embalagensMaster,
-          totalEnviado: 0,
-          totalRetornado: 0,
-          totalRejeitado: 0,
-          totalAvarias: 0,
-          items: [],
-          status: masterStatus,
-          progresso: 0
+      for (const pallet of (pallets || [])) {
+        if (remaining <= 0) break
+        const qty = pallet.Quantidade || 0
+        if (qty <= remaining) {
+          await supabase.from('mapeamento').delete().eq('id', pallet.id)
+          remaining -= qty
+        } else {
+          await supabase.from('mapeamento').update({ Quantidade: qty - remaining }).eq('id', pallet.id)
+          remaining = 0
         }
       }
-      
-      const situacaoNormalizada = (item.situacao || '').toLowerCase();
-      if (['entregues ao conserto', 'entregues ao cd', 'armazenado', 'retornado ao g300'].includes(situacaoNormalizada)) {
-        groups[loteKey].totalEnviado += item.quantidade_enviada || 0
-      }
-      groups[loteKey].totalRetornado += item.quantidade_retornada || 0
-      groups[loteKey].totalRejeitado += item.quantidade_rejeitada || 0
-      groups[loteKey].totalAvarias += item.embalagens_avariadas || 0
-      groups[loteKey].items.push(item)
-    })
 
-    lotesConfig.forEach(config => {
-      const loteKey = String(config.lote ?? '').trim()
-      if (!loteKey || loteKey === 'null' || groups[loteKey]) return
-      const loteId = isNaN(Number(loteKey)) ? loteKey as any : Number(loteKey)
+      // Registro em Monitoramento
+      await supabase.from('Registros').insert([{
+        Data: today,
+        Produto: item.produto,
+        'Saída': item.embalagens,
+        Entrada: null,
+        Origem: 'Retrabalho',
+        tipo_avaria: 'Sem Avaria',
+        turno: 1,
+        Observação: `Consolidação de programação de retrabalho`,
+      }])
 
-      const codigo = config.codigo || "---"
-      const masterStatus = (config.status || config.Status || "Aguardando").toUpperCase()
-      const base = baseCodigos.find(b => String(b["Código"]).trim() === String(codigo).trim())
+      // Marcar como Concluído
+      await supabase.from('programacao_itens').update({
+        status: 'Concluído',
+        confirmado_em: new Date().toISOString()
+      }).eq('id', item.id)
 
-      groups[loteKey] = {
-        lote: loteId,
-        codigo,
-        descricao: base?.["Descrição"] || `Produto ${codigo}`,
-        grade: base?.["Grade"] ? Number(base["Grade"]) : 0,
-        totalEmbalagens: config.embalagens || 0,
-        totalEnviado: 0,
-        totalRetornado: 0,
-        totalRejeitado: 0,
-        totalAvarias: 0,
-        items: [],
-        status: masterStatus,
-        progresso: 0
-      }
-    })
-
-    return Object.values(groups).map(lote => ({
-      ...lote,
-      progresso: Math.min(100, (lote.totalRetornado / (lote.totalEnviado || 1)) * 100)
-    })).filter(lote => {
-      const matchesSearch = lote.codigo?.toLowerCase().includes(search.toLowerCase()) ||
-                           lote.descricao?.toLowerCase().includes(search.toLowerCase()) ||
-                           lote.lote.toString().includes(search)
-      const matchesStatus = activeStatus === 'all' || lote.status === activeStatus.toUpperCase()
-      const matchesSituacao = activeSituacao === 'all' || lote.items.some(item => (item.situacao || 'Em preparação').toLowerCase() === activeSituacao.toLowerCase())
-      return matchesSearch && matchesStatus && matchesSituacao
-    }).sort((a, b) => {
-      const dateA = Math.max(...a.items.map(i => i.data_inicio ? new Date(i.data_inicio).getTime() : 0));
-      const dateB = Math.max(...b.items.map(i => i.data_inicio ? new Date(i.data_inicio).getTime() : 0));
-      return dateB - dateA;
-    }).map(lote => ({
-      ...lote,
-      items: [...lote.items].sort((a, b) => {
-        const dA = a.data_inicio ? new Date(a.data_inicio).getTime() : 0;
-        const dB = b.data_inicio ? new Date(b.data_inicio).getTime() : 0;
-        return dA - dB;
-      })
-    }))
-  }, [records, lotesConfig, baseCodigos, search, activeStatus, activeSituacao])
-
-  const getDriveForLote = useCallback((lote: GroupedLote): string => {
-    const firstItemUnidade = lote.items.find(i => i.unidade && i.unidade.trim())?.unidade?.trim()
-    if (firstItemUnidade) {
-      const u = firstItemUnidade.toUpperCase()
-      if (u.includes('G300')) return 'Drive G300'
-      if (u.includes('A501')) return 'Drive A501'
-      if (u.includes('G501')) return 'Drive G501'
-      return firstItemUnidade
-    }
-    const regMatch = registrosData.find(r => String(r.Produto || r.Código || '').trim().toUpperCase() === lote.codigo.toUpperCase())
-    if (regMatch?.Posição) {
-      const pos = String(regMatch.Posição).trim().toUpperCase()
-      if (pos.startsWith('G300')) {
-        const m = pos.match(/G300(\d{2})/i)
-        return m ? `Drive G300-${m[1]}` : 'Drive G300'
-      }
-      if (pos.startsWith('A501')) return 'Drive A501'
-      if (pos.startsWith('G501')) return 'Drive G501'
-    }
-    return 'Drive Geral'
-  }, [registrosData])
-
-  const driveOptions = useMemo(() => {
-    const set = new Set<string>()
-    groupedData.forEach(lote => {
-      const d = getDriveForLote(lote)
-      if (d) set.add(d)
-    })
-    return ['all', ...Array.from(set).sort()]
-  }, [groupedData, getDriveForLote])
-
-  const filteredByDriveData = useMemo(() => {
-    if (activeDriveFilter === 'all') return groupedData
-    return groupedData.filter(lote => getDriveForLote(lote) === activeDriveFilter)
-  }, [groupedData, activeDriveFilter, getDriveForLote])
-
-  const sectionsData = useMemo(() => {
-    const emAndamento = filteredByDriveData.filter(l => l.status === 'EM ANDAMENTO' || l.status === 'EM FILA')
-    const aguardando = filteredByDriveData.filter(l => l.status === 'AGUARDANDO' || l.status === 'PAUSADO')
-    const finalizados = filteredByDriveData.filter(l => l.status === 'FINALIZADO')
-    return { emAndamento, aguardando, finalizados }
-  }, [filteredByDriveData])
-
-  const formatPallets = (total: number, grade: number, abbreviated = false) => {
-    if (!grade || grade <= 0 || !total || total <= 0) return null
-    const pallets = Math.floor(total / grade)
-    const pieces = total % grade
-
-    const palLabel = abbreviated ? 'pal' : (pallets === 1 ? 'palete' : 'paletes')
-    const pçLabel = abbreviated ? 'pç' : (pieces === 1 ? 'peça' : 'peças')
-
-    if (pallets > 0 && pieces > 0) return `${pallets} ${palLabel} + ${pieces} ${pçLabel}`
-    if (pallets > 0) return `${pallets} ${palLabel}`
-    return `${pieces} ${pçLabel}`
-  }
-
-  const getStatusConfig = (status: string) => {
-    const s = status?.toUpperCase() || 'AGUARDANDO'
-    switch (s) {
-      case 'FINALIZADO': return { style: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', dot: 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' }
-      case 'EM ANDAMENTO': return { style: 'bg-blue-500/10 text-blue-400 border-blue-500/20', dot: 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)] animate-pulse' }
-      case 'PAUSADO': return { style: 'bg-rose-500/10 text-rose-400 border-rose-500/20', dot: 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]' }
-      case 'AGUARDANDO': return { style: 'bg-amber-500/10 text-amber-400 border-amber-500/20', dot: 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]' }
-      case 'EM FILA': return { style: 'bg-violet-500/15 text-violet-400 border-violet-500/30', dot: 'bg-violet-500 shadow-[0_0_10px_rgba(139,92,246,0.6)]' }
-      default: return { style: 'bg-slate-500/10 text-slate-400 border-slate-500/20', dot: 'bg-slate-500' }
+      await fetchData()
+      setIsConsolidarOpen(false)
+      setConsolidarTarget(null)
+      showToast(`${item.produto} consolidado com sucesso!`)
+    } catch (err: any) {
+      showToast('Erro ao consolidar: ' + err.message, 'error')
+    } finally {
+      setConsolidating(false)
     }
   }
 
+  // ── Print Reservas ─────────────────────────────────────────────────────────
+  const handlePrintReservas = (item: ProgramacaoItem, prog: Programacao) => {
+    const rs = reservasByItem.get(item.id) || []
+    if (rs.length === 0) { showToast('Sem reservas para imprimir', 'error'); return }
 
+    const printWin = window.open('', '_blank')
+    if (!printWin) return
 
-  const renderDocumentTable = (text: string, colorClass: string) => {
-    if (!text || text === '---') return null;
-    const items = text.split(/[\s\n,]+/).filter(Boolean);
-    if (items.length === 0) return null;
-    
-    return (
-      <div className="flex flex-wrap gap-1.5 w-full mt-2">
-        {items.map((item, idx) => (
-          <div 
-            key={`${item}-${idx}`} 
-            className={cn(
-              "px-3 py-1 rounded-md bg-white/[0.03] border border-white/5 text-[10px] font-mono font-semibold transition-all hover:bg-white/10 select-all cursor-text",
-              colorClass
-            )}
-          >
-            {item}
+    const qrUrl = (text: string) =>
+      `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(text)}`
+
+    const cards = rs.map(r => {
+      const confirmada = r.quantidade_diferenca === 0
+      return `
+        <div style="border:2px solid #000;width:480px;padding:18px;border-radius:10px;background:#fff;margin-bottom:18px;page-break-inside:avoid;">
+          <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px;">
+            <h2 style="margin:0;font-size:18px;font-weight:900;">${r.deposito || '—'} → ${r.deposito_receptor || '—'}</h2>
+            <span style="font-size:11px;padding:3px 8px;border-radius:5px;background:${confirmada ? '#dcfce7' : '#fef9c3'};color:${confirmada ? '#166534' : '#854d0e'};font-weight:700;">
+              ${confirmada ? '✓ CONFIRMADA' : '⏳ ABERTA'}
+            </span>
           </div>
-        ))}
-      </div>
-    );
-  };
+          <div style="display:flex;align-items:center;gap:18px;">
+            <img src="${qrUrl(r.numero_reserva)}" style="width:140px;height:140px;flex-shrink:0;"/>
+            <div style="flex:1;">
+              <div style="font-size:26px;font-weight:900;font-family:monospace;margin-bottom:6px;">${r.numero_reserva}</div>
+              <div style="font-size:13px;margin-bottom:3px;"><strong>PRODUTO:</strong> ${item.produto}</div>
+              <div style="font-size:11px;color:#555;margin-bottom:3px;">${baseMap.get(item.produto.toUpperCase())?.["\u0044escri\u00e7\u00e3o"] || ''}</div>
+              <div style="font-size:13px;margin-bottom:3px;"><strong>QTD:</strong> ${fmtNum(r.qtd_necessaria)} un.</div>
+              ${r.data_necessidade ? `<div style="font-size:12px;color:#777;"><strong>DATA:</strong> ${fmtDate(r.data_necessidade)}</div>` : ''}
+              <div style="font-size:11px;color:#999;margin-top:4px;"><strong>PROG:</strong> ${fmtDate(prog.data)}</div>
+            </div>
+          </div>
+        </div>
+      `
+    }).join('')
 
-  const handleDeleteLoteCompleto = async (loteStr: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    if (!confirm(`Tem certeza que deseja EXCLUIR completamente o lote ${loteStr}? Esta ação não pode ser desfeita.`)) return;
-
-    try {
-      // Exclui os itens do lote da tabela retrabalhos
-      const { error: errorRetrabalhos } = await supabase
-        .from('retrabalhos')
-        .delete()
-        .eq('lote', loteStr);
-
-      if (errorRetrabalhos) throw errorRetrabalhos;
-
-      // Exclui a configuração do lote da tabela lotes_config
-      const { error: errorConfig } = await supabase
-        .from('lotes_config')
-        .delete()
-        .eq('lote', loteStr);
-
-      if (errorConfig) throw errorConfig;
-      
-      await fetchData();
-    } catch (err: any) {
-      alert("Erro ao excluir lote: " + err.message);
-    }
-  };
-
-  const handleDeleteViagem = async (viagemKey: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    if (viagemKey === 'SEM_VIAGEM') return;
-    if (!confirm(`Tem certeza que deseja EXCLUIR completamente todas as reservas da viagem #${viagemKey}? Esta ação não pode ser desfeita.`)) return;
-
-    try {
-      const viagemNum = Number(viagemKey);
-      if (isNaN(viagemNum)) {
-        alert("Número da viagem inválido.");
-        return;
-      }
-
-      // Exclui todas as reservas da viagem no banco
-      const { error } = await supabase
-        .from('retrabalhos')
-        .delete()
-        .eq('numero_da_viagem', viagemNum);
-
-      if (error) throw error;
-
-      alert("Viagem excluída com sucesso!");
-      await fetchData();
-
-      // Atualiza o estado local do lote selecionado se estiver aberto
-      if (selectedLoteDetail) {
-        setSelectedLoteDetail(prev => prev ? {
-          ...prev,
-          items: prev.items.filter(i => Number(i.numero_da_viagem) !== viagemNum)
-        } : null);
-      }
-    } catch (err: any) {
-      alert("Erro ao excluir viagem: " + err.message);
-    }
-  };
-
-  const handleExportLoteExcel = async (loteDetail: GroupedLote) => {
-    try {
-      const XLSX = await import("xlsx");
-      const dataToExport = loteDetail.items.map(item => ({
-        "Lote": loteDetail.lote,
-        "Código Produto": loteDetail.codigo,
-        "Descrição Produto": loteDetail.descricao,
-        "Grade": loteDetail.grade,
-        "ID Reserva": item.id,
-        "Reserva A501": item.reserva_a501 || "",
-        "Reserva G501": item.reserva_g501 || "",
-        "Estorno A501": item.estorno_a501 || "",
-        "Estorno G501": item.estorno_g501 || "",
-        "Qtd Enviada": item.quantidade_enviada || 0,
-        "Qtd Retornada": item.quantidade_retornada || 0,
-        "Qtd Rejeitada": item.quantidade_rejeitada || 0,
-        "Avarias Embalagem": item.embalagens_avariadas || 0,
-        "Situação": item.situacao || "Em preparação",
-        "Nº da Viagem": item.numero_da_viagem || "Não atribuída",
-        "Turno da Viagem": item.turno_da_viagem || "",
-        "Enviado ao CD": item.enviado_ao_cd || "",
-        "Status Lote": loteDetail.status
-      }));
-
-      const ws = XLSX.utils.json_to_sheet(dataToExport);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Reservas");
-      XLSX.writeFile(wb, `Lote_${loteDetail.lote}_Reservas.xlsx`);
-    } catch (err: any) {
-      alert("Erro ao exportar lote: " + err.message);
-    }
-  };
-
-  const handleExportViagemExcel = async (viagemNum: string | number, items: RetrabalhoRecord[], loteDetail: GroupedLote) => {
-    try {
-      const XLSX = await import("xlsx");
-      const dataToExport = items.map(item => ({
-        "Nº da Viagem": viagemNum === 'SEM_VIAGEM' ? "Não atribuída" : viagemNum,
-        "Turno da Viagem": item.turno_da_viagem || "",
-        "Enviado ao CD": item.enviado_ao_cd || "",
-        "Lote": loteDetail.lote,
-        "Código Produto": loteDetail.codigo,
-        "Descrição Produto": loteDetail.descricao,
-        "ID Reserva": item.id,
-        "Reserva A501": item.reserva_a501 || "",
-        "Reserva G501": item.reserva_g501 || "",
-        "Estorno A501": item.estorno_a501 || "",
-        "Estorno G501": item.estorno_g501 || "",
-        "Qtd Enviada": item.quantidade_enviada || 0,
-        "Qtd Retornada": item.quantidade_retornada || 0,
-        "Qtd Rejeitada": item.quantidade_rejeitada || 0,
-        "Avarias Embalagem": item.embalagens_avariadas || 0,
-        "Situação": item.situacao || "Em preparação"
-      }));
-
-      const ws = XLSX.utils.json_to_sheet(dataToExport);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Viagem");
-      XLSX.writeFile(wb, `Lote_${loteDetail.lote}_Viagem_${viagemNum}.xlsx`);
-    } catch (err: any) {
-      alert("Erro ao exportar viagem: " + err.message);
-    }
-  };
-
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return '-'
-    // Replace hyphens with slashes to avoid UTC shift
-    const cleanDate = dateStr.includes('T') ? dateStr : dateStr.replace(/-/g, '/')
-    const date = new Date(cleanDate)
-    if (isNaN(date.getTime())) return '-'
-    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+    printWin.document.write(`
+      <html><head><title>Reservas ${item.produto} — ${fmtDate(prog.data)}</title>
+      <style>
+        @page{size:A4;margin:12mm}
+        body{margin:0;font-family:-apple-system,sans-serif}
+        @media print{.no-print{display:none}}
+      </style></head>
+      <body onload="setTimeout(()=>{window.print();window.close()},600)">
+        <div style="text-align:center;margin-bottom:20px;border-bottom:3px solid #000;padding-bottom:10px;">
+          <h1 style="margin:0;font-size:22px;font-weight:900;">PROGRAMAÇÃO ${fmtDate(prog.data)} — ${item.produto}</h1>
+          <p style="margin:4px 0 0;font-size:13px;color:#666;">${item.embalagens} embalagens &nbsp;|&nbsp; ${rs.length} reservas &nbsp;|&nbsp; ${rs.filter(r=>r.quantidade_diferenca===0).length} confirmadas</p>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:14px;justify-content:center;">${cards}</div>
+      </body></html>
+    `)
+    printWin.document.close()
   }
 
-  const formatDayMonth = (isoDate: string | null | undefined) => {
-    if (!isoDate) return '--/--';
-    const parts = isoDate.split('T')[0].split('-');
-    if (parts.length < 3) return '--/--';
-    const [y, m, d] = parts;
-    return `${d}/${m}`;
-  };
+  // ── Delete ─────────────────────────────────────────────────────────────────
+  const handleDeleteItem = async (id: number) => {
+    if (!confirm('Excluir este item e todas as suas reservas?')) return
+    await supabase.from('programacao_itens').delete().eq('id', id)
+    await fetchData()
+    showToast('Item excluído')
+  }
 
-  const totalRetrabalhado = records.reduce((s, i) => s + (i.quantidade_retornada || 0), 0)
-  const totalRegistros = registrosData.reduce((acc, curr) => acc + (Number(curr.Entrada) || 0) - (Number(curr.Saída) || 0), 0)
-  const percentualRetrabalhado = Math.round((totalRetrabalhado / ((totalRegistros + totalRetrabalhado) || 1)) * 100)
+  const handleDeleteReserva = async (id: number) => {
+    if (!confirm('Excluir esta reserva?')) return
+    await supabase.from('reservas_programacao').delete().eq('id', id)
+    await fetchData()
+  }
+
+  const handleDeleteProg = async (id: number) => {
+    if (!confirm('Excluir esta programação e todos os seus itens e reservas?')) return
+    await supabase.from('programacoes').delete().eq('id', id)
+    await fetchData()
+    showToast('Programação excluída')
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-4 pb-12">
-      <GlobalStyles />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {[
-          { label: "Qtd Retrabalhada", value: totalRetrabalhado, icon: TrendingUp, accent: "emerald" as const },
-          { label: "% Retrabalhado", value: `${percentualRetrabalhado}%`, icon: Sparkles, accent: "blue" as const },
-        ].map((stat, i) => (
-          <motion.div
-            key={stat.label}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.05 }}
-            className="relative p-4 bg-[#0B1120] border border-white/[0.06] rounded-2xl flex items-center gap-4 overflow-hidden"
-          >
-            <div className={cn(
-              "absolute inset-0 opacity-100 pointer-events-none",
-              stat.accent === "emerald" ? "bg-gradient-to-br from-emerald-500/[0.06] to-transparent" : "bg-gradient-to-br from-blue-500/[0.06] to-transparent"
-            )} />
-            <div className={cn(
-              "relative p-2.5 rounded-xl border",
-              stat.accent === "emerald" ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" : "bg-blue-500/10 border-blue-500/20 text-blue-400"
-            )}>
-              <stat.icon size={15} />
-            </div>
-            <div className="relative">
-              <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest block mb-0.5">{stat.label}</span>
-              <span className={cn(
-                "text-2xl font-bold font-mono",
-                stat.accent === "emerald" ? "text-emerald-300" : "text-blue-300"
-              )}>{stat.value}</span>
-            </div>
-          </motion.div>
-        ))}
-      </div>
+    <div className="flex flex-col flex-1 min-h-0 gap-4 relative">
 
-      <div className="flex flex-col lg:flex-row items-center gap-3">
-        <div className="flex-1 flex flex-wrap items-center gap-1.5 border border-white/[0.06] p-1 rounded-xl">
-          {STATUS_OPTIONS.map((status) => (
-            <button
-              key={status.id}
-              onClick={() => setActiveStatus(status.id)}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9.5px] font-semibold uppercase tracking-wider transition-all duration-150",
-                activeStatus === status.id
-                  ? "bg-white/[0.06] text-slate-100 border border-white/[0.08]"
-                  : "text-slate-500 hover:bg-white/[0.02]"
-              )}
-            >
-              <status.icon size={11} className={cn(activeStatus === status.id ? "text-white" : status.color)} />
-              {status.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-3 w-full lg:w-auto">
-          <div className="relative flex-1 lg:w-64">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-600" />
-            <input
-              type="text"
-              placeholder="Filtrar por lote ou SKU..."
-              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl py-1.5 pl-8 pr-3 text-[11px] text-slate-300 focus:outline-none focus:border-white/[0.12] transition-all placeholder:text-slate-600"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          
-          <div className="flex items-center gap-1 p-0.5 rounded-xl border border-white/[0.06]">
-            <button
-              onClick={() => setViewMode("list")}
-              className={cn(
-                "p-1.5 rounded-lg text-xs transition-all flex items-center gap-1 cursor-pointer",
-                viewMode === "list"
-                  ? "bg-white/[0.06] text-slate-100 border border-white/[0.08]"
-                  : "text-slate-500 hover:text-slate-300"
-              )}
-              title="Visualização em Lista Hierárquica"
-            >
-              <List size={13} />
-              <span className="text-[9.5px] uppercase font-bold hidden sm:inline">Lista</span>
-            </button>
-            <button
-              onClick={() => setViewMode("grid")}
-              className={cn(
-                "p-1.5 rounded-lg text-xs transition-all flex items-center gap-1 cursor-pointer",
-                viewMode === "grid"
-                  ? "bg-white/[0.06] text-slate-100 border border-white/[0.08]"
-                  : "text-slate-500 hover:text-slate-300"
-              )}
-              title="Visualização em Cards"
-            >
-              <LayoutGrid size={13} />
-              <span className="text-[9.5px] uppercase font-bold hidden sm:inline">Cards</span>
-            </button>
-          </div>
-
-          {user && (
-            <button 
-              onClick={() => setIsNewLoteModalOpen(true)}
-              className="flex items-center gap-1.5 bg-emerald-600/80 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-widest transition-all cursor-pointer shrink-0"
-            >
-              <Plus size={11} />
-              Novo Lote
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="pt-6">
-        <AnimatePresence mode="popLayout">
-          {loading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="h-16 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/5 animate-pulse" />
-              ))}
-            </div>
-          ) : groupedData.length > 0 ? (
-            viewMode === "list" ? (
-              /* ── Visualização Hierárquica em Lista ── */
-              <div className="rounded-xl border border-white/[0.06] bg-[#0B1120] overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-white/[0.04] bg-white/[0.01]">
-                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest">Lote / SKU</th>
-                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest">Produto</th>
-                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest text-center">Status</th>
-                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest text-right">Embalagens</th>
-                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest text-right">Enviado</th>
-                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest text-right">Retrabalhado</th>
-                        <th className="px-3 py-1.5 text-[9px] font-semibold text-slate-300 uppercase tracking-widest text-center">Ações</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {groupedData.map((lote) => (
-                        <tr 
-                          key={lote.displayId || lote.lote}
-                          onClick={() => setSelectedLoteDetail(lote)}
-                          className="border-b border-white/[0.03] last:border-0 hover:bg-white/[0.015] transition-colors cursor-pointer group"
-                        >
-                          {/* SKU / Lote */}
-                          <td className="py-1.5 px-3 whitespace-nowrap">
-                            <div className="flex flex-col">
-                              <span className="text-[11.5px] font-semibold text-slate-200">
-                                Lote {lote.lote}
-                              </span>
-                              <span className="text-[10px] font-normal text-slate-400 font-mono mt-0.5">
-                                {lote.codigo}
-                              </span>
-                            </div>
-                          </td>
-
-                          {/* Produto + Foto discreta */}
-                          <td className="py-1.5 px-3">
-                            <div className="flex items-center gap-2.5 max-w-md">
-                              {lote.codigo && lote.codigo !== "---" && (
-                                <img 
-                                  src={`https://bvgwlkdqmkuuhqiwzfti.supabase.co/storage/v1/object/public/Store/Codigos%20icon/${lote.codigo?.trim() || '---'}.png`}
-                                  alt={lote.codigo}
-                                  className="w-6 h-6 object-contain shrink-0 rounded bg-white/[0.02] p-0.5 border border-white/[0.05]"
-                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                                />
-                              )}
-                              <span className="text-[10.5px] font-normal text-slate-400 truncate leading-snug">
-                                {lote.descricao}
-                              </span>
-                            </div>
-                          </td>
-
-                          {/* Status */}
-                          <td className="py-1.5 px-3 text-center whitespace-nowrap">
-                            <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-medium tracking-wide border border-white/5", getStatusConfig(lote.status).style)}>
-                              <span className={cn("w-1 h-1 rounded-full", getStatusConfig(lote.status).dot)} />
-                              <span className="capitalize">{lote.status.toLowerCase()}</span>
-                            </span>
-                          </td>
-
-                          {/* Embalagens */}
-                          <td className="py-1.5 px-3 text-right whitespace-nowrap">
-                            <span className="text-[11px] text-slate-400">{lote.totalEmbalagens}</span>
-                            {lote.grade > 0 && lote.totalEmbalagens > 0 && (
-                              <span className="text-[9.5px] text-slate-600 block mt-0.5">
-                                {formatPallets(lote.totalEmbalagens, lote.grade, true)}
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Enviado */}
-                          <td className="py-1.5 px-3 text-right whitespace-nowrap">
-                            <span className="text-[11px] text-slate-400">{lote.totalEnviado}</span>
-                            {lote.grade > 0 && lote.totalEnviado > 0 && (
-                              <span className="text-[9.5px] text-slate-600 block mt-0.5">
-                                {formatPallets(lote.totalEnviado, lote.grade, true)}
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Retrabalhado */}
-                          <td className="py-1.5 px-3 text-right whitespace-nowrap">
-                            <span className="text-[11px] text-slate-400">{lote.totalRetornado}</span>
-                            {lote.grade > 0 && lote.totalRetornado > 0 && (
-                              <span className="text-[9.5px] text-slate-600 block mt-0.5">
-                                {formatPallets(lote.totalRetornado, lote.grade, true)}
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Ações */}
-                          <td className="py-1.5 px-3 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center justify-center gap-1">
-                              {user && (
-                                <>
-                                  <button 
-                                    onClick={() => setEditingLote(lote)}
-                                    className="p-1 rounded text-slate-500 hover:text-slate-300 hover:bg-white/[0.05] transition-colors"
-                                    title="Editar Lote"
-                                  >
-                                    <Edit3 size={12} />
-                                  </button>
-                                  <button 
-                                    onClick={(e) => handleDeleteLoteCompleto(lote.lote, e)}
-                                    className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                                    title="Excluir Lote"
-                                  >
-                                    <Trash2 size={12} />
-                                  </button>
-                                </>
-                              )}
-                              <button 
-                                onClick={() => setSelectedLoteDetail(lote)}
-                                className="px-2 py-0.5 rounded bg-transparent border border-white/[0.06] hover:border-white/[0.12] text-slate-400 hover:text-slate-200 text-[10px] font-medium transition-colors cursor-pointer"
-                              >
-                                Abrir
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {groupedData.map((lote) => (
-                <motion.div 
-                  layout 
-                  initial={{ opacity: 0, y: 20 }} 
-                  animate={{ opacity: 1, y: 0 }} 
-                  exit={{ opacity: 0, scale: 0.95 }} 
-                  key={lote.displayId || lote.lote} 
-                  onClick={() => setSelectedLoteDetail(lote)}
-                  className="group relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl transition-all duration-300 overflow-hidden shadow-sm hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-md cursor-pointer flex flex-col"
-                >
-                  {/* Card Header with Status */}
-                  <div className="absolute top-4 left-4 z-30">
-                    <div className={cn("flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[10px] font-semibold tracking-wide bg-white/80 dark:bg-slate-900/80 backdrop-blur", getStatusConfig(lote.status).style)}>
-                      <div className={cn("w-1.5 h-1.5 rounded-full", getStatusConfig(lote.status).dot)} />
-                      <span className="capitalize">{lote.status.toLowerCase()}</span>
-                    </div>
-                  </div>
-                  {/* Action Buttons */}
-                  {user && (
-                    <div className="absolute top-4 right-4 z-30 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingLote(lote);
-                        }}
-                        className="p-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-blue-600 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-white transition-all shadow-sm"
-                        title="Editar Lote"
-                      >
-                        <Edit3 size={12} />
-                      </button>
-                      <button 
-                        onClick={(e) => handleDeleteLoteCompleto(lote.lote, e)}
-                        className="p-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-rose-600 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-white transition-all shadow-sm"
-                        title="Excluir Lote"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  )}
-                  {/* Image Section - Simplified */}
-                  <div className="relative h-40 flex items-center justify-center p-6 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-800">
-                    <div className="relative w-32 h-32 flex items-center justify-center">
-                      <Package size={48} className="absolute text-slate-200 dark:text-slate-800" />
-                      {lote.codigo && lote.codigo !== "---" && (
-                        <img 
-                          src={`https://bvgwlkdqmkuuhqiwzfti.supabase.co/storage/v1/object/public/Store/Codigos%20icon/${lote.codigo?.trim() || '---'}.png`}
-                          alt={lote.codigo}
-                          className="w-full h-full object-contain relative z-10"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = 'none';
-                          }}
-                        />
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Card Content */}
-                  <div className="p-6 pt-5 flex flex-col flex-1">
-                    <div className="mb-6">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                          {lote.codigo}
-                        </span>
-                        <span className="text-xs font-semibold text-slate-500 uppercase">
-                          LOTE {lote.lote}
-                        </span>
-                      </div>
-                      <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300 line-clamp-2 leading-snug">
-                        {lote.descricao}
-                      </h3>
-                    </div>
-
-                    {/* Compact Metrics Grid */}
-                    <div className="grid grid-cols-3 gap-4 mb-6 mt-auto">
-                      <div className="space-y-1">
-                        <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block">Embalagens</span>
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-lg font-semibold text-slate-900 dark:text-white">{lote.totalEmbalagens}</span>
-                          <span className="text-[10px] font-medium text-slate-500 uppercase">emb</span>
-                        </div>
-                        {lote.grade > 0 && lote.totalEmbalagens > 0 && (
-                          <span className="text-[10px] text-slate-500 block">
-                            {formatPallets(lote.totalEmbalagens, lote.grade, true)}
-                          </span>
-                        )}
-                      </div>
-                      <div className="space-y-1">
-                        <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block">Enviado</span>
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-lg font-semibold text-slate-900 dark:text-white">{lote.totalEnviado}</span>
-                        </div>
-                        {lote.grade > 0 && lote.totalEnviado > 0 && (
-                          <span className="text-[10px] text-slate-500 block">
-                            {formatPallets(lote.totalEnviado, lote.grade, true)}
-                          </span>
-                        )}
-                      </div>
-                      <div className="space-y-1">
-                        <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block">Retrab.</span>
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-lg font-semibold text-slate-900 dark:text-white">{lote.totalRetornado}</span>
-                        </div>
-                        {lote.grade > 0 && lote.totalRetornado > 0 && (
-                          <span className="text-[10px] text-slate-500 block">
-                            {formatPallets(lote.totalRetornado, lote.grade, true)}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Progress Bar */}
-                    <div className="space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Progresso Total</span>
-                        <span className="text-[11px] font-semibold text-blue-400 font-mono">{Math.round(lote.progresso)}%</span>
-                      </div>
-                      <div className="h-2 w-full bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
-                        <motion.div 
-                          initial={{ width: 0 }} 
-                          animate={{ width: `${lote.progresso}%` }} 
-                          className={cn("h-full rounded-full transition-all duration-1000", lote.progresso === 100 ? "bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.4)]" : "bg-blue-600 shadow-[0_0_15px_rgba(37,99,235,0.4)]")} 
-                        />
-                      </div>
-                    </div>
-
-                    {/* Add Reserva Overlay for Quick Action */}
-                    {user && (
-                      <div className="mt-6 pt-5 border-t border-white/5 flex justify-end">
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-            )
-          ) : (
-            <div className="flex flex-col items-center justify-center py-20 bg-slate-50 dark:bg-white/5 rounded-[3rem] border border-dashed border-slate-300 dark:border-white/10">
-              <Package size={48} className="text-slate-300 dark:text-white/10 mb-4" />
-              <p className="text-slate-500 font-semibold text-[10px] uppercase tracking-[0.2em]">Nenhum lote encontrado</p>
-            </div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* Detail Modal for Lote Contents */}
+      {/* Toast */}
       <AnimatePresence>
-        {selectedLoteDetail && (
-          <div className="fixed inset-0 z-[150] flex items-center justify-center p-0">
-            <motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              exit={{ opacity: 0 }} 
-              onClick={() => {
-                setSelectedLoteDetail(null);
-                setSelectedReservas(new Set());
-                setSelectionMode(false);
-                setModalSearch("");
-              }} 
-              className="absolute inset-0 bg-black/90 backdrop-blur-md" 
-            />
-            <motion.div initial={{ opacity: 0, scale: 0.95, y: 30 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 30 }} className="relative w-full h-full bg-[#0B1120] border border-white/10 shadow-[0_0_100px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col">
-              <div className="absolute top-0 left-0 w-full h-[500px] bg-gradient-to-b from-blue-600/5 to-transparent pointer-events-none" />
-              
-              {/* Section 1: Header & Identity - Top Priority */}
-              <div className="px-12 py-1 flex items-center justify-between shrink-0 relative z-10 border-b border-white/5 bg-white/[0.01]">
-                <div className="flex items-center gap-6" />
-
-                <div className="flex items-center gap-4">
-                  {user && (
-                    <>
-                      {selectionMode && selectedReservas.size > 0 && (
-                        <motion.button
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          onClick={handlePrintQR}
-                          className="flex items-center gap-2 px-4 py-2 rounded-md bg-emerald-600/15 border border-emerald-500/25 hover:bg-emerald-600/25 text-emerald-400 text-[10px] font-semibold uppercase tracking-wider transition-colors"
-                        >
-                          <Printer size={13} />
-                          Imprimir ({selectedReservas.size})
-                        </motion.button>
-                      )}
-                      
-                      <button 
-                        onClick={() => {
-                          const itemsToGroup = selectionMode && selectedReservas.size > 0 
-                            ? selectedLoteDetail.items.filter(item => selectedReservas.has(item.id))
-                            : selectedLoteDetail.items.filter(item => !item.numero_da_viagem);
-                          
-                          // Reset rows for new voyage
-                          setExcelRows(Array.from({ length: 20 }, () => ({ a501: '', g501: '', qtd: '' })));
-                          setEditingViagemGroup({ number: "", items: itemsToGroup });
-                          setIsViagemModalOpen(true);
-                        }}
-                        className="flex items-center gap-2 px-4 py-2 rounded-md bg-amber-500/10 border border-amber-500/25 hover:bg-amber-500/20 text-amber-400 text-[10px] font-semibold uppercase tracking-wider transition-colors"
-                      >
-                        <Truck size={13} />
-                        Nova Viagem
-                      </button>
-
-                    </>
-                  )}
-
-                  <input
-                    type="file"
-                    ref={importConfirmadosRef}
-                    onChange={handleImportConfirmados}
-                    accept=".xlsx,.xls,.csv"
-                    className="hidden"
-                  />
-                  <button
-                    onClick={() => setIsConfirmadosModalOpen(true)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-md bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] hover:border-white/20 text-slate-300 text-[10px] font-semibold uppercase tracking-wider transition-colors"
-                    title="Importar reservas confirmadas"
-                  >
-                    <FileText size={13} />
-                    Importar Confirmados
-                  </button>
-
-                  <button 
-                    onClick={() => handleExportLoteExcel(selectedLoteDetail)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-md bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] hover:border-white/20 text-slate-300 text-[10px] font-semibold uppercase tracking-wider transition-colors"
-                    title="Exportar Lote Completo para Excel"
-                  >
-                    <FileText size={13} />
-                    Exportar Lote
-                  </button>
-                  <button 
-                    onClick={() => {
-                      setSelectedLoteDetail(null);
-                      setSelectedReservas(new Set());
-                      setSelectionMode(false);
-                      setModalSearch("");
-                    }}
-                    className="flex items-center justify-center w-9 h-9 rounded-md bg-white/[0.04] border border-white/10 hover:bg-rose-500/10 hover:border-rose-500/20 hover:text-rose-400 text-slate-500 transition-colors"
-                  >
-                    <X size={15} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Section 2: Dashboard Overview - Milestone Volume Grid */}
-              <div className="grid grid-cols-3 gap-3 px-12 py-1 shrink-0 border-b border-white/5 relative z-10 bg-white/[0.01]">
-                {(() => {
-                  const items = selectedLoteDetail.items;
-                  const filterId = modalSituacaoFilter.toLowerCase();
-                  
-                  // Calculate volumes based on double-confirmation status
-                  const vTotal = selectedLoteDetail.totalEmbalagens;
-                  const vEmPreparacao = items.reduce((acc, curr) => {
-                    const isBothConfirmed = curr.situacao_a501 === 'CONFIRMADO' && curr.situacao_g501 === 'CONFIRMADO';
-                    return acc + (!isBothConfirmed ? (curr.quantidade_enviada || 0) : 0);
-                  }, 0);
-                  const vRetrabalhados = items.reduce((acc, curr) => {
-                    const isBothConfirmed = curr.situacao_a501 === 'CONFIRMADO' && curr.situacao_g501 === 'CONFIRMADO';
-                    return acc + (isBothConfirmed ? (curr.quantidade_enviada || 0) : 0);
-                  }, 0);
-
-                  const milestones = [
-                    { id: 'all', label: 'Total de Embalagens', value: vTotal, unit: 'emb', icon: Database, color: 'text-white', active: filterId === 'all' },
-                    { id: 'em preparação', label: 'Em Preparação', value: vEmPreparacao, unit: 'pçs', icon: Hourglass, color: 'text-slate-400', active: filterId === 'em preparação' },
-                    { id: 'retrabalhados', label: 'Retrabalhados', value: vRetrabalhados, unit: 'pçs', icon: RefreshCw, color: 'text-indigo-400', active: filterId === 'retrabalhados' },
-                  ];
-
-                  return milestones.map((stat, i) => (
-                    <button 
-                      key={stat.label} 
-                      onClick={() => setModalSituacaoFilter(stat.id)}
-                      className={cn(
-                        "bg-white/[0.02] border p-3 rounded-xl flex items-center justify-between hover:bg-white/[0.04] transition-all group/card relative overflow-hidden text-left",
-                        stat.active ? "border-blue-500/30 bg-blue-500/[0.02]" : "border-white/5"
-                      )}
-                    >
-                      {stat.active && <div className="absolute top-0 left-0 w-full h-[1px] bg-blue-500/50" />}
-                      <div>
-                        <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest mb-0.5">{stat.label}</p>
-                        <div className="flex items-baseline gap-1">
-                          <span className={`text-2xl font-light ${stat.color} font-mono tracking-tighter`}>{stat.value}</span>
-                          <span className="text-[10px] font-semibold text-slate-400 uppercase font-mono">{stat.unit}</span>
-                        </div>
-                        {stat.unit !== 'emb' && formatPallets(stat.value, selectedLoteDetail.grade) && (
-                          <span className={`text-[12px] font-light uppercase tracking-widest ${stat.color} opacity-90`}>
-                            {formatPallets(stat.value, selectedLoteDetail.grade)}
-                          </span>
-                        )}
-                      </div>
-                      <div className={cn(
-                        "p-2 rounded-lg bg-white/[0.03] transition-all",
-                        stat.color,
-                        stat.active ? "opacity-100" : "opacity-40 group-hover/card:opacity-100"
-                      )}>
-                        <stat.icon size={14} />
-                      </div>
-                    </button>
-                  ));
-                })()}
-              </div>
-
-              {/* Modal Internal Filter - Situation & Search */}
-              <div className="px-12 py-2 bg-white/[0.01] border-b border-white/5 flex items-center justify-between gap-6 relative z-20">
-                <div className="relative flex-1 max-w-md group">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-blue-400 transition-colors" />
-                  <input 
-                    type="text" 
-                    placeholder="Pesquisar por reserva ou estorno..." 
-                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-2 pl-12 pr-4 text-[11px] text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:bg-white/[0.05] transition-all placeholder:text-slate-500"
-                    value={modalSearch}
-                    onChange={(e) => setModalSearch(e.target.value)}
-                  />
-                  {modalSearch && (
-                    <button 
-                      onClick={() => setModalSearch("")}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md hover:bg-white/10 text-slate-500 hover:text-white transition-all"
-                    >
-                      <X size={12} />
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => {
-                      setSelectionMode(!selectionMode);
-                      if (selectionMode) setSelectedReservas(new Set());
-                    }}
-                    className={cn(
-                      "flex items-center gap-2 px-4 py-1.5 rounded-xl border text-[9px] font-semibold uppercase tracking-widest transition-all",
-                      selectionMode 
-                        ? "bg-emerald-600 border-emerald-600 text-white shadow-lg shadow-emerald-600/30" 
-                        : "bg-white/5 border-white/10 text-slate-400 hover:text-white hover:bg-white/10"
-                    )}
-                  >
-                    <CheckSquare size={12} />
-                    {selectionMode ? "Desabilitar Seleção" : "Habilitar Seleção"}
-                  </button>
-
-                  {selectionMode && (
-                    <button
-                      onClick={() => {
-                        const preparedIds = selectedLoteDetail.items
-                          .filter(item => (item.situacao || 'Em preparação').toLowerCase() === 'em preparação')
-                          .map(i => i.id);
-                        setSelectedReservas(new Set(preparedIds));
-                      }}
-                      className="flex items-center gap-2 px-4 py-1.5 rounded-xl bg-white/5 border border-white/10 text-[9px] font-semibold text-slate-400 uppercase tracking-widest hover:text-white hover:bg-white/10 transition-all"
-                    >
-                      <QrCode size={12} />
-                      Selecionar Preparados
-                    </button>
-                  )}
-
-                  {selectionMode && selectedReservas.size > 0 && (
-                    <button
-                      onClick={() => {
-                        const selectedItems = selectedLoteDetail.items.filter(item => selectedReservas.has(item.id));
-                        setEditingViagemGroup({ number: "", items: selectedItems });
-                        setIsViagemModalOpen(true);
-                      }}
-                      className="flex items-center gap-2 px-4 py-1.5 rounded-xl bg-blue-600 text-[9px] font-semibold text-white uppercase tracking-widest hover:bg-blue-500 transition-all shadow-lg shadow-blue-600/20"
-                    >
-                      <Truck size={12} />
-                      Vincular à Viagem
-                    </button>
-                  )}
-
-                </div>
-              </div>
-
-              {/* Section 3: Execution Logs */}
-              <div className="flex-1 overflow-y-auto p-6 no-scrollbar bg-black/20">
-                <div className="bg-white/[0.02] border border-white/5 overflow-x-auto shadow-2xl rounded-xl">
-                                {(() => {
-                                  const filteredForTable = selectedLoteDetail.items
-                                    .filter(item => {
-                                      const isBothConfirmed = item.situacao_a501 === 'CONFIRMADO' && item.situacao_g501 === 'CONFIRMADO';
-                                      const matchesSituacao = modalSituacaoFilter === 'all' || 
-                                        (modalSituacaoFilter === 'em preparação' && !isBothConfirmed) ||
-                                        (modalSituacaoFilter === 'retrabalhados' && isBothConfirmed);
-                                      const searchLower = modalSearch.toLowerCase();
-                                      const matchesSearch = !modalSearch || 
-                                        (item.reserva_a501 || '').toLowerCase().includes(searchLower) ||
-                                        (item.reserva_g501 || '').toLowerCase().includes(searchLower);
-                                      return matchesSituacao && matchesSearch;
-                                    });
-
-                                  if (filteredForTable.length === 0) {
-                                    return (
-                                      <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
-                                        <div className="w-14 h-14 rounded-2xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-center">
-                                          <Filter size={20} className="text-slate-600" />
-                                        </div>
-                                        <div>
-                                          <p className="text-[13px] font-semibold text-slate-400 uppercase tracking-widest">Nenhuma reserva encontrada</p>
-                                          <p className="text-[11px] text-slate-600 mt-1">Não há registros com a situação selecionada.</p>
-                                        </div>
-                                        <button
-                                          onClick={() => setModalSituacaoFilter('all')}
-                                          className="text-[10px] font-semibold text-blue-400 uppercase tracking-widest hover:text-blue-300 transition-colors"
-                                        >
-                                          Limpar filtro
-                                        </button>
-                                      </div>
-                                    );
-                                  }
-
-                                  // Group by Viagem
-                                  const groups: Record<string, typeof filteredForTable> = {};
-                                  filteredForTable.forEach(item => {
-                                    const key = item.numero_da_viagem || 'SEM_VIAGEM';
-                                    if (!groups[key]) groups[key] = [];
-                                    groups[key].push(item);
-                                  });
-
-                                  const sortedViagens = Object.keys(groups).sort((a, b) => {
-                                    if (a === 'SEM_VIAGEM') return 1;
-                                    if (b === 'SEM_VIAGEM') return -1;
-                                    return Number(b) - Number(a);
-                                  });
-
-                                  return sortedViagens.map(viagemKey => {
-                                    const items = groups[viagemKey];
-                                    const isExpanded = expandedViagens === viagemKey;
-
-                                    const firstItem = items[0];
-                                    
-                                    return (
-                                      <div key={viagemKey} className="border-b border-white/[0.04] last:border-0">
-                                        {/* Group Header */}
-                                        <div 
-                                          onClick={() => toggleViagem(viagemKey)}
-                                          className={cn(
-                                            "flex items-center justify-between px-4 py-2.5 cursor-pointer transition-all",
-                                            isExpanded ? "bg-white/[0.03]" : "hover:bg-white/[0.015]"
-                                          )}
-                                        >
-                                          <div className="flex items-center gap-6">
-                                            <div className="flex flex-col">
-                                              <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest mb-0.5">Viagem</span>
-                                              <span className="text-[14px] font-mono font-bold text-slate-200 tracking-wider">
-                                                {viagemKey === 'SEM_VIAGEM' ? 'NÃO ATRIBUÍDA' : `#${viagemKey}`}
-                                              </span>
-                                            </div>
-                                            
-                                            <div className="flex flex-col">
-                                              <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest mb-0.5">Data de Envio</span>
-                                              <div className="flex items-center gap-1.5">
-                                                <Calendar size={11} className="text-slate-500" />
-                                                <span className="text-[11px] font-medium text-slate-400">
-                                                  {viagemKey === 'SEM_VIAGEM' ? '--/--' : formatDayMonth(firstItem.enviado_ao_cd)}
-                                                </span>
-                                              </div>
-                                            </div>
-
-                                            <div className="flex flex-col">
-                                              <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest mb-0.5">Turno</span>
-                                              <div className="flex items-center gap-1.5">
-                                                <Clock size={11} className="text-slate-500" />
-                                                <span className="text-[11px] font-normal text-slate-400 font-mono uppercase">
-                                                  {firstItem.turno_da_viagem ? `TURNO ${firstItem.turno_da_viagem}` : '--'}
-                                                </span>
-                                              </div>
-                                            </div>
-
-                                            <div className="flex flex-col">
-                                              <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest mb-0.5">Volume Total</span>
-                                              <div className="flex items-baseline gap-0.5">
-                                                <span className="text-[11.5px] font-mono font-normal text-emerald-400">
-                                                  {items.reduce((acc, curr) => acc + (curr.quantidade_enviada || 0), 0)}
-                                                </span>
-                                                <span className="text-[9px] text-emerald-500/50 font-normal uppercase tracking-widest">UN</span>
-                                              </div>
-                                            </div>
-
-                                            <div className="flex flex-col">
-                                              <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest mb-0.5">Situação</span>
-                                              <div className={cn(
-                                                "px-1.5 py-0.5 rounded text-[9.5px] font-medium tracking-wide border-0",
-                                                items.every(i => (i.situacao || '').toLowerCase() === 'armazenado')
-                                                  ? "bg-emerald-500/10 text-emerald-400"
-                                                  : "bg-blue-500/10 text-blue-400"
-                                              )}>
-                                                {items.every(i => (i.situacao || '').toLowerCase() === 'armazenado') ? 'CONCLUÍDO' : 'EM ANDAMENTO'}
-                                              </div>
-                                            </div>
-                                          </div>
-
-                                          <div className="flex items-center gap-2">
-                                            <button
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleExportViagemExcel(viagemKey, items, selectedLoteDetail);
-                                              }}
-                                              className="p-1.5 rounded-lg bg-transparent hover:bg-white/[0.05] border border-white/[0.06] hover:border-white/[0.12] text-slate-500 hover:text-slate-300 transition-colors"
-                                              title="Exportar Viagem para Excel"
-                                            >
-                                              <FileText size={12} />
-                                            </button>
-                                            {user && viagemKey !== 'SEM_VIAGEM' && (
-                                              <>
-                                                <button
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setEditingViagemGroup({ 
-                                                      number: viagemKey, 
-                                                      items: items 
-                                                    });
-                                                    setIsViagemModalOpen(true);
-                                                  }}
-                                                  className="p-1.5 rounded-lg bg-transparent hover:bg-white/[0.05] border border-white/[0.06] hover:border-white/[0.12] text-slate-500 hover:text-slate-300 transition-colors"
-                                                  title="Editar Viagem"
-                                                >
-                                                  <Edit3 size={12} />
-                                                </button>
-                                                <button
-                                                  onClick={(e) => handleDeleteViagem(viagemKey, e)}
-                                                  className="p-1.5 rounded-lg bg-transparent hover:bg-white/[0.05] border border-white/[0.06] hover:border-white/[0.12] text-slate-500 hover:text-red-400 transition-colors"
-                                                  title="Excluir Viagem"
-                                                >
-                                                  <Trash2 size={12} />
-                                                </button>
-                                              </>
-                                            )}
-                                            <div className={cn(
-                                              "w-6 h-6 rounded-full flex items-center justify-center border border-white/[0.06] transition-transform duration-300 text-slate-500",
-                                              isExpanded && "rotate-180 text-blue-400 border-blue-500/30"
-                                            )}>
-                                              <ChevronDown size={14} />
-                                            </div>
-                                          </div>
-
-                                        </div>
-
-                                        {/* Group Content - Instant render without animations */}
-                                        {isExpanded && (
-                                          <div className="pb-3 overflow-x-auto relative">
-                                            {/* Table Header inside Group */}
-                                            <div className={cn(
-                                              "grid gap-3 px-4 py-2 border-b border-white/[0.06] items-center bg-white/[0.01] sticky top-0 z-30 font-mono text-[9px] uppercase font-semibold text-slate-400 tracking-wider",
-                                              selectionMode 
-                                                ? "grid-cols-[3rem_3rem_150px_150px_110px_1fr_100px_120px_120px_50px]" 
-                                                : "grid-cols-[3rem_150px_150px_110px_1fr_100px_120px_120px_50px]" 
-                                            )}>
-                                              {selectionMode && (
-                                                <div className="flex justify-center">
-                                                  <button 
-                                                    onClick={() => {
-                                                      const groupIds = items.map(i => i.id);
-                                                      const allSelectedInGroup = groupIds.every(id => selectedReservas.has(id));
-                                                      
-                                                      const newSelection = new Set(selectedReservas);
-                                                      if (allSelectedInGroup) {
-                                                        groupIds.forEach(id => newSelection.delete(id));
-                                                      } else {
-                                                        groupIds.forEach(id => newSelection.add(id));
-                                                      }
-                                                      setSelectedReservas(newSelection);
-                                                    }}
-                                                    className={cn(
-                                                      "w-4 h-4 rounded border flex items-center justify-center transition-all",
-                                                      items.every(id => selectedReservas.has(id.id))
-                                                        ? "bg-emerald-500 border-emerald-400" 
-                                                        : "border-white/20 bg-white/5 hover:border-emerald-500/50"
-                                                    )}
-                                                  >
-                                                    {items.some(id => selectedReservas.has(id.id)) && (
-                                                      <Check size={11} className={cn("text-white stroke-[3]", !items.every(id => selectedReservas.has(id.id)) && "opacity-50")} />
-                                                    )}
-                                                  </button>
-                                                </div>
-                                              )}
-                                              <span className="text-center text-slate-600">#</span>
-                                              <span className="text-left text-slate-300">Reserva (A)</span>
-                                              <span className="text-left text-slate-300">Reserva (G)</span>
-                                              <span className="text-left text-slate-300">Código</span>
-                                              <span className="text-left text-slate-300">Descrição</span>
-                                              <span className="text-center text-slate-300">Volume</span>
-                                              <span className="text-center text-slate-300">Sit. A</span>
-                                              <span className="text-center text-slate-300">Sit. G</span>
-                                              <span className="text-center text-slate-600">Ação</span>
-                                            </div>
-                                            {items.map((item, idx) => {
-                                               const config = lotesConfig.find(c => String(c.lote).trim() === String(item.lote).trim());
-                                               const cleanCodigo = (item.codigo || config?.codigo || '---').trim();
-                                               const base = baseCodigos.find(b => String(b["Código"]).trim() === cleanCodigo);
-                                               const desc = item.desc_produto || base?.["Descrição"] || `Produto ${cleanCodigo}`;
-                                               return (
-                                                 <div 
-                                                   key={item.id} 
-                                                   className={cn(
-                                                     "group/row grid gap-3 px-4 py-1 border-b border-white/[0.03] last:border-0 transition-colors items-center relative hover:bg-white/[0.015]",
-                                                     selectionMode 
-                                                       ? "grid-cols-[3rem_3rem_150px_150px_110px_1fr_100px_120px_120px_50px]" 
-                                                       : "grid-cols-[3rem_150px_150px_110px_1fr_100px_120px_120px_50px]",
-                                                     selectedReservas.has(item.id) && "bg-emerald-500/10"
-                                                   )}
-                                                 >
-                                                 {selectionMode && (
-                                                  <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>
-                                                    <button 
-                                                      onClick={() => {
-                                                        const newSelection = new Set(selectedReservas);
-                                                        if (newSelection.has(item.id)) newSelection.delete(item.id);
-                                                        else newSelection.add(item.id);
-                                                        setSelectedReservas(newSelection);
-                                                      }}
-                                                      className={cn(
-                                                        "w-4 h-4 rounded border flex items-center justify-center transition-all",
-                                                        selectedReservas.has(item.id) 
-                                                          ? "bg-emerald-500 border-emerald-400" 
-                                                          : "border-white/20 bg-white/5 group-hover/row:border-emerald-500/50"
-                                                      )}
-                                                    >
-                                                      {selectedReservas.has(item.id) && <Check size={11} className="text-white stroke-[3]" />}
-                                                    </button>
-                                                  </div>
-                                                )}
-                                                
-                                                {/* Index */}
-                                                <div className="text-center">
-                                                  <span className="text-[11px] font-mono text-slate-600">
-                                                    {String(idx + 1).padStart(2, '0')}
-                                                  </span>
-                                                </div>
-                                                
-                                                {/* Reserva A */}
-                                                <div>
-                                                  <input
-                                                    type="text"
-                                                    value={item.reserva_a501 || ""}
-                                                    onChange={e => updateReservaField(item.id, "reserva_a501", e.target.value)}
-                                                    placeholder="A501..."
-                                                    className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/60 focus:bg-slate-900/80 rounded px-2 py-1 text-[11px] font-mono text-slate-300 transition-all outline-none"
-                                                  />
-                                                </div>
-                                                
-                                                {/* Reserva G */}
-                                                <div>
-                                                  <input
-                                                    type="text"
-                                                    value={item.reserva_g501 || ""}
-                                                    onChange={e => updateReservaField(item.id, "reserva_g501", e.target.value)}
-                                                    placeholder="G501..."
-                                                    className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/60 focus:bg-slate-900/80 rounded px-2 py-1 text-[11px] font-mono text-slate-400 transition-all outline-none"
-                                                  />
-                                                </div>
-
-                                                 {/* Código */}
-                                                 <div className="text-left select-text">
-                                                   <span className="text-[11px] font-mono text-slate-400">
-                                                     {cleanCodigo}
-                                                   </span>
-                                                 </div>
-                                                 
-                                                 {/* Descrição */}
-                                                 <div className="text-left select-text truncate" title={desc}>
-                                                   <span className="text-[11px] text-slate-300">
-                                                     {desc}
-                                                   </span>
-                                                 </div>
-
-                                                {/* Volume Enviado */}
-                                                <div className="text-center">
-                                                  <input
-                                                    type="number"
-                                                    value={item.quantidade_enviada || 0}
-                                                    onChange={e => updateReservaField(item.id, "quantidade_enviada", Number(e.target.value))}
-                                                    className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/60 focus:bg-slate-900/80 rounded px-1.5 py-1 text-xs font-mono text-slate-300 text-center transition-all outline-none"
-                                                  />
-                                                </div>
-
-                                                {/* Sit. A */}
-                                                <div className="text-center">
-                                                  <span className={cn(
-                                                    "inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider",
-                                                    item.situacao_a501 === 'CONFIRMADO'
-                                                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                                                      : item.situacao_a501 === 'CANCELADO'
-                                                      ? "bg-rose-500/20 text-rose-400 border border-rose-500/30"
-                                                      : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                                                  )}>
-                                                    {item.situacao_a501 === 'CONFIRMADO' ? 'CONFIRMADO' : item.situacao_a501 === 'CANCELADO' ? 'CANCELADO' : 'PENDENTE'}
-                                                  </span>
-                                                </div>
-
-                                                {/* Sit. G */}
-                                                <div className="text-center">
-                                                  <span className={cn(
-                                                    "inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider",
-                                                    item.situacao_g501 === 'CONFIRMADO'
-                                                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                                                      : item.situacao_g501 === 'CANCELADO'
-                                                      ? "bg-rose-500/20 text-rose-400 border border-rose-500/30"
-                                                      : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                                                  )}>
-                                                    {item.situacao_g501 === 'CONFIRMADO' ? 'CONFIRMADO' : item.situacao_g501 === 'CANCELADO' ? 'CANCELADO' : 'PENDENTE'}
-                                                  </span>
-                                                </div>
-
-
-
-                                                {/* Excluir Reserva */}
-                                                <div className="text-center" onClick={(e) => e.stopPropagation()}>
-                                                  {user && (
-                                                    <button
-                                                      onClick={(e) => handleDeleteReserva(item.id, e)}
-                                                      className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                                                      title="Excluir reserva"
-                                                    >
-                                                      <Trash2 size={13} />
-                                                    </button>
-                                                  )}
-                                                </div>
-                                              </div>
-                                            );
-                                          })}
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  });
-                                })()}
-                  </div>
-                </div>
-              </motion.div>
-            </div>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+            className={cn(
+              "fixed top-4 right-4 z-[9999] px-5 py-3 rounded-2xl text-sm font-semibold shadow-2xl flex items-center gap-2",
+              toast.type === 'success' ? "bg-emerald-600 text-white" : "bg-rose-600 text-white"
+            )}
+          >
+            {toast.type === 'success' ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+            {toast.msg}
+          </motion.div>
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {isNewLoteModalOpen && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsNewLoteModalOpen(false)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-            <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="relative w-full max-w-md bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-white/10 rounded-[2.5rem] p-8 shadow-2xl overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-600 to-indigo-600" />
-              <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-6 flex items-center gap-3">
-                <Plus className="text-blue-600 dark:text-blue-500" /> Novo Lote de Retrabalho
-              </h2>
-              <form onSubmit={async (e) => {
-                e.preventDefault();
-                const formData = new FormData(e.currentTarget);
-                const data = {
-                  lote: Number(formData.get('lote')),
-                  codigo: String(formData.get('codigo')),
-                  status: String(formData.get('status')),
-                  embalagens: Number(formData.get('embalagens')),
-                };
-                
-                const { error } = await supabase.from('lotes_config').insert([data]);
-                if (!error) {
-                  setIsNewLoteModalOpen(false);
-                  fetchData();
-                } else {
-                  alert("Erro ao criar lote: " + error.message);
-                }
-              }} className="space-y-4">
-                <div>
-                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5 block">Número do Lote</label>
-                  <input 
-                    name="lote" 
-                    required 
-                    type="number" 
-                    defaultValue={Math.max(...lotesConfig.map(l => Number(l.lote) || 0), 0) + 1}
-                    className="w-full bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-blue-500/50 transition-all" 
-                    placeholder="Ex: 4" 
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5 block">Código do Produto (SKU)</label>
-                  <input name="codigo" required type="text" className="w-full bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-blue-500/50 transition-all" placeholder="Ex: 0685-04" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5 block">Embalagens</label>
-                    <input name="embalagens" required type="number" className="w-full bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-blue-500/50 transition-all" placeholder="Qtd" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5 block">Status Inicial</label>
-                    <select name="status" className="w-full bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white text-xs focus:outline-none focus:border-blue-500/50 transition-all appearance-none">
-                      <option value="Em fila">Em fila</option>
-                      <option value="Aguardando">Aguardando</option>
-                      <option value="Em andamento">Em andamento</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setIsNewLoteModalOpen(false)} className="flex-1 px-4 py-3 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-900 dark:text-white text-[11px] font-semibold uppercase transition-all">Cancelar</button>
-                  <button type="submit" className="flex-2 px-8 py-3 rounded-xl bg-blue-600 text-white text-[11px] font-semibold uppercase shadow-lg shadow-blue-500/20 transition-all">Criar Lote</button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-
-        {isNewReservaModalOpen && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsNewReservaModalOpen(false)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-            <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="relative w-full max-w-md bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-white/10 rounded-[2.5rem] p-8 shadow-2xl overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-600 to-teal-600" />
-              <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-2 flex items-center gap-3">
-                <Plus className="text-emerald-500" /> Nova Reserva
-              </h2>
-              <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold mb-6">Lote: {selectedLoteForReserva}</p>
-              
-              <form onSubmit={async (e) => {
-                e.preventDefault();
-                const formData = new FormData(e.currentTarget);
-                const resA = String(formData.get('reserva_a501') || '').trim();
-                const resG = String(formData.get('reserva_g501') || '').trim();
-
-                // Trava contra importação/criação de reservas duplicadas
-                if (resA || resG) {
-                  const isDuplicate = records.some(r => 
-                    (resA && r.reserva_a501?.trim() === resA) || 
-                    (resG && r.reserva_g501?.trim() === resG)
-                  );
-                  if (isDuplicate) {
-                    alert(`Atenção: A reserva (A: ${resA || 'N/A'} / G: ${resG || 'N/A'}) já foi cadastrada e não pode ser duplicada!`);
-                    return;
-                  }
-                }
-
-                const data = {
-                  lote: selectedLoteForReserva,
-                  quantidade_enviada: Number(formData.get('quantidade_enviada')),
-                  reserva_a501: resA,
-                  reserva_g501: resG,
-                  data_inicio: new Date().toISOString(),
-                  status: 'EM ANDAMENTO'
-                };
-                
-                const { error } = await supabase.from('retrabalhos').insert([data]);
-                if (!error) {
-                  setIsNewReservaModalOpen(false);
-                  fetchData();
-                } else {
-                  alert("Erro ao adicionar reserva: " + error.message);
-                }
-              }} className="space-y-4">
-                <div>
-                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5 block">Quantidade Enviada</label>
-                  <input name="quantidade_enviada" required type="number" className="w-full bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-emerald-500/50 transition-all" placeholder="Ex: 500" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5 block">Reserva A501</label>
-                    <input name="reserva_a501" className="w-full bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-emerald-500/50 transition-all" placeholder="OP" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5 block">Reserva G501</label>
-                    <input name="reserva_g501" className="w-full bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-emerald-500/50 transition-all" placeholder="OP" />
-                  </div>
-                </div>
-                <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setIsNewReservaModalOpen(false)} className="flex-1 px-4 py-3 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-900 dark:text-white text-[11px] font-semibold uppercase transition-all">Cancelar</button>
-                  <button type="submit" className="flex-2 px-8 py-3 rounded-xl bg-emerald-600 text-white text-[11px] font-semibold uppercase shadow-lg shadow-emerald-500/20 transition-all">Adicionar</button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-
-
-
-
-        {editingLote && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setEditingLote(null)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
-            <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="relative w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 shadow-xl overflow-hidden">
-              <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-2 flex items-center gap-3">
-                <Edit3 className="text-blue-600 dark:text-blue-500" /> Editar Lote
-              </h2>
-              <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold mb-6">Lote: {editingLote.lote}</p>
-              
-              <form onSubmit={async (e) => {
-                e.preventDefault();
-                const formData = new FormData(e.currentTarget);
-                const statusValue = String(formData.get('status'));
-                const embalagensValue = Number(formData.get('embalagens'));
-                const { error } = await supabase.from('lotes_config').update({ 
-                  status: statusValue,
-                  embalagens: embalagensValue
-}).eq('lote', editingLote.lote);
-            if (!error) {
-                  setEditingLote(null);
-                  fetchData();
-                } else {
-                  alert("Erro ao atualizar: " + error.message);
-                }
-              }} className="space-y-6">
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5 block ml-1">Quantidade de Embalagens</label>
-                    <input 
-                      name="embalagens" 
-                      type="number" 
-                      defaultValue={editingLote.totalEmbalagens} 
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-semibold text-slate-900 dark:text-white font-mono focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-slate-400" 
-                      placeholder="Qtd total do lote" 
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1 block ml-1">Status do Lote</label>
-                <div className="grid grid-cols-2 gap-2">
-  {[
-    { id: 'Aguardando', label: 'Aguardando', icon: Hourglass, color: 'amber' },
-    { id: 'Em andamento', label: 'Em andamento', icon: PlayCircle, color: 'blue' },
-    { id: 'Pausado', label: 'Pausado', icon: PauseCircle, color: 'rose' },
-    { id: 'Finalizado', label: 'Finalizado', icon: CheckCircle2, color: 'emerald' },
-    { id: 'Em fila', label: 'Em Fila', icon: ListMusic, color: 'violet' },
-  ].map((status) => (
-    <button
-      key={status.id}
-      type="button"
-      onClick={() => setTempStatus(status.id)}
-      className={cn(
-        "flex items-center gap-3 px-4 py-3 rounded-xl border text-[10px] font-semibold uppercase tracking-widest transition-all",
-        status.id === 'Em fila' && "col-span-2",
-        tempStatus === status.id ? `bg-${status.color}-600 text-white border-${status.color}-400 shadow-lg` : "bg-white/5 border-white/10 text-slate-500 hover:bg-white/10"
-      )}
-    >
-      <status.icon size={12} />
-      {status.label}
-    </button>
-  ))}
-</div>
-                    <input type="hidden" name="status" value={tempStatus} />
-                  </div>
-                </div>
-                <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setEditingLote(null)} className="flex-1 px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-white text-[11px] font-semibold uppercase transition-all">Cancelar</button>
-                  <button type="submit" className="flex-2 px-8 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-semibold uppercase shadow-sm transition-all">Salvar</button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-
-        {isViagemModalOpen && editingViagemGroup && (
-          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              exit={{ opacity: 0 }} 
-              onClick={() => setIsViagemModalOpen(false)} 
-              className="absolute inset-0 bg-black/90 backdrop-blur-md" 
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar programação, produto..."
+              className="pl-9 pr-4 py-2 text-xs rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 w-64"
             />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }} 
-              animate={{ opacity: 1, scale: 1, y: 0 }} 
-              exit={{ opacity: 0, scale: 0.9, y: 20 }} 
-              className="relative bg-[#0B1120] border border-white/10 rounded-xl overflow-hidden shadow-2xl transition-all duration-500 w-full max-w-6xl"
-            >
+          </div>
+          <button onClick={fetchData} className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+            <RefreshCw size={14} />
+          </button>
+        </div>
+        <button
+          onClick={() => setIsNewProgOpen(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl transition-colors shadow-lg shadow-blue-500/20"
+        >
+          <Plus size={14} /> Nova Programação
+        </button>
+      </div>
 
-              <div className="absolute top-0 left-0 w-full h-px bg-white/10" />
-              
-              <div className="p-8 overflow-y-auto max-h-[90vh] custom-scrollbar">
+      {/* Content */}
+      {loading ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3 text-slate-400">
+            <RefreshCw size={24} className="animate-spin" />
+            <span className="text-xs font-medium">Carregando programações...</span>
+          </div>
+        </div>
+      ) : filteredProgramacoes.length === 0 ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center text-slate-400">
+            <Hammer size={40} className="mx-auto mb-3 opacity-30" />
+            <p className="text-sm font-medium">Nenhuma programação encontrada</p>
+            <p className="text-xs mt-1">Crie uma nova programação para começar</p>
+          </div>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto space-y-4 pb-8">
+          {filteredProgramacoes.map(prog => {
+            const progItens = (itensByProg.get(prog.id) || []).sort((a, b) =>
+              new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+            )
+            const progStatus = getProgramacaoStatus(progItens)
+            const isExpanded = expandedProg.has(prog.id)
 
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-3">
-                    <Truck size={16} className="text-amber-500/70" />
-                    <h2 className="text-sm font-semibold text-white tracking-tight">
-                      {editingViagemGroup.number && editingViagemGroup.number !== 'SEM_VIAGEM' ? 'Editar Viagem' : 'Nova Viagem'}
-                    </h2>
+            return (
+              <div key={prog.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+
+                {/* Programação Header */}
+                <div
+                  className="flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                  onClick={() => setExpandedProg(prev => {
+                    const s = new Set(prev)
+                    s.has(prog.id) ? s.delete(prog.id) : s.add(prog.id)
+                    return s
+                  })}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className={cn("flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-lg border uppercase tracking-wider", STATUS_STYLE[progStatus] || STATUS_STYLE['Aguardando'])}>
+                      {STATUS_ICON[progStatus]}
+                      {progStatus}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Calendar size={13} className="text-slate-400" />
+                        <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                          Programação {fmtDate(prog.data)}
+                        </span>
+                      </div>
+                      {prog.descricao && (
+                        <p className="text-xs text-slate-400 mt-0.5 ml-5">{prog.descricao}</p>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+                      {progItens.length} produto{progItens.length !== 1 ? 's' : ''}
+                    </span>
                   </div>
-                  <button 
-                    onClick={() => setIsViagemModalOpen(false)}
-                    className="w-8 h-8 rounded-md bg-white/[0.04] border border-white/10 flex items-center justify-center text-slate-500 hover:text-white hover:bg-white/[0.08] transition-colors"
-                  >
-                    <X size={14} />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={e => {
+                        e.stopPropagation()
+                        setSelectedProgForItem(prog)
+                        setIsNewItemOpen(true)
+                      }}
+                      className="p-1.5 text-slate-400 hover:text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                      title="Adicionar produto"
+                    >
+                      <Plus size={14} />
+                    </button>
+                    <button
+                      onClick={e => { e.stopPropagation(); handleDeleteProg(prog.id) }}
+                      className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors"
+                      title="Excluir programação"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                    <ChevronDown size={16} className={cn("text-slate-400 transition-transform", isExpanded && "rotate-180")} />
+                  </div>
                 </div>
 
-                <form onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (confirmingViagem) return;
-                  setConfirmingViagem(true);
-
-                  try {
-                    const formData = new FormData(e.currentTarget);
-                    const viagemNum = Number(formData.get('viagem_num'));
-                    const viagemDate = formData.get('viagem_date') as string;
-                    
-                    if (isNaN(viagemNum)) {
-                      alert("Por favor, insira um número de viagem válido.");
-                      setConfirmingViagem(false);
-                      return;
-                    }
-
-                    const updateData: any = { numero_da_viagem: viagemNum };
-                    if (viagemDate) updateData.enviado_ao_cd = viagemDate;
-                    
-                    const turnoVal = formData.get('turno_da_viagem');
-                    if (turnoVal) updateData.turno_da_viagem = Number(turnoVal);
-
-                    if (!editingViagemGroup.number || editingViagemGroup.number === 'SEM_VIAGEM') {
-                      // EXCEL MODE: Bulk Update/Insert
-                      const validRows = excelRows.filter(row => row.a501 || row.g501);
-                      if (validRows.length === 0) {
-                        alert("Insira pelo menos uma reserva na tabela.");
-                        setConfirmingViagem(false);
-                        return;
-                      }
-
-                      if (!selectedLoteDetail) {
-                        setConfirmingViagem(false);
-                        return;
-                      }
-
-                      for (const row of validRows) {
-                        const resA = row.a501?.trim();
-                        const resG = row.g501?.trim();
-
-                        const existingInLote = selectedLoteDetail.items.find(item =>
-                          (resA && item.reserva_a501?.trim() === resA) ||
-                          (resG && item.reserva_g501?.trim() === resG)
-                        );
-
-                        const isDuplicateGlobal = records.some(r =>
-                          (resA && r.reserva_a501?.trim() === resA) ||
-                          (resG && r.reserva_g501?.trim() === resG)
-                        );
-
-                        if (existingInLote) {
-                          await supabase.from('retrabalhos').update(updateData).eq('id', existingInLote.id);
-                        } else if (!isDuplicateGlobal) {
-                          await supabase.from('retrabalhos').insert([{
-                            ...updateData,
-                            reserva_a501: resA || row.a501,
-                            reserva_g501: resG || row.g501,
-                            quantidade_enviada: Number(row.qtd) || 0,
-                            lote: selectedLoteDetail.lote,
-                            status: 'EM ANDAMENTO',
-                            data_inicio: new Date().toISOString()
-                          }]);
-                        }
-                      }
-                    } else {
-                      // NORMAL EDIT MODE: Bulk Update
-                      const ids = editingViagemGroup.items.map(i => i.id);
-                      const { error } = await supabase.from('retrabalhos').update(updateData).in('id', ids);
-                      if (error) alert("Erro ao atualizar: " + error.message);
-                      
-                      // Salva alterações de células individuais
-                      await saveAllViagemChanges();
-                    }
-
-                    // Cleanup and Refresh
-                    await fetchData();
-                    setIsViagemModalOpen(false);
-                    setSelectionMode(false);
-                    setSelectedReservas(new Set());
-                    setExcelRows(Array.from({ length: 20 }, () => ({ a501: '', g501: '', qtd: '' })));
-                  } catch (err) {
-                    alert("Erro ao salvar viagem: " + (err instanceof Error ? err.message : String(err)));
-                  } finally {
-                    setConfirmingViagem(false);
-                  }
-                }} className="space-y-5">
-                  {/* Common Header Fields */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest block">Nº da Viagem</label>
-                      <div className="relative group">
-                        <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-600 group-focus-within:text-amber-500 transition-colors" />
-                        <input 
-                          name="viagem_num"
-                          type="number"
-                          required
-                          autoFocus
-                          defaultValue={editingViagemGroup.number && editingViagemGroup.number !== "SEM_VIAGEM" ? editingViagemGroup.number : ""}
-                          placeholder="Ex: 12345"
-                          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-md py-2.5 pl-9 pr-3 text-sm font-mono text-white focus:outline-none focus:border-amber-500/40 focus:bg-amber-500/[0.04] transition-all no-spinner"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest block">Data de Envio</label>
-                      <div className="relative group">
-                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-600 group-focus-within:text-blue-500 transition-colors" />
-                        <input 
-                          name="viagem_date"
-                          type="date"
-                          defaultValue={editingViagemGroup.items[0]?.enviado_ao_cd?.split('T')[0] || ""}
-                          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-md py-2.5 pl-9 pr-3 text-sm font-mono text-white focus:outline-none focus:border-blue-500/40 focus:bg-blue-500/[0.04] transition-all [color-scheme:dark]"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest block">Turno da Viagem</label>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {[1, 2, 3].map((t) => (
-                          <label key={t} className="relative cursor-pointer">
-                            <input 
-                              type="radio" 
-                              name="turno_da_viagem" 
-                              value={t}
-                              defaultChecked={editingViagemGroup.items[0]?.turno_da_viagem === t}
-                              className="peer sr-only" 
-                            />
-                            <div className="flex items-center justify-center py-2.5 rounded-md bg-white/[0.04] border border-white/[0.08] text-slate-500 peer-checked:bg-amber-500/10 peer-checked:text-amber-400 peer-checked:border-amber-500/30 transition-all text-[10px] font-semibold tracking-wider">
-                              T{t}
-                            </div>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Body: Excel Table for NEW or Summary for EDIT */}
-                  {!editingViagemGroup.number || editingViagemGroup.number === 'SEM_VIAGEM' ? (
-                    <div className="space-y-0">
-                      <div className="flex items-center justify-between px-1 pb-2">
-                        <h3 className="text-[9px] font-semibold text-slate-500 uppercase tracking-[0.18em] flex items-center gap-1.5">
-                          <Table size={11} className="opacity-70" /> Tabela de Lançamento
-                        </h3>
-                        <button 
-                          type="button" 
-                          onClick={() => setExcelRows(Array.from({ length: 20 }, () => ({ a501: '', g501: '', qtd: '' })))}
-                          className="text-[9px] font-semibold text-rose-500/70 hover:text-rose-400 uppercase tracking-widest flex items-center gap-1 transition-colors"
-                        >
-                          <Trash2 size={11} /> Limpar
-                        </button>
-                      </div>
-
-                      <div className="border border-white/[0.06] rounded-sm overflow-hidden bg-[#0B1120]">
-                        {/* Table Header */}
-                        <div className="grid grid-cols-[40px_1fr_1fr_140px] border-b border-white/[0.06] bg-white/[0.03]">
-                          <div className="px-3 py-2.5 text-[9px] font-semibold text-slate-500 uppercase tracking-widest text-center border-r border-white/[0.06]">#</div>
-                          <div className="px-4 py-2.5 text-[9px] font-semibold text-slate-500 uppercase tracking-widest border-r border-white/[0.06]">Reserva A501</div>
-                          <div className="px-4 py-2.5 text-[9px] font-semibold text-slate-500 uppercase tracking-widest border-r border-white/[0.06]">Reserva G501</div>
-                          <div className="px-4 py-2.5 text-[9px] font-semibold text-slate-500 uppercase tracking-widest">Quantidade</div>
+                {/* Programação Items */}
+                <AnimatePresence>
+                  {isExpanded && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      {progItens.length === 0 ? (
+                        <div className="px-5 py-8 text-center text-xs text-slate-400 border-t border-slate-100 dark:border-slate-800">
+                          Nenhum produto nesta programação.{' '}
+                          <button onClick={() => { setSelectedProgForItem(prog); setIsNewItemOpen(true) }} className="text-blue-500 hover:underline">Adicionar</button>
                         </div>
+                      ) : (
+                        <div className="border-t border-slate-100 dark:border-slate-800">
+                          {/* Items Table Header */}
+                          <div className="grid grid-cols-[2fr_1fr_1.5fr_1fr_1fr_1fr_1fr_auto] gap-2 px-5 py-2 bg-slate-50/80 dark:bg-slate-800/50 text-[9px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">
+                            <span>Produto</span>
+                            <span>Embalagens</span>
+                            <span>Paletes Previstos</span>
+                            <span>Reservas Abertas</span>
+                            <span>Confirmadas</span>
+                            <span>Retrabalhado</span>
+                            <span>Status</span>
+                            <span>Ações</span>
+                          </div>
 
-                        {/* Table Body */}
-                        <div className="max-h-[38vh] overflow-y-auto custom-scrollbar">
-                          {excelRows.map((row, idx) => {
-                            // Smart paste handler - works from any cell
-                            const handleSmartPaste = (e: React.ClipboardEvent<HTMLInputElement>, startCol: number) => {
-                              const text = e.clipboardData.getData('text');
-                              const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
-                              
-                              // Detect if it's multi-column (tab or semicolon separated)
-                              const isTSV = lines.some(l => l.includes('\t'));
-                              const isCSV = !isTSV && lines.some(l => l.includes(';'));
-                              const isMultiCol = isTSV || isCSV;
-                              
-                              if (!isMultiCol && lines.length === 1) return; // single value, paste normally
-                              
-                              e.preventDefault();
-                              const sep = isTSV ? '\t' : ';';
-                              const newRows = [...excelRows];
-                              
-                              lines.forEach((line, lineOffset) => {
-                                const cells = line.split(sep).map(c => c.trim());
-                                const targetIdx = idx + lineOffset;
-                                
-                                // Expand rows if needed
-                                while (newRows.length <= targetIdx) {
-                                  newRows.push({ a501: '', g501: '', qtd: '' });
-                                }
-                                
-                                const cols: (keyof typeof newRows[0])[] = ['a501', 'g501', 'qtd'];
-                                cells.forEach((val, colOffset) => {
-                                  const colIdx = startCol + colOffset;
-                                  if (colIdx < cols.length) {
-                                    newRows[targetIdx][cols[colIdx]] = val;
-                                  }
-                                });
-                              });
-                              
-                              setExcelRows(newRows);
-                            };
+                          {progItens.map(item => {
+                            const { rs, qtdAberta, qtdConfirmada, qtdRetrabalhada, grade, paletes, sobra, base, abertas, confirmadas } = getItemStats(item)
+                            const isItemExpanded = expandedItem.has(item.id)
+                            const isConcluido = item.status === 'Concluído'
 
                             return (
-                              <div key={idx} className="grid grid-cols-[40px_1fr_1fr_140px] border-b border-white/[0.04] hover:bg-white/[0.015] transition-colors">
-                                <div className="flex items-center justify-center border-r border-white/[0.06] text-[10px] font-mono text-slate-600">{idx + 1}</div>
-                                <div className="border-r border-white/[0.06]">
-                                  <input 
-                                    value={row.a501}
-                                    onChange={(e) => {
-                                      const newRows = [...excelRows];
-                                      newRows[idx].a501 = e.target.value;
-                                      setExcelRows(newRows);
-                                    }}
-                                    onPaste={(e) => handleSmartPaste(e, 0)}
-                                    placeholder="Digitar..."
-                                    className="w-full bg-transparent px-4 py-2 text-[11px] font-mono text-slate-200 focus:outline-none placeholder:text-slate-700"
-                                  />
-                                </div>
-                                <div className="border-r border-white/[0.06]">
-                                  <input 
-                                    value={row.g501}
-                                    onChange={(e) => {
-                                      const newRows = [...excelRows];
-                                      newRows[idx].g501 = e.target.value;
-                                      setExcelRows(newRows);
-                                    }}
-                                    onPaste={(e) => handleSmartPaste(e, 1)}
-                                    placeholder="Digitar..."
-                                    className="w-full bg-transparent px-4 py-2 text-[11px] font-mono text-slate-200 focus:outline-none placeholder:text-slate-700"
-                                  />
-                                </div>
-                                <div>
-                                  <input 
-                                    value={row.qtd}
-                                    onChange={(e) => {
-                                      const newRows = [...excelRows];
-                                      newRows[idx].qtd = e.target.value;
-                                      setExcelRows(newRows);
-                                    }}
-                                    onPaste={(e) => handleSmartPaste(e, 2)}
-                                    placeholder="Qtd..."
-                                    className="w-full bg-transparent px-4 py-2 text-[11px] font-mono text-slate-200 focus:outline-none placeholder:text-slate-700"
-                                  />
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
+                              <div key={item.id} className={cn("border-b border-slate-100 dark:border-slate-800 last:border-0", isConcluido && "opacity-70")}>
+                                {/* Item Row */}
+                                <div
+                                  className="grid grid-cols-[2fr_1fr_1.5fr_1fr_1fr_1fr_1fr_auto] gap-2 px-5 py-3.5 items-center hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors cursor-pointer"
+                                  onClick={() => setExpandedItem(prev => {
+                                    const s = new Set(prev); s.has(item.id) ? s.delete(item.id) : s.add(item.id); return s
+                                  })}
+                                >
+                                  {/* Produto */}
+                                  <div className="flex items-center gap-2">
+                                    <ChevronRight size={12} className={cn("text-slate-400 transition-transform flex-shrink-0", isItemExpanded && "rotate-90")} />
+                                    <div>
+                                      <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{item.produto}</p>
+                                      {base && <p className="text-[10px] text-slate-400 truncate max-w-[180px]">{base["Descrição"]}</p>}
+                                    </div>
+                                  </div>
 
-                        {/* Add Line Footer */}
-                        <button 
-                          type="button"
-                          onClick={() => setExcelRows([...excelRows, { a501: '', g501: '', qtd: '' }])}
-                          className="w-full py-2.5 text-center text-[9px] font-semibold text-slate-600 uppercase tracking-widest hover:text-slate-400 hover:bg-white/[0.02] transition-colors border-t border-white/[0.04]"
-                        >
-                          + Adicionar Linha
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="rounded-xl overflow-hidden border border-slate-700/60">
-                      <div className="overflow-auto max-h-[55vh]">
-                        <table className="w-full border-collapse text-left" style={{ minWidth: 900 }}>
-                          <thead className="sticky top-0 z-10 bg-slate-800">
-                            <tr>
-                              {selectionMode && (
-                                <th className="w-9 px-2 py-2 text-center border-r border-b border-slate-700/60 bg-slate-800">
-                                  <button type="button" onClick={() => { if (selectedReservas.size === localViagemItems.length) setSelectedReservas(new Set()); else setSelectedReservas(new Set(localViagemItems.map(i => i.id))); }} className="w-4 h-4 rounded border border-white/30 bg-white/10 flex items-center justify-center mx-auto">
-                                    {selectedReservas.size === localViagemItems.length && <Check size={10} className="text-white stroke-[3]" />}
-                                  </button>
-                                </th>
-                              )}
-                              <th className="w-10 px-2 py-2 text-[10px] font-medium text-slate-400 text-center border-r border-b border-slate-700/60">#</th>
-                              <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider border-r border-b border-slate-700/60">Reserva A</th>
-                              <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider border-r border-b border-slate-700/60">Reserva G</th>
-                              <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider text-center border-r border-b border-slate-700/60">Volume</th>
-                              <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider text-center border-r border-b border-slate-700/60">Sit. A</th>
-                              <th className="px-3 py-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider text-center border-r border-b border-slate-700/60">Sit. G</th>
-                              <th className="w-9 border-b border-slate-700/60"></th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {localViagemItems.map((item, idx) => (
-                              <tr
-                                key={item.id}
-                                onClick={(e) => handleViagemRowClick(e, idx, item.id)}
-                                className={cn(
-                                  "group/row border-b border-slate-700/40 hover:bg-slate-800/40 transition-colors select-none cursor-pointer",
-                                  selectedReservas.has(item.id) && "bg-emerald-500/10"
-                                )}
-                              >
-                                {selectionMode && (
-                                  <td className="px-2 py-1 text-center border-r border-slate-700/40" onClick={(e) => e.stopPropagation()}>
-                                    <button onClick={() => { const s = new Set(selectedReservas); if (s.has(item.id)) s.delete(item.id); else s.add(item.id); setSelectedReservas(s); }} className={cn("w-4 h-4 rounded border flex items-center justify-center mx-auto transition-all", selectedReservas.has(item.id) ? "bg-emerald-500 border-emerald-400" : "border-white/20 bg-white/5 group-hover/row:border-emerald-500/50")}>
-                                      {selectedReservas.has(item.id) && <Check size={10} className="text-white stroke-[3]" />}
+                                  {/* Embalagens */}
+                                  <span className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+                                    {fmtNum(item.embalagens)}
+                                  </span>
+
+                                  {/* Paletes Previstos */}
+                                  <div className="text-xs text-slate-500">
+                                    {grade > 0 ? (
+                                      <span>
+                                        <span className="font-bold text-slate-700 dark:text-slate-300">{paletes}</span> pal.
+                                        {sobra > 0 && <span className="text-slate-400"> + {sobra} un.</span>}
+                                        <span className="text-[9px] text-slate-400 ml-1">(grade {grade})</span>
+                                      </span>
+                                    ) : <span className="text-slate-400">Grade n/a</span>}
+                                  </div>
+
+                                  {/* Reservas Abertas */}
+                                  <div className="text-xs">
+                                    <span className={cn("font-bold", qtdAberta > 0 ? "text-amber-500" : "text-slate-400")}>
+                                      {fmtNum(qtdAberta)}
+                                    </span>
+                                    {abertas.length > 0 && <span className="text-[9px] text-slate-400 ml-1">({abertas.length})</span>}
+                                  </div>
+
+                                  {/* Confirmadas */}
+                                  <div className="text-xs">
+                                    <span className={cn("font-bold", confirmadas.length > 0 ? "text-emerald-500" : "text-slate-400")}>
+                                      {fmtNum(qtdConfirmada)}
+                                    </span>
+                                    {confirmadas.length > 0 && <span className="text-[9px] text-slate-400 ml-1">({confirmadas.length})</span>}
+                                  </div>
+
+                                  {/* Retrabalhado */}
+                                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                                    {fmtNum(qtdRetrabalhada)}
+                                  </span>
+
+                                  {/* Status */}
+                                  <div>
+                                    <span className={cn("inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-md border uppercase tracking-wider", STATUS_STYLE[item.status] || STATUS_STYLE['Aguardando'])}>
+                                      {STATUS_ICON[item.status]}
+                                      {item.status}
+                                    </span>
+                                  </div>
+
+                                  {/* Ações */}
+                                  <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                                    {!isConcluido && (
+                                      <button
+                                        onClick={() => { setImportTarget({ item, prog }); setIsImportOpen(true) }}
+                                        className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-500/10 rounded-lg transition-colors"
+                                        title="Importar planilha"
+                                      >
+                                        <Upload size={13} />
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => handlePrintReservas(item, prog)}
+                                      className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                                      title="Imprimir reservas"
+                                    >
+                                      <Printer size={13} />
                                     </button>
-                                  </td>
-                                )}
-                                {/* # */}
-                                <td className="px-2 py-0 text-center border-r border-slate-700/40 text-[11px] font-mono text-slate-500 select-none bg-slate-800/30">
-                                  {String(idx + 1).padStart(2, '0')}
-                                </td>
-                            
-                                {/* Reserva A */}
-                                <td className="p-0 border-r border-slate-700/40">
-                                  <input 
-                                    type="text" 
-                                    value={item.reserva_a501 || ""} 
-                                    onChange={e => updateLocalViagemItem(item.id, "reserva_a501", e.target.value)} 
-                                    onBlur={e => { updateReservaField(item.id, "reserva_a501", e.target.value); saveReservaFieldToDb(item.id, "reserva_a501", e.target.value); }}
-                                    onPaste={e => handleViagemPaste(e, idx, "reserva_a501")}
-                                    onClick={e => e.stopPropagation()}
-                                    placeholder="A501..." 
-                                    className="w-full h-full px-3 py-2 bg-transparent text-[11px] font-mono text-white focus:outline-none focus:bg-blue-500/10 transition-colors" 
-                                  />
-                                </td>
-                            
-                                {/* Reserva G */}
-                                <td className="p-0 border-r border-slate-700/40">
-                                  <input 
-                                    type="text" 
-                                    value={item.reserva_g501 || ""} 
-                                    onChange={e => updateLocalViagemItem(item.id, "reserva_g501", e.target.value)} 
-                                    onBlur={e => { updateReservaField(item.id, "reserva_g501", e.target.value); saveReservaFieldToDb(item.id, "reserva_g501", e.target.value); }}
-                                    onPaste={e => handleViagemPaste(e, idx, "reserva_g501")}
-                                    onClick={e => e.stopPropagation()}
-                                    placeholder="G501..." 
-                                    className="w-full h-full px-3 py-2 bg-transparent text-[11px] font-mono text-slate-300 focus:outline-none focus:bg-blue-500/10 transition-colors" 
-                                  />
-                                </td>
-                                {/* Volume Enviado */}
-                                <td className="p-0 border-r border-slate-700/40">
-                                  <input 
-                                    type="number" 
-                                    value={item.quantidade_enviada ?? ""} 
-                                    onChange={e => updateLocalViagemItem(item.id, "quantidade_enviada", e.target.value)} 
-                                    onBlur={e => { updateReservaField(item.id, "quantidade_enviada", Number(e.target.value)); saveReservaFieldToDb(item.id, "quantidade_enviada", e.target.value); }}
-                                    onPaste={e => handleViagemPaste(e, idx, "quantidade_enviada")}
-                                    onClick={e => e.stopPropagation()}
-                                    className="w-full h-full px-2 py-2 bg-transparent text-[11px] font-mono font-bold text-white text-center focus:outline-none focus:bg-blue-500/10 transition-colors no-spinner" 
-                                  />
-                                </td>
-                                {/* Sit. A */}
-                                <td className="px-2 py-1 text-center border-r border-slate-700/40" onClick={e => e.stopPropagation()}>
-                                  <select
-                                    value={item.situacao_a501 || 'PENDENTE'}
-                                    onChange={e => {
-                                      const val = e.target.value;
-                                      updateLocalViagemItem(item.id, "situacao_a501", val);
-                                      updateReservaField(item.id, "situacao_a501", val);
-                                      saveReservaFieldToDb(item.id, "situacao_a501", val);
-                                    }}
-                                    className={cn(
-                                      "px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-slate-900 focus:outline-none cursor-pointer border transition-colors",
-                                      item.situacao_a501 === 'CONFIRMADO'
-                                        ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-                                        : item.situacao_a501 === 'CANCELADO'
-                                        ? "bg-rose-500/20 text-rose-400 border-rose-500/30"
-                                        : "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                                    {!isConcluido && (
+                                      <button
+                                        onClick={() => { setConsolidarTarget(item); setIsConsolidarOpen(true) }}
+                                        className="p-1.5 text-slate-400 hover:text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                                        title="Consolidar (concluir)"
+                                      >
+                                        <CheckCircle2 size={13} />
+                                      </button>
                                     )}
-                                  >
-                                    <option value="PENDENTE" className="bg-slate-900 text-amber-400 font-bold">PENDENTE</option>
-                                    <option value="CONFIRMADO" className="bg-slate-900 text-emerald-400 font-bold">CONFIRMADO</option>
-                                    <option value="CANCELADO" className="bg-slate-900 text-rose-400 font-bold">CANCELADO</option>
-                                  </select>
-                                </td>
-                                {/* Sit. G */}
-                                <td className="px-2 py-1 text-center border-r border-slate-700/40" onClick={e => e.stopPropagation()}>
-                                  <select
-                                    value={item.situacao_g501 || 'PENDENTE'}
-                                    onChange={e => {
-                                      const val = e.target.value;
-                                      updateLocalViagemItem(item.id, "situacao_g501", val);
-                                      updateReservaField(item.id, "situacao_g501", val);
-                                      saveReservaFieldToDb(item.id, "situacao_g501", val);
-                                    }}
-                                    className={cn(
-                                      "px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-slate-900 focus:outline-none cursor-pointer border transition-colors",
-                                      item.situacao_g501 === 'CONFIRMADO'
-                                        ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-                                        : item.situacao_g501 === 'CANCELADO'
-                                        ? "bg-rose-500/20 text-rose-400 border-rose-500/30"
-                                        : "bg-amber-500/20 text-amber-400 border-amber-500/30"
-                                    )}
-                                  >
-                                    <option value="PENDENTE" className="bg-slate-900 text-amber-400 font-bold">PENDENTE</option>
-                                    <option value="CONFIRMADO" className="bg-slate-900 text-emerald-400 font-bold">CONFIRMADO</option>
-                                    <option value="CANCELADO" className="bg-slate-900 text-rose-400 font-bold">CANCELADO</option>
-                                  </select>
-                                </td>
-
-                                {/* Excluir */}
-                                <td className="px-1 py-0 text-center" onClick={(e) => e.stopPropagation()}>
-                                  {user && (
-                                    <button onClick={(e) => handleDeleteReserva(item.id, e)} className="p-1 rounded text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer" title="Excluir reserva">
+                                    <button
+                                      onClick={() => handleDeleteItem(item.id)}
+                                      className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors"
+                                      title="Excluir item"
+                                    >
                                       <Trash2 size={13} />
                                     </button>
+                                  </div>
+                                </div>
+
+                                {/* Reservas expandidas */}
+                                <AnimatePresence>
+                                  {isItemExpanded && rs.length > 0 && (
+                                    <motion.div
+                                      initial={{ height: 0, opacity: 0 }}
+                                      animate={{ height: 'auto', opacity: 1 }}
+                                      exit={{ height: 0, opacity: 0 }}
+                                      transition={{ duration: 0.15 }}
+                                      className="bg-slate-50/50 dark:bg-slate-800/30 border-t border-slate-100 dark:border-slate-800"
+                                    >
+                                      <div className="px-8 py-3">
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2">Reservas ({rs.length})</p>
+                                        <div className="overflow-x-auto">
+                                          <table className="w-full text-xs">
+                                            <thead>
+                                              <tr className="text-[9px] text-slate-400 uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">
+                                                <th className="pb-2 text-left font-semibold">Nº Reserva</th>
+                                                <th className="pb-2 text-left font-semibold">Depósito</th>
+                                                <th className="pb-2 text-left font-semibold">Recept.</th>
+                                                <th className="pb-2 text-right font-semibold">Qtd Nec.</th>
+                                                <th className="pb-2 text-right font-semibold">Qtd Dif.</th>
+                                                <th className="pb-2 text-left font-semibold">Status</th>
+                                                <th className="pb-2 text-left font-semibold">Data Nec.</th>
+                                                <th className="pb-2"></th>
+                                              </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                              {[...rs].sort((a, b) => (a.numero_reserva > b.numero_reserva ? 1 : -1)).map(r => {
+                                                const confirmada = r.quantidade_diferenca === 0
+                                                return (
+                                                  <tr key={r.id} className="hover:bg-white dark:hover:bg-slate-800/50 transition-colors">
+                                                    <td className="py-2 font-mono font-bold text-slate-700 dark:text-slate-300">{r.numero_reserva}</td>
+                                                    <td className="py-2 text-slate-500">{r.deposito || '—'}</td>
+                                                    <td className="py-2 text-slate-500">{r.deposito_receptor || '—'}</td>
+                                                    <td className="py-2 text-right text-slate-700 dark:text-slate-300 tabular-nums">{fmtNum(r.qtd_necessaria)}</td>
+                                                    <td className="py-2 text-right tabular-nums">
+                                                      <span className={r.quantidade_diferenca > 0 ? "text-amber-500 font-semibold" : "text-slate-400"}>
+                                                        {fmtNum(r.quantidade_diferenca)}
+                                                      </span>
+                                                    </td>
+                                                    <td className="py-2">
+                                                      <span className={cn("inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase",
+                                                        confirmada ? "text-emerald-500 bg-emerald-500/10 border-emerald-500/20" : "text-amber-500 bg-amber-500/10 border-amber-500/20"
+                                                      )}>
+                                                        {confirmada ? <CheckCircle2 size={9} /> : <Clock size={9} />}
+                                                        {confirmada ? 'Confirmada' : 'Aberta'}
+                                                      </span>
+                                                    </td>
+                                                    <td className="py-2 text-slate-400 text-[10px]">{fmtDate(r.data_necessidade)}</td>
+                                                    <td className="py-2">
+                                                      <button onClick={() => handleDeleteReserva(r.id)} className="p-1 text-slate-300 hover:text-rose-500 rounded transition-colors">
+                                                        <X size={11} />
+                                                      </button>
+                                                    </td>
+                                                  </tr>
+                                                )
+                                              })}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      </div>
+                                    </motion.div>
                                   )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
+                                  {isItemExpanded && rs.length === 0 && (
+                                    <motion.div
+                                      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                                      className="px-8 py-4 text-xs text-slate-400 bg-slate-50/50 dark:bg-slate-800/30 border-t border-slate-100 dark:border-slate-800"
+                                    >
+                                      Nenhuma reserva importada. Use o botão{' '}
+                                      <button
+                                        onClick={() => { setImportTarget({ item, prog }); setIsImportOpen(true) }}
+                                        className="text-blue-500 hover:underline inline-flex items-center gap-1"
+                                      >
+                                        <Upload size={10} /> Importar planilha
+                                      </button>
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </motion.div>
                   )}
-
-                  <div className="flex gap-3 pt-3">
-                    <button 
-                      type="button"
-                      onClick={() => setIsViagemModalOpen(false)}
-                      disabled={confirmingViagem}
-                      className="flex-1 py-2.5 rounded-md bg-white/[0.04] border border-white/[0.08] text-slate-400 text-[10px] font-semibold uppercase tracking-wider hover:bg-white/[0.08] hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      Cancelar
-                    </button>
-                    <button 
-                      type="submit"
-                      disabled={confirmingViagem}
-                      className="flex-[2] py-2.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[10px] font-semibold uppercase tracking-wider hover:bg-amber-500/25 transition-colors flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                    >
-                      {confirmingViagem ? <RefreshCw className="animate-spin" size={13} /> : <Save size={13} />}
-                      Confirmar Viagem
-                    </button>
-                  </div>
-                </form>
-
+                </AnimatePresence>
               </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+            )
+          })}
+        </div>
+      )}
 
-      {/* Confirmados Table Modal */}
+      {/* ─── Modal: Nova Programação ─── */}
       <AnimatePresence>
-        {isConfirmadosModalOpen && (
-          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsConfirmadosModalOpen(false)}
-              className="absolute inset-0 bg-black/90 backdrop-blur-md"
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 16 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 16 }}
-              className="relative bg-[#0B1120] border border-white/10 rounded-xl overflow-hidden shadow-2xl w-full max-w-2xl"
-            >
-              <div className="absolute top-0 left-0 w-full h-px bg-white/10" />
-
-              <div className="p-6">
-                {/* Header */}
-                <div className="flex items-center justify-between mb-5">
-                  <div className="flex items-center gap-3">
-                    <FileText size={15} className="text-slate-400" />
-                    <h2 className="text-sm font-semibold text-white tracking-tight">Importar Confirmados</h2>
-                  </div>
-                  <button
-                    onClick={() => setIsConfirmadosModalOpen(false)}
-                    className="w-8 h-8 rounded-md bg-white/[0.04] border border-white/10 flex items-center justify-center text-slate-500 hover:text-white hover:bg-white/[0.08] transition-colors"
-                  >
-                    <X size={14} />
-                  </button>
+        {isNewProgOpen && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setIsNewProgOpen(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0, scale: 0.92, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.92, y: 20 }}
+              className="relative w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 shadow-2xl">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-t-3xl" />
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
+                <Calendar size={18} className="text-blue-500" /> Nova Programação
+              </h2>
+              <form onSubmit={handleCreateProgramacao} className="space-y-4">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1.5">Data da Programação *</label>
+                  <input name="data" type="date" required
+                    defaultValue={new Date().toISOString().split('T')[0]}
+                    className="w-full bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500/50 [color-scheme:dark]" />
                 </div>
-
-                {/* Table */}
-                <div className="space-y-0">
-                  <div className="flex items-center justify-between px-1 pb-2">
-                    <h3 className="text-[9px] font-semibold text-slate-500 uppercase tracking-[0.18em] flex items-center gap-1.5">
-                      <Table size={11} className="opacity-70" /> Tabela de Confirmações
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmadosRows(Array.from({ length: 20 }, () => ({ reserva: '' })))}
-                      className="text-[9px] font-semibold text-rose-500/70 hover:text-rose-400 uppercase tracking-widest flex items-center gap-1 transition-colors"
-                    >
-                      <Trash2 size={11} /> Limpar
-                    </button>
-                  </div>
-
-                  <div className="border border-white/[0.06] rounded-sm overflow-hidden bg-[#0B1120]">
-                    {/* Header */}
-                    <div className="grid grid-cols-[40px_1fr] border-b border-white/[0.06] bg-white/[0.03]">
-                      <div className="px-3 py-2.5 text-[9px] font-semibold text-slate-500 uppercase tracking-widest text-center border-r border-white/[0.06]">#</div>
-                      <div className="px-4 py-2.5 text-[9px] font-semibold text-slate-500 uppercase tracking-widest">Nº da Reserva (A501 ou G501)</div>
-                    </div>
-
-                    {/* Body */}
-                    <div className="max-h-[40vh] overflow-y-auto custom-scrollbar divide-y divide-white/[0.04]">
-                      {confirmadosRows.map((row, idx) => {
-                        const handleSmartPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
-                          const text = e.clipboardData.getData('text')
-                          const lines = text.split(/\r?\n/).filter(l => l.trim() !== '')
-                          if (lines.length === 0) return
-                          e.preventDefault()
-
-                          const pastedCodes: string[] = []
-                          lines.forEach(line => {
-                            const cells = line.split(/[\t;,]/).map(c => c.trim()).filter(Boolean)
-                            cells.forEach(c => pastedCodes.push(c))
-                          })
-
-                          const newRows = [...confirmadosRows]
-                          pastedCodes.forEach((code, offset) => {
-                            const targetIdx = idx + offset
-                            while (newRows.length <= targetIdx) newRows.push({ reserva: '' })
-                            newRows[targetIdx] = { reserva: code }
-                          })
-                          setConfirmadosRows(newRows)
-                        }
-
-                        return (
-                          <div key={idx} className="grid grid-cols-[40px_1fr] hover:bg-white/[0.015] transition-colors">
-                            <div className="flex items-center justify-center border-r border-white/[0.06] text-[10px] font-mono text-slate-600 py-1.5">{idx + 1}</div>
-                            <div>
-                              <input
-                                value={row.reserva}
-                                onChange={(e) => {
-                                  const newRows = [...confirmadosRows]
-                                  newRows[idx].reserva = e.target.value
-                                  setConfirmadosRows(newRows)
-                                }}
-                                onPaste={handleSmartPaste}
-                                placeholder="Digitar ou colar reserva A501 ou G501..."
-                                className="w-full bg-transparent px-4 py-2 text-[11px] font-mono text-slate-200 focus:outline-none placeholder:text-slate-700 uppercase"
-                              />
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-
-                    {/* Add Line */}
-                    <button
-                      type="button"
-                      onClick={() => setConfirmadosRows([...confirmadosRows, { reserva: '' }])}
-                      className="w-full py-2.5 text-center text-[9px] font-semibold text-slate-600 uppercase tracking-widest hover:text-slate-400 hover:bg-white/[0.02] transition-colors border-t border-white/[0.04]"
-                    >
-                      + Adicionar Linha
-                    </button>
-                  </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1.5">Descrição (opcional)</label>
+                  <input name="descricao" type="text" placeholder="Ex: Retrabalho linha 3"
+                    className="w-full bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500/50" />
                 </div>
-
-                {/* Actions */}
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => setIsConfirmadosModalOpen(false)}
-                    disabled={processingConfirmados}
-                    className="flex-1 py-2.5 rounded-md bg-white/[0.04] border border-white/[0.08] text-slate-400 text-[10px] font-semibold uppercase tracking-wider hover:bg-white/[0.08] hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
+                <div className="flex gap-3 pt-2">
+                  <button type="button" onClick={() => setIsNewProgOpen(false)}
+                    className="flex-1 px-4 py-3 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-white text-xs font-semibold transition-all">
                     Cancelar
                   </button>
-                  <button
-                    type="button"
-                    onClick={handleProcessConfirmadosTable}
-                    disabled={processingConfirmados}
-                    className="flex-[2] py-2.5 rounded-md bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-[10px] font-semibold uppercase tracking-wider hover:bg-emerald-500/20 transition-colors flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    {processingConfirmados ? <RefreshCw className="animate-spin" size={13} /> : <Check size={13} />}
-                    Confirmar Reservas
+                  <button type="submit" disabled={saving}
+                    className="flex-[2] px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-lg shadow-blue-500/20 transition-all disabled:opacity-50">
+                    {saving ? 'Criando...' : 'Criar Programação'}
                   </button>
                 </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── Modal: Novo Item ─── */}
+      <AnimatePresence>
+        {isNewItemOpen && selectedProgForItem && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => { setIsNewItemOpen(false); setSelectedProgForItem(null) }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0, scale: 0.92, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.92, y: 20 }}
+              className="relative w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 shadow-2xl">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-600 to-teal-600 rounded-t-3xl" />
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-1 flex items-center gap-2">
+                <Package size={18} className="text-emerald-500" /> Adicionar Produto
+              </h2>
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold mb-6">
+                Programação {fmtDate(selectedProgForItem.data)}
+              </p>
+              <form onSubmit={handleCreateItem} className="space-y-4">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1.5">Código do Produto *</label>
+                  <input name="produto" type="text" required placeholder="Ex: 5618-04"
+                    className="w-full bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-emerald-500/50 uppercase" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1.5">Quantidade de Embalagens *</label>
+                  <input name="embalagens" type="number" required placeholder="Ex: 800" min={1}
+                    className="w-full bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-emerald-500/50" />
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <button type="button" onClick={() => { setIsNewItemOpen(false); setSelectedProgForItem(null) }}
+                    className="flex-1 px-4 py-3 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-white text-xs font-semibold transition-all">
+                    Cancelar
+                  </button>
+                  <button type="submit" disabled={saving}
+                    className="flex-[2] px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-50">
+                    {saving ? 'Adicionando...' : 'Adicionar'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── Modal: Importar Planilha ─── */}
+      <AnimatePresence>
+        {isImportOpen && importTarget && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => { if (!importing) { setIsImportOpen(false); setImportTarget(null) } }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0, scale: 0.92, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.92, y: 20 }}
+              className="relative w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 shadow-2xl">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-violet-600 to-purple-600 rounded-t-3xl" />
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-1 flex items-center gap-2">
+                <FileSpreadsheet size={18} className="text-violet-500" /> Importar Planilha de Reservas
+              </h2>
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold mb-4">
+                {importTarget.item.produto} — Prog. {fmtDate(importTarget.prog.data)}
+              </p>
+
+              {/* Rules */}
+              <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 mb-5 text-xs text-slate-500 dark:text-slate-400 space-y-1">
+                <p className="font-semibold text-slate-700 dark:text-slate-300 mb-2">Filtros aplicados automaticamente:</p>
+                <p>• <strong>Material</strong> = {importTarget.item.produto}</p>
+                <p>• <strong>Depósito</strong> ∈ A501, G501</p>
+                <p>• <strong>Depósito receptor</strong> ∈ A560, G560</p>
+                <p>• <strong>Data necessidade</strong> ≥ {fmtDate(importTarget.prog.data)}</p>
+              </div>
+
+              <input
+                ref={importFileRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                onChange={e => {
+                  const file = e.target.files?.[0]
+                  if (file) handleImportFile(file)
+                  e.target.value = ''
+                }}
+              />
+              <button
+                onClick={() => importFileRef.current?.click()}
+                disabled={importing}
+                className="w-full py-4 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl flex flex-col items-center gap-2 text-slate-500 hover:border-violet-500/50 hover:text-violet-500 hover:bg-violet-500/5 transition-all disabled:opacity-50 cursor-pointer"
+              >
+                {importing ? (
+                  <>
+                    <RefreshCw size={24} className="animate-spin text-violet-500" />
+                    <span className="text-sm font-semibold">Importando...</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload size={24} />
+                    <span className="text-sm font-semibold">Clique para selecionar arquivo</span>
+                    <span className="text-xs">.xlsx, .xls, .csv</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={() => { setIsImportOpen(false); setImportTarget(null) }}
+                disabled={importing}
+                className="w-full mt-3 py-2.5 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-600 dark:text-white text-xs font-semibold transition-all disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── Modal: Consolidar ─── */}
+      <AnimatePresence>
+        {isConsolidarOpen && consolidarTarget && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => { if (!consolidating) { setIsConsolidarOpen(false); setConsolidarTarget(null) } }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0, scale: 0.92, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.92, y: 20 }}
+              className="relative w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 shadow-2xl">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-600 to-green-600 rounded-t-3xl" />
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
+                <CheckCircle2 size={18} className="text-emerald-500" /> Consolidar Retrabalho
+              </h2>
+              <p className="text-xs text-slate-500 mb-5">Esta ação é irreversível. Confirme os dados abaixo:</p>
+
+              <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 mb-5 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Produto</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{consolidarTarget.produto}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Quantidade</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{fmtNum(consolidarTarget.embalagens)} un.</span>
+                </div>
+                <div className="border-t border-slate-200 dark:border-slate-700 pt-2 mt-2 space-y-1 text-xs text-slate-500">
+                  <p>✓ Abater {fmtNum(consolidarTarget.embalagens)} un. da posição <strong>Retrabalho</strong> no Mapeamento</p>
+                  <p>✓ Criar registro de saída em <strong>Monitoramento</strong></p>
+                  <p>✓ Marcar item como <strong>Concluído</strong></p>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button onClick={() => { setIsConsolidarOpen(false); setConsolidarTarget(null) }} disabled={consolidating}
+                  className="flex-1 px-4 py-3 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-white text-xs font-semibold transition-all disabled:opacity-50">
+                  Cancelar
+                </button>
+                <button onClick={handleConsolidar} disabled={consolidating}
+                  className="flex-[2] px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                  {consolidating ? <><RefreshCw size={13} className="animate-spin" /> Consolidando...</> : <><CheckCircle2 size={13} /> Confirmar Consolidação</>}
+                </button>
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* Scanner Toast Notification */}
-      <AnimatePresence>
-        {scanToast.show && (
-          <motion.div
-            initial={{ opacity: 0, y: 50, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
-            className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[10001] pointer-events-none"
-          >
-            <div className={cn(
-              "px-8 py-4 rounded-2xl border backdrop-blur-xl shadow-2xl flex items-center gap-4",
-              scanToast.type === 'success' 
-                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" 
-                : "bg-rose-500/10 border-rose-500/20 text-rose-400"
-            )}>
-              <div className={cn(
-                "w-10 h-10 rounded-xl flex items-center justify-center",
-                scanToast.type === 'success' ? "bg-emerald-500/20" : "bg-rose-500/20"
-              )}>
-                {scanToast.type === 'success' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
-              </div>
-              <div>
-                <div className="text-[10px] font-semibold uppercase tracking-[0.2em] opacity-50">Scanner Automático</div>
-                <div className="text-sm font-semibold uppercase tracking-tight">{scanToast.message}</div>
-              </div>
-              <div className="ml-4 w-1 h-8 rounded-full bg-current opacity-20 animate-pulse" />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   )
 }
