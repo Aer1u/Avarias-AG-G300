@@ -484,13 +484,23 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
   }
 
   // ── Consolidar ─────────────────────────────────────────────────────────────
-  const handleConsolidar = async () => {
+ const handleConsolidar = async () => {
     const item = consolidarTarget
     if (!item) return
+
+    const { paresConfirmados, qtdConfirmada } = getItemStats(item)
+    // nunca consolida mais do que o programado
+    const qtdFinal = Math.min(qtdConfirmada, item.embalagens)
+
+    if (qtdFinal <= 0) {
+      showToast('Nenhuma reserva confirmada para consolidar.', 'error')
+      return
+    }
+
     setConsolidating(true)
     try {
       const today = new Date().toISOString().split('T')[0]
-      let remaining = item.embalagens
+      let remaining = qtdFinal
 
       // Abate do mapeamento (posição Retrabalho)
       const { data: pallets, error: stockErr } = await supabase
@@ -500,8 +510,8 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
       if (stockErr) throw stockErr
 
       const totalStock = (pallets || []).reduce((s: number, p: any) => s + (p.Quantidade || 0), 0)
-      if (totalStock < item.embalagens) {
-        showToast(`Estoque insuficiente em Retrabalho: disponível ${totalStock}, necessário ${item.embalagens}`, 'error')
+      if (totalStock < qtdFinal) {
+        showToast(`Estoque insuficiente em Retrabalho: disponível ${totalStock}, necessário ${qtdFinal}`, 'error')
         return
       }
 
@@ -517,11 +527,11 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
         }
       }
 
-      // Registro em Monitoramento
+      // Registro em Monitoramento (só o que foi confirmado)
       await supabase.from('Registros').insert([{
         Data: today,
         Produto: item.produto,
-        'Saída': item.embalagens,
+        'Saída': qtdFinal,
         Entrada: null,
         Origem: 'Retrabalho',
         tipo_avaria: 'Sem Avaria',
@@ -529,16 +539,33 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
         Observação: `Consolidação de programação de retrabalho`,
       }])
 
-      // Marcar como Concluído
-      await supabase.from('programacao_itens').update({
-        status: 'Concluído',
-        confirmado_em: new Date().toISOString()
-      }).eq('id', item.id)
+      // Remove as reservas já consolidadas (para não consolidar duas vezes)
+      const idsConsolidados = paresConfirmados.flatMap(p =>
+        [p.reservaA?.id, p.reservaG?.id].filter((x): x is number => x != null)
+      )
+      if (idsConsolidados.length > 0) {
+        await supabase.from('reservas_programacao').delete().in('id', idsConsolidados)
+      }
+
+      // Saldo que ainda falta consolidar
+      const saldo = item.embalagens - qtdFinal
+      if (saldo <= 0) {
+        await supabase.from('programacao_itens').update({
+          status: 'Concluído',
+          confirmado_em: new Date().toISOString()
+        }).eq('id', item.id)
+      } else {
+        await supabase.from('programacao_itens').update({ embalagens: saldo }).eq('id', item.id)
+      }
 
       await fetchData()
       setIsConsolidarOpen(false)
       setConsolidarTarget(null)
-      showToast(`${item.produto} consolidado com sucesso!`)
+      showToast(
+        saldo <= 0
+          ? `${item.produto} consolidado e concluído!`
+          : `${fmtNum(qtdFinal)} un. consolidadas. Faltam ${fmtNum(saldo)} un.`
+      )
     } catch (err: any) {
       showToast('Erro ao consolidar: ' + err.message, 'error')
     } finally {
@@ -671,6 +698,14 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
   // RENDER
   // ─────────────────────────────────────────────────────────────────────────────
 
+const consolidarStats = consolidarTarget ? getItemStats(consolidarTarget) : null
+  const qtdConsolidar = consolidarTarget && consolidarStats
+    ? Math.min(consolidarStats.qtdConfirmada, consolidarTarget.embalagens)
+    : 0
+
+  return (
+    <div className="flex flex-col flex-1 min-h-0 gap-4 relative">
+  
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-4 relative">
 
@@ -1246,7 +1281,7 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
         )}
       </AnimatePresence>
 
-      {/* ─── Modal: Consolidar ─── */}
+         {/* ─── Modal: Consolidar ─── */}
       <AnimatePresence>
         {isConsolidarOpen && consolidarTarget && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
@@ -1267,13 +1302,21 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
                   <span className="font-bold text-slate-800 dark:text-slate-200">{consolidarTarget.produto}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Quantidade</span>
+                  <span className="text-slate-400">Programado</span>
                   <span className="font-bold text-slate-800 dark:text-slate-200">{fmtNum(consolidarTarget.embalagens)} un.</span>
                 </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Confirmado (a consolidar)</span>
+                  <span className="font-bold text-emerald-500">{fmtNum(qtdConsolidar)} un.</span>
+                </div>
                 <div className="border-t border-slate-200 dark:border-slate-700 pt-2 mt-2 space-y-1 text-xs text-slate-500">
-                  <p>✓ Abater {fmtNum(consolidarTarget.embalagens)} un. da posição <strong>Retrabalho</strong> no Mapeamento</p>
+                  <p>✓ Abater {fmtNum(qtdConsolidar)} un. da posição <strong>Retrabalho</strong> no Mapeamento</p>
                   <p>✓ Criar registro de saída em <strong>Monitoramento</strong></p>
-                  <p>✓ Marcar item como <strong>Concluído</strong></p>
+                  <p>
+                    ✓ {qtdConsolidar >= consolidarTarget.embalagens
+                      ? <>Marcar item como <strong>Concluído</strong></>
+                      : <>Manter item em andamento (faltam {fmtNum(consolidarTarget.embalagens - qtdConsolidar)} un.)</>}
+                  </p>
                 </div>
               </div>
 
@@ -1282,7 +1325,7 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
                   className="flex-1 px-4 py-3 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-white text-xs font-semibold transition-all disabled:opacity-50">
                   Cancelar
                 </button>
-                <button onClick={handleConsolidar} disabled={consolidating}
+                <button onClick={handleConsolidar} disabled={consolidating || qtdConsolidar <= 0}
                   className="flex-[2] px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
                   {consolidating ? <><RefreshCw size={13} className="animate-spin" /> Consolidando...</> : <><CheckCircle2 size={13} /> Confirmar Consolidação</>}
                 </button>
