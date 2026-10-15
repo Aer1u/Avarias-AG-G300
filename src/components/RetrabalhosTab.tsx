@@ -29,6 +29,8 @@ interface ProgramacaoItem {
   embalagens: number
   status: string
   confirmado_em: string | null
+  qtd_consolidada: number | null   // ← adicionar
+  qtd_diferenca: number | null     // ← adicionar
   created_at: string
 }
 
@@ -41,6 +43,7 @@ interface Reserva {
   deposito_receptor: string | null
   qtd_necessaria: number
   quantidade_diferenca: number
+  consolidado: boolean | null   // ← adicionar
   created_at: string
 }
 
