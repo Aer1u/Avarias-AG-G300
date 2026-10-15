@@ -702,10 +702,6 @@ const consolidarStats = consolidarTarget ? getItemStats(consolidarTarget) : null
   const qtdConsolidar = consolidarTarget && consolidarStats
     ? Math.min(consolidarStats.qtdConfirmada, consolidarTarget.embalagens)
     : 0
-
-  return (
-    <div className="flex flex-col flex-1 min-h-0 gap-4 relative">
-  
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-4 relative">
 
