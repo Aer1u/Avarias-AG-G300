@@ -50,6 +50,16 @@ interface BaseCodigo {
   "Grade"?: string | number
 }
 
+interface ParReserva {
+  parIndex: number
+  reservaA: Reserva | null
+  reservaG: Reserva | null
+  qtd: number
+  status: 'Completo' | 'Falta G501' | 'Falta A501'
+  confirmado: boolean
+  dataNecessidade: string | null
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const calcPaletes = (embalagens: number, grade: number) => {
@@ -57,6 +67,38 @@ const calcPaletes = (embalagens: number, grade: number) => {
   const paletes = Math.floor(embalagens / grade)
   const sobra = embalagens - paletes * grade
   return { paletes, sobra }
+}
+
+const buildParesReservas = (rs: Reserva[]): ParReserva[] => {
+  const rsA = rs
+    .filter(r => r.deposito === 'A501' || r.deposito_receptor === 'A501')
+    .sort((a, b) => a.numero_reserva.localeCompare(b.numero_reserva, undefined, { numeric: true }))
+  const rsG = rs
+    .filter(r => r.deposito === 'G501' || r.deposito_receptor === 'G501')
+    .sort((a, b) => a.numero_reserva.localeCompare(b.numero_reserva, undefined, { numeric: true }))
+
+  const count = Math.max(rsA.length, rsG.length)
+  const pares: ParReserva[] = []
+
+  for (let i = 0; i < count; i++) {
+    const rA = rsA[i] || null
+    const rG = rsG[i] || null
+    const qtd = rA?.qtd_necessaria || rG?.qtd_necessaria || 0
+    const confirmado = (!rA || rA.quantidade_diferenca === 0) && (!rG || rG.quantidade_diferenca === 0)
+    const dataNecessidade = rA?.data_necessidade || rG?.data_necessidade || null
+    const status = (rA && rG) ? 'Completo' : (rA ? 'Falta G501' : 'Falta A501')
+
+    pares.push({
+      parIndex: i + 1,
+      reservaA: rA,
+      reservaG: rG,
+      qtd,
+      status,
+      confirmado,
+      dataNecessidade
+    })
+  }
+  return pares
 }
 
 const getProgramacaoStatus = (itens: ProgramacaoItem[]) => {
@@ -88,6 +130,68 @@ const fmtDate = (d: string | null) => {
 
 const fmtNum = (n: number | null | undefined) =>
   n == null ? '—' : n.toLocaleString('pt-BR')
+
+const parseDate = (val: any): string | null => {
+  if (!val) return null
+  if (val instanceof Date && !isNaN(val.getTime())) {
+    const y = val.getFullYear()
+    const m = String(val.getMonth() + 1).padStart(2, '0')
+    const d = String(val.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  }
+  const s = String(val).trim()
+  if (!s) return null
+
+  // Excel serial number (e.g. 46162)
+  if (/^\d{5}$/.test(s)) {
+    const serial = parseInt(s, 10)
+    const epoch = new Date(Date.UTC(1899, 11, 30))
+    epoch.setUTCDate(epoch.getUTCDate() + serial)
+    return epoch.toISOString().split('T')[0]
+  }
+
+  // ISO YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    return s.slice(0, 10)
+  }
+
+  // DD/MM/YYYY or M/D/YY or DD/MM/YY
+  if (s.includes('/')) {
+    const parts = s.split('/')
+    if (parts.length === 3) {
+      let p0 = parseInt(parts[0], 10)
+      let p1 = parseInt(parts[1], 10)
+      let p2 = parseInt(parts[2], 10)
+      if (p2 < 100) p2 += 2000
+
+      let day = p0
+      let month = p1
+      if (p0 <= 12 && p1 > 12) {
+        day = p1
+        month = p0
+      }
+      return `${p2}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    }
+  }
+
+  return null
+}
+
+const parseNum = (val: any): number => {
+  if (typeof val === 'number') return val
+  const s = String(val || '').trim()
+  if (!s) return 0
+  if (s.includes('.') && s.includes(',')) {
+    return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0
+  }
+  if (s.includes(',')) {
+    return parseFloat(s.replace(',', '.')) || 0
+  }
+  if (s.includes('.') && /^\d+\.\d{3}$/.test(s)) {
+    return parseFloat(s.replace(/\./g, '')) || 0
+  }
+  return parseFloat(s) || 0
+}
 
 const normCol = (s: string) =>
   s.trim().toLowerCase()
@@ -207,15 +311,20 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
   // ── Item stats helpers ─────────────────────────────────────────────────────
   const getItemStats = (item: ProgramacaoItem) => {
     const rs = reservasByItem.get(item.id) || []
+    const pares = buildParesReservas(rs)
     const abertas = rs.filter(r => r.quantidade_diferenca > 0)
     const confirmadas = rs.filter(r => r.quantidade_diferenca === 0)
-    const qtdAberta = abertas.reduce((s, r) => s + (r.qtd_necessaria || 0), 0)
-    const qtdConfirmada = confirmadas.reduce((s, r) => s + (r.qtd_necessaria || 0), 0)
-    const qtdRetrabalhada = rs.reduce((s, r) => s + (r.qtd_necessaria || 0), 0)
+    const paresCompletos = pares.filter(p => p.status === 'Completo')
+    const paresConfirmados = pares.filter(p => p.confirmado && p.status === 'Completo')
+    const paresAbertos = pares.filter(p => !p.confirmado || p.status !== 'Completo')
+    const qtdAberta = paresAbertos.reduce((s, p) => s + p.qtd, 0)
+    const qtdConfirmada = paresConfirmados.reduce((s, p) => s + p.qtd, 0)
+    const qtdRetrabalhada = pares.reduce((s, p) => s + p.qtd, 0)
+    const diferenca = Math.max(0, qtdRetrabalhada - (item.embalagens || 0))
     const base = baseMap.get(item.produto.toUpperCase())
     const grade = base?.["Grade"] ? Number(base["Grade"]) : 0
     const { paletes, sobra } = calcPaletes(item.embalagens, grade)
-    return { rs, abertas, confirmadas, qtdAberta, qtdConfirmada, qtdRetrabalhada, grade, paletes, sobra, base }
+    return { rs, pares, paresCompletos, paresConfirmados, paresAbertos, abertas, confirmadas, qtdAberta, qtdConfirmada, qtdRetrabalhada, diferenca, grade, paletes, sobra, base }
   }
 
   // ── Create Programação ─────────────────────────────────────────────────────
@@ -456,55 +565,89 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
   }
 
   // ── Print Reservas ─────────────────────────────────────────────────────────
-  const handlePrintReservas = (item: ProgramacaoItem, prog: Programacao) => {
+  const handlePrintReservas = (item: ProgramacaoItem, prog: Programacao, singleParIndex?: number) => {
     const rs = reservasByItem.get(item.id) || []
     if (rs.length === 0) { showToast('Sem reservas para imprimir', 'error'); return }
+
+    let pares = buildParesReservas(rs)
+    if (singleParIndex != null) {
+      pares = pares.filter(p => p.parIndex === singleParIndex)
+      if (pares.length === 0) { showToast('Par não encontrado', 'error'); return }
+    }
 
     const printWin = window.open('', '_blank')
     if (!printWin) return
 
     const qrUrl = (text: string) =>
-      `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(text)}`
+      `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(text)}`
 
-    const cards = rs.map(r => {
-      const confirmada = r.quantidade_diferenca === 0
-      return `
-        <div style="border:2px solid #000;width:480px;padding:18px;border-radius:10px;background:#fff;margin-bottom:18px;page-break-inside:avoid;">
-          <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px;">
-            <h2 style="margin:0;font-size:18px;font-weight:900;">${r.deposito || '—'} → ${r.deposito_receptor || '—'}</h2>
-            <span style="font-size:11px;padding:3px 8px;border-radius:5px;background:${confirmada ? '#dcfce7' : '#fef9c3'};color:${confirmada ? '#166534' : '#854d0e'};font-weight:700;">
-              ${confirmada ? '✓ CONFIRMADA' : '⏳ ABERTA'}
-            </span>
-          </div>
-          <div style="display:flex;align-items:center;gap:18px;">
-            <img src="${qrUrl(r.numero_reserva)}" style="width:140px;height:140px;flex-shrink:0;"/>
-            <div style="flex:1;">
-              <div style="font-size:26px;font-weight:900;font-family:monospace;margin-bottom:6px;">${r.numero_reserva}</div>
-              <div style="font-size:13px;margin-bottom:3px;"><strong>PRODUTO:</strong> ${item.produto}</div>
-              <div style="font-size:11px;color:#555;margin-bottom:3px;">${baseMap.get(item.produto.toUpperCase())?.["\u0044escri\u00e7\u00e3o"] || ''}</div>
-              <div style="font-size:13px;margin-bottom:3px;"><strong>QTD:</strong> ${fmtNum(r.qtd_necessaria)} un.</div>
-              ${r.data_necessidade ? `<div style="font-size:12px;color:#777;"><strong>DATA:</strong> ${fmtDate(r.data_necessidade)}</div>` : ''}
-              <div style="font-size:11px;color:#999;margin-top:4px;"><strong>PROG:</strong> ${fmtDate(prog.data)}</div>
-            </div>
+    const sku = item.produto
+    const desc = baseMap.get(item.produto.toUpperCase())?.["Descrição"] || ''
+
+    const renderCard = (title: string, resNum: string, qrCodeUrl: string, qtdVal: any) => `
+      <div style="border: 2px solid #000; width: 500px; padding: 20px; text-align: center; border-radius: 12px; background: white; margin-bottom: 20px;">
+        <h2 style="margin: 0 0 10px 0; font-size: 18px; text-transform: uppercase; font-weight: 900; color: #000; border-bottom: 2px solid #000; padding-bottom: 5px;">${title}</h2>
+        <div style="display: flex; align-items: center; gap: 20px; margin-top: 10px; text-align: left;">
+          ${resNum && resNum !== '—'
+            ? `<img src="${qrCodeUrl}" style="width: 150px; height: 150px;" />`
+            : `<div style="width: 150px; height: 150px; border: 1.5px dashed #bbb; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 28px;">—</div>`
+          }
+          <div style="flex: 1;">
+            <div style="font-size: 26px; font-weight: 900; color: #000; margin-bottom: 8px; font-family: monospace;">${resNum}</div>
+            <div style="margin-bottom: 4px; font-size: 13px;"><strong>CÓD:</strong> ${sku}</div>
+            <div style="margin-bottom: 4px; font-size: 11px; color: #444; line-height: 1.2;">${desc}</div>
+            <div style="margin-bottom: 4px; font-size: 13px;"><strong>QTD:</strong> ${qtdVal}</div>
           </div>
         </div>
-      `
+      </div>
+    `;
+
+    const pagesHtml = pares.map(par => {
+      const resNumA = par.reservaA?.numero_reserva || '—'
+      const resNumG = par.reservaG?.numero_reserva || '—'
+      const qrUrlA = resNumA !== '—' ? qrUrl(resNumA) : ''
+      const qrUrlG = resNumG !== '—' ? qrUrl(resNumG) : ''
+      const qtdA = par.reservaA ? `${fmtNum(par.reservaA.qtd_necessaria)} un` : '—'
+      const qtdG = par.reservaG ? `${fmtNum(par.reservaG.qtd_necessaria)} un` : '—'
+
+      return `
+        <div style="page-break-after: always; display: flex; flex-direction: column; align-items: center; padding: 30px; font-family: 'Inter', -apple-system, sans-serif; min-height: 95vh; box-sizing: border-box;">
+          
+          <!-- TOPO DA PÁGINA: Informações -->
+          <div style="text-align: center; margin-bottom: 30px; border-bottom: 4px solid #000; padding-bottom: 15px; width: 100%; max-width: 550px;">
+            <div style="font-size: 42px; font-weight: 900; color: #000; text-transform: uppercase; letter-spacing: -1px;">PALETE #${par.parIndex} - G300</div>
+            <div style="font-size: 14px; font-weight: 800; color: #444; text-transform: uppercase; margin-top: 5px; letter-spacing: 1px;">
+              DATA: ${fmtDate(par.dataNecessidade)} &nbsp; | &nbsp; CÓDIGO: ${sku}
+            </div>
+          </div>
+
+          <!-- MEIO: Cards de Reserva -->
+          <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 10px;">
+            ${renderCard('RESERVA A501', resNumA, qrUrlA, qtdA)}
+            ${renderCard('RESERVA G501', resNumG, qrUrlG, qtdG)}
+          </div>
+
+        </div>
+      `;
     }).join('')
 
     printWin.document.write(`
-      <html><head><title>Reservas ${item.produto} — ${fmtDate(prog.data)}</title>
-      <style>
-        @page{size:A4;margin:12mm}
-        body{margin:0;font-family:-apple-system,sans-serif}
-        @media print{.no-print{display:none}}
-      </style></head>
-      <body onload="setTimeout(()=>{window.print();window.close()},600)">
-        <div style="text-align:center;margin-bottom:20px;border-bottom:3px solid #000;padding-bottom:10px;">
-          <h1 style="margin:0;font-size:22px;font-weight:900;">PROGRAMAÇÃO ${fmtDate(prog.data)} — ${item.produto}</h1>
-          <p style="margin:4px 0 0;font-size:13px;color:#666;">${item.embalagens} embalagens &nbsp;|&nbsp; ${rs.length} reservas &nbsp;|&nbsp; ${rs.filter(r=>r.quantidade_diferenca===0).length} confirmadas</p>
-        </div>
-        <div style="display:flex;flex-wrap:wrap;gap:14px;justify-content:center;">${cards}</div>
-      </body></html>
+      <html>
+        <head>
+          <title>Imprimir Etiquetas - ${sku}</title>
+          <style>
+            @page { size: A4; margin: 0; }
+            body { margin: 0; padding: 0; background: #fff; }
+            @media print {
+              .no-print { display: none; }
+              body { -webkit-print-color-adjust: exact; }
+            }
+          </style>
+        </head>
+        <body onload="setTimeout(() => { window.print(); window.close(); }, 500);">
+          ${pagesHtml}
+        </body>
+      </html>
     `)
     printWin.document.close()
   }
@@ -521,6 +664,18 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
     if (!confirm('Excluir esta reserva?')) return
     await supabase.from('reservas_programacao').delete().eq('id', id)
     await fetchData()
+  }
+
+  const handleDeletePar = async (par: ParReserva) => {
+    if (!confirm(`Excluir as reservas do Palete #${par.parIndex}?`)) return
+    const ids: number[] = []
+    if (par.reservaA) ids.push(par.reservaA.id)
+    if (par.reservaG) ids.push(par.reservaG.id)
+    if (ids.length > 0) {
+      await supabase.from('reservas_programacao').delete().in('id', ids)
+      await fetchData()
+      showToast(`Palete #${par.parIndex} excluído`)
+    }
   }
 
   const handleDeleteProg = async (id: number) => {
@@ -674,19 +829,22 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
                       ) : (
                         <div className="border-t border-slate-100 dark:border-slate-800">
                           {/* Items Table Header */}
-                          <div className="grid grid-cols-[2fr_1fr_1.5fr_1fr_1fr_1fr_1fr_auto] gap-2 px-5 py-2 bg-slate-50/80 dark:bg-slate-800/50 text-[9px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">
-                            <span>Produto</span>
+                          <div
+                            style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.5fr 1fr 1fr 1fr 1fr 120px' }}
+                            className="gap-2 px-5 py-2 bg-slate-50/80 dark:bg-slate-800/50 text-[9px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 items-center"
+                          >
+                            <span className="pl-5">Produto</span>
                             <span>Embalagens</span>
                             <span>Paletes Previstos</span>
                             <span>Reservas Abertas</span>
                             <span>Confirmadas</span>
-                            <span>Retrabalhado</span>
+                            <span>Diferença</span>
                             <span>Status</span>
-                            <span>Ações</span>
+                            <span className="text-right pr-1">Ações</span>
                           </div>
 
                           {progItens.map(item => {
-                            const { rs, qtdAberta, qtdConfirmada, qtdRetrabalhada, grade, paletes, sobra, base, abertas, confirmadas } = getItemStats(item)
+                            const { rs, pares, paresCompletos, paresConfirmados, paresAbertos, qtdAberta, qtdConfirmada, qtdRetrabalhada, diferenca, grade, paletes, sobra, base, abertas, confirmadas } = getItemStats(item)
                             const isItemExpanded = expandedItem.has(item.id)
                             const isConcluido = item.status === 'Concluído'
 
@@ -694,29 +852,30 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
                               <div key={item.id} className={cn("border-b border-slate-100 dark:border-slate-800 last:border-0", isConcluido && "opacity-70")}>
                                 {/* Item Row */}
                                 <div
-                                  className="grid grid-cols-[2fr_1fr_1.5fr_1fr_1fr_1fr_1fr_auto] gap-2 px-5 py-3.5 items-center hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors cursor-pointer"
+                                  style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.5fr 1fr 1fr 1fr 1fr 120px' }}
+                                  className="gap-2 px-5 py-3.5 items-center hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors cursor-pointer"
                                   onClick={() => setExpandedItem(prev => {
                                     const s = new Set(prev); s.has(item.id) ? s.delete(item.id) : s.add(item.id); return s
                                   })}
                                 >
                                   {/* Produto */}
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
                                     <ChevronRight size={12} className={cn("text-slate-400 transition-transform flex-shrink-0", isItemExpanded && "rotate-90")} />
-                                    <div>
-                                      <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{item.produto}</p>
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-bold text-slate-800 dark:text-slate-200 truncate">{item.produto}</p>
                                       {base && <p className="text-[10px] text-slate-400 truncate max-w-[180px]">{base["Descrição"]}</p>}
                                     </div>
                                   </div>
 
                                   {/* Embalagens */}
-                                  <span className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+                                  <span className="text-sm font-semibold text-slate-600 dark:text-slate-300 min-w-0 truncate">
                                     {fmtNum(item.embalagens)}
                                   </span>
 
                                   {/* Paletes Previstos */}
-                                  <div className="text-xs text-slate-500">
+                                  <div className="text-xs text-slate-500 min-w-0">
                                     {grade > 0 ? (
-                                      <span>
+                                      <span className="truncate block">
                                         <span className="font-bold text-slate-700 dark:text-slate-300">{paletes}</span> pal.
                                         {sobra > 0 && <span className="text-slate-400"> + {sobra} un.</span>}
                                         <span className="text-[9px] text-slate-400 ml-1">(grade {grade})</span>
@@ -725,7 +884,7 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
                                   </div>
 
                                   {/* Reservas Abertas */}
-                                  <div className="text-xs">
+                                  <div className="text-xs min-w-0">
                                     <span className={cn("font-bold", qtdAberta > 0 ? "text-amber-500" : "text-slate-400")}>
                                       {fmtNum(qtdAberta)}
                                     </span>
@@ -733,20 +892,22 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
                                   </div>
 
                                   {/* Confirmadas */}
-                                  <div className="text-xs">
+                                  <div className="text-xs min-w-0">
                                     <span className={cn("font-bold", confirmadas.length > 0 ? "text-emerald-500" : "text-slate-400")}>
                                       {fmtNum(qtdConfirmada)}
                                     </span>
                                     {confirmadas.length > 0 && <span className="text-[9px] text-slate-400 ml-1">({confirmadas.length})</span>}
                                   </div>
 
-                                  {/* Retrabalhado */}
-                                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                                    {fmtNum(qtdRetrabalhada)}
-                                  </span>
+                                  {/* Diferença */}
+                                  <div className="min-w-0">
+                                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 min-w-0 truncate">
+                                      {fmtNum(diferenca)}
+                                    </span>
+                                  </div>
 
                                   {/* Status */}
-                                  <div>
+                                  <div className="min-w-0">
                                     <span className={cn("inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-md border uppercase tracking-wider", STATUS_STYLE[item.status] || STATUS_STYLE['Aguardando'])}>
                                       {STATUS_ICON[item.status]}
                                       {item.status}
@@ -754,7 +915,7 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
                                   </div>
 
                                   {/* Ações */}
-                                  <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                                  <div className="flex items-center justify-end gap-1 w-[120px] flex-shrink-0" onClick={e => e.stopPropagation()}>
                                     {!isConcluido && (
                                       <button
                                         onClick={() => { setImportTarget({ item, prog }); setIsImportOpen(true) }}
@@ -801,48 +962,118 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
                                       className="bg-slate-50/50 dark:bg-slate-800/30 border-t border-slate-100 dark:border-slate-800"
                                     >
                                       <div className="px-8 py-3">
-                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2">Reservas ({rs.length})</p>
+                                        <div className="flex items-center justify-between mb-2">
+                                          <p className="text-[9px] font-normal text-slate-400 uppercase tracking-widest">
+                                            Pares de Reservas / Paletes ({pares.length} {pares.length === 1 ? 'palete' : 'paletes'})
+                                          </p>
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-[9px] font-normal text-slate-400">
+                                              {paresCompletos.length} pares completos ({rs.length} reservas)
+                                            </span>
+                                            <button
+                                              onClick={() => handlePrintReservas(item, prog)}
+                                              className="flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 rounded-lg text-[9.5px] font-normal uppercase tracking-wider transition-colors cursor-pointer"
+                                              title="Imprimir todas as etiquetas (1 par por folha A4)"
+                                            >
+                                              <Printer size={11} /> Imprimir Todos os Pares
+                                            </button>
+                                          </div>
+                                        </div>
                                         <div className="overflow-x-auto">
-                                          <table className="w-full text-xs">
+                                          <table className="w-full border-collapse text-[10.5px] font-sans">
                                             <thead>
-                                              <tr className="text-[9px] text-slate-400 uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">
-                                                <th className="pb-2 text-left font-semibold">Nº Reserva</th>
-                                                <th className="pb-2 text-left font-semibold">Depósito</th>
-                                                <th className="pb-2 text-left font-semibold">Recept.</th>
-                                                <th className="pb-2 text-right font-semibold">Qtd Nec.</th>
-                                                <th className="pb-2 text-right font-semibold">Qtd Dif.</th>
-                                                <th className="pb-2 text-left font-semibold">Status</th>
-                                                <th className="pb-2 text-left font-semibold">Data Nec.</th>
-                                                <th className="pb-2"></th>
+                                              <tr className="border-b border-white/[0.04] text-[9px] text-slate-500 uppercase tracking-widest select-none font-normal">
+                                                <th className="py-1.5 text-left w-24 font-normal">Palete</th>
+                                                <th className="py-1.5 text-left font-normal">Reserva A501 (A501 → A560)</th>
+                                                <th className="py-1.5 text-left font-normal">Reserva G501 (G501 → G560)</th>
+                                                <th className="py-1.5 text-center font-normal">Qtd Palete</th>
+                                                <th className="py-1.5 text-left font-normal">Data Nec.</th>
+                                                <th className="py-1.5 text-center font-normal">Status Par</th>
+                                                <th className="py-1.5 text-right font-normal">Ações</th>
                                               </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                              {[...rs].sort((a, b) => (a.numero_reserva > b.numero_reserva ? 1 : -1)).map(r => {
-                                                const confirmada = r.quantidade_diferenca === 0
+                                            <tbody className="divide-y divide-white/[0.02]">
+                                              {pares.map(par => {
+                                                const { reservaA: rA, reservaG: rG } = par
                                                 return (
-                                                  <tr key={r.id} className="hover:bg-white dark:hover:bg-slate-800/50 transition-colors">
-                                                    <td className="py-2 font-mono font-bold text-slate-700 dark:text-slate-300">{r.numero_reserva}</td>
-                                                    <td className="py-2 text-slate-500">{r.deposito || '—'}</td>
-                                                    <td className="py-2 text-slate-500">{r.deposito_receptor || '—'}</td>
-                                                    <td className="py-2 text-right text-slate-700 dark:text-slate-300 tabular-nums">{fmtNum(r.qtd_necessaria)}</td>
-                                                    <td className="py-2 text-right tabular-nums">
-                                                      <span className={r.quantidade_diferenca > 0 ? "text-amber-500 font-semibold" : "text-slate-400"}>
-                                                        {fmtNum(r.quantidade_diferenca)}
-                                                      </span>
+                                                  <tr key={par.parIndex} className="hover:bg-white/[0.02] transition-colors font-normal">
+                                                    {/* Palete # */}
+                                                    <td className="py-2 text-slate-300 font-normal">
+                                                      Palete #{par.parIndex}
                                                     </td>
+
+                                                    {/* Reserva A501 */}
                                                     <td className="py-2">
-                                                      <span className={cn("inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase",
-                                                        confirmada ? "text-emerald-500 bg-emerald-500/10 border-emerald-500/20" : "text-amber-500 bg-amber-500/10 border-amber-500/20"
+                                                      {rA ? (
+                                                        <div className="flex items-center gap-2">
+                                                          <span className="text-slate-200 font-normal">{rA.numero_reserva}</span>
+                                                          <span className={cn(
+                                                            "text-[9px] px-1.5 py-0.5 rounded font-normal",
+                                                            rA.quantidade_diferenca === 0 ? "text-slate-400" : "text-amber-400"
+                                                          )}>
+                                                            {rA.quantidade_diferenca === 0 ? '✓' : '⏳'} {fmtNum(rA.qtd_necessaria)} un.
+                                                          </span>
+                                                        </div>
+                                                      ) : (
+                                                        <span className="text-slate-600 italic text-[9.5px]">Sem reserva A501</span>
+                                                      )}
+                                                    </td>
+
+                                                    {/* Reserva G501 */}
+                                                    <td className="py-2">
+                                                      {rG ? (
+                                                        <div className="flex items-center gap-2">
+                                                          <span className="text-slate-200 font-normal">{rG.numero_reserva}</span>
+                                                          <span className={cn(
+                                                            "text-[9px] px-1.5 py-0.5 rounded font-normal",
+                                                            rG.quantidade_diferenca === 0 ? "text-slate-400" : "text-amber-400"
+                                                          )}>
+                                                            {rG.quantidade_diferenca === 0 ? '✓' : '⏳'} {fmtNum(rG.qtd_necessaria)} un.
+                                                          </span>
+                                                        </div>
+                                                      ) : (
+                                                        <span className="text-slate-600 italic text-[9.5px]">Sem reserva G501</span>
+                                                      )}
+                                                    </td>
+
+                                                    {/* Qtd Palete */}
+                                                    <td className="py-2 text-center text-slate-200 font-normal">
+                                                      {fmtNum(par.qtd)} un.
+                                                    </td>
+
+                                                    {/* Data Necessidade */}
+                                                    <td className="py-2 text-slate-400 text-[10px] font-normal">
+                                                      {fmtDate(par.dataNecessidade)}
+                                                    </td>
+
+                                                    {/* Status Par */}
+                                                    <td className="py-2 text-center">
+                                                      <span className={cn(
+                                                        "inline-flex items-center gap-1 text-[9px] font-normal px-1.5 py-0.5 rounded uppercase tracking-wider",
+                                                        par.status === 'Completo' ? "text-slate-300 bg-white/[0.03] border border-white/10" : "text-amber-400/90 bg-amber-500/10 border border-amber-500/20"
                                                       )}>
-                                                        {confirmada ? <CheckCircle2 size={9} /> : <Clock size={9} />}
-                                                        {confirmada ? 'Confirmada' : 'Aberta'}
+                                                        {par.status === 'Completo' ? '✓ Par OK' : par.status}
                                                       </span>
                                                     </td>
-                                                    <td className="py-2 text-slate-400 text-[10px]">{fmtDate(r.data_necessidade)}</td>
-                                                    <td className="py-2">
-                                                      <button onClick={() => handleDeleteReserva(r.id)} className="p-1 text-slate-300 hover:text-rose-500 rounded transition-colors">
-                                                        <X size={11} />
-                                                      </button>
+
+                                                    {/* Ações */}
+                                                    <td className="py-2 text-right">
+                                                      <div className="flex items-center justify-end gap-1.5">
+                                                        <button
+                                                          onClick={() => handlePrintReservas(item, prog, par.parIndex)}
+                                                          className="p-1 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                                                          title={`Imprimir folha A4 do Palete #${par.parIndex} (1 par)`}
+                                                        >
+                                                          <Printer size={12} />
+                                                        </button>
+                                                        <button
+                                                          onClick={() => handleDeletePar(par)}
+                                                          className="p-1 text-slate-500 hover:text-rose-400 transition-colors cursor-pointer"
+                                                          title="Excluir este par de reservas"
+                                                        >
+                                                          <Trash2 size={12} />
+                                                        </button>
+                                                      </div>
                                                     </td>
                                                   </tr>
                                                 )

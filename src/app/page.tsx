@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import React, { useState, useEffect, useMemo } from "react"
 import {
@@ -7273,15 +7273,7 @@ function DashboardPage() {
                                   <th className="px-5 py-4 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest text-right transition-colors">Saldo</th>
                                 </tr>
                               </thead>
-                              <AnimatePresence mode="wait">
-                                <motion.tbody
-                                  key={`${confrontoType}-${confrontoFilter}-${confrontoSearch}-${confrontoSortDir}`}
-                                  initial={{ opacity: 0, y: 10 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  exit={{ opacity: 0, y: -10 }}
-                                  transition={{ duration: 0.2 }}
-                                  className="divide-y divide-slate-200 dark:divide-slate-800/50"
-                                >
+                                <tbody className="divide-y divide-slate-200 dark:divide-slate-800/50">
                                   {(() => {
                                     const baMapLocal = new Map<string, number>();
                                     (baRawList || []).forEach((item: any) => {
@@ -7416,8 +7408,7 @@ function DashboardPage() {
                                     ))
                                   })()
                                   }
-                                </motion.tbody>
-                              </AnimatePresence>
+                                </tbody>
                             </table>
                           </div>
 
