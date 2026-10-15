@@ -575,8 +575,9 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
 
   // ── Print Reservas ─────────────────────────────────────────────────────────
   const handlePrintReservas = (item: ProgramacaoItem, prog: Programacao, singleParIndex?: number) => {
-    const rs = reservasByItem.get(item.id) || []
-    if (rs.length === 0) { showToast('Sem reservas para imprimir', 'error'); return }
+const rs = (reservasByItem.get(item.id) || [])
+  .filter(r => !r.consolidado) 
+  if (rs.length === 0) { showToast('Sem reservas para imprimir', 'error'); return }
 
     let pares = buildParesReservas(rs)
     if (singleParIndex != null) {
@@ -843,7 +844,7 @@ const consolidarStats = consolidarTarget ? getItemStats(consolidarTarget) : null
                         <div className="border-t border-slate-100 dark:border-slate-800">
                           {/* Items Table Header */}
                           <div
-                            style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.5fr 1fr 1fr 1fr 1fr 120px' }}
+                            style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.5fr 1fr 1fr 1fr 1fr 1fr 120px'}}
                             className="gap-2 px-5 py-2 bg-slate-50/80 dark:bg-slate-800/50 text-[9px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 items-center"
                           >
                             <span className="pl-5">Produto</span>
@@ -851,6 +852,7 @@ const consolidarStats = consolidarTarget ? getItemStats(consolidarTarget) : null
                             <span>Paletes Previstos</span>
                             <span>Reservas Abertas</span>
                             <span>Confirmadas</span>
+                            <span>Consolidado</span>
                             <span>Diferença</span>
                             <span>Status</span>
                             <span className="text-right pr-1">Ações</span>
@@ -865,7 +867,7 @@ const consolidarStats = consolidarTarget ? getItemStats(consolidarTarget) : null
                               <div key={item.id} className={cn("border-b border-slate-100 dark:border-slate-800 last:border-0", isConcluido && "opacity-70")}>
                                 {/* Item Row */}
                                 <div
-                                  style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.5fr 1fr 1fr 1fr 1fr 120px' }}
+                                  style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.5fr 1fr 1fr 1fr 1fr 1fr 120px' }}
                                   className="gap-2 px-5 py-3.5 items-center hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors cursor-pointer"
                                   onClick={() => setExpandedItem(prev => {
                                     const s = new Set(prev); s.has(item.id) ? s.delete(item.id) : s.add(item.id); return s
@@ -912,10 +914,30 @@ const consolidarStats = consolidarTarget ? getItemStats(consolidarTarget) : null
                                     {confirmadas.length > 0 && <span className="text-[9px] text-slate-400 ml-1">({confirmadas.length})</span>}
                                   </div>
 
+                                  
+{/* Consolidado (histórico fixo) */}
+<div className="text-xs min-w-0">
+  <span
+    className={cn(
+      "font-bold",
+      (item.qtd_consolidada || 0) > 0
+        ? "text-emerald-500"
+        : "text-slate-400"
+    )}
+  >
+    {fmtNum(item.qtd_consolidada || 0)}
+  </span>
+</div>
+
+
                                   {/* Diferença */}
                                   <div className="min-w-0">
                                     <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 min-w-0 truncate">
-                                      {fmtNum(diferenca)}
+                                     {fmtNum(
+  (item.qtd_consolidada || 0) > 0
+    ? (item.qtd_diferenca || 0)
+    : diferenca
+)}
                                     </span>
                                   </div>
 
