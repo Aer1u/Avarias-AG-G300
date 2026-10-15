@@ -1281,7 +1281,7 @@ const consolidarStats = consolidarTarget ? getItemStats(consolidarTarget) : null
         )}
       </AnimatePresence>
 
-         {/* ─── Modal: Consolidar ─── */}
+        {/* ─── Modal: Consolidar ─── */}
       <AnimatePresence>
         {isConsolidarOpen && consolidarTarget && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
