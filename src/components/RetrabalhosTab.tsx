@@ -29,8 +29,7 @@ interface ProgramacaoItem {
   embalagens: number
   status: string
   confirmado_em: string | null
-  qtd_consolidada: number | null   // ← adicionar
-  qtd_diferenca: number | null     // ← adicionar
+  qtd_confirmada: number | null
   created_at: string
 }
 
@@ -43,7 +42,6 @@ interface Reserva {
   deposito_receptor: string | null
   qtd_necessaria: number
   quantidade_diferenca: number
-  consolidado: boolean | null   // ← adicionar
   created_at: string
 }
 
@@ -329,9 +327,14 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
     const paresConfirmados = pares.filter(p => p.confirmado && p.status === 'Completo')
     const paresAbertos = pares.filter(p => !p.confirmado || p.status !== 'Completo')
     const qtdAberta = paresAbertos.reduce((s, p) => s + p.qtd, 0)
-    const qtdConfirmada = paresConfirmados.reduce((s, p) => s + p.qtd, 0)
+
+    const qtdConfirmadaLive = paresConfirmados.reduce((s, p) => s + p.qtd, 0)
+    const qtdConfirmada = item.status === 'Concluído' && item.qtd_confirmada != null
+      ? item.qtd_confirmada
+      : qtdConfirmadaLive
+
     const qtdRetrabalhada = pares.reduce((s, p) => s + p.qtd, 0)
-    const diferenca = Math.max(0, qtdRetrabalhada - (item.embalagens || 0))
+    const diferenca = (item.embalagens || 0) - qtdConfirmada
     const base = baseMap.get(item.produto.toUpperCase())
     const grade = base?.["Grade"] ? Number(base["Grade"]) : 0
     const { paletes, sobra } = calcPaletes(item.embalagens, grade)
@@ -351,7 +354,6 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
     if (error) { showToast('Erro: ' + error.message, 'error'); return }
     await fetchData()
     setIsNewProgOpen(false)
-    // Auto-expand new programação
     if (created) setExpandedProg(prev => new Set([...prev, created.id]))
     showToast('Programação criada!')
   }
@@ -384,7 +386,6 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
     if (!importTarget) return
     const { item, prog } = importTarget
 
-    // Item already concluded → skip
     if (item.status === 'Concluído') {
       showToast('Este item já está Concluído — importação bloqueada.', 'error')
       return
@@ -393,9 +394,9 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
     setImporting(true)
     try {
       const ab = await file.arrayBuffer()
-    const wb = XLSX.read(ab, { cellDates: true })
-    const ws = wb.Sheets[wb.SheetNames[0]]
-    const rows = XLSX.utils.sheet_to_json<any>(ws, { raw: true, defval: '' })
+      const wb = XLSX.read(ab, { cellDates: true })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json<any>(ws, { raw: true, defval: '' })
       if (rows.length === 0) { showToast('Planilha vazia!', 'error'); return }
 
       const headers = Object.keys(rows[0] || {})
@@ -422,7 +423,6 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
         return
       }
 
-      const progDate = new Date(prog.data + 'T00:00:00')
       const existing = reservasByItem.get(item.id) || []
       const existingMap = new Map(existing.map(r => [r.numero_reserva, r]))
 
@@ -437,7 +437,6 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
         if (!['A501', 'G501'].includes(dep)) { skipped++; continue }
         if (!['A560', 'G560'].includes(depRec)) { skipped++; continue }
 
-            // Data da necessidade (já em YYYY-MM-DD)
         const dataNecessidade = cDataNec ? toISODate(row[cDataNec]) : null
         if (dataNecessidade && dataNecessidade < prog.data) { skipped++; continue }
 
@@ -480,19 +479,12 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
     }
   }
 
-  // ── Toggle Item Status ─────────────────────────────────────────────────────
-  const handleToggleItemStatus = async (item: ProgramacaoItem, newStatus: string) => {
-    await supabase.from('programacao_itens').update({ status: newStatus }).eq('id', item.id)
-    await fetchData()
-  }
-
   // ── Consolidar ─────────────────────────────────────────────────────────────
- const handleConsolidar = async () => {
+  const handleConsolidar = async () => {
     const item = consolidarTarget
     if (!item) return
 
-    const { paresConfirmados, qtdConfirmada } = getItemStats(item)
-    // nunca consolida mais do que o programado
+    const { qtdConfirmada } = getItemStats(item)
     const qtdFinal = Math.min(qtdConfirmada, item.embalagens)
 
     if (qtdFinal <= 0) {
@@ -505,7 +497,6 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
       const today = new Date().toISOString().split('T')[0]
       let remaining = qtdFinal
 
-      // Abate do mapeamento (posição Retrabalho)
       const { data: pallets, error: stockErr } = await supabase
         .from('mapeamento').select('id, Quantidade')
         .eq('Posição', 'Retrabalho').eq('Código', item.produto)
@@ -530,7 +521,6 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
         }
       }
 
-      // Registro em Monitoramento (só o que foi confirmado)
       await supabase.from('Registros').insert([{
         Data: today,
         Produto: item.produto,
@@ -542,32 +532,21 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
         Observação: `Consolidação de programação de retrabalho`,
       }])
 
-      // Remove as reservas já consolidadas (para não consolidar duas vezes)
-      const idsConsolidados = paresConfirmados.flatMap(p =>
-        [p.reservaA?.id, p.reservaG?.id].filter((x): x is number => x != null)
-      )
-      if (idsConsolidados.length > 0) {
-        await supabase.from('reservas_programacao').delete().in('id', idsConsolidados)
-      }
-
-      // Saldo que ainda falta consolidar
-      const saldo = item.embalagens - qtdFinal
-      if (saldo <= 0) {
-        await supabase.from('programacao_itens').update({
-          status: 'Concluído',
-          confirmado_em: new Date().toISOString()
-        }).eq('id', item.id)
-      } else {
-        await supabase.from('programacao_itens').update({ embalagens: saldo }).eq('id', item.id)
-      }
+      // Grava o confirmado no item e conclui
+      await supabase.from('programacao_itens').update({
+        qtd_confirmada: qtdFinal,
+        status: 'Concluído',
+        confirmado_em: new Date().toISOString()
+      }).eq('id', item.id)
 
       await fetchData()
       setIsConsolidarOpen(false)
       setConsolidarTarget(null)
+      const dif = item.embalagens - qtdFinal
       showToast(
-        saldo <= 0
-          ? `${item.produto} consolidado e concluído!`
-          : `${fmtNum(qtdFinal)} un. consolidadas. Faltam ${fmtNum(saldo)} un.`
+        dif > 0
+          ? `${item.produto} consolidado: ${fmtNum(qtdFinal)} un. (diferença de ${fmtNum(dif)})`
+          : `${item.produto} consolidado com sucesso!`
       )
     } catch (err: any) {
       showToast('Erro ao consolidar: ' + err.message, 'error')
@@ -578,9 +557,8 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
 
   // ── Print Reservas ─────────────────────────────────────────────────────────
   const handlePrintReservas = (item: ProgramacaoItem, prog: Programacao, singleParIndex?: number) => {
-const rs = (reservasByItem.get(item.id) || [])
-  .filter(r => !r.consolidado) 
-  if (rs.length === 0) { showToast('Sem reservas para imprimir', 'error'); return }
+    const rs = reservasByItem.get(item.id) || []
+    if (rs.length === 0) { showToast('Sem reservas para imprimir', 'error'); return }
 
     let pares = buildParesReservas(rs)
     if (singleParIndex != null) {
@@ -673,12 +651,6 @@ const rs = (reservasByItem.get(item.id) || [])
     showToast('Item excluído')
   }
 
-  const handleDeleteReserva = async (id: number) => {
-    if (!confirm('Excluir esta reserva?')) return
-    await supabase.from('reservas_programacao').delete().eq('id', id)
-    await fetchData()
-  }
-
   const handleDeletePar = async (par: ParReserva) => {
     if (!confirm(`Excluir as reservas do Palete #${par.parIndex}?`)) return
     const ids: number[] = []
@@ -702,10 +674,11 @@ const rs = (reservasByItem.get(item.id) || [])
   // RENDER
   // ─────────────────────────────────────────────────────────────────────────────
 
-const consolidarStats = consolidarTarget ? getItemStats(consolidarTarget) : null
+  const consolidarStats = consolidarTarget ? getItemStats(consolidarTarget) : null
   const qtdConsolidar = consolidarTarget && consolidarStats
     ? Math.min(consolidarStats.qtdConfirmada, consolidarTarget.embalagens)
     : 0
+
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-4 relative">
 
@@ -847,7 +820,7 @@ const consolidarStats = consolidarTarget ? getItemStats(consolidarTarget) : null
                         <div className="border-t border-slate-100 dark:border-slate-800">
                           {/* Items Table Header */}
                           <div
-                            style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.5fr 1fr 1fr 1fr 1fr 1fr 120px'}}
+                            style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.5fr 1fr 1fr 1fr 1fr 120px' }}
                             className="gap-2 px-5 py-2 bg-slate-50/80 dark:bg-slate-800/50 text-[9px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 items-center"
                           >
                             <span className="pl-5">Produto</span>
@@ -855,14 +828,13 @@ const consolidarStats = consolidarTarget ? getItemStats(consolidarTarget) : null
                             <span>Paletes Previstos</span>
                             <span>Reservas Abertas</span>
                             <span>Confirmadas</span>
-                            <span>Consolidado</span>
                             <span>Diferença</span>
                             <span>Status</span>
                             <span className="text-right pr-1">Ações</span>
                           </div>
 
                           {progItens.map(item => {
-                            const { rs, pares, paresCompletos, paresConfirmados, paresAbertos, qtdAberta, qtdConfirmada, qtdRetrabalhada, diferenca, grade, paletes, sobra, base, abertas, confirmadas } = getItemStats(item)
+                            const { rs, pares, paresCompletos, qtdAberta, qtdConfirmada, diferenca, grade, paletes, sobra, base, abertas, confirmadas } = getItemStats(item)
                             const isItemExpanded = expandedItem.has(item.id)
                             const isConcluido = item.status === 'Concluído'
 
@@ -870,7 +842,7 @@ const consolidarStats = consolidarTarget ? getItemStats(consolidarTarget) : null
                               <div key={item.id} className={cn("border-b border-slate-100 dark:border-slate-800 last:border-0", isConcluido && "opacity-70")}>
                                 {/* Item Row */}
                                 <div
-                                  style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.5fr 1fr 1fr 1fr 1fr 1fr 120px' }}
+                                  style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.5fr 1fr 1fr 1fr 1fr 120px' }}
                                   className="gap-2 px-5 py-3.5 items-center hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors cursor-pointer"
                                   onClick={() => setExpandedItem(prev => {
                                     const s = new Set(prev); s.has(item.id) ? s.delete(item.id) : s.add(item.id); return s
@@ -917,30 +889,10 @@ const consolidarStats = consolidarTarget ? getItemStats(consolidarTarget) : null
                                     {confirmadas.length > 0 && <span className="text-[9px] text-slate-400 ml-1">({confirmadas.length})</span>}
                                   </div>
 
-                                  
-{/* Consolidado (histórico fixo) */}
-<div className="text-xs min-w-0">
-  <span
-    className={cn(
-      "font-bold",
-      (item.qtd_consolidada || 0) > 0
-        ? "text-emerald-500"
-        : "text-slate-400"
-    )}
-  >
-    {fmtNum(item.qtd_consolidada || 0)}
-  </span>
-</div>
-
-
                                   {/* Diferença */}
                                   <div className="min-w-0">
                                     <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 min-w-0 truncate">
-                                     {fmtNum(
-  (item.qtd_consolidada || 0) > 0
-    ? (item.qtd_diferenca || 0)
-    : diferenca
-)}
+                                      {fmtNum(diferenca)}
                                     </span>
                                   </div>
 
@@ -1302,7 +1254,7 @@ const consolidarStats = consolidarTarget ? getItemStats(consolidarTarget) : null
         )}
       </AnimatePresence>
 
-        {/* ─── Modal: Consolidar ─── */}
+      {/* ─── Modal: Consolidar ─── */}
       <AnimatePresence>
         {isConsolidarOpen && consolidarTarget && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
@@ -1333,11 +1285,10 @@ const consolidarStats = consolidarTarget ? getItemStats(consolidarTarget) : null
                 <div className="border-t border-slate-200 dark:border-slate-700 pt-2 mt-2 space-y-1 text-xs text-slate-500">
                   <p>✓ Abater {fmtNum(qtdConsolidar)} un. da posição <strong>Retrabalho</strong> no Mapeamento</p>
                   <p>✓ Criar registro de saída em <strong>Monitoramento</strong></p>
-                  <p>
-                    ✓ {qtdConsolidar >= consolidarTarget.embalagens
-                      ? <>Marcar item como <strong>Concluído</strong></>
-                      : <>Manter item em andamento (faltam {fmtNum(consolidarTarget.embalagens - qtdConsolidar)} un.)</>}
-                  </p>
+                  <p>✓ Marcar item como <strong>Concluído</strong></p>
+                  {consolidarTarget.embalagens - qtdConsolidar > 0 && (
+                    <p className="text-amber-500">⚠ Diferença de {fmtNum(consolidarTarget.embalagens - qtdConsolidar)} un. ficará registrada</p>
+                  )}
                 </div>
               </div>
 
