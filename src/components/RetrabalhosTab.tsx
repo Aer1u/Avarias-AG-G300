@@ -193,6 +193,14 @@ const parseNum = (val: any): number => {
   return parseFloat(s) || 0
 }
 
+const toISODate = (v: any): string | null => {
+  if (v instanceof Date && !isNaN(v.getTime())) {
+    const d = new Date(v.getTime() + 12 * 3600 * 1000)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+  return parseDate(v)
+}
+
 const normCol = (s: string) =>
   s.trim().toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -382,9 +390,9 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
     setImporting(true)
     try {
       const ab = await file.arrayBuffer()
-      const wb = XLSX.read(ab)
-      const ws = wb.Sheets[wb.SheetNames[0]]
-      const rows = XLSX.utils.sheet_to_json<any>(ws, { raw: false, defval: '' })
+    const wb = XLSX.read(ab, { cellDates: true })
+    const ws = wb.Sheets[wb.SheetNames[0]]
+    const rows = XLSX.utils.sheet_to_json<any>(ws, { raw: true, defval: '' })
       if (rows.length === 0) { showToast('Planilha vazia!', 'error'); return }
 
       const headers = Object.keys(rows[0] || {})
@@ -426,41 +434,15 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
         if (!['A501', 'G501'].includes(dep)) { skipped++; continue }
         if (!['A560', 'G560'].includes(depRec)) { skipped++; continue }
 
-        // Date filter
-        if (cDataNec) {
-          const rawDate = String(row[cDataNec] || '').trim()
-          if (rawDate) {
-            let dateNec: Date
-            if (rawDate.includes('/')) {
-              const parts = rawDate.split('/')
-              // Could be DD/MM/YYYY or MM/DD/YYYY — assume DD/MM/YYYY (Brazilian)
-              dateNec = new Date(`${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}T00:00:00`)
-            } else {
-              dateNec = new Date(rawDate + 'T00:00:00')
-            }
-            if (!isNaN(dateNec.getTime()) && dateNec < progDate) { skipped++; continue }
-          }
-        }
+            // Data da necessidade (já em YYYY-MM-DD)
+        const dataNecessidade = cDataNec ? toISODate(row[cDataNec]) : null
+        if (dataNecessidade && dataNecessidade < prog.data) { skipped++; continue }
 
         const nrReserva = String(row[cNrReserva] || '').trim()
         if (!nrReserva) { skipped++; continue }
 
-        const qtdNec = cQtdNec ? parseFloat(String(row[cQtdNec] || '0').replace(',', '.')) || 0 : 0
-        const qtdDif = cQtdDif ? parseFloat(String(row[cQtdDif] || '0').replace(',', '.')) || 0 : 0
-
-        // Parse data_necessidade
-        let dataNecessidade: string | null = null
-        if (cDataNec) {
-          const rawDate = String(row[cDataNec] || '').trim()
-          if (rawDate) {
-            if (rawDate.includes('/')) {
-              const parts = rawDate.split('/')
-              dataNecessidade = `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`
-            } else {
-              dataNecessidade = rawDate
-            }
-          }
-        }
+        const qtdNec = cQtdNec ? parseNum(row[cQtdNec]) : 0
+        const qtdDif = cQtdDif ? parseNum(row[cQtdDif]) : 0
 
         const payload = {
           programacao_item_id: item.id,
