@@ -568,18 +568,28 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
   }
 
   // ── Print Reservas ─────────────────────────────────────────────────────────
-  const handlePrintReservas = (item: ProgramacaoItem, prog: Programacao, singleParIndex?: number) => {
-    const rs = reservasByItem.get(item.id) || []
-    if (rs.length === 0) { showToast('Sem reservas para imprimir', 'error'); return }
+const handlePrintReservas = (
+  item: ProgramacaoItem, 
+  prog: Programacao, 
+  singleParIndex?: number,
+  onlyAbertos?: boolean // ← Adicionado aqui
+) => {
+  const rs = reservasByItem.get(item.id) || []
+  if (rs.length === 0) { showToast('Sem reservas para imprimir', 'error'); return }
 
-    let pares = buildParesReservas(rs)
-    if (singleParIndex != null) {
-      pares = pares.filter(p => p.parIndex === singleParIndex)
-      if (pares.length === 0) { showToast('Par não encontrado', 'error'); return }
-    }
+  let pares = buildParesReservas(rs)
+  
+  if (singleParIndex != null) {
+    pares = pares.filter(p => p.parIndex === singleParIndex)
+    if (pares.length === 0) { showToast('Par não encontrado', 'error'); return }
+  } else if (onlyAbertos) {
+    // Filtra apenas os que não estão confirmados ou incompletos
+    pares = pares.filter(p => !p.confirmado || p.status !== 'Completo')
+    if (pares.length === 0) { showToast('Nenhum par aberto para imprimir', 'error'); return }
+  }
 
-    const printWin = window.open('', '_blank')
-    if (!printWin) return
+  const printWin = window.open('', '_blank')
+  if (!printWin) return
 
     const qrUrl = (text: string) =>
       `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(text)}`
@@ -993,14 +1003,15 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
                                               {isOnlyOpen ? `Abertos (${paresAbertos.length})` : "Todos"}
                                             </button>
 
-                                            <button
-                                              onClick={() => handlePrintReservas(item, prog)}
-                                              className="flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 rounded-lg text-[9.5px] font-normal uppercase tracking-wider transition-colors cursor-pointer"
-                                              title="Imprimir todas as etiquetas (1 par por folha A4)"
-                                            >
-                                              <Printer size={11} /> Imprimir Todos os Pares
-                                            </button>
-                                          </div>
+                                            {isOnlyOpen && visiblePares.length > 0 && (
+  <button
+    onClick={() => handlePrintReservas(item, prog, undefined, true)}
+    className="flex items-center gap-1 px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-lg text-[9.5px] font-normal uppercase tracking-wider transition-colors cursor-pointer"
+    title="Imprimir apenas as etiquetas dos pares abertos"
+  >
+    <Printer size={11} /> Imprimir Pares Abertos ({visiblePares.length})
+  </button>
+)}
                                         </div>
                                         <div className="overflow-x-auto">
                                           <table className="w-full border-collapse text-[10.5px] font-sans">
