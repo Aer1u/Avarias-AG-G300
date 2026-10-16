@@ -983,36 +983,38 @@ const handlePrintReservas = (
                                           <p className="text-[9px] font-normal text-slate-400 uppercase tracking-widest">
                                             Pares de Reservas / Paletes ({visiblePares.length} exibido{visiblePares.length !== 1 ? 's' : ''})
                                           </p>
-                                          <div className="flex items-center gap-2">
-                                            <span className="text-[9px] font-normal text-slate-400">
-                                              {paresCompletos.length} pares completos ({rs.length} reservas)
-                                            </span>
+                                      <div className="flex items-center gap-2">
+  <span className="text-[9px] font-normal text-slate-400">
+    {paresCompletos.length} pares completos ({rs.length} reservas)
+  </span>
 
-                                            {/* Filtro: Somente Abertas */}
-                                            <button
-                                              onClick={() => toggleFilterAbertas(item.id)}
-                                              className={cn(
-                                                "flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9.5px] font-normal uppercase tracking-wider transition-colors cursor-pointer border",
-                                                isOnlyOpen
-                                                  ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                                                  : "bg-slate-800 hover:bg-slate-700 text-slate-300 border-white/10"
-                                              )}
-                                              title={isOnlyOpen ? "Mostrar todos os paletes" : "Filtrar apenas paletes com reservas em aberto"}
-                                            >
-                                              <Filter size={11} className={isOnlyOpen ? "text-amber-400" : "text-slate-400"} />
-                                              {isOnlyOpen ? `Abertos (${paresAbertos.length})` : "Todos"}
-                                            </button>
-
-                                            {isOnlyOpen && visiblePares.length > 0 && (
+  {/* 1. Botão do filtro (continua existindo) */}
   <button
-    onClick={() => handlePrintReservas(item, prog, undefined, true)}
-    className="flex items-center gap-1 px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-lg text-[9.5px] font-normal uppercase tracking-wider transition-colors cursor-pointer"
-    title="Imprimir apenas as etiquetas dos pares abertos"
+    onClick={() => toggleFilterAbertas(item.id)}
+    className={cn(
+      "flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9.5px] font-normal uppercase tracking-wider transition-colors cursor-pointer border",
+      isOnlyOpen
+        ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+        : "bg-slate-800 hover:bg-slate-700 text-slate-300 border-white/10"
+    )}
+    title={isOnlyOpen ? "Mostrar todos os paletes" : "Filtrar apenas paletes com reservas em aberto"}
   >
-    <Printer size={11} /> Imprimir Pares Abertos ({visiblePares.length})
+    <Filter size={11} className={isOnlyOpen ? "text-amber-400" : "text-slate-400"} />
+    {isOnlyOpen ? `Abertos (${paresAbertos.length})` : "Todos"}
   </button>
-)}
-                                        </div>
+
+  {/* 2. Botão de imprimir (só aparece se estiver filtrado por abertos) */}
+  {isOnlyOpen && visiblePares.length > 0 && (
+    <button
+      onClick={() => handlePrintReservas(item, prog, undefined, true)}
+      className="flex items-center gap-1 px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-lg text-[9.5px] font-normal uppercase tracking-wider transition-colors cursor-pointer"
+      title="Imprimir apenas as etiquetas dos pares abertos"
+    >
+      <Printer size={11} /> Imprimir Pares Abertos ({visiblePares.length})
+    </button>
+  )}
+</div>
+                                          </div>
                                         <div className="overflow-x-auto">
                                           <table className="w-full border-collapse text-[10.5px] font-sans">
                                             <thead>
