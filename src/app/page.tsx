@@ -7171,7 +7171,7 @@ function DashboardPage() {
                             const counts = confrontosData.dados.reduce((acc: any, c: any) => {
                               const k = getConfrontoCalc(c);
                               const baQty = confrontoType === "fisico_x_a501" ? (baMap.get(normalizeSku(c.produto)) || 0) : 0;
-                              const teveAjuste = (k.ajusteSoma !== 0) || (baQty > 0);
+                              const teveAjuste = (k.ajusteSoma !== 0) || (baQty > 0) || (k.mapRetrab > 0) || (k.resAberta > 0);
                               const diferenca = k.diferenca;
 
                               acc.all++;
@@ -7306,6 +7306,7 @@ function DashboardPage() {
                                         reserva_aberta: kc.resAberta,
                                         diferenca: diferencaAjustada,
                                         teve_ajuste: teveAjuste,
+                                        filtro_ajustado: teveAjuste || kc.mapRetrab > 0 || kc.resAberta > 0,
                                         teve_ajuste_ba: teveAjusteBA,
                                         teve_ajuste_manual: teveAjusteManual,
                                         ajuste_quantidade: ajusteSoma,
@@ -7319,7 +7320,7 @@ function DashboardPage() {
                                       if (confrontoFilter === "match" && c.diferenca !== 0) return false;
                                       if (confrontoFilter === "excess" && c.diferenca <= 0) return false;
                                       if (confrontoFilter === "missing" && c.diferenca >= 0) return false;
-                                      if (confrontoFilter === "adjusted" && !c.teve_ajuste) return false;
+                                      if (confrontoFilter === "adjusted" && !c.filtro_ajustado) return false;
 
                                       // Filtro da Busca
                                       if (confrontoSearch) {
@@ -7395,15 +7396,21 @@ function DashboardPage() {
                                         </td>
                                         <td className="px-5 py-3.5 text-right">
                                           <div className="flex flex-col items-end">
-                                            <span className={cn("text-sm font-normal", c.teve_ajuste ? "text-blue-600 dark:text-blue-300 font-bold" : "text-slate-600 dark:text-slate-300")}>{fmtNum(c.qtd_fisica)}</span>
-                                            {c.teve_ajuste && (
-                                              <span className="text-[9px] text-slate-400 dark:text-slate-500 line-through">Orig: {fmtNum(c.qtd_fisica_original)}</span>
+                                            <span className={cn("text-sm font-normal", (c.teve_ajuste || c.qtd_retrabalho > 0) ? "text-blue-600 dark:text-blue-300 font-bold" : "text-slate-600 dark:text-slate-300")}>{fmtNum(c.qtd_fisica)}</span>
+                                            {(c.teve_ajuste || c.qtd_retrabalho > 0) && (
+                                              <span className="text-[9px] text-slate-400 dark:text-slate-500 line-through">
+                                                Orig: {fmtNum(c.qtd_fisica_original)}
+                                                {c.qtd_retrabalho > 0 && ` (-${fmtNum(c.qtd_retrabalho)} ret)`}
+                                                {c.teve_ajuste_manual && ` (${c.ajuste_quantidade > 0 ? "+" : ""}${fmtNum(c.ajuste_quantidade)} aj)`}
+                                              </span>
                                             )}
                                           </div>
                                         </td>
                                         <td className="px-5 py-3.5 text-right">
-                                          <span className="text-sm font-normal text-slate-600 dark:text-slate-300">{fmtNum(c.qtd_sistema)}</span>
-                                          {c.reserva_aberta > 0 && <span className="block text-[9px] text-amber-500">Orig: {fmtNum(c.qtd_sistema_original)}</span>}
+                                          <div className="flex flex-col items-end">
+                                            <span className={cn("text-sm font-normal", c.reserva_aberta > 0 ? "text-amber-500 dark:text-amber-400 font-bold" : "text-slate-600 dark:text-slate-300")}>{fmtNum(c.qtd_sistema)}</span>
+                                            {c.reserva_aberta > 0 && <span className="text-[9px] text-amber-500">Orig: {fmtNum(c.qtd_sistema_original)} (-{fmtNum(c.reserva_aberta)})</span>}
+                                          </div>
                                         </td>
                                         <td className="px-5 py-3.5 text-right">
                                           {c.diferenca === 0 ? (
@@ -7439,6 +7446,7 @@ function DashboardPage() {
                               return {
                                 ...c,
                                 teve_ajuste: teveAjuste,
+                                filtro_ajustado: teveAjuste || kc.mapRetrab > 0 || kc.resAberta > 0,
                                 teve_ajuste_ba: baQty > 0,
                                 diferenca: kc.diferenca
                               }
@@ -7449,7 +7457,7 @@ function DashboardPage() {
                               if (confrontoFilter === "match" && c.diferenca !== 0) return false;
                               if (confrontoFilter === "excess" && c.diferenca <= 0) return false;
                               if (confrontoFilter === "missing" && c.diferenca >= 0) return false;
-                              if (confrontoFilter === "adjusted" && !c.teve_ajuste) return false;
+                              if (confrontoFilter === "adjusted" && !c.filtro_ajustado) return false;
                               if (confrontoSearch) {
                                 const term = confrontoSearch.toLowerCase();
                                 if (!c.produto.toLowerCase().includes(term) && !c.descricao.toLowerCase().includes(term)) return false;
