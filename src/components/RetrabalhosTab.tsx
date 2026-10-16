@@ -6,7 +6,7 @@ import {
   Calendar, Package, CheckCircle2, Clock,
   PlayCircle, Upload, Printer, Trash2, RefreshCw,
   AlertTriangle, Save, FileSpreadsheet, Layers,
-  BarChart3, ArrowRight, PauseCircle, Hammer
+  BarChart3, ArrowRight, PauseCircle, Hammer, Filter
 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
@@ -221,6 +221,18 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
 
   const [expandedProg, setExpandedProg] = useState<Set<number>>(new Set())
   const [expandedItem, setExpandedItem] = useState<Set<number>>(new Set())
+
+  // Filtro de "Somente Abertas" por item
+  const [onlyOpenByItem, setOnlyOpenByItem] = useState<Set<number>>(new Set())
+
+  const toggleFilterAbertas = (itemId: number) => {
+    setOnlyOpenByItem(prev => {
+      const next = new Set(prev)
+      if (next.has(itemId)) next.delete(itemId)
+      else next.add(itemId)
+      return next
+    })
+  }
 
   // Modais
   const [isNewProgOpen, setIsNewProgOpen] = useState(false)
@@ -834,9 +846,14 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
                           </div>
 
                           {progItens.map(item => {
-                            const { rs, pares, paresCompletos, qtdAberta, qtdConfirmada, diferenca, grade, paletes, sobra, base, abertas, confirmadas } = getItemStats(item)
+                            const { rs, pares, paresCompletos, paresAbertos, qtdAberta, qtdConfirmada, diferenca, grade, paletes, sobra, base, abertas, confirmadas } = getItemStats(item)
                             const isItemExpanded = expandedItem.has(item.id)
                             const isConcluido = item.status === 'Concluído'
+
+                            const isOnlyOpen = onlyOpenByItem.has(item.id)
+                            const visiblePares = isOnlyOpen
+                              ? pares.filter(p => !p.confirmado || p.status !== 'Completo')
+                              : pares
 
                             return (
                               <div key={item.id} className={cn("border-b border-slate-100 dark:border-slate-800 last:border-0", isConcluido && "opacity-70")}>
@@ -954,12 +971,28 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
                                       <div className="px-8 py-3">
                                         <div className="flex items-center justify-between mb-2">
                                           <p className="text-[9px] font-normal text-slate-400 uppercase tracking-widest">
-                                            Pares de Reservas / Paletes ({pares.length} {pares.length === 1 ? 'palete' : 'paletes'})
+                                            Pares de Reservas / Paletes ({visiblePares.length} exibido{visiblePares.length !== 1 ? 's' : ''})
                                           </p>
                                           <div className="flex items-center gap-2">
                                             <span className="text-[9px] font-normal text-slate-400">
                                               {paresCompletos.length} pares completos ({rs.length} reservas)
                                             </span>
+
+                                            {/* Filtro: Somente Abertas */}
+                                            <button
+                                              onClick={() => toggleFilterAbertas(item.id)}
+                                              className={cn(
+                                                "flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9.5px] font-normal uppercase tracking-wider transition-colors cursor-pointer border",
+                                                isOnlyOpen
+                                                  ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                                                  : "bg-slate-800 hover:bg-slate-700 text-slate-300 border-white/10"
+                                              )}
+                                              title={isOnlyOpen ? "Mostrar todos os paletes" : "Filtrar apenas paletes com reservas em aberto"}
+                                            >
+                                              <Filter size={11} className={isOnlyOpen ? "text-amber-400" : "text-slate-400"} />
+                                              {isOnlyOpen ? `Abertos (${paresAbertos.length})` : "Todos"}
+                                            </button>
+
                                             <button
                                               onClick={() => handlePrintReservas(item, prog)}
                                               className="flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 rounded-lg text-[9.5px] font-normal uppercase tracking-wider transition-colors cursor-pointer"
@@ -983,43 +1016,50 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
                                               </tr>
                                             </thead>
                                             <tbody className="divide-y divide-white/[0.02]">
-                                              {pares.map(par => {
-                                                const { reservaA: rA, reservaG: rG } = par
-                                                return (
-                                                  <tr key={par.parIndex} className="hover:bg-white/[0.02] transition-colors font-normal">
-                                                    {/* Palete # */}
-                                                    <td className="py-2 text-slate-300 font-normal">
-                                                      Palete #{par.parIndex}
-                                                    </td>
+                                              {visiblePares.length === 0 ? (
+                                                <tr>
+                                                  <td colSpan={7} className="py-5 text-center text-slate-500 text-xs italic">
+                                                    Nenhum par de reservas aberto para este item.
+                                                  </td>
+                                                </tr>
+                                              ) : (
+                                                visiblePares.map(par => {
+                                                  const { reservaA: rA, reservaG: rG } = par
+                                                  return (
+                                                    <tr key={par.parIndex} className="hover:bg-white/[0.02] transition-colors font-normal">
+                                                      {/* Palete # */}
+                                                      <td className="py-2 text-slate-300 font-normal">
+                                                        Palete #{par.parIndex}
+                                                      </td>
 
-                                                    {/* Reserva A501 */}
-                                                    <td className="py-2">
-                                                      {rA ? (
-                                                        <div className="flex items-center gap-2">
-                                                          <span className="text-slate-200 font-normal">{rA.numero_reserva}</span>
-                                                          <span className={cn(
-                                                            "text-[9px] px-1.5 py-0.5 rounded font-normal",
-                                                            rA.quantidade_diferenca === 0 ? "text-slate-400" : "text-amber-400"
-                                                          )}>
-                                                            {rA.quantidade_diferenca === 0 ? '✓' : '⏳'} {fmtNum(rA.qtd_necessaria)} un.
-                                                          </span>
-                                                        </div>
-                                                      ) : (
-                                                        <span className="text-slate-600 italic text-[9.5px]">Sem reserva A501</span>
-                                                      )}
-                                                    </td>
+                                                      {/* Reserva A501 */}
+                                                      <td className="py-2">
+                                                        {rA ? (
+                                                          <div className="flex items-center gap-2">
+                                                            <span className="text-slate-200 font-normal">{rA.numero_reserva}</span>
+                                                            <span className={cn(
+                                                              "text-[9px] px-1.5 py-0.5 rounded font-normal",
+                                                              rA.quantidade_diferenca === 0 ? "text-slate-400" : "text-amber-400"
+                                                            )}>
+                                                              {rA.quantidade_diferenca === 0 ? '✓' : '⏳'} {fmtNum(rA.qtd_necessaria)} un.
+                                                            </span>
+                                                          </div>
+                                                        ) : (
+                                                          <span className="text-slate-600 italic text-[9.5px]">Sem reserva A501</span>
+                                                        )}
+                                                      </td>
 
-                                                    {/* Reserva G501 */}
-                                                    <td className="py-2">
-                                                      {rG ? (
-                                                        <div className="flex items-center gap-2">
-                                                          <span className="text-slate-200 font-normal">{rG.numero_reserva}</span>
-                                                          <span className={cn(
-                                                            "text-[9px] px-1.5 py-0.5 rounded font-normal",
-                                                            rG.quantidade_diferenca === 0 ? "text-slate-400" : "text-amber-400"
-                                                          )}>
-                                                            {rG.quantidade_diferenca === 0 ? '✓' : '⏳'} {fmtNum(rG.qtd_necessaria)} un.
-                                                          </span>
+                                                      {/* Reserva G501 */}
+                                                      <td className="py-2">
+                                                        {rG ? (
+                                                          <div className="flex items-center gap-2">
+                                                            <span className="text-slate-200 font-normal">{rG.numero_reserva}</span>
+                                                            <span className={cn(
+                                                              "text-[9px] px-1.5 py-0.5 rounded font-normal",
+                                                              rG.quantidade_diferenca === 0 ? "text-slate-400" : "text-amber-400"
+                                                            )}>
+                                                              {rG.quantidade_diferenca === 0 ? '✓' : '⏳'} {fmtNum(rG.qtd_necessaria)} un.
+                                                            </span>
                                                         </div>
                                                       ) : (
                                                         <span className="text-slate-600 italic text-[9.5px]">Sem reserva G501</span>
@@ -1067,41 +1107,42 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
                                                     </td>
                                                   </tr>
                                                 )
-                                              })}
-                                            </tbody>
-                                          </table>
-                                        </div>
+                                              })
+                                            )}
+                                          </tbody>
+                                        </table>
                                       </div>
-                                    </motion.div>
-                                  )}
-                                  {isItemExpanded && rs.length === 0 && (
-                                    <motion.div
-                                      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                                      className="px-8 py-4 text-xs text-slate-400 bg-slate-50/50 dark:bg-slate-800/30 border-t border-slate-100 dark:border-slate-800"
+                                    </div>
+                                  </motion.div>
+                                )}
+                                {isItemExpanded && rs.length === 0 && (
+                                  <motion.div
+                                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                                    className="px-8 py-4 text-xs text-slate-400 bg-slate-50/50 dark:bg-slate-800/30 border-t border-slate-100 dark:border-slate-800"
+                                  >
+                                    Nenhuma reserva importada. Use o botão{' '}
+                                    <button
+                                      onClick={() => { setImportTarget({ item, prog }); setIsImportOpen(true) }}
+                                      className="text-blue-500 hover:underline inline-flex items-center gap-1"
                                     >
-                                      Nenhuma reserva importada. Use o botão{' '}
-                                      <button
-                                        onClick={() => { setImportTarget({ item, prog }); setIsImportOpen(true) }}
-                                        className="text-blue-500 hover:underline inline-flex items-center gap-1"
-                                      >
-                                        <Upload size={10} /> Importar planilha
-                                      </button>
-                                    </motion.div>
-                                  )}
-                                </AnimatePresence>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            )
-          })}
-        </div>
-      )}
+                                      <Upload size={10} /> Importar planilha
+                                    </button>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )
+        })}
+      </div>
+    )}
 
       {/* ─── Modal: Nova Programação ─── */}
       <AnimatePresence>
