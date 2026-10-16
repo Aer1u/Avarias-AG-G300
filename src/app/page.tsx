@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import React, { useState, useEffect, useMemo } from "react"
 import {
@@ -385,6 +385,20 @@ const calculateStatsFromData = (allData: any[], processedHistory: any) => {
 
 function DashboardPage() {
   const normalizeSku = (s: string) => String(s || "").trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  // Cálculo unificado do confronto (retrabalho e reservas A501 abatidos no físico x sistema)
+  const getConfrontoCalc = (c: any) => {
+    const sku = normalizeSku(c.produto);
+    const isFis = confrontoType === "fisico_x_a501";
+    const ajusteSoma = isFis
+      ? ajustesConfronto.filter((a) => normalizeSku(a.produto) === sku).reduce((s, a) => s + a.quantidade, 0)
+      : 0;
+    const mapRetrab = isFis ? (retrabalhoConfrontoData.mapeamentoMap.get(sku) || 0) : 0;
+    const resAberta = isFis ? (retrabalhoConfrontoData.reservasMap.get(sku) || 0) : 0;
+    const qtdFisica = isFis ? Math.max(0, c.qtd_fisica - mapRetrab) + ajusteSoma : c.qtd_fisica;
+    const qtdSistema = isFis ? Math.max(0, c.qtd_sistema - resAberta) : c.qtd_sistema;
+    return { ajusteSoma, mapRetrab, resAberta, qtdFisica, qtdSistema, diferenca: qtdFisica - qtdSistema };
+  };
 
   const [mounted, setMounted] = useState(false)
   const [data, setData] = useState<any[]>([])
@@ -1975,16 +1989,20 @@ function DashboardPage() {
         if (alt.data) baRaw = alt.data;
       }
       const { data: ajustesRaw, error: ajustesErr } = await supabase.from('Ajuste').select('*');
-      const { data: reservasProgRaw } = await supabase.from('reservas_programacao').select('qtd_necessaria, quantidade_diferenca, programacao_itens(produto, status)');
+      const { data: reservasProgRaw } = await supabase.from('reservas_programacao').select('deposito, deposito_receptor, qtd_necessaria, quantidade_diferenca, programacao_itens(produto, status)');
       const { data: mapRetrabRaw } = await supabase.from('mapeamento').select('Código, Quantidade').eq('Posição', 'Retrabalho');
 
       const resProgMap = new Map<string, number>();
       (reservasProgRaw || []).forEach((r: any) => {
-        const item = r.programacao_itens;
+        const item = Array.isArray(r.programacao_itens) ? r.programacao_itens[0] : r.programacao_itens;
         if (!item || item.status === 'Concluído') return;
-        if (Number(r.quantidade_diferenca) > 0) {
+        const dep = String(r.deposito || '').trim().toUpperCase();
+        const depRec = String(r.deposito_receptor || '').trim().toUpperCase();
+        if (dep !== 'A501' && depRec !== 'A501') return;
+        const openDiff = Number(r.quantidade_diferenca);
+        if (openDiff > 0) {
           const sku = normalizeSku(item.produto || '');
-          if (sku) resProgMap.set(sku, (resProgMap.get(sku) || 0) + (Number(r.qtd_necessaria) || 0));
+          if (sku) resProgMap.set(sku, (resProgMap.get(sku) || 0) + openDiff);
         }
       });
 
@@ -1993,6 +2011,15 @@ function DashboardPage() {
         const sku = normalizeSku(m['Código'] || m['codigo'] || m['Produto'] || '');
         if (sku) mapRetrabMap.set(sku, (mapRetrabMap.get(sku) || 0) + (Number(m['Quantidade'] || m['quantidade']) || 0));
       });
+
+      if (mapRetrabMap.size === 0 && effectiveData.length > 0) {
+        effectiveData
+          .filter((i: any) => String(i.posicao || '').toLowerCase().includes('retrabalho'))
+          .forEach((item: any) => {
+            const sku = normalizeSku(item.produto || '');
+            if (sku) mapRetrabMap.set(sku, (mapRetrabMap.get(sku) || 0) + (Number(item.quantidade_total) || 0));
+          });
+      }
 
       setRetrabalhoConfrontoData({ reservasMap: resProgMap, mapeamentoMap: mapRetrabMap });
 
@@ -4112,10 +4139,7 @@ function DashboardPage() {
 
                                   // Apply filters based on balance
                                   data = data.filter((c: any) => {
-                                    const skuNormal = normalizeSku(c.produto);
-                                    const ajusteSoma = ajustesConfronto.filter((a: any) => normalizeSku(a.produto) === skuNormal).reduce((acc, curr) => acc + curr.quantidade, 0);
-                                    const qtdFisicaAjustada = c.qtd_fisica + ajusteSoma;
-                                    const balance = qtdFisicaAjustada - c.qtd_sistema;
+                                    const balance = getConfrontoCalc(c).diferenca;
 
                                     if (exportFilter === "positivado") return balance > 0;
                                     if (exportFilter === "negativado") return balance < 0;
@@ -4125,12 +4149,10 @@ function DashboardPage() {
                                   });
 
                                   const rows = data.map((c: any) => {
-                                    const skuNormal = normalizeSku(c.produto);
-                                    const ajusteSoma = ajustesConfronto.filter((a: any) => normalizeSku(a.produto) === skuNormal).reduce((acc, curr) => acc + curr.quantidade, 0);
-                                    const qtdFisicaAjustada = c.qtd_fisica + ajusteSoma;
-                                    const diferenca = qtdFisicaAjustada - c.qtd_sistema;
+                                    const k = getConfrontoCalc(c);
+                                    const diferenca = k.diferenca;
                                     const saldo = diferenca === 0 ? 'Bateu' : diferenca > 0 ? `+${diferenca} (Positivo)` : `${diferenca} (Negativo)`;
-                                    return `<tr><td>${c.produto}</td><td>${c.descricao}</td><td>${qtdFisicaAjustada}</td><td>${c.qtd_sistema}</td><td>${saldo}</td></tr>`;
+                                    return `<tr><td>${c.produto}</td><td>${c.descricao}</td><td>${k.qtdFisica}</td><td>${k.qtdSistema}</td><td>${saldo}</td></tr>`;
                                   }).join('');
 
                                   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Confronto ${typeLabel} - ${filterLabel}</title><style>body{font-family:sans-serif;font-size:12px;padding:20px}h2{margin-bottom:16px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#1e3a8a;color:white}tr:nth-child(even){background:#f8fafc}@media print{button{display:none}}</style></head><body><h2>Confronto de Saldos - ${typeLabel} (${filterLabel})</h2><p style="color:#64748b;margin-bottom:12px">Gerado em ${new Date().toLocaleString('pt-BR')}</p><table><thead><tr><th>Código</th><th>Descrição</th><th>Qtd Física</th><th>Qtd Sistema</th><th>Saldo</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
@@ -4166,10 +4188,7 @@ function DashboardPage() {
 
                                   // Apply filters based on balance
                                   data = data.filter((c: any) => {
-                                    const skuNormal = normalizeSku(c.produto);
-                                    const ajusteSoma = ajustesConfronto.filter((a: any) => normalizeSku(a.produto) === skuNormal).reduce((acc, curr) => acc + curr.quantidade, 0);
-                                    const qtdFisicaAjustada = c.qtd_fisica + ajusteSoma;
-                                    const balance = qtdFisicaAjustada - c.qtd_sistema;
+                                    const balance = getConfrontoCalc(c).diferenca;
 
                                     if (exportFilter === "positivado") return balance > 0;
                                     if (exportFilter === "negativado") return balance < 0;
@@ -4179,11 +4198,8 @@ function DashboardPage() {
                                   });
 
                                   const rows = data.map((c: any) => {
-                                    const skuNormal = normalizeSku(c.produto);
-                                    const ajusteSoma = ajustesConfronto.filter((a: any) => normalizeSku(a.produto) === skuNormal).reduce((acc, curr) => acc + curr.quantidade, 0);
-                                    const qtdFisicaAjustada = c.qtd_fisica + ajusteSoma;
-                                    const diferenca = qtdFisicaAjustada - c.qtd_sistema;
-                                    return `<tr><td>${c.produto}</td><td>${c.descricao}</td><td>${qtdFisicaAjustada}</td><td>${c.qtd_sistema}</td><td>${diferenca}</td></tr>`;
+                                    const k = getConfrontoCalc(c);
+                                    return `<tr><td>${c.produto}</td><td>${c.descricao}</td><td>${k.qtdFisica}</td><td>${k.qtdSistema}</td><td>${k.diferenca}</td></tr>`;
                                   }).join('');
 
                                   const xls = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>Confronto</title><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Confronto</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body><table><thead><tr><th>Código</th><th>Descrição</th><th>Qtd Física</th><th>Qtd Sistema</th><th>Saldo</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
@@ -7080,13 +7096,9 @@ function DashboardPage() {
                         >
                           {/* Painel Premium Minimalista */}
                           {(() => {
-                            const divergenciasAjustadas = confrontosData.dados.filter((c: any) => {
-                              const skuNormal = normalizeSku(c.produto);
-                              const itemAdjustments = confrontoType === "fisico_x_a501" ? ajustesConfronto.filter((a: any) => normalizeSku(a.produto) === skuNormal) : [];
-                              const ajusteSoma = itemAdjustments.reduce((acc, curr) => acc + curr.quantidade, 0);
-                              const qtdFisicaAjustada = c.qtd_fisica + ajusteSoma
-                              return Math.abs(qtdFisicaAjustada - c.qtd_sistema) > 0.001;
-                            }).length;
+                            const divergenciasAjustadas = confrontosData.dados.filter(
+                              (c: any) => Math.abs(getConfrontoCalc(c).diferenca) > 0.001
+                            ).length;
                             const total = confrontosData.total_produtos;
                             const acuracidade = Math.round(((total - divergenciasAjustadas) / Math.max(1, total)) * 100);
 
@@ -7125,14 +7137,8 @@ function DashboardPage() {
                                   </div>
                                   <div className="flex items-baseline gap-2">
                                     {(() => {
-                                      const fisico = confrontosData.dados.reduce((acc: number, item: any) => {
-                                        const skuNormal = normalizeSku(item.produto);
-                                        const itemAdjustments = confrontoType === "fisico_x_a501" ? ajustesConfronto.filter(a => normalizeSku(a.produto) === skuNormal) : [];
-                                        const ajusteSoma = itemAdjustments.reduce((a, c) => a + c.quantidade, 0);
-                                        return acc + (item.qtd_fisica + ajusteSoma)
-                                      }, 0);
-
-                                      const sistema = confrontosData.dados.reduce((acc: number, item: any) => acc + item.qtd_sistema, 0);
+                                      const fisico = confrontosData.dados.reduce((acc: number, item: any) => acc + getConfrontoCalc(item).qtdFisica, 0);
+                                      const sistema = confrontosData.dados.reduce((acc: number, item: any) => acc + getConfrontoCalc(item).qtdSistema, 0);
                                       const net = fisico - sistema;
                                       return (
                                         <>
@@ -7163,13 +7169,10 @@ function DashboardPage() {
                             });
 
                             const counts = confrontosData.dados.reduce((acc: any, c: any) => {
-                              const skuNormal = normalizeSku(c.produto);
-                              const ajusteSoma = confrontoType === "fisico_x_a501" ? ajustesConfronto.filter(a => normalizeSku(a.produto) === skuNormal).reduce((x, curr) => x + curr.quantidade, 0) : 0;
-                              const baQty = confrontoType === "fisico_x_a501" ? (baMap.get(skuNormal) || 0) : 0;
-                              const teveAjuste = (ajusteSoma !== 0) || (baQty > 0);
-
-                              const qtdFisicaAjustada = c.qtd_fisica + ajusteSoma;
-                              const diferenca = qtdFisicaAjustada - c.qtd_sistema;
+                              const k = getConfrontoCalc(c);
+                              const baQty = confrontoType === "fisico_x_a501" ? (baMap.get(normalizeSku(c.produto)) || 0) : 0;
+                              const teveAjuste = (k.ajusteSoma !== 0) || (baQty > 0);
+                              const diferenca = k.diferenca;
 
                               acc.all++;
                               if (teveAjuste) acc.adjusted++;
@@ -7284,9 +7287,9 @@ function DashboardPage() {
                                     const dadosAjustados = confrontosData.dados.map((c: any) => {
                                       const skuNormal = normalizeSku(c.produto);
                                       const itemAdjustments = confrontoType === "fisico_x_a501" ? ajustesConfronto.filter((a: any) => normalizeSku(a.produto) === skuNormal) : [];
-                                      const ajusteSoma = itemAdjustments.reduce((acc, curr) => acc + curr.quantidade, 0);
-                                      const qtdFisicaAjustada = c.qtd_fisica + ajusteSoma;
-                                      const diferencaAjustada = qtdFisicaAjustada - c.qtd_sistema;
+                                      const kc = getConfrontoCalc(c);
+                                      const ajusteSoma = kc.ajusteSoma;
+                                      const diferencaAjustada = kc.diferenca;
                                       const baQty = confrontoType === "fisico_x_a501" ? (baMapLocal.get(skuNormal) || 0) : 0;
                                       const teveAjusteManual = ajusteSoma !== 0;
                                       const teveAjusteBA = baQty > 0;
@@ -7296,7 +7299,11 @@ function DashboardPage() {
                                       return {
                                         ...c,
                                         qtd_fisica_original: c.qtd_fisica,
-                                        qtd_fisica: qtdFisicaAjustada,
+                                        qtd_fisica: kc.qtdFisica,
+                                        qtd_sistema_original: c.qtd_sistema,
+                                        qtd_sistema: kc.qtdSistema,
+                                        qtd_retrabalho: kc.mapRetrab,
+                                        reserva_aberta: kc.resAberta,
                                         diferenca: diferencaAjustada,
                                         teve_ajuste: teveAjuste,
                                         teve_ajuste_ba: teveAjusteBA,
@@ -7358,6 +7365,8 @@ function DashboardPage() {
                                               AJUSTADO
                                             </span>
                                           )}
+                                          {c.qtd_retrabalho > 0 && <span className="ml-1 inline-flex align-middle text-[8px] bg-sky-500/10 text-sky-500 border border-sky-500/30 px-1 py-0.5 rounded">-{c.qtd_retrabalho} RET</span>}
+                                          {c.reserva_aberta > 0 && <span className="ml-1 inline-flex align-middle text-[8px] bg-amber-500/10 text-amber-500 border border-amber-500/30 px-1 py-0.5 rounded">-{c.reserva_aberta} RES</span>}
                                           {c.teve_ajuste_ba && (
                                             <span className="ml-1 inline-flex border border-purple-500/30 bg-purple-500/10 text-purple-600 dark:text-purple-400 text-[8px] font-bold px-1.5 py-0.5 rounded-md align-middle shadow-sm" title={c.motivo_ajuste}>
                                               BA
@@ -7394,6 +7403,7 @@ function DashboardPage() {
                                         </td>
                                         <td className="px-5 py-3.5 text-right">
                                           <span className="text-sm font-normal text-slate-600 dark:text-slate-300">{fmtNum(c.qtd_sistema)}</span>
+                                          {c.reserva_aberta > 0 && <span className="block text-[9px] text-amber-500">Orig: {fmtNum(c.qtd_sistema_original)}</span>}
                                         </td>
                                         <td className="px-5 py-3.5 text-right">
                                           {c.diferenca === 0 ? (
@@ -7422,16 +7432,15 @@ function DashboardPage() {
                             });
                             const dadosAjustados = confrontosData.dados.map((c: any) => {
                               const skuNormal = normalizeSku(c.produto);
-                              const itemAdjustments = confrontoType === "fisico_x_a501" ? ajustesConfronto.filter((a: any) => normalizeSku(a.produto) === skuNormal) : [];
-                              const ajusteSoma = itemAdjustments.reduce((acc, curr) => acc + curr.quantidade, 0);
-                              const qtdFisicaAjustada = c.qtd_fisica + ajusteSoma;
+                              const kc = getConfrontoCalc(c);
+                              const ajusteSoma = kc.ajusteSoma;
                               const baQty = confrontoType === "fisico_x_a501" ? (baMapLocal2.get(skuNormal) || 0) : 0;
                               const teveAjuste = ajusteSoma !== 0 || baQty > 0;
                               return {
                                 ...c,
                                 teve_ajuste: teveAjuste,
                                 teve_ajuste_ba: baQty > 0,
-                                diferenca: qtdFisicaAjustada - c.qtd_sistema
+                                diferenca: kc.diferenca
                               }
                             });
 
