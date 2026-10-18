@@ -22,6 +22,7 @@ import {
   Layers,
   ShoppingCart,
   ChevronRight,
+  ChevronDown,
   Boxes,
   ArrowUpRight,
   ArrowDownRight,
@@ -579,6 +580,8 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
   const [isImporting, setIsImporting] = useState(false)
   const [showSkuTable, setShowSkuTable] = useState(false)
   const [expandedSolicitations, setExpandedSolicitations] = useState<Set<string>>(new Set())
+  const [groupByNf, setGroupByNf] = useState<boolean>(true)
+  const [expandedNfGroups, setExpandedNfGroups] = useState<Set<string>>(new Set())
   const [importedFileName, setImportedFileName] = useState("")
   const [showAddG300Modal, setShowAddG300Modal] = useState(false)
   const [addG300Search, setAddG300Search] = useState("")
@@ -1955,7 +1958,20 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
         ))}
 
         {subTab === "pedidas" && (
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => setGroupByNf(prev => !prev)}
+              className={cn(
+                "flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition-all border cursor-pointer",
+                groupByNf
+                  ? "bg-blue-600/20 border-blue-500/40 text-blue-300 hover:bg-blue-600/30 shadow-sm"
+                  : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800"
+              )}
+              title="Alternar agrupamento por Nota Fiscal dentro de cada Solicitação"
+            >
+              <Layers size={13} className={groupByNf ? "text-blue-400" : "text-slate-500"} />
+              {groupByNf ? "Agrupado por NF (Ativo)" : "Lista Direta"}
+            </button>
             <button
               onClick={() => setShowImportModal(true)}
               className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 px-4 py-2.5 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition-all cursor-pointer shadow-inner"
@@ -2317,6 +2333,7 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
                   const statusResumo = totPendente > 0
                     ? `Pendente (${totPendente.toLocaleString('pt-BR')} un)`
                     : 'Concluído'
+                  const uniqueNfs = Array.from(new Set(items.map(x => String(x.nf || '').trim()).filter(Boolean)))
 
                   return (
                     <div key={solKey} className="border-b border-white/[0.04] last:border-0">
@@ -2333,8 +2350,13 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
                         </span>
                         <span className="text-[11px] text-slate-500">{dateLabel}</span>
                         <span className="text-[11px] text-slate-400 truncate">{items[0]?.solicitante || '—'}</span>
-                        <span className="flex items-center gap-2 text-[11px]">
+                        <span className="flex items-center gap-2 text-[11px] flex-wrap">
                           <span className="text-slate-600">{items.length} {items.length === 1 ? 'item' : 'itens'}</span>
+                          <span className="text-slate-700">·</span>
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-300 border border-blue-500/20" title={`Notas Fiscais: ${uniqueNfs.join(', ') || 'Nenhuma'}`}>
+                            <FileText size={10} className="text-blue-400" />
+                            {uniqueNfs.length === 0 ? "Sem NF" : uniqueNfs.length === 1 ? `NF ${uniqueNfs[0]}` : `${uniqueNfs.length} NFs`}
+                          </span>
                           <span className="text-slate-700">·</span>
                           <span className="text-slate-500">{responsavel}</span>
                           <span className="text-slate-700">·</span>
@@ -2359,116 +2381,258 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
                       {/* Expanded detail rows */}
                       {isExpanded && (
                         <div className="border-t border-white/[0.04] overflow-x-auto">
-                          <table className="w-full border-collapse text-[10px]">
-                            <thead>
-                              <tr className="border-b border-white/[0.04] bg-white/[0.01]">
-                                <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Cód. Produto</th>
-                                <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Modelo</th>
-                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Qtd</th>
-                                <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Cód. Emb.</th>
-                                <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Descrição Emb.</th>
-                                <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Tipo</th>
-                                <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Tipo Emb.</th>
-                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Enviado</th>
-                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Pendente</th>
-                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Entrega (C.)</th>
-                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Envio (E.)</th>
-                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Status</th>
-                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Status BA</th>
-                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">NF</th>
-                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Previsão</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {rowDetails.map((row, ri) => (
-                                <tr key={ri} className="border-b border-white/[0.03] last:border-0 hover:bg-white/[0.015] transition-colors">
-                                  <td className="px-2.5 py-1.5 whitespace-nowrap">
-                                    <span className="text-slate-400 cursor-help" title={row.p.modelo_produto || row.p.modelo || ''}>{row.sku}</span>
-                                  </td>
-                                  <td className="px-2.5 py-1.5 whitespace-nowrap">
-                                    <span className="text-slate-400" title={row.p.modelo || ''}>{row.p.modelo || '—'}</span>
-                                  </td>
-                                  <td className="px-2.5 py-1.5 text-center text-slate-400 whitespace-nowrap">{row.qty.toLocaleString('pt-BR')}</td>
-                                  <td className="px-2.5 py-1.5 whitespace-nowrap">
-                                    <span className="text-slate-400" title={row.p.codigo_embalagem || ''}>{row.p.codigo_embalagem || '—'}</span>
-                                  </td>
-                                  <td className="px-2.5 py-1.5 whitespace-nowrap">
-                                    <span className="text-slate-400" title={row.p.descricao_embalagem || ''}>{row.p.descricao_embalagem || '—'}</span>
-                                  </td>
-                                  <td className="px-2.5 py-1.5 whitespace-nowrap">
-                                    <span className="text-slate-400 uppercase text-[10px]">{row.p.tipo || '—'}</span>
-                                  </td>
-                                  <td className="px-2.5 py-1.5 whitespace-nowrap">
-                                    <span className="text-slate-400 uppercase text-[10px]">{row.p.tipo_embalagem || '—'}</span>
-                                  </td>
-                                  <td className="px-2.5 py-1.5 text-center font-mono whitespace-nowrap">
-                                    <span className={cn("inline-flex items-center gap-1", row.enviado > 0 ? "text-emerald-500" : "text-slate-600")}>
-                                      {row.enviado > 0 && <Truck size={10} className="opacity-70 flex-shrink-0" />}
-                                      {row.enviado.toLocaleString('pt-BR')}
-                                    </span>
-                                  </td>
-                                  <td className="px-2.5 py-1.5 text-center font-mono whitespace-nowrap">
-                                    <span className={cn("inline-flex items-center gap-1", row.pendente !== 0 ? "text-amber-500" : "text-slate-600")}>
-                                      {row.pendente !== 0 && <Hourglass size={10} className="opacity-70 flex-shrink-0" />}
-                                      {row.pendente.toLocaleString('pt-BR')}
-                                    </span>
-                                  </td>
-                                  <td className="px-2.5 py-1.5 text-center text-slate-400 text-[10px] whitespace-nowrap">{row.p.entrega_compras || 'TBC'}</td>
-                                  <td className="px-2.5 py-1.5 text-center text-slate-400 text-[10px] whitespace-nowrap">{row.p.envio_expedicao || 'TBC'}</td>
-                                  <td className="px-2.5 py-1.5 text-center whitespace-nowrap">
-                                    <span className={cn(
-                                      "inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-medium",
-                                      row.status === 'FINALIZADO' ? 'text-emerald-400 bg-emerald-500/10' :
-                                      row.status === 'EM ANDAMENTO' ? 'text-blue-400 bg-blue-500/10' :
-                                      'text-amber-400 bg-amber-500/10'
-                                    )}>{row.status}</span>
-                                  </td>
-                                  <td className="px-3 py-1.5 text-center">
-                                    <button
-                                      disabled={togglingBa || savingBaConfirm}
-                                      onClick={() => {
-                                        if (row.isBa) {
-                                          // Unmark: toggle directly
-                                          toggleBaixado(
-                                            row.p.solicitacao || '',
-                                            row.sku,
-                                            row.p.codigo_embalagem || '',
-                                            row.rowId
-                                          )
-                                        } else {
-                                          // Mark BA: open confirmation modal
-                                          setBaConfirmModalItem({
-                                            solicitacao: row.p.solicitacao || '',
-                                            sku: row.sku,
-                                            codigoEmbalagem: row.p.codigo_embalagem || '',
-                                            descricaoEmbalagem: row.p.descricao_embalagem || '',
-                                            modeloProduto: row.p.modelo_produto || row.p.modelo || '',
-                                            quantidadePrevista: row.qty,
-                                            confirmQty: row.qty,
-                                            observacao: '',
-                                            rowId: String(row.rowId || ''),
-                                          })
-                                        }
-                                      }}
-                                      title={row.isBa ? "Clique para desmarcar BA" : "Clique para confirmar entrada (BA)"}
-                                      className={cn(
-                                        "px-2 py-0.5 rounded text-[9.5px] font-medium transition-all border",
-                                        (togglingBa || savingBaConfirm) ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
-                                        row.isBa
-                                          ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20"
-                                          : "bg-transparent border-white/[0.06] text-slate-600 hover:text-slate-400 hover:border-white/[0.12]"
-                                      )}
-                                    >
-                                      {row.isBa ? "✓ BA" : "—"}
-                                    </button>
-                                  </td>
+                          {(() => {
+                            const renderItemRow = (row: typeof rowDetails[0], ri: number | string, showNfCol = true) => (
+                              <tr key={ri} className="border-b border-white/[0.03] last:border-0 hover:bg-white/[0.015] transition-colors">
+                                <td className="px-2.5 py-1.5 whitespace-nowrap">
+                                  <span className="text-slate-400 cursor-help" title={row.p.modelo_produto || row.p.modelo || ''}>{row.sku}</span>
+                                </td>
+                                <td className="px-2.5 py-1.5 whitespace-nowrap">
+                                  <span className="text-slate-400" title={row.p.modelo || ''}>{row.p.modelo || '—'}</span>
+                                </td>
+                                <td className="px-2.5 py-1.5 text-center text-slate-400 whitespace-nowrap">{row.qty.toLocaleString('pt-BR')}</td>
+                                <td className="px-2.5 py-1.5 whitespace-nowrap">
+                                  <span className="text-slate-400" title={row.p.codigo_embalagem || ''}>{row.p.codigo_embalagem || '—'}</span>
+                                </td>
+                                <td className="px-2.5 py-1.5 whitespace-nowrap">
+                                  <span className="text-slate-400" title={row.p.descricao_embalagem || ''}>{row.p.descricao_embalagem || '—'}</span>
+                                </td>
+                                <td className="px-2.5 py-1.5 whitespace-nowrap">
+                                  <span className="text-slate-400 uppercase text-[10px]">{row.p.tipo || '—'}</span>
+                                </td>
+                                <td className="px-2.5 py-1.5 whitespace-nowrap">
+                                  <span className="text-slate-400 uppercase text-[10px]">{row.p.tipo_embalagem || '—'}</span>
+                                </td>
+                                <td className="px-2.5 py-1.5 text-center font-mono whitespace-nowrap">
+                                  <span className={cn("inline-flex items-center gap-1", row.enviado > 0 ? "text-emerald-500" : "text-slate-600")}>
+                                    {row.enviado > 0 && <Truck size={10} className="opacity-70 flex-shrink-0" />}
+                                    {row.enviado.toLocaleString('pt-BR')}
+                                  </span>
+                                </td>
+                                <td className="px-2.5 py-1.5 text-center font-mono whitespace-nowrap">
+                                  <span className={cn("inline-flex items-center gap-1", row.pendente !== 0 ? "text-amber-500" : "text-slate-600")}>
+                                    {row.pendente !== 0 && <Hourglass size={10} className="opacity-70 flex-shrink-0" />}
+                                    {row.pendente.toLocaleString('pt-BR')}
+                                  </span>
+                                </td>
+                                <td className="px-2.5 py-1.5 text-center text-slate-400 text-[10px] whitespace-nowrap">{row.p.entrega_compras || 'TBC'}</td>
+                                <td className="px-2.5 py-1.5 text-center text-slate-400 text-[10px] whitespace-nowrap">{row.p.envio_expedicao || 'TBC'}</td>
+                                <td className="px-2.5 py-1.5 text-center whitespace-nowrap">
+                                  <span className={cn(
+                                    "inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-medium",
+                                    row.status === 'FINALIZADO' ? 'text-emerald-400 bg-emerald-500/10' :
+                                    row.status === 'EM ANDAMENTO' ? 'text-blue-400 bg-blue-500/10' :
+                                    'text-amber-400 bg-amber-500/10'
+                                  )}>{row.status}</span>
+                                </td>
+                                <td className="px-3 py-1.5 text-center">
+                                  <button
+                                    disabled={togglingBa || savingBaConfirm}
+                                    onClick={() => {
+                                      if (row.isBa) {
+                                        // Unmark: toggle directly
+                                        toggleBaixado(
+                                          row.p.solicitacao || '',
+                                          row.sku,
+                                          row.p.codigo_embalagem || '',
+                                          row.rowId
+                                        )
+                                      } else {
+                                        // Mark BA: open confirmation modal
+                                        setBaConfirmModalItem({
+                                          solicitacao: row.p.solicitacao || '',
+                                          sku: row.sku,
+                                          codigoEmbalagem: row.p.codigo_embalagem || '',
+                                          descricaoEmbalagem: row.p.descricao_embalagem || '',
+                                          modeloProduto: row.p.modelo_produto || row.p.modelo || '',
+                                          quantidadePrevista: row.qty,
+                                          confirmQty: row.qty,
+                                          observacao: '',
+                                          rowId: String(row.rowId || ''),
+                                        })
+                                      }
+                                    }}
+                                    title={row.isBa ? "Clique para desmarcar BA" : "Clique para confirmar entrada (BA)"}
+                                    className={cn(
+                                      "px-2 py-0.5 rounded text-[9.5px] font-medium transition-all border",
+                                      (togglingBa || savingBaConfirm) ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
+                                      row.isBa
+                                        ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20"
+                                        : "bg-transparent border-white/[0.06] text-slate-600 hover:text-slate-400 hover:border-white/[0.12]"
+                                    )}
+                                  >
+                                    {row.isBa ? "✓ BA" : "—"}
+                                  </button>
+                                </td>
+                                {showNfCol && (
                                   <td className="px-3 py-1.5 text-center text-slate-400 text-[10px]">{row.p.nf || '—'}</td>
-                                  <td className="px-3 py-1.5 text-center text-slate-400 text-[10px]">{row.p.previsao_entrega || '—'}</td>
-                                </tr>
+                                )}
+                                <td className="px-3 py-1.5 text-center text-slate-400 text-[10px]">{row.p.previsao_entrega || '—'}</td>
+                              </tr>
+                            )
 
-                              ))}
-                            </tbody>
-                          </table>
+                            if (!groupByNf) {
+                              return (
+                                <table className="w-full border-collapse text-[10px]">
+                                  <thead>
+                                    <tr className="border-b border-white/[0.04] bg-white/[0.01]">
+                                      <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Cód. Produto</th>
+                                      <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Modelo</th>
+                                      <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Qtd</th>
+                                      <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Cód. Emb.</th>
+                                      <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Descrição Emb.</th>
+                                      <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Tipo</th>
+                                      <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Tipo Emb.</th>
+                                      <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Enviado</th>
+                                      <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Pendente</th>
+                                      <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Entrega (C.)</th>
+                                      <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Envio (E.)</th>
+                                      <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Status</th>
+                                      <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Status BA</th>
+                                      <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">NF</th>
+                                      <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Previsão</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {rowDetails.map((row, ri) => renderItemRow(row, ri, true))}
+                                  </tbody>
+                                </table>
+                              )
+                            }
+
+                            // Agrupamento por Nota Fiscal
+                            const nfGroups: Record<string, typeof rowDetails> = {}
+                            rowDetails.forEach(row => {
+                              const rawNf = String(row.p.nf || '').trim()
+                              const nfKey = rawNf && rawNf !== '-' && rawNf.toLowerCase() !== 'null' ? rawNf : '__SEM_NF__'
+                              if (!nfGroups[nfKey]) nfGroups[nfKey] = []
+                              nfGroups[nfKey].push(row)
+                            })
+
+                            const sortedNfKeys = Object.keys(nfGroups).sort((a, b) => {
+                              if (a === '__SEM_NF__') return 1
+                              if (b === '__SEM_NF__') return -1
+                              const numA = Number(a.replace(/\D/g, ''))
+                              const numB = Number(b.replace(/\D/g, ''))
+                              if (!isNaN(numA) && !isNaN(numB) && numA !== numB) return numA - numB
+                              return a.localeCompare(b)
+                            })
+
+                            return (
+                              <div className="p-3 space-y-2 bg-[#070b14]/80">
+                                {sortedNfKeys.map(nfKey => {
+                                  const nfRows = nfGroups[nfKey]
+                                  const nfGroupStateKey = `${solKey}__NF__${nfKey}`
+                                  // As NFs vem fechadas por padrão (expandedNfGroups starts empty)
+                                  const isNfExpanded = expandedNfGroups.has(nfGroupStateKey)
+                                  const toggleNf = () => {
+                                    setExpandedNfGroups(prev => {
+                                      const next = new Set(prev)
+                                      if (next.has(nfGroupStateKey)) next.delete(nfGroupStateKey)
+                                      else next.add(nfGroupStateKey)
+                                      return next
+                                    })
+                                  }
+
+                                  let nfSolic = 0, nfEnviado = 0, nfPendente = 0
+                                  nfRows.forEach(r => {
+                                    nfSolic += r.qty
+                                    nfEnviado += r.enviado
+                                    nfPendente += r.pendente
+                                  })
+                                  const nfPrevisao = nfRows.find(r => r.p.previsao_entrega)?.p.previsao_entrega
+                                  const allBaInNf = nfRows.length > 0 && nfRows.every(r => r.isBa)
+
+                                  return (
+                                    <div
+                                      key={nfGroupStateKey}
+                                      className="rounded-lg border border-blue-500/25 bg-[#0b1324] overflow-hidden transition-all shadow-sm"
+                                    >
+                                      {/* Header / Toggle da Nota Fiscal */}
+                                      <button
+                                        type="button"
+                                        onClick={toggleNf}
+                                        className="w-full px-3 py-2 bg-gradient-to-r from-blue-950/50 via-slate-900/60 to-transparent hover:bg-blue-900/20 text-left transition-colors cursor-pointer flex items-center justify-between flex-wrap gap-2 group"
+                                      >
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <ChevronRight
+                                            size={13}
+                                            className={cn("text-blue-400 transition-transform duration-150 flex-shrink-0", isNfExpanded ? "rotate-90 text-blue-300" : "")}
+                                          />
+                                          <span className="text-[11px] font-normal text-blue-200/90 flex items-center gap-1.5">
+                                            <FileText size={12} className="text-blue-400" />
+                                            {nfKey === '__SEM_NF__' ? 'Sem Nota Fiscal' : `Nota Fiscal: ${nfKey}`}
+                                          </span>
+                                          <span className="text-[10px] text-slate-400 bg-slate-800/90 px-2 py-0.5 rounded-full border border-slate-700/60 font-mono">
+                                            {nfRows.length} {nfRows.length === 1 ? 'item' : 'itens'}
+                                          </span>
+                                          {nfPrevisao && (
+                                            <span className="text-[10px] text-slate-400 ml-1.5">
+                                              Previsão: <span className="text-slate-300 font-mono">{nfPrevisao}</span>
+                                            </span>
+                                          )}
+                                          {allBaInNf && (
+                                            <span className="text-[9px] font-normal text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded ml-1">
+                                              ✓ Todos BA
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        <div className="flex items-center gap-3 text-[10px]">
+                                          <span className="text-slate-400">
+                                            Solicitado: <span className="text-slate-400 font-mono font-normal">{nfSolic.toLocaleString('pt-BR')}</span>
+                                          </span>
+                                          <span className="text-slate-400">
+                                            Enviado: <span className="text-emerald-500/80 font-mono font-normal">{nfEnviado.toLocaleString('pt-BR')}</span>
+                                          </span>
+                                          <span className="text-slate-400">
+                                            Pendente: <span className={cn("font-mono font-normal", nfPendente > 0 ? "text-amber-400" : "text-slate-600")}>{nfPendente.toLocaleString('pt-BR')}</span>
+                                          </span>
+                                          <span className={cn(
+                                            "px-1.5 py-0.5 rounded text-[9px] font-normal uppercase tracking-wider",
+                                            nfPendente === 0 ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
+                                            nfEnviado > 0 ? "bg-blue-500/10 text-blue-400 border border-blue-500/20" :
+                                            "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                          )}>
+                                            {nfPendente === 0 ? "Concluído" : nfEnviado > 0 ? "Em Andamento" : "Pendente"}
+                                          </span>
+                                        </div>
+                                      </button>
+
+                                      {/* Cabeçalho das informações e linhas de itens DENTRO do toggle da NF (coluna NF oculta) */}
+                                      {isNfExpanded && (
+                                        <div className="border-t border-blue-500/20 overflow-x-auto bg-[#070d18]">
+                                          <table className="w-full border-collapse text-[10px]">
+                                            <thead>
+                                              <tr className="border-b border-white/[0.04] bg-white/[0.02]">
+                                                <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Cód. Produto</th>
+                                                <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Modelo</th>
+                                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Qtd</th>
+                                                <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Cód. Emb.</th>
+                                                <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Descrição Emb.</th>
+                                                <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Tipo</th>
+                                                <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Tipo Emb.</th>
+                                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Enviado</th>
+                                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Pendente</th>
+                                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Entrega (C.)</th>
+                                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Envio (E.)</th>
+                                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Status</th>
+                                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Status BA</th>
+                                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Previsão</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {nfRows.map((row, ri) => renderItemRow(row, `${nfKey}-${ri}`, false))}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )
+                          })()}
                         </div>
                       )}
                     </div>
