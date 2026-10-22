@@ -31,7 +31,6 @@ interface EditableRow {
   codigo: string
   tipo: "chao" | "drive_in"
   setor: string
-  capacidade: number
   nivelCount: number
   profundidadeCount: number
   isNew?: boolean
@@ -59,7 +58,7 @@ export function MapeamentoPosicaoModal({
 
   // Carrega posições na tabela
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && rows.length === 0) {
       if (posicoesAtuais.length > 0) {
         setRows(
           posicoesAtuais.map(p => ({
@@ -67,20 +66,18 @@ export function MapeamentoPosicaoModal({
             codigo: p.codigo,
             tipo: p.tipo === "drive_in" ? "drive_in" : "chao",
             setor: p.setor || (p.tipo === "chao" ? "Área de Chão" : "Rua"),
-            capacidade: p.capacidade || 10,
             nivelCount: p.nivelCount || (p.tipo === "drive_in" ? 3 : 1),
             profundidadeCount: p.profundidadeCount || (p.tipo === "drive_in" ? 4 : 10),
           }))
         )
       } else {
-        // Inicia com 3 linhas vazias de exemplo para preenchimento rápido
+        // Inicia com 2 linhas vazias de exemplo para preenchimento rápido
         setRows([
           {
             id: "row_1",
             codigo: "CHAO-01",
             tipo: "chao",
             setor: "Área de Chão",
-            capacidade: 10,
             nivelCount: 1,
             profundidadeCount: 10,
             isNew: true,
@@ -90,7 +87,6 @@ export function MapeamentoPosicaoModal({
             codigo: "CHAO-02",
             tipo: "chao",
             setor: "Área de Chão",
-            capacidade: 10,
             nivelCount: 1,
             profundidadeCount: 10,
             isNew: true,
@@ -98,7 +94,7 @@ export function MapeamentoPosicaoModal({
         ])
       }
     }
-  }, [isOpen, posicoesAtuais])
+  }, [isOpen]) // Removido posicoesAtuais da dependência para evitar sobrescrita ao atualizar
 
   if (!isOpen) return null
 
@@ -112,7 +108,6 @@ export function MapeamentoPosicaoModal({
         codigo: `CHAO-${pad}`,
         tipo: "chao",
         setor: "Área de Chão",
-        capacidade: 10,
         nivelCount: 1,
         profundidadeCount: 10,
         isNew: true,
@@ -128,12 +123,11 @@ export function MapeamentoPosicaoModal({
         if (field === "tipo") {
           if (value === "chao") {
             updated.nivelCount = 1
-            updated.profundidadeCount = updated.capacidade || 10
+            updated.profundidadeCount = 10
             if (updated.setor === "Rua 1F") updated.setor = "Área de Chão"
           } else {
             updated.nivelCount = 3
             updated.profundidadeCount = 4
-            updated.capacidade = 12
             if (updated.setor === "Área de Chão") updated.setor = "Rua 1F"
           }
         }
@@ -165,9 +159,8 @@ export function MapeamentoPosicaoModal({
         codigo: code,
         tipo: batchType,
         setor: batchSetor,
-        capacidade: batchCap,
         nivelCount: batchType === "drive_in" ? 3 : 1,
-        profundidadeCount: batchType === "drive_in" ? 4 : batchCap,
+        profundidadeCount: batchType === "drive_in" ? 4 : 10,
         isNew: true,
       })
     }
@@ -192,12 +185,9 @@ export function MapeamentoPosicaoModal({
         mapeamentoId: config.id,
         codigo: r.codigo.trim().toUpperCase(),
         tipo: r.tipo,
-        capacidade: Number(r.capacidade) || (r.tipo === "drive_in" ? 16 : 10),
+        capacidade: Number(r.nivelCount) * Number(r.profundidadeCount),
         nivelCount: r.tipo === "drive_in" ? Number(r.nivelCount) || 3 : 1,
-        profundidadeCount:
-          r.tipo === "drive_in"
-            ? Number(r.profundidadeCount) || 4
-            : Number(r.capacidade) || 10,
+        profundidadeCount: Number(r.profundidadeCount) || (r.tipo === "drive_in" ? 4 : 10),
         setor: r.setor.trim() || (r.tipo === "chao" ? "Área de Chão" : "Rua"),
         status: "Aberto",
         criadoEm: new Date().toISOString(),
@@ -206,8 +196,14 @@ export function MapeamentoPosicaoModal({
 
       await onBulkSavePosicoes(posicoesToSave)
       onClose()
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro ao salvar posições:", err)
+      const msg = err?.message || ""
+      if (msg.includes("row-level security") || err?.code === "42501") {
+        alert("Erro de Permissão (RLS) no Supabase:\nA tabela 'mapeamentos_posicoes' bloqueou a inserção anônima. É necessário liberar a política RLS no SQL Editor do Supabase.")
+      } else {
+        alert(`Erro ao salvar no banco de dados: ${msg || "Erro desconhecido"}`)
+      }
     } finally {
       setIsSaving(false)
     }
@@ -243,13 +239,7 @@ export function MapeamentoPosicaoModal({
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowBatchBar(!showBatchBar)}
-              className="px-3 py-1.5 rounded-xl border border-slate-700 hover:border-blue-500 text-xs font-semibold text-slate-300 hover:text-white flex items-center gap-1.5 transition-all cursor-pointer"
-            >
-              <Sparkles size={14} className="text-blue-400" />
-              <span>Gerar Sequência</span>
-            </button>
+            {/* REMOVIDO: Botão Gerar Sequência */}
 
             <button
               onClick={handleAddRow}
@@ -268,83 +258,9 @@ export function MapeamentoPosicaoModal({
           </div>
         </div>
 
-        {/* Barra de Geração Rápida em Lote (Expansível) */}
+        {/* REMOVIDO: Barra de Geração Rápida */}
         {showBatchBar && (
-          <div className="p-4 bg-slate-950 border-b border-slate-800 shrink-0">
-            <div className="flex flex-wrap items-center gap-3 text-xs">
-              <span className="font-bold text-blue-400 uppercase text-[11px] flex items-center gap-1">
-                <Sparkles size={13} /> Gerar Várias:
-              </span>
-
-              <div className="flex items-center gap-1">
-                <span className="text-slate-400 text-[11px]">Prefixo:</span>
-                <input
-                  type="text"
-                  value={batchPrefix}
-                  onChange={e => setBatchPrefix(e.target.value.toUpperCase())}
-                  placeholder="CHAO-"
-                  className="w-20 px-2 py-1 bg-slate-800 border border-slate-700 rounded text-white font-mono text-xs uppercase"
-                />
-              </div>
-
-              <div className="flex items-center gap-1">
-                <span className="text-slate-400 text-[11px]">De:</span>
-                <input
-                  type="number"
-                  min={1}
-                  value={batchStart}
-                  onChange={e => setBatchStart(Number(e.target.value))}
-                  className="w-14 px-2 py-1 bg-slate-800 border border-slate-700 rounded text-white text-xs"
-                />
-              </div>
-
-              <div className="flex items-center gap-1">
-                <span className="text-slate-400 text-[11px]">Até:</span>
-                <input
-                  type="number"
-                  min={batchStart}
-                  value={batchEnd}
-                  onChange={e => setBatchEnd(Number(e.target.value))}
-                  className="w-14 px-2 py-1 bg-slate-800 border border-slate-700 rounded text-white text-xs"
-                />
-              </div>
-
-              <div className="flex items-center gap-1">
-                <span className="text-slate-400 text-[11px]">Tipo:</span>
-                <select
-                  value={batchType}
-                  onChange={e => {
-                    const t = e.target.value as "chao" | "drive_in"
-                    setBatchType(t)
-                    setBatchSetor(t === "chao" ? "Área de Chão" : "Rua 1F")
-                    setBatchCap(t === "chao" ? 10 : 12)
-                  }}
-                  className="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-white text-xs cursor-pointer"
-                >
-                  <option value="chao">Chão / Blocado</option>
-                  <option value="drive_in">Drive-In / Estante</option>
-                </select>
-              </div>
-
-              <div className="flex items-center gap-1">
-                <span className="text-slate-400 text-[11px]">Setor:</span>
-                <input
-                  type="text"
-                  value={batchSetor}
-                  onChange={e => setBatchSetor(e.target.value)}
-                  className="w-28 px-2 py-1 bg-slate-800 border border-slate-700 rounded text-white text-xs"
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={handleGenerateBatch}
-                className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded text-xs ml-auto transition-colors cursor-pointer"
-              >
-                + Inserir na Tabela ({Math.max(0, batchEnd - batchStart + 1)})
-              </button>
-            </div>
-          </div>
+          <></>
         )}
 
         {/* Tabela Editável de Posições */}
@@ -356,7 +272,8 @@ export function MapeamentoPosicaoModal({
                 <th className="py-2.5 px-3 w-[28%]">Código da Posição *</th>
                 <th className="py-2.5 px-3 w-[22%]">Tipo de Estrutura</th>
                 <th className="py-2.5 px-3 w-[24%]">Setor / Rua / Área</th>
-                <th className="py-2.5 px-3 w-[16%]">Capacidade (PTs)</th>
+                <th className="py-2.5 px-3 w-[8%]">Nível</th>
+                <th className="py-2.5 px-3 w-[8%]">Profund.</th>
                 <th className="py-2.5 px-3 w-10 text-center">Ações</th>
               </tr>
             </thead>
@@ -386,7 +303,7 @@ export function MapeamentoPosicaoModal({
                       className="w-full h-8 px-2 bg-slate-800 border border-slate-700 rounded text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
                     >
                       <option value="chao">Chão / Blocado (Solo)</option>
-                      <option value="drive_in">Drive-In / Porta-Palete</option>
+                      <option value="drive_in">Drive-In / Estante</option>
                     </select>
                   </td>
 
@@ -401,15 +318,27 @@ export function MapeamentoPosicaoModal({
                     />
                   </td>
 
-                  {/* Capacidade */}
+                  {/* Nível */}
                   <td className="py-2 px-3">
                     <input
                       type="number"
                       min={1}
-                      max={200}
-                      value={row.capacidade}
-                      onChange={e => handleUpdateRow(row.id, "capacidade", Number(e.target.value))}
-                      className="w-full h-8 px-2.5 bg-slate-800 border border-slate-700 rounded text-xs font-semibold text-white focus:outline-none focus:border-blue-500"
+                      max={10}
+                      value={row.nivelCount}
+                      onChange={e => handleUpdateRow(row.id, "nivelCount", Number(e.target.value))}
+                      className="w-full h-8 px-2.5 bg-slate-800 border border-slate-700 rounded text-xs font-semibold text-white focus:outline-none focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                  </td>
+
+                  {/* Profundidade */}
+                  <td className="py-2 px-3">
+                    <input
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={row.profundidadeCount}
+                      onChange={e => handleUpdateRow(row.id, "profundidadeCount", Number(e.target.value))}
+                      className="w-full h-8 px-2.5 bg-slate-800 border border-slate-700 rounded text-xs font-semibold text-white focus:outline-none focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                   </td>
 
