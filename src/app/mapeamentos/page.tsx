@@ -436,6 +436,15 @@ export default function MapeamentosPage() {
     XLSX.writeFile(workbook, `${safeName}_${new Date().toISOString().slice(0, 10)}.xlsx`)
   }
 
+  const [view, setView] = useState<"list" | "detail">(configs.length > 0 ? "list" : "list")
+  
+  // Atualiza a visualização para 'list' se não houver seleção
+  useEffect(() => {
+    if (!selectedConfigId) {
+        setView("list")
+    }
+  }, [selectedConfigId])
+
   if (!mounted) return null
 
   // Estado vazio: nenhum mapeamento cadastrado
@@ -459,6 +468,50 @@ export default function MapeamentosPage() {
     )
   }
 
+  // Visualização de Listagem
+  if (view === "list") {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-8">
+        <div className="max-w-4xl mx-auto">
+            <header className="flex items-center justify-between mb-8">
+                <div>
+                    <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Mapeamentos</h1>
+                    <p className="text-slate-500 text-sm">Selecione um mapeamento para iniciar</p>
+                </div>
+                <div className="flex gap-2">
+                    <button onClick={() => router.push("/")} className="px-4 py-2 text-sm font-semibold text-slate-600 dark:text-slate-400">Voltar</button>
+                    <button 
+                        onClick={() => { setConfigParaEditar(null); setIsConfigModalOpen(true) }}
+                        className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-xl"
+                    >
+                        Novo Mapeamento
+                    </button>
+                </div>
+            </header>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {configs.map(c => (
+                    <div 
+                        key={c.id} 
+                        onClick={() => { setSelectedConfigId(c.id); setView("detail") }}
+                        className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl cursor-pointer hover:border-blue-500 transition-colors"
+                    >
+                        <h3 className="font-bold text-lg">{c.nome}</h3>
+                        <p className="text-slate-500 text-sm">{c.categoria}</p>
+                    </div>
+                ))}
+            </div>
+        </div>
+        <MapeamentoConfigModal
+            isOpen={isConfigModalOpen}
+            onClose={() => setIsConfigModalOpen(false)}
+            onSave={handleCreateOrUpdateConfig}
+            initialConfig={configParaEditar}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-100">
       {/* ── HEADER SUPERIOR ───────────────────────────────────────────────── */}
@@ -467,106 +520,23 @@ export default function MapeamentosPage() {
           {/* Lado Esquerdo: Voltar + Seletor de Mapeamento */}
           <div className="flex items-center gap-3">
             <button
-              onClick={() => router.push("/")}
-              title="Voltar à tela inicial de módulos"
+              onClick={() => setView("list")}
+              title="Voltar à lista de mapeamentos"
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all text-xs font-semibold cursor-pointer shrink-0"
             >
               <ChevronLeft size={16} />
-              <span className="hidden sm:inline">Módulos</span>
+              <span className="hidden sm:inline">Mapeamentos</span>
             </button>
-
-            <div className="h-6 w-px bg-slate-200 dark:bg-slate-800 hidden sm:block" />
-
-            {/* Dropdown de Seleção de Mapeamento */}
-            <div className="flex items-center gap-2 flex-1">
-              <div
-                className="w-3 h-3 rounded-full shrink-0"
-                style={{ background: activeTheme.primary }}
-              />
-              <select
-                value={selectedConfigId || ""}
-                onChange={e => setSelectedConfigId(e.target.value)}
-                className="bg-transparent font-semibold text-sm md:text-base text-slate-900 dark:text-white focus:outline-none cursor-pointer tracking-tight"
-              >
-                {configs.map(c => (
-                  <option
-                    key={c.id}
-                    value={c.id}
-                    className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
-                  >
-                    {c.nome} ({c.categoria})
-                  </option>
-                ))}
-              </select>
-
-              {activeConfig && (
-                <span
-                  className={cn(
-                    "text-[9px] font-semibold uppercase px-2 py-0.5 rounded-full border hidden md:inline",
-                    activeTheme.badge
-                  )}
-                >
-                  {activeConfig.categoria}
-                </span>
-              )}
-            </div>
+            <div className="text-sm font-bold text-slate-900 dark:text-white">{activeConfig?.nome}</div>
           </div>
-
-          {/* Lado Direito: Ações */}
-          <div className="flex items-center gap-2 self-end md:self-auto">
-            {/* Botão para gerenciar/cadastrar posições do mapeamento */}
+          
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setIsPosicaoModalOpen(true)}
-              title="Cadastrar áreas de Chão, Blocados ou Drive-In para este mapeamento"
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/60 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white transition-all text-xs font-semibold cursor-pointer shadow-sm"
             >
               <Warehouse size={14} className="text-amber-500" />
               <span>Posições / Chão</span>
-            </button>
-
-            <button
-              onClick={() => {
-                setItemCoords({ lvl: 1, prof: 1 })
-                setItemParaEditar(null)
-                setIsItemModalOpen(true)
-              }}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-white shadow-sm transition-all active:scale-95 cursor-pointer"
-              style={{ background: activeTheme.primary }}
-            >
-              <Plus size={14} /> Mapear Item
-            </button>
-
-            <button
-              onClick={handleExportExcel}
-              title="Exportar para Excel (.xlsx)"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all text-xs font-semibold cursor-pointer"
-            >
-              <Download size={14} />
-              <span className="hidden sm:inline">Exportar</span>
-            </button>
-
-            {activeConfig && (
-              <button
-                onClick={() => {
-                  setConfigParaEditar(activeConfig)
-                  setIsConfigModalOpen(true)
-                }}
-                title="Configurar este mapeamento"
-                className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer"
-              >
-                <Settings size={15} />
-              </button>
-            )}
-
-            <button
-              onClick={() => {
-                setConfigParaEditar(null)
-                setIsConfigModalOpen(true)
-              }}
-              title="Novo Mapeamento"
-              className="p-2 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 hover:text-blue-500 hover:border-blue-400 transition-all cursor-pointer"
-            >
-              <Plus size={15} />
             </button>
           </div>
         </div>
@@ -574,7 +544,6 @@ export default function MapeamentosPage() {
 
       {/* ── CONTEÚDO PRINCIPAL ─────────────────────────────────────────────── */}
       <main className="max-w-[1600px] mx-auto p-4 md:p-8 space-y-6">
-        {/* Barra de Controles (idêntica ao G300) */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           {/* Alternador de Modo: MAPA vs TABELA */}
           <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-900 rounded-2xl w-fit border border-slate-200/50 dark:border-slate-800/50">
@@ -602,7 +571,7 @@ export default function MapeamentosPage() {
             </button>
           </div>
 
-          {/* Legenda de Status idêntica ao G300 */}
+        {/* Legenda de Status idêntica ao G300 */}
           {displayMode === "mapa" && (
             <div className="hidden lg:flex items-center justify-center gap-8 px-6">
               <div className="flex items-center gap-2.5">
@@ -653,8 +622,6 @@ export default function MapeamentosPage() {
             </select>
           </div>
         </div>
-
-        {/* ── MODO 1: MAPA VISUAL DO ARMAZÉM ────────────────────────────────── */}
         {displayMode === "mapa" && (
           <MapeamentoWarehouseMap
             streetData={streetData}
@@ -665,8 +632,6 @@ export default function MapeamentosPage() {
             onOpenAddPosicao={() => setIsPosicaoModalOpen(true)}
           />
         )}
-
-        {/* ── MODO 2: TABELA DE ITENS MAPEADOS ──────────────────────────────── */}
         {displayMode === "tabela" && (
           <MapeamentoTable
             activeConfig={activeConfig}
@@ -745,7 +710,9 @@ export default function MapeamentosPage() {
           config={activeConfig}
           itemParaEditar={itemParaEditar}
         />
-      )}
+      )
+      }
     </div>
   )
 }
+
