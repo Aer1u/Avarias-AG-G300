@@ -1,0 +1,10 @@
+// Barrel export para o módulo G300
+export { DriveInGrid } from "../DriveInGrid"
+export { AddPalletModal } from "../AddPalletModal"
+export { WarehouseTable } from "../WarehouseTable"
+export { MetricCard } from "../MetricCard"
+export { OriginDonutChart } from "../OriginDonutChart"
+export { default as RegistrosTab } from "../RegistrosTab"
+export { default as RetrabalhosTab } from "../RetrabalhosTab"
+export { default as EmbalagensTab } from "../EmbalagensTab"
+export { default as RelatorioRecebimentoTab } from "../RelatorioRecebimentoTab"

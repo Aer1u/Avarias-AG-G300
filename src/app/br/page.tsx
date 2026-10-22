@@ -1005,7 +1005,7 @@ ${autoPrint ? `<script>window.onload=()=>{window.print()}</script>` : ''}
 
           {/* Module switcher */}
           <button
-            onClick={() => setShowModuleModal(true)}
+            onClick={() => { window.location.href = '/' }}
             className="flex h-12 w-full items-center rounded-2xl text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors overflow-hidden group/btn border border-blue-200/60 dark:border-blue-500/20 bg-blue-50/50 dark:bg-blue-500/5 cursor-pointer"
             title="Trocar Módulo"
           >
