@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Tv, Fan, LayoutGrid, ArrowRight } from "lucide-react"
+import { motion } from "framer-motion"
+import { cn } from "@/lib/utils"
 
 interface ModuleCard {
   id: string
@@ -96,9 +98,6 @@ export default function HomePage() {
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white mb-2">
             Selecione o Módulo de Trabalho
           </h1>
-          <p className="text-sm text-slate-400 max-w-xl">
-            Escolha o ambiente operacional que deseja gerenciar. Você pode alternar entre eles a qualquer momento pelo menu superior.
-          </p>
         </div>
 
         {/* Grade de Módulos Estilo 2D Flat */}
@@ -112,8 +111,24 @@ export default function HomePage() {
               <div>
                 {/* Topo do card: Ícone 2D + Badge */}
                 <div className="flex items-center justify-between mb-6">
-                  <div className={`w-14 h-14 rounded-xl flex items-center justify-center ${mod.iconBg} ${mod.iconColor}`}>
-                    {mod.icon}
+                  <div className={cn(
+                    "w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg text-white",
+                    mod.id === 'mkbr' ? "bg-emerald-600" : mod.id === 'g300' ? "bg-blue-600" : "bg-purple-600"
+                  )}>
+                    <motion.div
+                      animate={
+                        mod.id === 'mkbr' ? { rotate: 360 } :
+                        mod.id === 'g300' ? { scale: [1, 1.1, 1] } :
+                        { rotate: [0, 10, -10, 0] }
+                      }
+                      transition={{
+                        repeat: Infinity,
+                        duration: mod.id === 'mkbr' ? 2 : 3,
+                        ease: "linear"
+                      }}
+                    >
+                      {mod.icon}
+                    </motion.div>
                   </div>
                   <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-md bg-slate-800 border border-slate-700/60 text-slate-400">
                     {mod.badge}
@@ -126,9 +141,6 @@ export default function HomePage() {
                 </h3>
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
                   {mod.subtitle}
-                </p>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  {mod.description}
                 </p>
               </div>
 
