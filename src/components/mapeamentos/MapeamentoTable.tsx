@@ -11,6 +11,7 @@ interface MapeamentoTableProps {
   onEditItem: (item: MapeamentoItem) => void
   onDeleteItem: (itemId: string) => void
   onExportExcel: () => void
+  isLoggedIn?: boolean
 }
 
 export function MapeamentoTable({
@@ -20,6 +21,7 @@ export function MapeamentoTable({
   onEditItem,
   onDeleteItem,
   onExportExcel,
+  isLoggedIn = false,
 }: MapeamentoTableProps) {
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
@@ -107,20 +109,24 @@ export function MapeamentoTable({
                   ))}
                   <td className="py-3 px-4 text-right">
                     <div className="flex items-center justify-end gap-1.5">
-                      <button
-                        onClick={() => onEditItem(it)}
-                        className="p-1 text-slate-400 hover:text-blue-500 transition-colors cursor-pointer"
-                        title="Editar item"
-                      >
-                        <Edit2 size={13} />
-                      </button>
-                      <button
-                        onClick={() => onDeleteItem(it.id)}
-                        className="p-1 text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
-                        title="Excluir item"
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                      {isLoggedIn && (
+                        <>
+                          <button
+                            onClick={() => onEditItem(it)}
+                            className="p-1 text-slate-400 hover:text-blue-500 transition-colors cursor-pointer"
+                            title="Editar item"
+                          >
+                            <Edit2 size={13} />
+                          </button>
+                          <button
+                            onClick={() => onDeleteItem(it.id)}
+                            className="p-1 text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
+                            title="Excluir item"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </>
+                      )}
                       <button
                         onClick={() => onOpenDriveIn(it.posicao)}
                         className="p-1 text-slate-400 hover:text-white transition-colors cursor-pointer"
