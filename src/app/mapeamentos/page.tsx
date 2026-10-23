@@ -11,10 +11,15 @@ import {
   Table as TableIcon,
   Search,
   Warehouse,
+  LogIn,
+  LogOut,
+  Lock,
+  X,
 } from "lucide-react"
 import * as XLSX from "xlsx"
-import { AnimatePresence } from "framer-motion"
+import { AnimatePresence, motion } from "framer-motion"
 
+import { supabase } from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 import {
   MapeamentoConfig,
@@ -45,6 +50,14 @@ export default function MapeamentosPage() {
   const [mounted, setMounted] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
 
+  // Autenticação Supabase
+  const [user, setUser] = useState<any>(null)
+  const [showLoginModal, setShowLoginModal] = useState(false)
+  const [loginEmail, setLoginEmail] = useState("")
+  const [loginPassword, setLoginPassword] = useState("")
+  const [isLoggingIn, setIsLoggingIn] = useState(false)
+  const [loginError, setLoginError] = useState<string | null>(null)
+
   // Dados da plataforma
   const [configs, setConfigs] = useState<MapeamentoConfig[]>([])
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null)
@@ -69,7 +82,46 @@ export default function MapeamentosPage() {
 
   const [isItemModalOpen, setIsItemModalOpen] = useState(false)
   const [itemCoords, setItemCoords] = useState<{ lvl: number; prof: number }>({ lvl: 1, prof: 1 })
+  const [batchCoords, setBatchCoords] = useState<{ lvl: number; prof: number }[] | null>(null)
   const [itemParaEditar, setItemParaEditar] = useState<MapeamentoItem | null>(null)
+
+  // Escuta autenticação do Supabase
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+    })
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoggingIn(true)
+    setLoginError(null)
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: loginEmail,
+        password: loginPassword,
+      })
+      if (error) throw error
+      setUser(data.user)
+      setShowLoginModal(false)
+      setLoginPassword("")
+    } catch (err: any) {
+      setLoginError(err.message || "Erro ao realizar login. Verifique as credenciais.")
+    } finally {
+      setIsLoggingIn(false)
+    }
+  }
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    setUser(null)
+  }
 
   // Carrega configurações, itens e posições físicas
   useEffect(() => {
@@ -157,10 +209,14 @@ export default function MapeamentosPage() {
     const prof_count = pos?.profundidadeCount ?? (pos?.tipo === "chao" ? capacidade : 4)
     return {
       posicao: selectedPosId,
+      posObj: pos,
+      tipo: (pos?.tipo as "chao" | "drive_in") || "drive_in",
+      setor: pos?.setor || "",
       capacidade,
       nivel_count,
       prof_count,
       is_blocked: pos?.status === "Bloqueado",
+      status: pos?.status || "Aberto",
       observacao: pos?.observacao || "",
       items: posItems,
       occupied: posItems.length,
@@ -354,12 +410,41 @@ export default function MapeamentosPage() {
     setItems(updated)
     setIsItemModalOpen(false)
     setItemParaEditar(null)
+    setBatchCoords(null)
   }
 
   const handleDeleteItem = async (itemId: string) => {
     await deleteMapeamentoItem(itemId)
     const updated = await fetchMapeamentoItens(selectedConfigId || undefined)
     setItems(updated)
+  }
+
+  const handleSwapItems = async (
+    posicao: string,
+    source: { lvl: number; d: number },
+    target: { lvl: number; d: number }
+  ) => {
+    if (source.lvl === target.lvl && source.d === target.d) return
+
+    const posItems = items.filter(it => it.posicao === posicao)
+    const sourceItems = posItems.filter(it => it.nivel === source.lvl && it.profundidade === source.d)
+    const targetItems = posItems.filter(it => it.nivel === target.lvl && it.profundidade === target.d)
+
+    if (sourceItems.length === 0 && targetItems.length === 0) return
+
+    const updates: MapeamentoItem[] = [
+      ...sourceItems.map(it => ({ ...it, nivel: target.lvl, profundidade: target.d })),
+      ...targetItems.map(it => ({ ...it, nivel: source.lvl, profundidade: source.d })),
+    ]
+
+    setItems(prev => {
+      const updatedMap = new Map(updates.map(u => [u.id, u]))
+      return prev.map(p => updatedMap.get(p.id) || p)
+    })
+
+    for (const item of updates) {
+      await saveMapeamentoItem(item)
+    }
   }
 
   const handleSavePosicao = async (pos: MapeamentoPosicao) => {
@@ -386,9 +471,16 @@ export default function MapeamentosPage() {
       const filtered = prev.filter(p => !newCodes.has(p.codigo))
       return [...filtered, ...posList]
     })
-    await bulkSaveMapeamentoPosicoes(posList)
-    if (selectedConfigId) {
-      await loadPosicoesParaMapeamento(selectedConfigId)
+    try {
+      await bulkSaveMapeamentoPosicoes(posList)
+      if (selectedConfigId) {
+        await loadPosicoesParaMapeamento(selectedConfigId)
+      }
+    } catch (err) {
+      if (selectedConfigId) {
+        await loadPosicoesParaMapeamento(selectedConfigId)
+      }
+      throw err
     }
   }
 
@@ -476,16 +568,38 @@ export default function MapeamentosPage() {
             <header className="flex items-center justify-between mb-8">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Mapeamentos</h1>
-                    <p className="text-slate-500 text-sm">Selecione um mapeamento para iniciar</p>
+                    <p className="text-slate-500 text-sm">Selecione um mapeamento para iniciar ou crie um novo</p>
                 </div>
-                <div className="flex gap-2">
-                    <button onClick={() => router.push("/")} className="px-4 py-2 text-sm font-semibold text-slate-600 dark:text-slate-400">Voltar</button>
-                    <button 
-                        onClick={() => { setConfigParaEditar(null); setIsConfigModalOpen(true) }}
-                        className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-xl"
-                    >
-                        Novo Mapeamento
-                    </button>
+                <div className="flex items-center gap-3">
+                    <button onClick={() => router.push("/")} className="px-4 py-2 text-sm font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer">Voltar</button>
+                    {user ? (
+                      <div className="flex items-center gap-2">
+                        <div className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                          <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 truncate max-w-[140px]">{user.email}</span>
+                        </div>
+                        <button
+                          onClick={handleLogout}
+                          className="px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-rose-500 transition-colors text-xs font-semibold rounded-xl flex items-center gap-1.5 cursor-pointer"
+                          title="Sair da conta"
+                        >
+                          <LogOut size={14} /> Sair
+                        </button>
+                        <button 
+                            onClick={() => { setConfigParaEditar(null); setIsConfigModalOpen(true) }}
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl flex items-center gap-1.5 shadow-md cursor-pointer transition-all"
+                        >
+                            <Plus size={16} /> Novo Mapeamento
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setShowLoginModal(true)}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl flex items-center gap-1.5 shadow-md cursor-pointer transition-all"
+                      >
+                        <LogIn size={15} /> Entrar / Login
+                      </button>
+                    )}
                 </div>
             </header>
             
@@ -530,14 +644,40 @@ export default function MapeamentosPage() {
             <div className="text-sm font-bold text-slate-900 dark:text-white">{activeConfig?.nome}</div>
           </div>
           
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsPosicaoModalOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/60 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white transition-all text-xs font-semibold cursor-pointer shadow-sm"
-            >
-              <Warehouse size={14} className="text-amber-500" />
-              <span>Posições / Chão</span>
-            </button>
+          <div className="flex items-center gap-2.5">
+            {user ? (
+              <>
+                <button
+                  onClick={() => setIsPosicaoModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/60 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white transition-all text-xs font-semibold cursor-pointer shadow-sm"
+                >
+                  <Warehouse size={14} className="text-amber-500" />
+                  <span>Posições / Chão</span>
+                </button>
+
+                <div className="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-slate-800">
+                  <div className="px-2.5 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 truncate max-w-[120px]">{user.email}</span>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="p-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-rose-500 transition-colors rounded-xl flex items-center justify-center cursor-pointer"
+                    title="Sair"
+                  >
+                    <LogOut size={14} />
+                  </button>
+                </div>
+              </>
+            ) : (
+              <button
+                onClick={() => setShowLoginModal(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition-all text-xs font-semibold cursor-pointer shadow-md"
+              >
+                <LogIn size={14} />
+                <span>Entrar / Login</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -629,7 +769,8 @@ export default function MapeamentosPage() {
             advancedStats={advancedStats}
             activeConfig={activeConfig}
             onOpenDriveIn={handleOpenDriveIn}
-            onOpenAddPosicao={() => setIsPosicaoModalOpen(true)}
+            onOpenAddPosicao={() => (user ? setIsPosicaoModalOpen(true) : setShowLoginModal(true))}
+            isLoggedIn={!!user}
           />
         )}
         {displayMode === "tabela" && (
@@ -638,6 +779,10 @@ export default function MapeamentosPage() {
             items={activeItems}
             onOpenDriveIn={handleOpenDriveIn}
             onEditItem={it => {
+              if (!user) {
+                setShowLoginModal(true)
+                return
+              }
               setSelectedPosId(it.posicao)
               setItemParaEditar(it)
               setItemCoords({ lvl: it.nivel, prof: it.profundidade })
@@ -645,6 +790,7 @@ export default function MapeamentosPage() {
             }}
             onDeleteItem={handleDeleteItem}
             onExportExcel={handleExportExcel}
+            isLoggedIn={!!user}
           />
         )}
       </main>
@@ -661,7 +807,7 @@ export default function MapeamentosPage() {
       />
 
       {/* Modal para criar ou gerenciar posições do mapeamento (Chão, Drive-In) */}
-      {isPosicaoModalOpen && activeConfig && (
+      {isPosicaoModalOpen && activeConfig && user && (
         <MapeamentoPosicaoModal
           isOpen={isPosicaoModalOpen}
           onClose={() => setIsPosicaoModalOpen(false)}
@@ -680,27 +826,41 @@ export default function MapeamentosPage() {
             posDetail={selectedPosDetail}
             config={activeConfig}
             onClose={() => setSelectedPosId(null)}
-            onAddItem={(lvl, prof) => {
+            onAddItem={(lvl, prof, batch) => {
+              if (!user) {
+                setShowLoginModal(true)
+                return
+              }
               setItemCoords({ lvl, prof })
+              setBatchCoords(batch || null)
               setItemParaEditar(null)
               setIsItemModalOpen(true)
             }}
             onEditItem={it => {
+              if (!user) {
+                setShowLoginModal(true)
+                return
+              }
               setItemParaEditar(it)
               setItemCoords({ lvl: it.nivel, prof: it.profundidade })
+              setBatchCoords(null)
               setIsItemModalOpen(true)
             }}
             onDeleteItem={handleDeleteItem}
+            onSavePosicao={handleSavePosicao}
+            onSwapItems={handleSwapItems}
+            isLoggedIn={!!user}
           />
         )}
       </AnimatePresence>
 
-      {isItemModalOpen && activeConfig && (
+      {isItemModalOpen && activeConfig && user && (
         <MapeamentoItemModal
           isOpen={isItemModalOpen}
           onClose={() => {
             setIsItemModalOpen(false)
             setItemParaEditar(null)
+            setBatchCoords(null)
           }}
           onSave={handleSaveItem}
           posicao={selectedPosId || posicoes[0]?.codigo || ""}
@@ -709,9 +869,99 @@ export default function MapeamentosPage() {
           profundidadeInicial={itemCoords.prof}
           config={activeConfig}
           itemParaEditar={itemParaEditar}
+          batchCoords={batchCoords}
         />
-      )
-      }
+      )}
+
+      {/* Modal de Autenticação / Login */}
+      <AnimatePresence>
+        {showLoginModal && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl relative"
+            >
+              <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-5">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2.5 rounded-2xl bg-blue-500/10 text-blue-500">
+                    <Lock size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                      Área Restrita — Autenticação
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Faça login para editar, adicionar ou remover itens
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowLoginModal(false)}
+                  className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {loginError && (
+                <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs font-medium text-rose-600 dark:text-rose-400">
+                  {loginError}
+                </div>
+              )}
+
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                    E-mail de Acesso
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={loginEmail}
+                    onChange={e => setLoginEmail(e.target.value)}
+                    placeholder="seu.email@empresa.com"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-500 transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                    Senha
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={loginPassword}
+                    onChange={e => setLoginPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-500 transition-colors"
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowLoginModal(false)}
+                    className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-semibold text-xs hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isLoggingIn}
+                    className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-blue-600/20 disabled:opacity-50 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <LogIn size={14} />
+                    {isLoggingIn ? "Entrando..." : "Entrar"}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
