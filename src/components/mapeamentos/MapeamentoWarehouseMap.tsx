@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { Warehouse, Plus, Layers, Sparkles } from "lucide-react"
+import { Warehouse, Plus, Layers } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { MapeamentoConfig, COLOR_THEMES } from "@/lib/mapeamentosStorage"
 
@@ -17,6 +17,7 @@ interface MapeamentoWarehouseMapProps {
   activeConfig: MapeamentoConfig | null
   onOpenDriveIn: (posId: string) => void
   onOpenAddPosicao: () => void
+  isLoggedIn?: boolean
 }
 
 export function MapeamentoWarehouseMap({
@@ -26,6 +27,7 @@ export function MapeamentoWarehouseMap({
   activeConfig,
   onOpenDriveIn,
   onOpenAddPosicao,
+  isLoggedIn = false,
 }: MapeamentoWarehouseMapProps) {
   const theme = activeConfig ? COLOR_THEMES[activeConfig.cor] || COLOR_THEMES.blue : COLOR_THEMES.blue
 
@@ -50,15 +52,17 @@ export function MapeamentoWarehouseMap({
             estruturas de <strong className="text-slate-700 dark:text-slate-300">Drive-In / Porta-Paletes</strong> ou importe do galpão.
           </p>
         </div>
-        <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-          <button
-            onClick={onOpenAddPosicao}
-            className="px-5 py-3 rounded-xl text-xs font-semibold text-white shadow-md hover:brightness-110 active:scale-95 transition-all cursor-pointer flex items-center gap-2"
-            style={{ background: theme.primary }}
-          >
-            <Plus size={16} /> Cadastrar Posições / Chão
-          </button>
-        </div>
+        {isLoggedIn && (
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <button
+              onClick={onOpenAddPosicao}
+              className="px-5 py-3 rounded-xl text-xs font-semibold text-white shadow-md hover:brightness-110 active:scale-95 transition-all cursor-pointer flex items-center gap-2"
+              style={{ background: theme.primary }}
+            >
+              <Plus size={16} /> Cadastrar Posições / Chão
+            </button>
+          </div>
+        )}
       </div>
     )
   }
@@ -157,12 +161,14 @@ export function MapeamentoWarehouseMap({
             </div>
 
             {/* Botão de adicionar posição direto no resumo */}
-            <button
-              onClick={onOpenAddPosicao}
-              className="px-3 py-1.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:border-blue-500 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-blue-500 flex items-center gap-1.5 transition-all cursor-pointer"
-            >
-              <Plus size={14} /> Posição / Chão
-            </button>
+            {isLoggedIn && (
+              <button
+                onClick={onOpenAddPosicao}
+                className="px-3 py-1.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:border-blue-500 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-blue-500 flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <Plus size={14} /> Posição / Chão
+              </button>
+            )}
           </div>
         </div>
       </div>
