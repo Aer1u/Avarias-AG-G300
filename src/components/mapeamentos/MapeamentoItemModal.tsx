@@ -15,16 +15,17 @@ export interface PalletItemRow {
   customValues: Record<string, any>
 }
 
-interface MapeamentoItemModalProps {
+export interface MapeamentoItemModalProps {
   isOpen: boolean
   onClose: () => void
-  onSave: (items: MapeamentoItem[]) => void
+  onSave: (items: MapeamentoItem[] | MapeamentoItem) => void | Promise<void>
   config: MapeamentoConfig
   posicao: string
   posicoesDisponiveis?: string[]
   nivelInicial: number
   profundidadeInicial: number
   itemParaEditar?: MapeamentoItem | null
+  batchCoords?: { lvl: number; prof: number }[] | null
 }
 
 export function MapeamentoItemModal({
@@ -37,6 +38,7 @@ export function MapeamentoItemModal({
   nivelInicial,
   profundidadeInicial,
   itemParaEditar,
+  batchCoords,
 }: MapeamentoItemModalProps) {
   const [currentPosicao, setCurrentPosicao] = useState(posicao || posicoesDisponiveis[0] || "")
   const [destinationLevel, setDestinationLevel] = useState<number>(nivelInicial)
@@ -187,20 +189,29 @@ export function MapeamentoItemModal({
       : undefined
 
     const now = new Date().toISOString()
-    const mapeamentoItemsToSave: MapeamentoItem[] = validItems.map(item => ({
-      id: itemParaEditar ? itemParaEditar.id : "item_" + Math.random().toString(36).substring(2, 9),
-      mapeamentoId: config.id,
-      posicao: currentPosicao,
-      nivel: destinationLevel,
-      profundidade: destinationDepth,
-      sku: item.sku.trim().toUpperCase(),
-      descricao: item.descricao || "Item Mapeado",
-      quantidade: Number(item.qty) || 1,
-      idPalete: generatedPalletId || (itemParaEditar ? itemParaEditar.idPalete : undefined),
-      customValues: item.customValues || {},
-      criadoEm: itemParaEditar?.criadoEm || now,
-      atualizadoEm: now,
-    }))
+    const isBatch = !itemParaEditar && batchCoords && batchCoords.length > 1
+    const targets = isBatch ? batchCoords : [{ lvl: destinationLevel, prof: destinationDepth }]
+
+    const mapeamentoItemsToSave: MapeamentoItem[] = []
+
+    targets.forEach(tgt => {
+      validItems.forEach(item => {
+        mapeamentoItemsToSave.push({
+          id: itemParaEditar ? itemParaEditar.id : "item_" + Math.random().toString(36).substring(2, 9),
+          mapeamentoId: config.id,
+          posicao: currentPosicao,
+          nivel: tgt.lvl,
+          profundidade: tgt.prof,
+          sku: item.sku.trim().toUpperCase(),
+          descricao: item.descricao || "Item Mapeado",
+          quantidade: Number(item.qty) || 1,
+          idPalete: generatedPalletId || (itemParaEditar ? itemParaEditar.idPalete : undefined),
+          customValues: item.customValues || {},
+          criadoEm: itemParaEditar?.criadoEm || now,
+          atualizadoEm: now,
+        })
+      })
+    })
 
     onSave(mapeamentoItemsToSave)
     onClose()
@@ -226,11 +237,20 @@ export function MapeamentoItemModal({
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-sm font-bold text-white uppercase tracking-wider">
-                    {itemParaEditar ? "Editar Palete / Item" : "Adicionar Palete na Posição"}
+                    {itemParaEditar
+                      ? "Editar Palete / Item"
+                      : batchCoords && batchCoords.length > 1
+                      ? `Mapear em Lote (${batchCoords.length} Células)`
+                      : "Adicionar Palete na Posição"}
                   </h2>
                   {isMix && (
                     <span className="text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-full uppercase">
                       Palete MIX
+                    </span>
+                  )}
+                  {batchCoords && batchCoords.length > 1 && (
+                    <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full uppercase">
+                      Lote: {batchCoords.length} Células
                     </span>
                   )}
                 </div>
@@ -238,10 +258,19 @@ export function MapeamentoItemModal({
                   <span className="font-mono font-bold text-white bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
                     {currentPosicao}
                   </span>
-                  <span>•</span>
-                  <span>Nível {destinationLevel}</span>
-                  <span>•</span>
-                  <span>Profundidade {destinationDepth}</span>
+                  {batchCoords && batchCoords.length > 1 ? (
+                    <>
+                      <span>•</span>
+                      <span>Aplicando em {batchCoords.length} células selecionadas</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>•</span>
+                      <span>Nível {destinationLevel}</span>
+                      <span>•</span>
+                      <span>Profundidade {destinationDepth}</span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -401,7 +430,7 @@ export function MapeamentoItemModal({
                 onClick={handleSave}
                 className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white shadow-lg shadow-blue-500/20 transition-all cursor-pointer flex items-center gap-2"
               >
-                <Check size={16} /> Confirmar e Mapear
+                <Check size={16} /> Confirmar e Mapear {batchCoords && batchCoords.length > 1 ? `(${batchCoords.length} Células)` : ""}
               </button>
             </div>
           </div>
