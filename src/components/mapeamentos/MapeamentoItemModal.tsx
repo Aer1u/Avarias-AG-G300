@@ -25,6 +25,7 @@ export interface MapeamentoItemModalProps {
   nivelInicial: number
   profundidadeInicial: number
   itemParaEditar?: MapeamentoItem | null
+  itensParaEditar?: MapeamentoItem[] | null
   batchCoords?: { lvl: number; prof: number }[] | null
 }
 
@@ -38,6 +39,7 @@ export function MapeamentoItemModal({
   nivelInicial,
   profundidadeInicial,
   itemParaEditar,
+  itensParaEditar,
   batchCoords,
 }: MapeamentoItemModalProps) {
   const [currentPosicao, setCurrentPosicao] = useState(posicao || posicoesDisponiveis[0] || "")
@@ -54,21 +56,28 @@ export function MapeamentoItemModal({
   const [isSearching, setIsSearching] = useState(false)
   const dropdownRefs = useRef<(HTMLTableCellElement | null)[]>([])
 
+  const itemsToLoad = (itensParaEditar && itensParaEditar.length > 0)
+    ? itensParaEditar
+    : itemParaEditar
+    ? [itemParaEditar]
+    : null
+
   useEffect(() => {
     if (isOpen) {
-      if (itemParaEditar) {
-        setCurrentPosicao(itemParaEditar.posicao)
-        setDestinationLevel(itemParaEditar.nivel)
-        setDestinationDepth(itemParaEditar.profundidade)
-        setItems([
-          {
-            id: itemParaEditar.id,
-            sku: itemParaEditar.sku,
-            descricao: itemParaEditar.descricao || "",
-            qty: itemParaEditar.quantidade,
-            customValues: itemParaEditar.customValues || {},
-          },
-        ])
+      if (itemsToLoad && itemsToLoad.length > 0) {
+        const first = itemsToLoad[0]
+        setCurrentPosicao(first.posicao)
+        setDestinationLevel(first.nivel)
+        setDestinationDepth(first.profundidade)
+        setItems(
+          itemsToLoad.map(it => ({
+            id: it.id,
+            sku: it.sku,
+            descricao: it.descricao || "",
+            qty: it.quantidade,
+            customValues: it.customValues || {},
+          }))
+        )
       } else {
         setCurrentPosicao(posicao || posicoesDisponiveis[0] || "")
         setDestinationLevel(nivelInicial)
@@ -86,7 +95,7 @@ export function MapeamentoItemModal({
       setActiveSearchIndex(null)
       setSearchResults([])
     }
-  }, [isOpen, itemParaEditar, posicao, posicoesDisponiveis, nivelInicial, profundidadeInicial])
+  }, [isOpen, itemParaEditar, itensParaEditar, posicao, posicoesDisponiveis, nivelInicial, profundidadeInicial])
 
   // Fechar dropdown ao clicar fora
   useEffect(() => {
@@ -184,20 +193,26 @@ export function MapeamentoItemModal({
     }
 
     const isMix = validItems.length > 1
+    const existingPalletId = itemsToLoad?.find(it => it.idPalete)?.idPalete
     const generatedPalletId = isMix
-      ? "MIX-" + Math.random().toString(36).substring(2, 6).toUpperCase()
+      ? existingPalletId || "MIX-" + Math.random().toString(36).substring(2, 6).toUpperCase()
       : undefined
 
     const now = new Date().toISOString()
-    const isBatch = !itemParaEditar && batchCoords && batchCoords.length > 1
+    const isBatch = !itemsToLoad && batchCoords && batchCoords.length > 1
     const targets = isBatch ? batchCoords : [{ lvl: destinationLevel, prof: destinationDepth }]
 
     const mapeamentoItemsToSave: MapeamentoItem[] = []
 
     targets.forEach(tgt => {
-      validItems.forEach(item => {
+      validItems.forEach((item, itemIdx) => {
+        const isExistingDbItem = itemsToLoad?.some(orig => orig.id === item.id)
+        const finalId = isExistingDbItem && !isBatch
+          ? item.id
+          : "item_" + Date.now() + "_" + itemIdx + "_" + Math.random().toString(36).substring(2, 7)
+
         mapeamentoItemsToSave.push({
-          id: itemParaEditar ? itemParaEditar.id : "item_" + Math.random().toString(36).substring(2, 9),
+          id: finalId,
           mapeamentoId: config.id,
           posicao: currentPosicao,
           nivel: tgt.lvl,
@@ -205,9 +220,9 @@ export function MapeamentoItemModal({
           sku: item.sku.trim().toUpperCase(),
           descricao: item.descricao || "Item Mapeado",
           quantidade: Number(item.qty) || 1,
-          idPalete: generatedPalletId || (itemParaEditar ? itemParaEditar.idPalete : undefined),
+          idPalete: generatedPalletId,
           customValues: item.customValues || {},
-          criadoEm: itemParaEditar?.criadoEm || now,
+          criadoEm: itemsToLoad?.find(orig => orig.id === item.id)?.criadoEm || now,
           atualizadoEm: now,
         })
       })
@@ -237,8 +252,8 @@ export function MapeamentoItemModal({
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-sm font-bold text-white uppercase tracking-wider">
-                    {itemParaEditar
-                      ? "Editar Palete / Item"
+                    {itemsToLoad
+                      ? "Editar Palete / Itens"
                       : batchCoords && batchCoords.length > 1
                       ? `Mapear em Lote (${batchCoords.length} Células)`
                       : "Adicionar Palete na Posição"}

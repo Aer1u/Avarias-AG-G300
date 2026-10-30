@@ -48,6 +48,7 @@ interface MapeamentoPositionPanelProps {
     batchCoords?: { lvl: number; prof: number }[]
   ) => void
   onEditItem: (item: MapeamentoItem) => void
+  onEditSlot?: (items: MapeamentoItem[]) => void
   onDeleteItem: (itemId: string) => void
   onSavePosicao?: (pos: MapeamentoPosicao) => Promise<void>
   onSwapItems?: (
@@ -69,6 +70,7 @@ export function MapeamentoPositionPanel({
   onClose,
   onAddItem,
   onEditItem,
+  onEditSlot,
   onDeleteItem,
   onSavePosicao,
   onSwapItems,
@@ -296,6 +298,7 @@ export function MapeamentoPositionPanel({
             setIsEditModeActive={setIsEditModeActive}
             onAddItem={onAddItem}
             onEditItem={onEditItem}
+            onEditSlot={onEditSlot}
             onDeleteItem={onDeleteItem}
             onSwapItems={onSwapItems ? (src, tgt) => onSwapItems(posicao, src, tgt) : undefined}
             isLoggedIn={isLoggedIn}

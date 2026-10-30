@@ -35,6 +35,7 @@ interface MapeamentoDriveInGridProps {
     batchCoords?: { lvl: number; prof: number }[]
   ) => void
   onEditItem: (item: MapeamentoItem) => void
+  onEditSlot?: (items: MapeamentoItem[]) => void
   onDeleteItem: (itemId: string) => void
   onSwapItems?: (
     source: { lvl: number; d: number },
@@ -55,6 +56,7 @@ export function MapeamentoDriveInGrid({
   setIsEditModeActive: propSetIsEditModeActive,
   onAddItem,
   onEditItem,
+  onEditSlot,
   onDeleteItem,
   onSwapItems,
   isLoggedIn = false,
@@ -134,12 +136,20 @@ export function MapeamentoDriveInGrid({
     })
   }
 
-  // Estatísticas agregadas
-  const { totalItems, uniqueSkus } = useMemo(() => {
-    const tItems = items.length
+  // Estatísticas agregadas: conta paletes físicos reais ocupados (células distintas preenchidas)
+  const { totalPallets, uniqueSkus, totalQty } = useMemo(() => {
+    let occupied = 0
+    levels.forEach(lvl => {
+      depths.forEach(d => {
+        if ((grid[lvl]?.[d] || []).length > 0) {
+          occupied++
+        }
+      })
+    })
     const uSkus = new Set(items.map(p => p.sku)).size
-    return { totalItems: tItems, uniqueSkus: uSkus }
-  }, [items])
+    const tQty = items.reduce((sum, p) => sum + p.quantidade, 0)
+    return { totalPallets: occupied, uniqueSkus: uSkus, totalQty: tQty }
+  }, [grid, levels, depths, items])
 
   // Itens da célula selecionada
   const selectedCellItems = selectedCoords
@@ -261,13 +271,19 @@ export function MapeamentoDriveInGrid({
                             selectedCoords?.lvl === lvl && selectedCoords?.d === d
                           const isGridSelected = selectedGaps.has(`${lvl}-${d}`)
                           const firstItem = cellItems[0]
-                          const sku = !isEmpty ? firstItem.sku : ""
+                          // isMixed: true only when there are DIFFERENT SKUs in the slot (not same-pallet multi-row)
+                          const isMixed = new Set(cellItems.map(p => p.sku)).size > 1
+                          const sku = !isEmpty
+                            ? isMixed
+                              ? `${new Set(cellItems.map(p => p.sku)).size} SKUs`
+                              : firstItem.sku
+                            : ""
                           const qty = !isEmpty
                             ? cellItems.reduce((sum, p) => sum + p.quantidade, 0)
                             : 0
-                          const hasTilted = Number(firstItem?.customValues?.qtd_tombada) > 0
-                          const hasWet = Number(firstItem?.customValues?.qtd_molhado) > 0
-                          const isMixed = cellItems.length > 1
+                          // hasTilted / hasWet: check across all items in the slot
+                          const hasTilted = cellItems.some(p => Number(p.customValues?.qtd_tombada) > 0)
+                          const hasWet = cellItems.some(p => Number(p.customValues?.qtd_molhado) > 0)
 
                           return (
                             <div
@@ -278,9 +294,12 @@ export function MapeamentoDriveInGrid({
                               onClick={() => {
                                 if (justDragged.current) return
                                 if (isEditModeActive) {
-                                  if (isEmpty) {
+                                  // Se já estiver em modo seleção em lote (grades > 0) ou se a célula estiver vazia:
+                                  // alterna a seleção para ação em lote
+                                  if (selectedGaps.size > 0 || isEmpty) {
                                     toggleGapSelection(lvl, d)
                                   } else {
+                                    // Célula ocupada: seleciona para inspeção e edição no sidebar
                                     setSelectedCoords(isSelected ? null : { lvl, d })
                                   }
                                 } else if (!isEmpty) {
@@ -306,7 +325,14 @@ export function MapeamentoDriveInGrid({
                             >
                               {/* Multi-Selection Indicator — idêntico ao G300 */}
                               {isEditModeActive && (
-                                <div className="absolute top-2 right-2 z-30">
+                                <div
+                                  className="absolute top-1.5 right-1.5 z-30 p-1 cursor-pointer rounded-lg hover:bg-orange-500/20 transition-colors"
+                                  onClick={e => {
+                                    e.stopPropagation()
+                                    toggleGapSelection(lvl, d)
+                                  }}
+                                  title="Selecionar para ação em lote"
+                                >
                                   {isGridSelected ? (
                                     <div className="bg-orange-500 text-white rounded-md p-0.5 shadow-sm">
                                       <Check size={12} strokeWidth={4} />
@@ -327,7 +353,14 @@ export function MapeamentoDriveInGrid({
                                   dragMomentum={false}
                                   dragElastic={0}
                                   onClick={e => {
-                                    if (isEditModeActive) e.stopPropagation()
+                                    if (justDragged.current) {
+                                      e.stopPropagation()
+                                      return
+                                    }
+                                    if (isEditModeActive && selectedGaps.size > 0) {
+                                      e.stopPropagation()
+                                      toggleGapSelection(lvl, d)
+                                    }
                                   }}
                                   onDragStart={() => {
                                     justDragged.current = false
@@ -613,22 +646,38 @@ export function MapeamentoDriveInGrid({
                 {/* Actions no sidebar — Edit e Delete por Item (apenas quando logado) */}
                 {isLoggedIn && (
                   <>
-                    <div className="flex gap-2 mt-4">
-                      <button
-                        onClick={() => handleOpenEditItemModal(selectedItem)}
-                        className="flex-1 py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer shadow-sm active:scale-95 text-white bg-blue-600 hover:bg-blue-500"
-                      >
-                        <Edit2 size={13} /> Editar Item
-                      </button>
-                      <button
-                        onClick={() => {
-                          onDeleteItem(selectedItem.id)
-                          setSelectedCoords(null)
-                        }}
-                        className="py-2 px-3 rounded-xl bg-rose-100 dark:bg-rose-900/30 hover:bg-rose-200 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all"
-                      >
-                        <Trash2 size={13} /> Remover
-                      </button>
+                    <div className="flex flex-col gap-2 mt-4">
+                      {selectedCellItems.length > 1 && onEditSlot && (
+                        <button
+                          onClick={() => onEditSlot(selectedCellItems)}
+                          className="w-full py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer shadow-sm active:scale-95 text-white bg-purple-600 hover:bg-purple-500"
+                        >
+                          <Edit2 size={13} /> Editar Palete MIX ({selectedCellItems.length} SKUs)
+                        </button>
+                      )}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            if (selectedCellItems.length > 1 && onEditSlot) {
+                              onEditSlot(selectedCellItems)
+                            } else {
+                              handleOpenEditItemModal(selectedItem)
+                            }
+                          }}
+                          className="flex-1 py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer shadow-sm active:scale-95 text-white bg-blue-600 hover:bg-blue-500"
+                        >
+                          <Edit2 size={13} /> {selectedCellItems.length > 1 ? "Editar Palete" : "Editar Item"}
+                        </button>
+                        <button
+                          onClick={() => {
+                            onDeleteItem(selectedItem.id)
+                            setSelectedCoords(null)
+                          }}
+                          className="py-2 px-3 rounded-xl bg-rose-100 dark:bg-rose-900/30 hover:bg-rose-200 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all"
+                        >
+                          <Trash2 size={13} /> Remover
+                        </button>
+                      </div>
                     </div>
 
                     {/* Botão de adicionar outro item ao mesmo slot */}
@@ -712,7 +761,7 @@ export function MapeamentoDriveInGrid({
                     <span className="text-[8px] font-semibold text-slate-400 uppercase tracking-wider">
                       Paletes Ocupados
                     </span>
-                    <p className="text-lg font-bold text-slate-900 dark:text-white">{totalItems}</p>
+                    <p className="text-lg font-bold text-slate-900 dark:text-white">{totalPallets}</p>
                   </div>
                   <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/50">
                     <span className="text-[8px] font-semibold text-slate-400 uppercase tracking-wider">
@@ -722,11 +771,19 @@ export function MapeamentoDriveInGrid({
                   </div>
                   <div className="col-span-2 p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/50">
                     <span className="text-[8px] font-semibold text-slate-400 uppercase tracking-wider">
+                      Total Peças
+                    </span>
+                    <p className="text-base font-bold text-slate-900 dark:text-white font-mono">
+                      {totalQty.toLocaleString("pt-BR")} un
+                    </p>
+                  </div>
+                  <div className="col-span-2 p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/50">
+                    <span className="text-[8px] font-semibold text-slate-400 uppercase tracking-wider">
                       Ocupação
                     </span>
                     <div className="flex items-center justify-between mt-1">
                       <p className="text-lg font-bold text-slate-900 dark:text-white">
-                        {totalItems} / {capacity} PTs
+                        {totalPallets} / {capacity} PTs
                       </p>
                       <div className="h-2 w-24 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
                         <div
@@ -734,9 +791,9 @@ export function MapeamentoDriveInGrid({
                           style={{
                             width: `${Math.min(
                               100,
-                              capacity > 0 ? (totalItems / capacity) * 100 : 0
+                              capacity > 0 ? (totalPallets / capacity) * 100 : 0
                             )}%`,
-                            background: totalItems > capacity ? "#ef4444" : theme.primary,
+                            background: totalPallets > capacity ? "#ef4444" : theme.primary,
                           }}
                         />
                       </div>
@@ -747,7 +804,7 @@ export function MapeamentoDriveInGrid({
 
               <div className="text-center py-4 text-xs text-slate-400 font-medium">
                 {isEditModeActive
-                  ? "Clique no botão + para mapear paletes ou selecione células vazias"
+                  ? "Clique nas células para selecioná-las e esvaziar em lote. Use o botão + para adicionar paletes."
                   : "Clique em qualquer célula para inspecionar, ou ative o botão Editar para modificar"}
               </div>
             </div>

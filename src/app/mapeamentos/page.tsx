@@ -84,6 +84,7 @@ export default function MapeamentosPage() {
   const [itemCoords, setItemCoords] = useState<{ lvl: number; prof: number }>({ lvl: 1, prof: 1 })
   const [batchCoords, setBatchCoords] = useState<{ lvl: number; prof: number }[] | null>(null)
   const [itemParaEditar, setItemParaEditar] = useState<MapeamentoItem | null>(null)
+  const [itensParaEditar, setItensParaEditar] = useState<MapeamentoItem[] | null>(null)
 
   // Escuta autenticação do Supabase
   useEffect(() => {
@@ -199,14 +200,48 @@ export default function MapeamentosPage() {
     return map
   }, [activeItems])
 
+  // Processamento de posições: une as posições cadastradas explicitamente com as posições dos itens
+  const effectivePosicoes = useMemo(() => {
+    const map = new Map<string, MapeamentoPosicao>()
+
+    // 1. Posições explicitamente cadastradas
+    posicoes.forEach(p => {
+      if (p.codigo) map.set(p.codigo, p)
+    })
+
+    // 2. Para itens que possuem posição mas ela não foi cadastrada na tabela de posições,
+    // criamos a representação automática da posição para exibição no mapa
+    activeItems.forEach(it => {
+      if (it.posicao && !map.has(it.posicao)) {
+        const isChao = it.posicao.toLowerCase().startsWith("chao") || it.posicao.toLowerCase().startsWith("box")
+        map.set(it.posicao, {
+          id: `pos_${it.posicao}`,
+          mapeamentoId: selectedConfigId || "",
+          codigo: it.posicao,
+          tipo: isChao ? "chao" : "drive_in",
+          capacidade: 16,
+          nivelCount: isChao ? 1 : 3,
+          profundidadeCount: isChao ? 16 : 4,
+          status: "Aberto",
+          criadoEm: it.criadoEm,
+          atualizadoEm: it.atualizadoEm,
+        })
+      }
+    })
+
+    return Array.from(map.values())
+  }, [posicoes, activeItems, selectedConfigId])
+
   // Detalhe da posição selecionada — padrão G300 (positionDetail)
   const selectedPosDetail = useMemo(() => {
     if (!selectedPosId) return null
-    const pos = posicoes.find(p => p.codigo === selectedPosId || p.id === selectedPosId)
+    const pos = effectivePosicoes.find(p => p.codigo === selectedPosId || p.id === selectedPosId)
     const posItems = activeItems.filter(it => it.posicao === selectedPosId)
     const capacidade = pos?.capacidade || 16
     const nivel_count = pos?.nivelCount ?? (pos?.tipo === "chao" ? 1 : 3)
     const prof_count = pos?.profundidadeCount ?? (pos?.tipo === "chao" ? capacidade : 4)
+    // Paletes reais ocupados: conta células distintas (mesmo nível e profundidade = 1 palete)
+    const occupiedPaletes = new Set(posItems.map(it => `${it.nivel}-${it.profundidade}`)).size
     return {
       posicao: selectedPosId,
       posObj: pos,
@@ -219,15 +254,15 @@ export default function MapeamentosPage() {
       status: pos?.status || "Aberto",
       observacao: pos?.observacao || "",
       items: posItems,
-      occupied: posItems.length,
-      isOverflow: posItems.length > capacidade,
+      occupied: occupiedPaletes,
+      isOverflow: occupiedPaletes > capacidade,
     }
-  }, [selectedPosId, posicoes, activeItems])
+  }, [selectedPosId, effectivePosicoes, activeItems])
 
   // Setores e Ruas disponíveis para filtro
   const setoresDisponiveis = useMemo(() => {
     const set = new Set<string>()
-    posicoes.forEach(p => {
+    effectivePosicoes.forEach(p => {
       if (p.setor) {
         set.add(p.setor)
       } else {
@@ -237,7 +272,7 @@ export default function MapeamentosPage() {
       }
     })
     return Array.from(set).sort()
-  }, [posicoes])
+  }, [effectivePosicoes])
 
   // Processamento de Posições (Ruas com Lado Par/Ímpar E Áreas de Chão/Blocados)
   const { streetData, areaData } = useMemo(() => {
@@ -245,7 +280,7 @@ export default function MapeamentosPage() {
     const areas: Record<string, any[]> = {}
     const posMap = new Map<string, any>()
 
-    posicoes.forEach(p => {
+    effectivePosicoes.forEach(p => {
       const posId = p.codigo
       if (!posId) return
 
@@ -278,7 +313,7 @@ export default function MapeamentosPage() {
         posIdReal: p.id,
         tipo: p.tipo,
         setor: p.setor || (p.tipo === "chao" ? "Área de Chão" : "Geral"),
-        paletes: posItems.length,
+        paletes: new Set(posItems.map(it => `${it.nivel}-${it.profundidade}`)).size,
         capacidade: p.capacidade || 16,
         is_blocked: p.status === "Bloqueado",
         status: p.status || "Aberto",
@@ -397,10 +432,19 @@ export default function MapeamentosPage() {
 
   const handleSaveItem = async (input: MapeamentoItem | MapeamentoItem[]) => {
     const list = Array.isArray(input) ? input : [input]
+    // Se estávamos editando um slot e algum item foi removido no modal:
+    if (itensParaEditar && itensParaEditar.length > 0) {
+      const savedIds = new Set(list.map(i => i.id))
+      const removedItems = itensParaEditar.filter(orig => !savedIds.has(orig.id))
+      for (const rem of removedItems) {
+        await deleteMapeamentoItem(rem.id)
+      }
+    }
     // Atualização otimista
     setItems(prev => {
       const ids = new Set(list.map(i => i.id))
-      const filtered = prev.filter(p => !ids.has(p.id))
+      const removedIds = new Set((itensParaEditar || []).map(i => i.id).filter(id => !ids.has(id)))
+      const filtered = prev.filter(p => !ids.has(p.id) && !removedIds.has(p.id))
       return [...filtered, ...list]
     })
     for (const item of list) {
@@ -410,6 +454,7 @@ export default function MapeamentosPage() {
     setItems(updated)
     setIsItemModalOpen(false)
     setItemParaEditar(null)
+    setItensParaEditar(null)
     setBatchCoords(null)
   }
 
@@ -842,7 +887,21 @@ export default function MapeamentosPage() {
                 return
               }
               setItemParaEditar(it)
+              setItensParaEditar([it])
               setItemCoords({ lvl: it.nivel, prof: it.profundidade })
+              setBatchCoords(null)
+              setIsItemModalOpen(true)
+            }}
+            onEditSlot={slotItems => {
+              if (!user) {
+                setShowLoginModal(true)
+                return
+              }
+              setItensParaEditar(slotItems)
+              setItemParaEditar(slotItems[0] || null)
+              if (slotItems[0]) {
+                setItemCoords({ lvl: slotItems[0].nivel, prof: slotItems[0].profundidade })
+              }
               setBatchCoords(null)
               setIsItemModalOpen(true)
             }}
@@ -860,15 +919,17 @@ export default function MapeamentosPage() {
           onClose={() => {
             setIsItemModalOpen(false)
             setItemParaEditar(null)
+            setItensParaEditar(null)
             setBatchCoords(null)
           }}
           onSave={handleSaveItem}
-          posicao={selectedPosId || posicoes[0]?.codigo || ""}
-          posicoesDisponiveis={posicoes.map(p => p.codigo)}
+          posicao={selectedPosId || effectivePosicoes[0]?.codigo || ""}
+          posicoesDisponiveis={effectivePosicoes.map(p => p.codigo)}
           nivelInicial={itemCoords.lvl}
           profundidadeInicial={itemCoords.prof}
           config={activeConfig}
           itemParaEditar={itemParaEditar}
+          itensParaEditar={itensParaEditar}
           batchCoords={batchCoords}
         />
       )}
