@@ -4418,7 +4418,7 @@ function DashboardPage() {
 
 
 
-            <AnimatePresence mode="wait">
+            <AnimatePresence>
               {topTab === "geral" && (
                 <motion.div
                   key="geral-content"
@@ -5440,7 +5440,7 @@ function DashboardPage() {
                   </div>
 
                   {/* --- MAIN DATA VIEW --- */}
-                  <AnimatePresence mode="wait">
+                  <AnimatePresence>
                     <motion.div
                       key={activeView}
                       initial={{ opacity: 0, y: 10 }}

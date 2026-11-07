@@ -147,13 +147,13 @@ export function MapeamentoPositionPanel({
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-2 sm:p-4 md:p-6">
-      {/* Backdrop com blur — idêntico ao G300 */}
+      {/* Backdrop */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
-        className="absolute inset-0 bg-slate-900/40 backdrop-blur-md"
+        className="absolute inset-0 bg-slate-950/70"
       />
 
       {/* Panel principal — idêntico ao G300 */}
@@ -309,7 +309,7 @@ export function MapeamentoPositionPanel({
       {/* ── MODAL DE CONFIGURAÇÃO ESTRUTURAL DA POSIÇÃO ─────────────────────── */}
       <AnimatePresence>
         {isConfigPosModalOpen && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/80">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
