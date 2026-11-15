@@ -22,6 +22,12 @@ const subModules: SubModule[] = [
     href: "/br",
   },
   {
+    id: "controle-pk",
+    label: "Controle PK",
+    description: "Controle de PK da operação BR.",
+    href: "/mkbr/controle-pk",
+  },
+  {
     id: "processos",
     label: "Processos BR",
     description: "Gestão de processos internos da BR.",
