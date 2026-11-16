@@ -2,16 +2,15 @@
 
 import React, { useMemo, useState } from "react"
 import {
-  FileText,
   Package,
+  Clock,
+  Award,
+  ListOrdered,
+  FileText,
+  Box,
   Boxes,
   Layers,
-  Clock,
-  Building2,
-  CheckCircle2,
-  LayoutGrid,
-  Filter,
-  X,
+  HelpCircle,
 } from "lucide-react"
 import { ControlePKRow, calculateDuration } from "./pkSpreadsheetParser"
 
@@ -21,755 +20,795 @@ interface ControlePKDashboardProps {
   periodLabel: string
 }
 
-function formatDurationReadable(avgSeconds: number | null): string {
-  if (avgSeconds === null || !Number.isFinite(avgSeconds)) return "—"
-  const rounded = Math.max(0, Math.round(avgSeconds))
-  if (rounded < 60) return `${rounded}s`
-  if (rounded < 3600) return `${Math.round(rounded / 60)} min`
-  const hours = Math.floor(rounded / 3600)
-  const mins = Math.round((rounded % 3600) / 60)
-  if (mins === 60) return `${hours + 1}h`
-  return mins > 0 ? `${hours}h ${mins}min` : `${hours}h`
+function formatDurationHuman(sec: number | null): string {
+  if (sec === null || !Number.isFinite(sec) || sec <= 0) return "—"
+  const r = Math.round(sec)
+  const h = Math.floor(r / 3600)
+  const m = Math.round((r % 3600) / 60)
+  if (h > 0 && m > 0) return `${h}h ${m}min`
+  if (h > 0) return `${h}h`
+  if (m > 0) return `${m} min`
+  return `${r}s`
 }
 
-function formatDurationClock(avgSeconds: number | null): string {
-  if (avgSeconds === null || !Number.isFinite(avgSeconds)) return "—"
-  const s = Math.max(0, Math.round(avgSeconds))
-  const hh = Math.floor(s / 3600)
-  const mm = Math.floor((s % 3600) / 60)
-  const ss = s % 60
-  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`
+function formatMinSec(sec: number | null): string {
+  if (sec === null || !Number.isFinite(sec) || sec <= 0) return "—"
+  const r = Math.round(sec)
+  const m = Math.floor(r / 60)
+  const s = r % 60
+  return `${m}m ${s.toString().padStart(2, "0")}s`
 }
 
-function calcAverageSeconds(values: number[]): number | null {
+function avg(values: number[]): number | null {
   if (values.length === 0) return null
-  return values.reduce((acc, v) => acc + v, 0) / values.length
+  return values.reduce((a, v) => a + v, 0) / values.length
 }
+
+const fmt = (n: number) => n.toLocaleString("pt-BR")
 
 function splitPeople(raw: string | null | undefined): string[] {
   if (!raw) return []
   return raw
     .split(",")
-    .map((item) => item.trim())
+    .map((i) => i.trim())
     .filter(Boolean)
 }
 
-export function ControlePKDashboard({
-  rows,
-  loading,
-  periodLabel,
-}: ControlePKDashboardProps) {
-  const [selectedEmpresa, setSelectedEmpresa] = useState<string>("todas")
-  const [selectedPessoa, setSelectedPessoa] = useState<string>("todas")
-  const [selectedConferente, setSelectedConferente] = useState<string>("todos")
-  const [selectedTipo, setSelectedTipo] = useState<string>("todos")
+function renderPeopleCell(raw: string | null | undefined) {
+  const people = splitPeople(raw)
+  if (people.length === 0) return "Não informado"
+  if (people.length === 1) return people[0]
+  return `${people.length} pessoas`
+}
 
-  // Dynamic filter options extracted from real Supabase rows
-  const filterOptions = useMemo(() => {
-    const empresas = new Map<string, string>()
-    const pessoas = new Map<string, string>()
-    const conferentes = new Map<string, string>()
+const companyColors: Record<string, string> = {
+  "Logística Express": "#10B981",
+  "NorteSul Transportes": "#F59E0B",
+  "TransBrasil Cargo": "#3B82F6",
+  "Não informado": "#89919e",
+}
 
-    for (const r of rows) {
-      const emp = r.empresa?.trim()
-      if (emp) {
-        const key = emp.toUpperCase()
-        if (!empresas.has(key)) empresas.set(key, emp)
-      }
-      for (const p of splitPeople(r.pessoa)) {
-        const key = p.toUpperCase()
-        if (!pessoas.has(key)) pessoas.set(key, p)
-      }
-      for (const c of splitPeople(r.conferente)) {
-        const key = c.toUpperCase()
-        if (!conferentes.has(key)) conferentes.set(key, c)
-      }
+interface RankItem {
+  name: string
+  avisos: number
+  pecas: number
+  avgSec: number
+  efficiency: number
+}
+
+function buildRanking(
+  rows: ControlePKRow[],
+  getName: (r: ControlePKRow) => string | null | undefined,
+  getStart: (r: ControlePKRow) => unknown,
+  getEnd: (r: ControlePKRow) => unknown,
+): RankItem[] {
+  const map = new Map<string, { avisos: number; pecas: number; secs: number[] }>()
+
+  for (const r of rows) {
+    const rawName = getName(r)?.trim()
+    if (!rawName || rawName.toLowerCase() === "não informado" || rawName === "—") continue
+    // Handle multiple operators separated by comma in ranking if desired, or split them
+    const people = splitPeople(rawName)
+    const dur = calculateDuration(getStart(r) as string, getEnd(r) as string)
+    if (!dur || !dur.totalSeconds) continue
+
+    for (const name of people) {
+      if (!map.has(name)) map.set(name, { avisos: 0, pecas: 0, secs: [] })
+      const o = map.get(name)!
+      o.avisos += 1
+      o.pecas += Number(r.pecas) || 0
+      o.secs.push(dur.totalSeconds)
     }
+  }
 
+  const list = Array.from(map.entries()).map(([name, o]) => {
+    const totalSec = o.secs.reduce((a, b) => a + b, 0)
     return {
-      empresas: Array.from(empresas.values()).sort((a, b) =>
-        a.localeCompare(b, "pt-BR")
-      ),
-      pessoas: Array.from(pessoas.values()).sort((a, b) =>
-        a.localeCompare(b, "pt-BR")
-      ),
-      conferentes: Array.from(conferentes.values()).sort((a, b) =>
-        a.localeCompare(b, "pt-BR")
-      ),
+      name,
+      avisos: o.avisos,
+      pecas: o.pecas,
+      avgSec: totalSec / o.secs.length,
+      perHour: totalSec > 0 ? o.pecas / (totalSec / 3600) : 0,
     }
-  }, [rows])
+  })
 
-  const hasSecondaryFilter =
-    selectedEmpresa !== "todas" ||
-    selectedPessoa !== "todas" ||
-    selectedConferente !== "todos" ||
-    selectedTipo !== "todos"
+  const best = Math.max(...list.map((l) => l.perHour), 0)
+  return list
+    .sort((a, b) => b.perHour - a.perHour)
+    .slice(0, 3)
+    .map((l) => ({
+      name: l.name,
+      avisos: l.avisos,
+      pecas: l.pecas,
+      avgSec: l.avgSec,
+      efficiency: best > 0 ? Math.round((l.perHour / best) * 100) : 0,
+    }))
+}
 
+const rankStyles = [
+  { num: "text-[#4edea3]", avatar: "bg-[#4edea3]/20 text-[#4edea3]", time: "text-[#4edea3]" },
+  { num: "text-[#159BFF]", avatar: "bg-[#159BFF]/20 text-[#159BFF]", time: "text-[#9fcaff]" },
+  { num: "text-[#bfc7d5]", avatar: "bg-[#273647] text-[#bfc7d5]", time: "text-[#bfc7d5]" },
+]
+
+function RankRow({
+  item,
+  index,
+  subtitle,
+}: {
+  item: RankItem
+  index: number
+  subtitle: string
+}) {
+  const st = rankStyles[index] || rankStyles[2]
+  return (
+    <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#0d1c2d] border border-[#273647]/60">
+      <div className="flex items-center gap-3">
+        <span className={`text-xs font-mono font-bold ${st.num}`}>#{index + 1}</span>
+        <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-semibold ${st.avatar}`}>
+          {item.name.slice(0, 2).toUpperCase()}
+        </div>
+        <div>
+          <div className="text-xs font-medium text-[#d4e4fa]">{item.name}</div>
+          <div className="text-[10px] text-[#89919e]">{subtitle}</div>
+        </div>
+      </div>
+      <div className="text-right">
+        <div className={`text-xs font-mono font-medium ${st.time}`}>{formatMinSec(item.avgSec)}</div>
+        <div className="text-[9px] text-[#89919e]">Eficiência: {item.efficiency}%</div>
+      </div>
+    </div>
+  )
+}
+
+function RankCard({
+  title,
+  dotClass,
+  items,
+  subtitleFor,
+  className = "",
+  gridClass = "flex flex-col gap-3 mt-3",
+}: {
+  title: string
+  dotClass: string
+  items: RankItem[]
+  subtitleFor: (i: RankItem) => string
+  className?: string
+  gridClass?: string
+}) {
+  return (
+    <div className={`bg-[#122131] rounded-xl p-4 border border-[#273647] ${className}`}>
+      <div className="flex items-center justify-between pb-3 border-b border-[#273647]/50">
+        <div className="flex items-center gap-2">
+          <span className={`w-2 h-2 rounded-full ${dotClass}`}></span>
+          <span className="text-xs font-semibold text-[#d4e4fa] uppercase tracking-wide">{title}</span>
+        </div>
+        <span className="text-[10px] text-[#89919e] font-mono">Média por aviso</span>
+      </div>
+      {items.length === 0 ? (
+        <p className="py-6 text-center text-xs text-[#89919e]">Sem registros na tabela do Supabase.</p>
+      ) : (
+        <div className={gridClass}>
+          {items.map((it, idx) => (
+            <RankRow key={it.name} item={it} index={idx} subtitle={subtitleFor(it)} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function ControlePKDashboard({ rows, periodLabel }: ControlePKDashboardProps) {
+  const [selectedEmpresa, setSelectedEmpresa] = useState<string>("ALL")
+  const [selectedEmbarque, setSelectedEmbarque] = useState<string>("ALL")
+  const [currentMetric, setCurrentMetric] = useState<"avisos" | "notas" | "pecas" | "skus" | "solicitante">("pecas")
+  const [activeTab, setActiveTab] = useState<"avisos" | "ranking">("avisos")
+
+  const hasFilter = selectedEmpresa !== "ALL" || selectedEmbarque !== "ALL"
+
+  // Filter rows strictly from Supabase table rows
   const filteredRows = useMemo(() => {
     return rows.filter((r) => {
-      if (selectedEmpresa !== "todas") {
-        const emp = r.empresa?.trim().toUpperCase() || ""
-        if (emp !== selectedEmpresa.toUpperCase()) return false
+      if (selectedEmpresa !== "ALL") {
+        const emp = (r.empresa?.trim() || "Não informado").toUpperCase()
+        const sol = (r.solicitante?.trim() || "Não informado").toUpperCase()
+        if (emp !== selectedEmpresa.toUpperCase() && sol !== selectedEmpresa.toUpperCase()) return false
       }
-      if (selectedPessoa !== "todas") {
-        const rowPessoas = splitPeople(r.pessoa).map((p) => p.toUpperCase())
-        if (!rowPessoas.includes(selectedPessoa.toUpperCase())) return false
-      }
-      if (selectedConferente !== "todos") {
-        const rowConf = splitPeople(r.conferente).map((c) => c.toUpperCase())
-        if (!rowConf.includes(selectedConferente.toUpperCase())) return false
-      }
-      if (selectedTipo !== "todos") {
-        if ((r.tipo_de_embarque || "") !== selectedTipo) return false
+      if (selectedEmbarque !== "ALL") {
+        const tipo = (r.tipo_de_embarque?.trim() || "Não informado").toUpperCase()
+        if (tipo !== selectedEmbarque.toUpperCase()) return false
       }
       return true
     })
-  }, [
-    rows,
-    selectedEmpresa,
-    selectedPessoa,
-    selectedConferente,
-    selectedTipo,
-  ])
+  }, [rows, selectedEmpresa, selectedEmbarque])
 
+  // Compute metrics and aggregations strictly from Supabase rows
   const metrics = useMemo(() => {
-    let totalNotas = 0
-    let totalPecas = 0
-    let totalSkus = 0
-
+    const avisos = filteredRows.length
+    let notas = 0
+    let pecas = 0
+    let skus = 0
     const sepAll: number[] = []
     const confAll: number[] = []
     const embAll: number[] = []
 
-    const byTipo: Record<
-      "Simples" | "Normal" | "Complexa",
-      { sep: number[]; conf: number[]; emb: number[]; count: number }
-    > = {
-      Simples: { sep: [], conf: [], emb: [], count: 0 },
-      Normal: { sep: [], conf: [], emb: [], count: 0 },
-      Complexa: { sep: [], conf: [], emb: [], count: 0 },
-    }
-
-    const companyMap = new Map<
-      string,
-      {
-        empresa: string
-        isUnknown: boolean
-        avisos: number
-        notas: number
-        pecas: number
-        skus: number
-        simples: number
-        normal: number
-        complexa: number
-      }
-    >()
+    const entityMap = new Map<string, { avisos: number; notas: number; pecas: number; skus: number; valor: number }>()
+    const compCount: Record<string, number> = { Simples: 0, Normal: 0, Complexa: 0, "Não informado": 0 }
 
     for (const r of filteredRows) {
-      const notasVal = Number(r.qtde_notas) || 0
-      const pecasVal = Number(r.pecas) || 0
-      const skusVal = Number(r.skus) || 0
+      const nNotas = Number(r.qtde_notas) || 0
+      const nPecas = Number(r.pecas) || 0
+      const nSkus = Number(r.skus) || 0
+      notas += nNotas
+      pecas += nPecas
+      skus += nSkus
 
-      totalNotas += notasVal
-      totalPecas += pecasVal
-      totalSkus += skusVal
+      const keyName =
+        currentMetric === "solicitante"
+          ? r.solicitante?.trim() || "Não informado"
+          : r.empresa?.trim() || "Não informado"
+
+      if (!entityMap.has(keyName)) {
+        entityMap.set(keyName, { avisos: 0, notas: 0, pecas: 0, skus: 0, valor: 0 })
+      }
+      const eObj = entityMap.get(keyName)!
+      eObj.avisos += 1
+      eObj.notas += nNotas
+      eObj.pecas += nPecas
+      eObj.skus += nSkus
+      eObj.valor += 1
 
       const dSep = calculateDuration(r.inicio, r.final)
-      const dConf = calculateDuration(
-        r.conferencia_inicial,
-        r.conferencia_final
-      )
-      const dEmb = calculateDuration(
-        r.horario_inicio_embalagem,
-        r.horario_final_embalagem
-      )
+      const dConf = calculateDuration(r.conferencia_inicial, r.conferencia_final)
+      const dEmb = calculateDuration(r.horario_inicio_embalagem, r.horario_final_embalagem)
 
       if (dSep) sepAll.push(dSep.totalSeconds)
       if (dConf) confAll.push(dConf.totalSeconds)
       if (dEmb) embAll.push(dEmb.totalSeconds)
 
-      if (
-        r.tipo_de_embarque === "Simples" ||
-        r.tipo_de_embarque === "Normal" ||
-        r.tipo_de_embarque === "Complexa"
-      ) {
-        const bucket = byTipo[r.tipo_de_embarque]
-        bucket.count += 1
-        if (dSep) bucket.sep.push(dSep.totalSeconds)
-        if (dConf) bucket.conf.push(dConf.totalSeconds)
-        if (dEmb) bucket.emb.push(dEmb.totalSeconds)
+      const tipo = r.tipo_de_embarque?.trim()
+      if (tipo && compCount[tipo] !== undefined) {
+        compCount[tipo] += 1
+      } else {
+        compCount["Não informado"] += 1
       }
-
-      const rawEmp = r.empresa?.trim() || ""
-      const isUnknown = !rawEmp
-      const key = isUnknown ? "__SEM_EMPRESA__" : rawEmp.toUpperCase()
-      const current = companyMap.get(key) || {
-        empresa: isUnknown ? "Não informado" : rawEmp,
-        isUnknown,
-        avisos: 0,
-        notas: 0,
-        pecas: 0,
-        skus: 0,
-        simples: 0,
-        normal: 0,
-        complexa: 0,
-      }
-      current.avisos += 1
-      current.notas += notasVal
-      current.pecas += pecasVal
-      current.skus += skusVal
-      if (r.tipo_de_embarque === "Simples") current.simples += 1
-      else if (r.tipo_de_embarque === "Normal") current.normal += 1
-      else if (r.tipo_de_embarque === "Complexa") current.complexa += 1
-
-      companyMap.set(key, current)
     }
 
-    const avgSepSec = calcAverageSeconds(sepAll)
-    const avgConfSec = calcAverageSeconds(confAll)
-    const avgEmbSec = calcAverageSeconds(embAll)
+    const avgSep = avg(sepAll)
+    const avgConf = avg(confAll)
+    const avgEmb = avg(embAll)
+    const totalTime = (avgSep ?? 0) + (avgConf ?? 0) + (avgEmb ?? 0)
 
-    const hasAnyStage =
-      avgSepSec !== null || avgConfSec !== null || avgEmbSec !== null
-    const totalAvgSec = hasAnyStage
-      ? (avgSepSec ?? 0) + (avgConfSec ?? 0) + (avgEmbSec ?? 0)
-      : null
-
-    const companiesSortedByAvisos = Array.from(companyMap.values()).sort(
-      (a, b) => {
-        if (a.isUnknown !== b.isUnknown) return a.isUnknown ? 1 : -1
-        if (b.avisos !== a.avisos) return b.avisos - a.avisos
-        return b.pecas - a.pecas
-      }
-    )
-
-    const maxCompanyAvisos =
-      companiesSortedByAvisos.length > 0
-        ? Math.max(1, ...companiesSortedByAvisos.map((c) => c.avisos))
-        : 1
+    const totalComp = Object.values(compCount).reduce((a, b) => a + b, 0)
+    const safeTotal = totalComp > 0 ? totalComp : 1
 
     return {
-      totalAvisos: filteredRows.length,
-      totalNotas,
-      totalPecas,
-      totalSkus,
-      avgSepSec,
-      avgConfSec,
-      avgEmbSec,
-      totalAvgSec,
-      sepCount: sepAll.length,
-      confCount: confAll.length,
-      embCount: embAll.length,
-      companies: companiesSortedByAvisos,
-      maxCompanyAvisos,
-      tipoTimes: [
-        {
-          tipo: "Simples" as const,
-          dotClass: "bg-emerald-400",
-          count: byTipo.Simples.count,
-          sep: calcAverageSeconds(byTipo.Simples.sep),
-          conf: calcAverageSeconds(byTipo.Simples.conf),
-          emb: calcAverageSeconds(byTipo.Simples.emb),
-        },
-        {
-          tipo: "Normal" as const,
-          dotClass: "bg-blue-400",
-          count: byTipo.Normal.count,
-          sep: calcAverageSeconds(byTipo.Normal.sep),
-          conf: calcAverageSeconds(byTipo.Normal.conf),
-          emb: calcAverageSeconds(byTipo.Normal.emb),
-        },
-        {
-          tipo: "Complexa" as const,
-          dotClass: "bg-amber-400",
-          count: byTipo.Complexa.count,
-          sep: calcAverageSeconds(byTipo.Complexa.sep),
-          conf: calcAverageSeconds(byTipo.Complexa.conf),
-          emb: calcAverageSeconds(byTipo.Complexa.emb),
-        },
-      ],
+      avisos,
+      notas,
+      pecas,
+      skus,
+      avgSep,
+      avgConf,
+      avgEmb,
+      totalTime,
+      entityMap,
+      complexitySummary: {
+        total: totalComp,
+        Simples: { count: compCount["Simples"], pct: Math.round((compCount["Simples"] / safeTotal) * 100) },
+        Normal: { count: compCount["Normal"], pct: Math.round((compCount["Normal"] / safeTotal) * 100) },
+        Complexa: { count: compCount["Complexa"], pct: Math.round((compCount["Complexa"] / safeTotal) * 100) },
+        "Não informado": { count: compCount["Não informado"], pct: Math.round((compCount["Não informado"] / safeTotal) * 100) },
+      },
     }
-  }, [filteredRows])
+  }, [filteredRows, currentMetric])
+
+  // Donut chart calculation from database entities
+  const donutData = useMemo(() => {
+    const items = Array.from(metrics.entityMap.entries()).map(([name, d]) => ({
+      name,
+      value: currentMetric === "solicitante" ? d.valor : d[currentMetric],
+    }))
+    const total = items.reduce((acc, cur) => acc + cur.value, 0)
+    let cumulative = 0
+    const totalCirc = 2 * Math.PI * 62
+    const fallbackColors = ["#10B981", "#F59E0B", "#3B82F6", "#8B5CF6", "#EC4899", "#64748b"]
+
+    const slices = items.map((item, idx) => {
+      const pct = total > 0 ? item.value / total : 0
+      const len = pct * totalCirc
+      const gap = items.length > 1 ? 5 : 0
+      const visibleLen = Math.max(0, len - gap)
+      const offset = cumulative
+      cumulative += len
+      const color = companyColors[item.name] || fallbackColors[idx % fallbackColors.length]
+      return {
+        ...item,
+        pct: Math.round(pct * 100),
+        color,
+        visibleLen,
+        strokeDasharray: `${visibleLen} ${totalCirc - visibleLen}`,
+        strokeDashoffset: `-${offset}`,
+      }
+    })
+
+    return { total, slices }
+  }, [metrics.entityMap, currentMetric])
+
+  // Ranking calculation from filtered rows
+  const ranking = useMemo(
+    () => ({
+      separadores: buildRanking(filteredRows, (r) => r.pessoa, (r) => r.inicio, (r) => r.final),
+      conferentes: buildRanking(
+        filteredRows,
+        (r) => r.conferente,
+        (r) => r.conferencia_inicial,
+        (r) => r.conferencia_final,
+      ),
+      embaladores: buildRanking(
+        filteredRows,
+        (r) => r.embalador,
+        (r) => r.horario_inicio_embalagem,
+        (r) => r.horario_final_embalagem,
+      ),
+    }),
+    [filteredRows],
+  )
+
+  const complexityItems = [
+    { key: "Simples" as const, label: "até 10 skus", Icon: Box, iconClass: "text-[#4edea3]", pctClass: "text-[#4edea3]", barClass: "bg-[#4edea3]" },
+    { key: "Normal" as const, label: ">10 e <=20 skus", Icon: Boxes, iconClass: "text-[#159BFF]", pctClass: "text-[#9fcaff]", barClass: "bg-[#159BFF]" },
+    { key: "Complexa" as const, label: ">20 skus", Icon: Layers, iconClass: "text-red-400", pctClass: "text-red-400", barClass: "bg-red-500" },
+    { key: "Não informado" as const, label: "não definido / —", Icon: HelpCircle, iconClass: "text-[#89919e]", pctClass: "text-[#89919e]", barClass: "bg-[#89919e]" },
+  ]
 
   return (
-    <div className="space-y-4">
-      {/* Cabeçalho da visão geral + filtros complementares */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 pt-1">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
-            Visão geral da operação
-          </h1>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Acompanhe os principais indicadores dos avisos e embarques ·{" "}
-            <span className="font-mono text-slate-300">{periodLabel}</span>
-          </p>
+    <div className="w-full flex flex-col items-center px-2 sm:px-4 md:px-6 py-4">
+      {/* Filter Status Indicator Banner */}
+      {hasFilter && (
+        <div className="w-full mb-4">
+          <div className="bg-[#122131] border border-[#159BFF]/40 rounded-lg p-3 flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[#159BFF] animate-pulse"></span>
+              <span className="text-[#89919e]">Filtros ativos:</span>
+              <span className="font-mono font-medium text-[#9fcaff]">
+                Empresa: {selectedEmpresa} | Embarque: {selectedEmbarque}
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                setSelectedEmpresa("ALL")
+                setSelectedEmbarque("ALL")
+              }}
+              className="text-xs text-[#89919e] hover:text-white underline cursor-pointer"
+            >
+              Limpar filtros
+            </button>
+          </div>
         </div>
+      )}
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="hidden sm:flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500 mr-1">
-            <Filter size={12} />
-            <span>Filtros:</span>
+      {/* Main Container: Fluid full width */}
+      <main className="w-full flex flex-col my-auto">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-stretch">
+          {/* Left Panel: Empresas e Volumes */}
+          <div className="bg-[#0d1c2d] rounded-2xl p-5 md:p-6 flex flex-col justify-between gap-5 shadow-2xl relative overflow-hidden border border-[#273647]">
+            <div className="absolute -top-24 -left-24 w-60 h-60 bg-[#159BFF]/10 rounded-full blur-3xl pointer-events-none"></div>
+
+            <div className="flex items-center justify-between relative z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#122131] flex items-center justify-center text-[#9fcaff] shadow-sm border border-[#273647]">
+                  <Package className="w-4 h-4" />
+                </div>
+                <div className="flex flex-col">
+                  <h2 className="text-base font-bold text-[#d4e4fa] tracking-tight">Empresas e Volumes</h2>
+                  <p className="text-[11px] text-[#bfc7d5]">Dados reais da tabela Supabase</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 text-[#bfc7d5] text-xs font-mono">
+                <span className="text-[#4edea3]">●</span>
+                <span>
+                  Métrica: <strong className="text-white font-semibold uppercase">{currentMetric}</strong>
+                </span>
+              </div>
+            </div>
+
+            {/* 4 Cards de Indicadores Superiores */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 relative z-10">
+              <div className="bg-[#122131] rounded-xl p-3 flex flex-col justify-between shadow-sm border border-[#273647]">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#d4e4fa] tracking-wide uppercase">Avisos</span>
+                  <span className="bg-[#4edea3]/10 text-[#4edea3] text-[9px] font-semibold px-1.5 py-0.5 rounded">Ativo</span>
+                </div>
+                <div className="mt-2 flex items-baseline gap-1">
+                  <span className="text-sm font-normal text-[#d4e4fa]">{fmt(metrics.avisos)}</span>
+                  <span className="text-[#89919e] text-[10px]">un</span>
+                </div>
+              </div>
+              <div className="bg-[#122131] rounded-xl p-3 flex flex-col justify-between shadow-sm border border-[#273647]">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#d4e4fa] tracking-wide uppercase">Notas</span>
+                  <span className="bg-[#273647] text-[#bfc7d5] text-[9px] font-semibold px-1.5 py-0.5 rounded">Doc</span>
+                </div>
+                <div className="mt-2 flex items-baseline gap-1">
+                  <span className="text-sm font-normal text-[#d4e4fa]">{fmt(metrics.notas)}</span>
+                  <span className="text-[#89919e] text-[10px]">doc</span>
+                </div>
+              </div>
+              <div className="bg-[#122131] rounded-xl p-3 flex flex-col justify-between shadow-sm border border-[#273647]">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#d4e4fa] tracking-wide uppercase">Peças</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#159BFF]"></span>
+                </div>
+                <div className="mt-2 flex items-baseline gap-1">
+                  <span className="text-sm font-normal text-[#9fcaff]">{fmt(metrics.pecas)}</span>
+                  <span className="text-[#89919e] text-[10px]">un</span>
+                </div>
+              </div>
+              <div className="bg-[#122131] rounded-xl p-3 flex flex-col justify-between shadow-sm border border-[#273647]">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#d4e4fa] tracking-wide uppercase">SKUs</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#d0bcff]"></span>
+                </div>
+                <div className="mt-2 flex items-baseline gap-1">
+                  <span className="text-sm font-normal text-[#d0bcff]">{fmt(metrics.skus)}</span>
+                  <span className="text-[#89919e] text-[10px]">cod</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Participação no Montante */}
+            <div className="bg-[#122131] rounded-xl p-4 flex flex-col gap-4 relative z-10 shadow-sm border border-[#273647] flex-1 justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <span className="text-xs text-[#bfc7d5] uppercase tracking-wider font-semibold">Participação no Montante</span>
+                <div className="inline-flex flex-wrap bg-[#0d1c2d] p-1 rounded-lg gap-1 border border-[#273647]">
+                  {(["avisos", "notas", "pecas", "skus", "solicitante"] as const).map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setCurrentMetric(m)}
+                      className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase transition-all cursor-pointer ${
+                        currentMetric === m ? "bg-[#159BFF] text-[#003157]" : "text-[#bfc7d5] hover:text-[#d4e4fa]"
+                      }`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center justify-around gap-4 py-2">
+                <div className="relative w-36 h-36 flex items-center justify-center shrink-0">
+                  <svg className="w-36 h-36 transform -rotate-90" viewBox="0 0 160 160">
+                    <circle className="text-[#273647]" cx="80" cy="80" fill="transparent" r="62" stroke="currentColor" strokeWidth="16"></circle>
+                    {donutData.slices
+                      .filter((s) => s.visibleLen > 0)
+                      .map((slice) => (
+                        <circle
+                          key={slice.name}
+                          cx="80"
+                          cy="80"
+                          fill="transparent"
+                          r="62"
+                          stroke={slice.color}
+                          strokeWidth={selectedEmpresa === slice.name ? "20" : "16"}
+                          strokeDasharray={slice.strokeDasharray}
+                          strokeDashoffset={slice.strokeDashoffset}
+                          strokeLinecap="butt"
+                          onClick={() => {
+                            if (currentMetric !== "solicitante") {
+                              setSelectedEmpresa(selectedEmpresa === slice.name ? "ALL" : slice.name)
+                            }
+                          }}
+                          className="transition-all duration-500 ease-out cursor-pointer hover:opacity-80"
+                        />
+                      ))}
+                  </svg>
+                  <div className="absolute flex flex-col items-center justify-center text-center pointer-events-none">
+                    <span className="text-[9px] uppercase tracking-wider text-[#89919e]">Total</span>
+                    <span className="text-base font-semibold text-[#d4e4fa] tracking-tight">{fmt(donutData.total)}</span>
+                    <span className="text-[9px] text-[#9fcaff] uppercase font-medium">{currentMetric}</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2 w-full sm:w-60 shrink-0 max-h-40 overflow-y-auto custom-scrollbar">
+                  {donutData.slices.map((slice) => {
+                    const isSelected = selectedEmpresa === slice.name
+                    return (
+                      <div
+                        key={slice.name}
+                        onClick={() => {
+                          if (currentMetric !== "solicitante") {
+                            setSelectedEmpresa(isSelected ? "ALL" : slice.name)
+                          }
+                        }}
+                        className={`flex items-center justify-between p-2 rounded bg-[#0d1c2d] hover:bg-[#1c2b3c] transition-colors cursor-pointer border ${
+                          isSelected ? "border-[#9fcaff] ring-1 ring-[#9fcaff]/30" : "border-[#273647]"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: slice.color }}></span>
+                          <span className="text-xs text-[#d4e4fa] font-medium truncate max-w-[130px]">{slice.name}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs font-mono">
+                          <span className="text-[#d4e4fa] font-normal">{fmt(slice.value)}</span>
+                          <span className="font-medium" style={{ color: slice.color }}>
+                            ({slice.pct}%)
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
           </div>
 
-          <select
-            value={selectedEmpresa}
-            onChange={(e) => setSelectedEmpresa(e.target.value)}
-            aria-label="Filtrar por empresa"
-            className="bg-slate-900/90 text-slate-100 border border-white/[0.09] hover:border-white/20 focus:border-blue-500/60 rounded-lg px-3 py-2 text-xs outline-none cursor-pointer"
-          >
-            <option value="todas">Empresa (Todas)</option>
-            {filterOptions.empresas.map((emp) => (
-              <option key={emp} value={emp}>
-                {emp}
-              </option>
-            ))}
-          </select>
+          {/* Right Panel: Desempenho Operacional */}
+          <div className="bg-[#0d1c2d] rounded-2xl p-5 md:p-6 flex flex-col justify-between gap-5 shadow-2xl relative overflow-hidden border border-[#273647]">
+            <div className="absolute -top-24 -right-24 w-60 h-60 bg-[#4edea3]/10 rounded-full blur-3xl pointer-events-none"></div>
 
-          <select
-            value={selectedPessoa}
-            onChange={(e) => setSelectedPessoa(e.target.value)}
-            aria-label="Filtrar por pessoa responsável"
-            className="bg-slate-900/90 text-slate-100 border border-white/[0.09] hover:border-white/20 focus:border-blue-500/60 rounded-lg px-3 py-2 text-xs outline-none cursor-pointer"
-          >
-            <option value="todas">Pessoa (Todas)</option>
-            {filterOptions.pessoas.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={selectedConferente}
-            onChange={(e) => setSelectedConferente(e.target.value)}
-            aria-label="Filtrar por conferente"
-            className="bg-slate-900/90 text-slate-100 border border-white/[0.09] hover:border-white/20 focus:border-blue-500/60 rounded-lg px-3 py-2 text-xs outline-none cursor-pointer"
-          >
-            <option value="todos">Conferente (Todos)</option>
-            {filterOptions.conferentes.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={selectedTipo}
-            onChange={(e) => setSelectedTipo(e.target.value)}
-            aria-label="Filtrar por tipo de embarque"
-            className="bg-slate-900/90 text-slate-100 border border-white/[0.09] hover:border-white/20 focus:border-blue-500/60 rounded-lg px-3 py-2 text-xs outline-none cursor-pointer"
-          >
-            <option value="todos">Tipo de embarque</option>
-            <option value="Simples">Simples</option>
-            <option value="Normal">Normal</option>
-            <option value="Complexa">Complexa</option>
-          </select>
-
-          {hasSecondaryFilter && (
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedEmpresa("todas")
-                setSelectedPessoa("todas")
-                setSelectedConferente("todos")
-                setSelectedTipo("todos")
-              }}
-              className="inline-flex items-center gap-1 px-2.5 py-2 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 text-[11px] font-semibold transition-colors cursor-pointer"
-              title="Limpar filtros do dashboard"
-            >
-              <X size={12} />
-              <span>Limpar</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* 1. Indicadores gerais: avisos, notas, peças, SKUs e tempo médio */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5">
-        <div className="bg-[#1b2638]/85 border border-[#2c3a50] border-b-[3px] border-b-[#438cf5] rounded-xl p-4">
-          <FileText size={16} className="text-sky-400" />
-          <strong className="block text-2xl font-bold text-white font-mono mt-3 mb-1">
-            {loading ? "..." : metrics.totalAvisos.toLocaleString("pt-BR")}
-          </strong>
-          <span className="text-xs text-[#aab6ca]">Avisos</span>
-        </div>
-
-        <div className="bg-[#1b2638]/85 border border-[#2c3a50] border-b-[3px] border-b-[#438cf5] rounded-xl p-4">
-          <Package size={16} className="text-amber-400" />
-          <strong className="block text-2xl font-bold text-white font-mono mt-3 mb-1">
-            {loading ? "..." : metrics.totalNotas.toLocaleString("pt-BR")}
-          </strong>
-          <span className="text-xs text-[#aab6ca]">Notas</span>
-        </div>
-
-        <div className="bg-[#1b2638]/85 border border-[#2c3a50] border-b-[3px] border-b-[#438cf5] rounded-xl p-4">
-          <Boxes size={16} className="text-orange-400" />
-          <strong className="block text-2xl font-bold text-white font-mono mt-3 mb-1">
-            {loading ? "..." : metrics.totalPecas.toLocaleString("pt-BR")}
-          </strong>
-          <span className="text-xs text-[#aab6ca]">Peças</span>
-        </div>
-
-        <div className="bg-[#1b2638]/85 border border-[#2c3a50] border-b-[3px] border-b-[#438cf5] rounded-xl p-4">
-          <Layers size={16} className="text-emerald-400" />
-          <strong className="block text-2xl font-bold text-white font-mono mt-3 mb-1">
-            {loading ? "..." : metrics.totalSkus.toLocaleString("pt-BR")}
-          </strong>
-          <span className="text-xs text-[#aab6ca]">SKUs</span>
-        </div>
-
-        <div
-          className="bg-[#1b2638]/85 border border-[#2c3a50] border-b-[3px] border-b-[#438cf5] rounded-xl p-4"
-          title={`Soma dos tempos médios de Separação, Conferência e Embalagem (${formatDurationClock(metrics.totalAvgSec)})`}
-        >
-          <Clock size={16} className="text-indigo-400" />
-          <strong className="block text-2xl font-bold text-white font-mono mt-3 mb-1">
-            {loading ? "..." : formatDurationReadable(metrics.totalAvgSec)}
-          </strong>
-          <span className="text-xs text-[#aab6ca]">Tempo médio total</span>
-        </div>
-      </section>
-
-      {/* 2. Ranking empresas com mais avisos + 3. Volume por empresa */}
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-[#1b2638]/85 border border-[#2c3a50] rounded-xl p-4 sm:p-5 min-w-0">
-          <h2 className="flex items-center gap-2 text-[15px] font-bold text-white mb-4">
-            <Building2 size={16} className="text-sky-400 shrink-0" />
-            <span>Empresas com mais avisos</span>
-          </h2>
-
-          {metrics.companies.length === 0 ? (
-            <p className="text-xs text-slate-400 py-8 text-center">
-              Nenhum dado encontrado para os filtros aplicados.
-            </p>
-          ) : (
-            <div className="space-y-4 max-h-80 overflow-y-auto pr-1">
-              {metrics.companies.map((c) => {
-                const widthPct = Math.max(
-                  4,
-                  Math.round((c.avisos / metrics.maxCompanyAvisos) * 100)
-                )
-                return (
-                  <div
-                    key={c.empresa}
-                    className="grid grid-cols-[110px_1fr_42px] sm:grid-cols-[135px_1fr_48px] items-center gap-3 text-xs"
-                  >
-                    <span
-                      className="text-slate-200 font-medium truncate"
-                      title={c.empresa}
-                    >
-                      {c.empresa}
-                    </span>
-                    <div className="h-3 bg-[#303b4f] rounded-full overflow-hidden">
-                      <div
-                        style={{ width: `${widthPct}%` }}
-                        className="h-full bg-[#438cf5] rounded-full transition-all duration-500"
-                      />
-                    </div>
-                    <span className="text-right font-mono font-semibold text-white">
-                      {c.avisos.toLocaleString("pt-BR")}
-                    </span>
-                  </div>
-                )
-              })}
+            <div className="flex items-center justify-between relative z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#122131] flex items-center justify-center text-[#4edea3] shadow-sm border border-[#273647]">
+                  <Clock className="w-4 h-4" />
+                </div>
+                <div className="flex flex-col">
+                  <h2 className="text-base font-bold text-[#d4e4fa] tracking-tight">Desempenho Operacional</h2>
+                  <p className="text-[11px] text-[#bfc7d5]">Tempos reais da tabela Supabase</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 text-[#bfc7d5] text-xs font-mono">
+                <span>Tempo Médio</span>
+              </div>
             </div>
-          )}
-        </div>
 
-        <div className="bg-[#1b2638]/85 border border-[#2c3a50] rounded-xl p-4 sm:p-5 min-w-0">
-          <h2 className="flex items-center gap-2 text-[15px] font-bold text-white mb-4">
-            <LayoutGrid size={16} className="text-emerald-400 shrink-0" />
-            <span>Volume por empresa</span>
-          </h2>
-
-          {metrics.companies.length === 0 ? (
-            <p className="text-xs text-slate-400 py-8 text-center">
-              Nenhum dado encontrado para os filtros aplicados.
-            </p>
-          ) : (
-            <div className="overflow-x-auto max-h-80 overflow-y-auto">
-              <table className="w-full border-collapse text-xs">
-                <thead>
-                  <tr className="bg-[#222f43] text-slate-200">
-                    <th className="px-2.5 py-2.5 text-left font-semibold rounded-tl-md">
-                      Empresa
-                    </th>
-                    <th className="px-2.5 py-2.5 text-left font-semibold">
-                      Notas
-                    </th>
-                    <th className="px-2.5 py-2.5 text-left font-semibold">
-                      Peças
-                    </th>
-                    <th className="px-2.5 py-2.5 text-left font-semibold rounded-tr-md">
-                      SKUs
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {metrics.companies.map((c) => (
-                    <tr
-                      key={c.empresa}
-                      className="border-b border-[#303c50] last:border-0 hover:bg-white/[0.02]"
-                    >
-                      <td
-                        className="px-2.5 py-2.5 font-medium text-white max-w-[180px] truncate"
-                        title={c.empresa}
-                      >
-                        {c.empresa}
-                      </td>
-                      <td className="px-2.5 py-2.5 font-mono text-slate-200">
-                        {c.notas.toLocaleString("pt-BR")}
-                      </td>
-                      <td className="px-2.5 py-2.5 font-mono text-slate-200">
-                        {c.pecas.toLocaleString("pt-BR")}
-                      </td>
-                      <td className="px-2.5 py-2.5 font-mono text-slate-200">
-                        {c.skus.toLocaleString("pt-BR")}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {/* 4 Cards de Indicadores de Tempo */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 relative z-10">
+              <div className="bg-[#122131] rounded-xl p-3 flex flex-col justify-between shadow-sm relative overflow-hidden border border-[#273647]">
+                <div className="absolute top-0 left-0 right-0 h-1 bg-[#4edea3]"></div>
+                <span className="text-xs font-bold text-[#d4e4fa] tracking-wide uppercase">Separação</span>
+                <div className="mt-2 flex flex-col">
+                  <span className="text-xs font-normal text-[#4edea3]">{formatDurationHuman(metrics.avgSep)}</span>
+                  <span className="text-[#89919e] text-[9px] mt-0.5">Tempo médio</span>
+                </div>
+              </div>
+              <div className="bg-[#122131] rounded-xl p-3 flex flex-col justify-between shadow-sm relative overflow-hidden border border-[#273647]">
+                <div className="absolute top-0 left-0 right-0 h-1 bg-[#159BFF]"></div>
+                <span className="text-xs font-bold text-[#d4e4fa] tracking-wide uppercase">Conferência</span>
+                <div className="mt-2 flex flex-col">
+                  <span className="text-xs font-normal text-[#9fcaff]">{formatDurationHuman(metrics.avgConf)}</span>
+                  <span className="text-[#89919e] text-[9px] mt-0.5">Validação</span>
+                </div>
+              </div>
+              <div className="bg-[#122131] rounded-xl p-3 flex flex-col justify-between shadow-sm relative overflow-hidden border border-[#273647]">
+                <div className="absolute top-0 left-0 right-0 h-1 bg-[#89919e]"></div>
+                <span className="text-xs font-bold text-[#d4e4fa] tracking-wide uppercase">Embalagem</span>
+                <div className="mt-2 flex flex-col">
+                  <span className="text-xs font-normal text-[#d4e4fa]">{formatDurationHuman(metrics.avgEmb)}</span>
+                  <span className="text-[#89919e] text-[9px] mt-0.5">Etapa</span>
+                </div>
+              </div>
+              <div className="rounded-xl p-3 flex flex-col justify-between shadow-sm relative overflow-hidden bg-gradient-to-b from-[#159BFF]/10 to-transparent border border-[#159BFF]/30 bg-[#122131]">
+                <div className="absolute top-0 left-0 right-0 h-1 bg-[#159BFF]"></div>
+                <span className="text-xs font-bold text-[#9fcaff] tracking-wide uppercase">Total Ciclo</span>
+                <div className="mt-2 flex flex-col">
+                  <span className="text-xs font-normal text-[#d4e4fa]">{formatDurationHuman(metrics.totalTime)}</span>
+                  <span className="text-[#89919e] text-[9px] mt-0.5">Ciclo global</span>
+                </div>
+              </div>
             </div>
-          )}
-        </div>
-      </section>
 
-      {/* 4. Quantidade e percentual de embarques simples, normais e complexos por empresa */}
-      <div className="bg-[#1b2638]/85 border border-[#2c3a50] rounded-xl p-4 sm:p-5 min-w-0">
-        <h2 className="flex items-center gap-2 text-[15px] font-bold text-white mb-4">
-          <Package size={16} className="text-amber-400 shrink-0" />
-          <span>Tipos de embarque por empresa</span>
-        </h2>
-
-        {metrics.companies.length === 0 ? (
-          <p className="text-xs text-slate-400 py-8 text-center">
-            Nenhum dado encontrado para os filtros aplicados.
-          </p>
-        ) : (
-          <div className="overflow-x-auto max-h-96 overflow-y-auto">
-            <table className="w-full border-collapse text-xs">
-              <thead>
-                <tr className="bg-[#222f43] text-slate-200">
-                  <th className="px-3 py-2.5 text-left font-semibold rounded-tl-md">
-                    Empresa
-                  </th>
-                  <th className="px-3 py-2.5 text-left font-semibold">
-                    Simples
-                  </th>
-                  <th className="px-3 py-2.5 text-left font-semibold">
-                    Normal
-                  </th>
-                  <th className="px-3 py-2.5 text-left font-semibold rounded-tr-md">
-                    Complexa
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {metrics.companies.map((c) => {
-                  const totalClassified = c.simples + c.normal + c.complexa
-                  const pctSimples =
-                    totalClassified > 0
-                      ? Math.round((c.simples / totalClassified) * 100)
-                      : 0
-                  const pctNormal =
-                    totalClassified > 0
-                      ? Math.round((c.normal / totalClassified) * 100)
-                      : 0
-                  const pctComplexa =
-                    totalClassified > 0
-                      ? Math.round((c.complexa / totalClassified) * 100)
-                      : 0
-
+            {/* Distribuição por Complexidade */}
+            <div className="bg-[#122131] rounded-xl p-4 flex flex-col gap-3 relative z-10 shadow-sm border border-[#273647] flex-1 justify-between">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-[#d4e4fa] tracking-wide uppercase">Distribuição por Complexidade</span>
+                  <span className="text-[11px] text-[#89919e] font-normal">({metrics.complexitySummary.total} avisos)</span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2.5 justify-center flex-1">
+                {complexityItems.map(({ key, label, Icon, iconClass, pctClass, barClass }) => {
+                  const item = metrics.complexitySummary[key]
+                  if (!item || (item.count === 0 && key === "Não informado")) return null
+                  const isSel = selectedEmbarque === key
                   return (
-                    <tr
-                      key={c.empresa}
-                      className="border-b border-[#303c50] last:border-0 hover:bg-white/[0.02]"
+                    <div
+                      key={key}
+                      onClick={() => setSelectedEmbarque(isSel ? "ALL" : key)}
+                      className={`flex flex-col gap-1 cursor-pointer group p-2 rounded-lg transition-colors hover:bg-[#0d1c2d] border ${
+                        isSel ? "bg-[#0d1c2d] border-[#9fcaff] ring-1 ring-[#9fcaff]/20" : "border-transparent"
+                      }`}
                     >
-                      <td
-                        className="px-3 py-3 font-medium text-white max-w-[200px] truncate"
-                        title={c.empresa}
-                      >
-                        {c.empresa}
-                      </td>
-                      <td className="px-3 py-3 min-w-[140px]">
-                        <div className="flex items-center justify-between gap-2 font-mono">
-                          <span className="text-white font-semibold">
-                            {pctSimples}%
-                          </span>
-                          <span className="text-[11px] text-[#aab6ca]">
-                            {c.simples}{" "}
-                            {c.simples === 1 ? "aviso" : "avisos"}
-                          </span>
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <Icon className={`w-3.5 h-3.5 shrink-0 ${iconClass}`} />
+                          <span className="font-medium text-[#d4e4fa] group-hover:text-[#9fcaff] transition-colors text-[11px]">{key}</span>
+                          <span className="text-[#89919e] text-[10px]">{label}</span>
                         </div>
-                        <div className="h-[7px] bg-[#303b4f] rounded-full mt-1.5 overflow-hidden">
-                          <div
-                            style={{ width: `${pctSimples}%` }}
-                            className="h-full bg-[#32c48d] rounded-full transition-all duration-500"
-                          />
+                        <div className="flex items-center gap-2 font-mono text-[11px]">
+                          <span className="text-[#bfc7d5] font-normal">{item.count} avisos</span>
+                          <span className={`${pctClass} font-normal`}>{item.pct}%</span>
                         </div>
-                      </td>
-                      <td className="px-3 py-3 min-w-[140px]">
-                        <div className="flex items-center justify-between gap-2 font-mono">
-                          <span className="text-white font-semibold">
-                            {pctNormal}%
-                          </span>
-                          <span className="text-[11px] text-[#aab6ca]">
-                            {c.normal} {c.normal === 1 ? "aviso" : "avisos"}
-                          </span>
-                        </div>
-                        <div className="h-[7px] bg-[#303b4f] rounded-full mt-1.5 overflow-hidden">
-                          <div
-                            style={{ width: `${pctNormal}%` }}
-                            className="h-full bg-[#438cf5] rounded-full transition-all duration-500"
-                          />
-                        </div>
-                      </td>
-                      <td className="px-3 py-3 min-w-[140px]">
-                        <div className="flex items-center justify-between gap-2 font-mono">
-                          <span className="text-white font-semibold">
-                            {pctComplexa}%
-                          </span>
-                          <span className="text-[11px] text-[#aab6ca]">
-                            {c.complexa}{" "}
-                            {c.complexa === 1 ? "aviso" : "avisos"}
-                          </span>
-                        </div>
-                        <div className="h-[7px] bg-[#303b4f] rounded-full mt-1.5 overflow-hidden">
-                          <div
-                            style={{ width: `${pctComplexa}%` }}
-                            className="h-full bg-[#f3ad43] rounded-full transition-all duration-500"
-                          />
-                        </div>
-                      </td>
-                    </tr>
+                      </div>
+                      <div className="w-full h-2 bg-[#0d1c2d] rounded-full overflow-hidden flex border border-[#273647]">
+                        <div className={`${barClass} h-full rounded-full transition-all duration-700 ease-out`} style={{ width: `${item.pct}%` }}></div>
+                      </div>
+                    </div>
                   )
                 })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* 5. Tempo médio por etapa + 6. Comparação do tempo médio por tipo de embarque */}
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-[#1b2638]/85 border border-[#2c3a50] rounded-xl p-4 sm:p-5 min-w-0">
-          <h2 className="flex items-center gap-2 text-[15px] font-bold text-white mb-4">
-            <Clock size={16} className="text-sky-400 shrink-0" />
-            <span>Tempo médio por etapa</span>
-          </h2>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-            <div
-              className="text-center px-2 py-5 bg-[#222f45] rounded-xl border border-white/[0.04]"
-              title={`Média exata: ${formatDurationClock(metrics.avgSepSec)} (${metrics.sepCount} registros)`}
-            >
-              <Package size={18} className="mx-auto text-sky-400" />
-              <strong className="block text-xl sm:text-2xl font-bold text-white font-mono my-2.5">
-                {formatDurationReadable(metrics.avgSepSec)}
-              </strong>
-              <span className="block text-xs text-[#aab6ca]">Separação</span>
-              <span className="block text-[10px] font-mono text-slate-500 mt-1">
-                {metrics.sepCount} medidos
-              </span>
-            </div>
-
-            <div
-              className="text-center px-2 py-5 bg-[#222f45] rounded-xl border border-white/[0.04]"
-              title={`Média exata: ${formatDurationClock(metrics.avgConfSec)} (${metrics.confCount} registros)`}
-            >
-              <CheckCircle2 size={18} className="mx-auto text-emerald-400" />
-              <strong className="block text-xl sm:text-2xl font-bold text-white font-mono my-2.5">
-                {formatDurationReadable(metrics.avgConfSec)}
-              </strong>
-              <span className="block text-xs text-[#aab6ca]">Conferência</span>
-              <span className="block text-[10px] font-mono text-slate-500 mt-1">
-                {metrics.confCount} medidos
-              </span>
-            </div>
-
-            <div
-              className="text-center px-2 py-5 bg-[#222f45] rounded-xl border border-white/[0.04]"
-              title={`Média exata: ${formatDurationClock(metrics.avgEmbSec)} (${metrics.embCount} registros)`}
-            >
-              <Boxes size={18} className="mx-auto text-amber-400" />
-              <strong className="block text-xl sm:text-2xl font-bold text-white font-mono my-2.5">
-                {formatDurationReadable(metrics.avgEmbSec)}
-              </strong>
-              <span className="block text-xs text-[#aab6ca]">Embalagem</span>
-              <span className="block text-[10px] font-mono text-slate-500 mt-1">
-                {metrics.embCount} medidos
-              </span>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-[#1b2638]/85 border border-[#2c3a50] rounded-xl p-4 sm:p-5 min-w-0">
-          <h2 className="flex items-center gap-2 text-[15px] font-bold text-white mb-4">
-            <LayoutGrid size={16} className="text-indigo-400 shrink-0" />
-            <span>Tempo por tipo de embarque</span>
-          </h2>
+        {/* Bottom Section: Últimos Avisos / Ranking de Operadores */}
+        <section className="mt-5 bg-[#0d1c2d] rounded-2xl p-5 md:p-6 shadow-2xl relative overflow-hidden border border-[#273647] text-[#d4e4fa]">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[#273647]/60">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-xl bg-[#122131] flex items-center justify-center text-[#159BFF] shadow-sm border border-[#273647] shrink-0 mt-0.5">
+                <FileText className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-semibold text-[#d4e4fa] tracking-tight">Últimos Avisos Separados</h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-[#159BFF]/10 text-[#9fcaff] border border-[#159BFF]/30">Tempo Real</span>
+                </div>
+                <p className="text-xs text-[#89919e] mt-0.5">
+                  Histórico recente ordenado por tipo de embarque e status operacional ({periodLabel})
+                </p>
+              </div>
+            </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-xs">
-              <thead>
-                <tr className="bg-[#222f43] text-slate-200">
-                  <th className="px-3 py-2.5 text-left font-semibold rounded-tl-md">
-                    Tipo
-                  </th>
-                  <th className="px-3 py-2.5 text-left font-semibold">
-                    Separação
-                  </th>
-                  <th className="px-3 py-2.5 text-left font-semibold">
-                    Conferência
-                  </th>
-                  <th className="px-3 py-2.5 text-left font-semibold rounded-tr-md">
-                    Embalagem
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {metrics.tipoTimes.map((row) => (
-                  <tr
-                    key={row.tipo}
-                    className="border-b border-[#303c50] last:border-0 hover:bg-white/[0.02]"
-                  >
-                    <td className="px-3 py-3 font-medium text-white whitespace-nowrap">
-                      <span className="inline-flex items-center gap-2">
-                        <span
-                          className={`w-2.5 h-2.5 rounded-full shrink-0 ${row.dotClass}`}
-                        />
-                        <span>{row.tipo}</span>
-                        <span className="text-[10px] font-mono text-slate-400">
-                          ({row.count})
-                        </span>
-                      </span>
-                    </td>
-                    <td
-                      className="px-3 py-3 font-mono text-slate-200"
-                      title={formatDurationClock(row.sep)}
-                    >
-                      {formatDurationReadable(row.sep)}
-                    </td>
-                    <td
-                      className="px-3 py-3 font-mono text-slate-200"
-                      title={formatDurationClock(row.conf)}
-                    >
-                      {formatDurationReadable(row.conf)}
-                    </td>
-                    <td
-                      className="px-3 py-3 font-mono text-slate-200"
-                      title={formatDurationClock(row.emb)}
-                    >
-                      {formatDurationReadable(row.emb)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="inline-flex items-center bg-[#051424] p-1 rounded-xl border border-[#273647] gap-1 self-start md:self-auto">
+              <button
+                onClick={() => setActiveTab("avisos")}
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                  activeTab === "avisos" ? "bg-[#159BFF] text-[#003157] shadow-sm" : "text-[#bfc7d5] hover:text-[#d4e4fa]"
+                }`}
+              >
+                <ListOrdered className="w-3.5 h-3.5" />
+                <span>Lista de Avisos</span>
+              </button>
+              <button
+                onClick={() => setActiveTab("ranking")}
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                  activeTab === "ranking" ? "bg-[#159BFF] text-[#003157] shadow-sm" : "text-[#bfc7d5] hover:text-[#d4e4fa]"
+                }`}
+              >
+                <Award className="w-3.5 h-3.5" />
+                <span>Ranking de Operadores</span>
+              </button>
+            </div>
           </div>
-        </div>
-      </section>
+
+          {activeTab === "avisos" ? (
+            <div className="overflow-x-auto mt-2">
+              {filteredRows.length === 0 ? (
+                <p className="py-12 text-center text-xs text-[#89919e]">Nenhum registro encontrado na tabela Supabase para os filtros selecionados.</p>
+              ) : (
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-[#273647] text-[#89919e] font-mono text-[11px] uppercase tracking-wider">
+                      <th className="py-3 px-3 font-medium">Aviso / PK</th>
+                      <th className="py-3 px-3 font-medium">Complexidade</th>
+                      <th className="py-3 px-3 font-medium">Empresa / Solicitante</th>
+                      <th className="py-3 px-3 font-medium text-center">Notas / Peças / SKUs</th>
+                      <th className="py-3 px-3 font-medium">Operador Separação</th>
+                      <th className="py-3 px-3 font-medium">Operador Conferência</th>
+                      <th className="py-3 px-3 font-medium">Operador Embalagem</th>
+                      <th className="py-3 px-3 font-medium text-right">Ciclo Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#273647]/50">
+                    {filteredRows.slice(0, 15).map((r) => {
+                      const durSep = calculateDuration(r.inicio, r.final)
+                      const durConf = calculateDuration(r.conferencia_inicial, r.conferencia_final)
+                      const durEmb = calculateDuration(r.horario_inicio_embalagem, r.horario_final_embalagem)
+                      const totalSec =
+                        (durSep?.totalSeconds || 0) + (durConf?.totalSeconds || 0) + (durEmb?.totalSeconds || 0)
+
+                      const tipoEmb = r.tipo_de_embarque?.trim() || "Não definido"
+                      const badgeColor =
+                        tipoEmb === "Simples"
+                          ? "bg-[#4edea3]/10 text-[#4edea3] border-[#4edea3]/30"
+                          : tipoEmb === "Complexa"
+                            ? "bg-red-500/10 text-red-400 border-red-500/30"
+                            : tipoEmb === "Normal"
+                              ? "bg-[#159BFF]/10 text-[#159BFF] border-[#159BFF]/30"
+                              : "bg-slate-500/10 text-slate-400 border-slate-500/30"
+
+                      return (
+                        <tr key={r.id} className="hover:bg-[#122131]/60 transition-colors group">
+                          <td className="py-3 px-3 font-mono font-normal text-white">{r.aviso}</td>
+                          <td className="py-3 px-3">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium border ${badgeColor}`}>
+                              <span className="w-1 h-1 rounded-full bg-current"></span>
+                              {tipoEmb}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3">
+                            <div className="font-medium text-[#d4e4fa]">{r.empresa || "Não informado"}</div>
+                            <div className="text-[10px] text-[#89919e]">{r.solicitante || "Não informado"}</div>
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono">
+                            <span className="text-[#d4e4fa]">{r.qtde_notas ?? 0} nf</span> <span className="text-[#89919e]">•</span>{" "}
+                            <span className="text-[#9fcaff]">{fmt(r.pecas)} un</span> <span className="text-[#89919e]">•</span>{" "}
+                            <span className="text-[#d0bcff]">{r.skus} skus</span>
+                          </td>
+                          <td className="py-3 px-3" title={r.pessoa || undefined}>
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-full bg-[#159BFF]/20 text-[#159BFF] flex items-center justify-center font-semibold text-[10px]">
+                                {splitPeople(r.pessoa).length > 0 ? splitPeople(r.pessoa).length : "—"}
+                              </div>
+                              <div>
+                                <div className="text-[#d4e4fa] font-medium cursor-help">
+                                  {renderPeopleCell(r.pessoa)}
+                                </div>
+                                <div className="text-[10px] text-[#89919e] font-mono">{durSep?.formatted || "—"}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-3" title={r.conferente || undefined}>
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-full bg-[#4edea3]/20 text-[#4edea3] flex items-center justify-center font-semibold text-[10px]">
+                                {splitPeople(r.conferente).length > 0 ? splitPeople(r.conferente).length : "—"}
+                              </div>
+                              <div>
+                                <div className="text-[#d4e4fa] font-medium cursor-help">
+                                  {renderPeopleCell(r.conferente)}
+                                </div>
+                                <div className="text-[10px] text-[#89919e] font-mono">{durConf?.formatted || "—"}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-3" title={r.embalador || undefined}>
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-full bg-[#d0bcff]/20 text-[#d0bcff] flex items-center justify-center font-semibold text-[10px]">
+                                {splitPeople(r.embalador).length > 0 ? splitPeople(r.embalador).length : "—"}
+                              </div>
+                              <div>
+                                <div className="text-[#d4e4fa] font-medium cursor-help">
+                                  {renderPeopleCell(r.embalador)}
+                                </div>
+                                <div className="text-[10px] text-[#89919e] font-mono">{durEmb?.formatted || "—"}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 text-right font-mono text-[#d4e4fa] font-medium">
+                            {totalSec > 0 ? formatDurationHuman(totalSec) : "—"}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          ) : (
+            <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <RankCard
+                title="Top Separadores"
+                dotClass="bg-[#4edea3]"
+                items={ranking.separadores}
+                subtitleFor={(i) => `${fmt(i.avisos)} avisos • ${fmt(i.pecas)} peças`}
+              />
+              <RankCard
+                title="Top Conferentes"
+                dotClass="bg-[#159BFF]"
+                items={ranking.conferentes}
+                subtitleFor={(i) => `${fmt(i.avisos)} avisos conferidos`}
+              />
+              <RankCard
+                title="Top Embaladores"
+                dotClass="bg-[#d0bcff]"
+                items={ranking.embaladores}
+                subtitleFor={(i) => `${fmt(i.avisos)} avisos embalados`}
+                className="lg:col-span-2"
+                gridClass="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3"
+              />
+            </div>
+          )}
+        </section>
+      </main>
     </div>
   )
 }
