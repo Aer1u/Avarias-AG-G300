@@ -1111,30 +1111,69 @@ export function ControlePKView() {
     }
   }
 
+  const splitPeopleNames = (raw: string | null | undefined): string[] => {
+    if (!raw) return []
+    return raw
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
+
+  const renderPeopleBadgeCell = (
+    raw: string | null | undefined,
+    accent: "sky" | "emerald"
+  ) => {
+    const people = splitPeopleNames(raw)
+    if (people.length === 0) {
+      return <span className="text-[#89919e]">—</span>
+    }
+    const avatarBg =
+      accent === "sky"
+        ? "bg-[#159BFF]/20 text-[#159BFF]"
+        : "bg-[#4edea3]/20 text-[#4edea3]"
+    const label = people.length === 1 ? people[0] : `${people.length} pessoas`
+    return (
+      <div className="flex items-center gap-2" title={people.join(", ")}>
+        <div
+          className={`w-6 h-6 rounded-full flex items-center justify-center font-semibold text-[10px] shrink-0 ${avatarBg}`}
+        >
+          {people.length}
+        </div>
+        <span className="text-[#d4e4fa] font-medium text-xs truncate max-w-[115px] cursor-help">
+          {label}
+        </span>
+      </div>
+    )
+  }
+
   const renderTipoEmbarqueBadge = (tipo: ControlePKRow["tipo_de_embarque"]) => {
     if (!tipo) {
       return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-medium bg-slate-800/70 text-slate-500 border border-slate-700/60 whitespace-nowrap">
-          Aguardando
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium border bg-slate-500/10 text-slate-400 border-slate-500/30 whitespace-nowrap">
+          <span className="w-1 h-1 rounded-full bg-current"></span>
+          Não definido
         </span>
       )
     }
     if (tipo === "Simples") {
       return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium border bg-[#4edea3]/10 text-[#4edea3] border-[#4edea3]/30 whitespace-nowrap">
+          <span className="w-1 h-1 rounded-full bg-current"></span>
           Simples
         </span>
       )
     }
     if (tipo === "Normal") {
       return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/30 whitespace-nowrap">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium border bg-[#159BFF]/10 text-[#159BFF] border-[#159BFF]/30 whitespace-nowrap">
+          <span className="w-1 h-1 rounded-full bg-current"></span>
           Normal
         </span>
       )
     }
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-wider bg-rose-500/15 text-rose-400 border border-rose-500/30 whitespace-nowrap">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium border bg-red-500/10 text-red-400 border-red-500/30 whitespace-nowrap">
+        <span className="w-1 h-1 rounded-full bg-current"></span>
         Complexa
       </span>
     )
@@ -1281,7 +1320,7 @@ export function ControlePKView() {
       </header>
 
       {/* Conteúdo principal */}
-      <main className="relative z-10 flex-1 w-full px-3 sm:px-5 py-4 space-y-4">
+      <main className="relative z-10 flex-1 w-full px-3 sm:px-5 py-4 space-y-4 bg-[#051424]">
         {/* Toast de feedback */}
         <AnimatePresence>
           {feedback && (
@@ -1790,7 +1829,7 @@ export function ControlePKView() {
               className="space-y-4"
             >
         {/* Barra de filtros, busca, botão sucinto + Aviso e menu 3 pontinhos */}
-        <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-3.5 py-2.5 flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+        <div className="rounded-2xl border border-[#273647] bg-[#0d1c2d] px-4 py-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3 shadow-lg">
           <div className="flex flex-wrap items-center gap-1.5">
             {(
               [
@@ -1817,10 +1856,12 @@ export function ControlePKView() {
                   filterTab === tab.id
                     ? tab.isManualPending
                       ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                      : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                      : tab.id === "Complexa"
+                        ? "bg-red-500/20 text-red-400 border border-red-500/40"
+                        : "bg-[#159BFF] text-[#003157] border border-[#159BFF]"
                     : tab.isManualPending && stats.manualPendentes > 0
                       ? "bg-amber-500/10 text-amber-300/90 border border-amber-500/20 hover:bg-amber-500/15"
-                      : "bg-white/[0.03] text-slate-400 border border-transparent hover:bg-white/[0.06] hover:text-slate-200"
+                      : "bg-[#122131] text-[#bfc7d5] border border-[#273647]/80 hover:bg-[#1c2b3c] hover:text-[#d4e4fa]"
                 }`}
               >
                 {tab.isManualPending && <Hourglass size={11} />}
@@ -1833,14 +1874,14 @@ export function ControlePKView() {
             <div className="relative flex-1 sm:flex-initial sm:w-64">
               <Search
                 size={13}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#89919e]"
               />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar aviso, empresa, solicitante..."
-                className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-slate-900/70 border border-white/[0.07] focus:border-emerald-500/40 text-xs text-white placeholder:text-slate-500 outline-none"
+                className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-[#051424] border border-[#273647] focus:border-[#159BFF]/60 text-xs text-white placeholder:text-[#89919e] outline-none"
               />
             </div>
 
@@ -1848,7 +1889,7 @@ export function ControlePKView() {
               type="button"
               onClick={() => setShowAddModal(true)}
               disabled={tableMissing}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold tracking-wide transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap shrink-0"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#4edea3] hover:bg-[#3cc990] text-[#003157] text-xs font-semibold tracking-wide transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap shrink-0"
               title="Adicionar um ou vários avisos"
             >
               <Plus size={14} />
@@ -1863,8 +1904,8 @@ export function ControlePKView() {
                 title="Configurações e ações"
                 className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
                   showActionsMenu
-                    ? "bg-white/[0.1] border-emerald-500/40 text-white"
-                    : "bg-white/[0.04] hover:bg-white/[0.08] border-white/[0.08] text-slate-300 hover:text-white"
+                    ? "bg-[#122131] border-[#159BFF]/60 text-white"
+                    : "bg-[#122131] hover:bg-[#1c2b3c] border-[#273647] text-[#bfc7d5] hover:text-white"
                 }`}
               >
                 <EllipsisVertical size={15} />
@@ -1877,7 +1918,7 @@ export function ControlePKView() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -6, scale: 0.96 }}
                     transition={{ duration: 0.14 }}
-                    className="absolute right-0 top-full mt-2 z-40 w-56 rounded-2xl border border-white/10 bg-[#0d1526]/95 backdrop-blur-xl shadow-2xl p-1.5 space-y-1"
+                    className="absolute right-0 top-full mt-2 z-40 w-56 rounded-2xl border border-[#273647] bg-[#0d1c2d]/95 backdrop-blur-xl shadow-2xl p-1.5 space-y-1"
                   >
                     <button
                       type="button"
@@ -1886,9 +1927,9 @@ export function ControlePKView() {
                         setShowImportModal(true)
                       }}
                       disabled={tableMissing}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left text-xs font-semibold text-sky-300 hover:bg-sky-500/15 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left text-xs font-semibold text-[#9fcaff] hover:bg-[#159BFF]/15 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      <UploadCloud size={15} className="text-sky-400 shrink-0" />
+                      <UploadCloud size={15} className="text-[#159BFF] shrink-0" />
                       <span>Atualizar via Planilha</span>
                     </button>
 
@@ -1899,9 +1940,9 @@ export function ControlePKView() {
                         handleExportExcel()
                       }}
                       disabled={filteredRows.length === 0}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left text-xs font-semibold text-slate-200 hover:bg-white/[0.07] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left text-xs font-semibold text-[#d4e4fa] hover:bg-[#122131] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      <Download size={15} className="text-emerald-400 shrink-0" />
+                      <Download size={15} className="text-[#4edea3] shrink-0" />
                       <span>Exportar Excel</span>
                     </button>
                   </motion.div>
@@ -1911,66 +1952,66 @@ export function ControlePKView() {
           </div>
         </div>
 
-        {/* Tabela principal Controle PK */}
-        <div className="rounded-xl overflow-hidden border border-white/[0.06] bg-[#0B1120]">
+        {/* Tabela principal Controle PK (estilo Dashboard) */}
+        <div className="bg-[#0d1c2d] rounded-2xl p-4 md:p-5 shadow-2xl relative overflow-hidden border border-[#273647] text-[#d4e4fa]">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="border-b border-white/[0.06] bg-white/[0.02]">
-                  <th className="px-2.5 py-2.5 text-[9px] font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">
+                <tr className="border-b border-[#273647] text-[#89919e] font-mono text-[11px] uppercase tracking-wider">
+                  <th className="py-3 px-3 font-medium whitespace-nowrap">
                     Aviso
                   </th>
-                  <th className="px-2 py-2.5 text-[9px] font-semibold text-slate-300 uppercase tracking-wider text-center whitespace-nowrap">
+                  <th className="py-3 px-3 font-medium text-center whitespace-nowrap">
                     Data Sep.
                   </th>
-                  <th className="px-2.5 py-2.5 text-[9px] font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">
+                  <th className="py-3 px-3 font-medium whitespace-nowrap">
                     Pessoa
                   </th>
-                  <th className="px-2 py-2.5 text-[9px] font-semibold text-slate-300 uppercase tracking-wider text-center whitespace-nowrap">
+                  <th className="py-3 px-3 font-medium text-center whitespace-nowrap">
                     Peças
                   </th>
-                  <th className="px-2 py-2.5 text-[9px] font-semibold text-slate-300 uppercase tracking-wider text-center whitespace-nowrap">
+                  <th className="py-3 px-3 font-medium text-center whitespace-nowrap">
                     SKUs
                   </th>
-                  <th className="px-2 py-2.5 text-[9px] font-semibold text-sky-300 uppercase tracking-wider text-center whitespace-nowrap">
+                  <th className="py-3 px-3 font-medium text-center whitespace-nowrap">
                     Tempo Sep.
                   </th>
-                  <th className="px-2 py-2.5 text-[9px] font-semibold text-slate-300 uppercase tracking-wider text-center whitespace-nowrap">
+                  <th className="py-3 px-3 font-medium text-center whitespace-nowrap">
                     Embarque
                   </th>
-                  <th className="px-2.5 py-2.5 text-[9px] font-semibold text-emerald-300 uppercase tracking-wider whitespace-nowrap">
+                  <th className="py-3 px-3 font-medium whitespace-nowrap">
                     Conferente
                   </th>
-                  <th className="px-2 py-2.5 text-[9px] font-semibold text-emerald-300 uppercase tracking-wider text-center whitespace-nowrap">
+                  <th className="py-3 px-3 font-medium text-center whitespace-nowrap">
                     Tempo Conf.
                   </th>
-                  <th className="px-2 py-2.5 text-[9px] font-semibold text-amber-300 uppercase tracking-wider text-center whitespace-nowrap">
+                  <th className="py-3 px-3 font-medium text-center whitespace-nowrap">
                     Tempo Emb.
                   </th>
-                  <th className="px-2.5 py-2.5 text-[9px] font-semibold text-amber-300 uppercase tracking-wider whitespace-nowrap">
+                  <th className="py-3 px-3 font-medium whitespace-nowrap">
                     Empresa
                   </th>
-                  <th className="px-2.5 py-2.5 text-[9px] font-semibold text-amber-300 uppercase tracking-wider whitespace-nowrap">
+                  <th className="py-3 px-3 font-medium whitespace-nowrap">
                     Solicitante
                   </th>
-                  <th className="px-2.5 py-2.5 text-[9px] font-semibold text-amber-300 uppercase tracking-wider whitespace-nowrap">
+                  <th className="py-3 px-3 font-medium whitespace-nowrap">
                     Notas
                   </th>
-                  <th className="px-2.5 py-2.5 text-[9px] font-semibold text-slate-300 uppercase tracking-wider text-right whitespace-nowrap">
+                  <th className="py-3 px-3 font-medium text-right whitespace-nowrap">
                     Ações
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/[0.04]">
+              <tbody className="divide-y divide-[#273647]/50">
                 {loading ? (
                   <tr>
                     <td
                       colSpan={14}
-                      className="px-6 py-10 text-center text-slate-400 text-xs"
+                      className="px-6 py-12 text-center text-[#89919e] text-xs"
                     >
                       <Loader2
                         size={18}
-                        className="animate-spin text-emerald-400 mx-auto mb-2"
+                        className="animate-spin text-[#4edea3] mx-auto mb-2"
                       />
                       Carregando registros de Controle PK...
                     </td>
@@ -1979,11 +2020,11 @@ export function ControlePKView() {
                   <tr>
                     <td
                       colSpan={14}
-                      className="px-6 py-10 text-center text-slate-500 text-xs"
+                      className="px-6 py-12 text-center text-[#89919e] text-xs"
                     >
                       <FileSpreadsheet
                         size={22}
-                        className="mx-auto mb-2 text-slate-600"
+                        className="mx-auto mb-2 text-[#89919e]"
                       />
                       {rows.length === 0
                         ? 'Nenhum aviso cadastrado. Clique em "+ Aviso" ao lado da busca para começar.'
@@ -2009,13 +2050,13 @@ export function ControlePKView() {
                     return (
                       <React.Fragment key={row.id}>
                         <tr
-                          className={`transition-colors ${
+                          className={`transition-colors group ${
                             isExpanded
-                              ? "bg-emerald-500/[0.06]"
-                              : "hover:bg-white/[0.02]"
+                              ? "bg-[#122131]"
+                              : "hover:bg-[#122131]/60"
                           }`}
                         >
-                          <td className="px-2.5 py-2 whitespace-nowrap">
+                          <td className="py-3 px-3 whitespace-nowrap">
                             <div className="inline-flex items-center gap-1.5">
                               <button
                                 type="button"
@@ -2025,17 +2066,17 @@ export function ControlePKView() {
                                     ? "Recolher detalhes do aviso"
                                     : "Clique para visualizar detalhes"
                                 }
-                                className="inline-flex items-center gap-1 font-mono text-[11px] font-bold text-white hover:text-emerald-300 transition-colors cursor-pointer group"
+                                className="inline-flex items-center gap-1 font-mono text-xs font-normal text-white hover:text-[#9fcaff] transition-colors cursor-pointer"
                               >
                                 {isExpanded ? (
                                   <ChevronDown
                                     size={13}
-                                    className="text-emerald-400 shrink-0"
+                                    className="text-[#4edea3] shrink-0"
                                   />
                                 ) : (
                                   <ChevronRight
                                     size={13}
-                                    className="text-slate-500 group-hover:text-emerald-400 shrink-0 transition-colors"
+                                    className="text-[#89919e] group-hover:text-[#4edea3] shrink-0 transition-colors"
                                   />
                                 )}
                                 <span>{row.aviso}</span>
@@ -2053,11 +2094,11 @@ export function ControlePKView() {
                               )}
                             </div>
                           </td>
-                          <td className="px-2 py-2 text-center whitespace-nowrap">
-                            <span className="inline-flex items-center gap-1 text-[11px] font-mono text-slate-300">
+                          <td className="py-3 px-3 text-center whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1 text-xs font-mono text-[#d4e4fa]">
                               <Calendar
                                 size={11}
-                                className="text-slate-500 shrink-0"
+                                className="text-[#89919e] shrink-0"
                               />
                               <span>
                                 {effectiveDateIso
@@ -2066,18 +2107,16 @@ export function ControlePKView() {
                               </span>
                             </span>
                           </td>
-                          <td className="px-2.5 py-2 text-[11px] text-slate-300 max-w-[125px] truncate" title={row.pessoa || undefined}>
-                            {row.pessoa || (
-                              <span className="text-slate-600">—</span>
-                            )}
+                          <td className="py-3 px-3 whitespace-nowrap">
+                            {renderPeopleBadgeCell(row.pessoa, "sky")}
                           </td>
-                          <td className="px-2 py-2 font-mono text-[11px] text-center text-sky-300 font-semibold whitespace-nowrap">
+                          <td className="py-3 px-3 font-mono text-xs text-center text-[#9fcaff] whitespace-nowrap">
                             {Number(row.pecas || 0).toLocaleString("pt-BR")}
                           </td>
-                          <td className="px-2 py-2 font-mono text-[11px] text-center text-indigo-300 font-semibold whitespace-nowrap">
+                          <td className="py-3 px-3 font-mono text-xs text-center text-[#d0bcff] whitespace-nowrap">
                             {Number(row.skus || 0).toLocaleString("pt-BR")}
                           </td>
-                          <td className="px-2 py-2 text-center whitespace-nowrap">
+                          <td className="py-3 px-3 text-center whitespace-nowrap">
                             {renderDurationCell(
                               row.inicio,
                               row.final,
@@ -2085,15 +2124,13 @@ export function ControlePKView() {
                               "sky"
                             )}
                           </td>
-                          <td className="px-2 py-2 text-center whitespace-nowrap">
+                          <td className="py-3 px-3 text-center whitespace-nowrap">
                             {renderTipoEmbarqueBadge(row.tipo_de_embarque)}
                           </td>
-                          <td className="px-2.5 py-2 text-[11px] text-emerald-200/90 max-w-[125px] truncate" title={row.conferente || undefined}>
-                            {row.conferente || (
-                              <span className="text-slate-600">—</span>
-                            )}
+                          <td className="py-3 px-3 whitespace-nowrap">
+                            {renderPeopleBadgeCell(row.conferente, "emerald")}
                           </td>
-                          <td className="px-2 py-2 text-center whitespace-nowrap">
+                          <td className="py-3 px-3 text-center whitespace-nowrap">
                             {renderDurationCell(
                               row.conferencia_inicial,
                               row.conferencia_final,
@@ -2101,7 +2138,7 @@ export function ControlePKView() {
                               "emerald"
                             )}
                           </td>
-                          <td className="px-2 py-2 text-center whitespace-nowrap">
+                          <td className="py-3 px-3 text-center whitespace-nowrap">
                             {renderDurationCell(
                               row.horario_inicio_embalagem,
                               row.horario_final_embalagem,
@@ -2109,12 +2146,12 @@ export function ControlePKView() {
                               "amber"
                             )}
                           </td>
-                          <td className="px-2.5 py-2 text-[11px] text-slate-200 max-w-[130px] truncate" title={row.empresa || undefined}>
+                          <td className="py-3 px-3 text-xs font-medium text-[#d4e4fa] max-w-[140px] truncate" title={row.empresa || undefined}>
                             {row.empresa || (
-                              <span className="text-slate-600">—</span>
+                              <span className="text-[#89919e]">—</span>
                             )}
                           </td>
-                          <td className="px-2.5 py-2 text-[11px] text-slate-200 min-w-[130px] max-w-[220px]">
+                          <td className="py-3 px-3 text-xs text-[#bfc7d5] min-w-[130px] max-w-[220px]">
                             {row.solicitante ? (
                               <span
                                 className="line-clamp-2 break-words leading-snug"
@@ -2123,20 +2160,20 @@ export function ControlePKView() {
                                 {row.solicitante}
                               </span>
                             ) : (
-                              <span className="text-slate-600">—</span>
+                              <span className="text-[#89919e]">—</span>
                             )}
                           </td>
-                          <td className="px-2.5 py-2 font-mono text-[11px] text-amber-200/90 max-w-[110px] truncate" title={row.notas || undefined}>
+                          <td className="py-3 px-3 font-mono text-xs text-[#d4e4fa] max-w-[115px] truncate" title={row.notas || undefined}>
                             {row.notas || (
-                              <span className="text-slate-600">—</span>
+                              <span className="text-[#89919e]">—</span>
                             )}
                           </td>
-                          <td className="px-2.5 py-2 text-right whitespace-nowrap">
+                          <td className="py-3 px-3 text-right whitespace-nowrap">
                             <div className="inline-flex items-center justify-end gap-0.5">
                               <button
                                 type="button"
                                 onClick={() => handleOpenEditModal(row)}
-                                className="p-1 rounded-md text-slate-400 hover:text-sky-400 hover:bg-sky-500/10 transition-colors cursor-pointer"
+                                className="p-1.5 rounded-lg text-[#89919e] hover:text-[#9fcaff] hover:bg-[#159BFF]/10 transition-colors cursor-pointer"
                                 title={`Editar aviso ${row.aviso}`}
                               >
                                 <Pencil size={13} />
@@ -2144,7 +2181,7 @@ export function ControlePKView() {
                               <button
                                 type="button"
                                 onClick={() => void handleDeleteRow(row)}
-                                className="p-1 rounded-md text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                                className="p-1.5 rounded-lg text-[#89919e] hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
                                 title={`Remover aviso ${row.aviso}`}
                               >
                                 <Trash2 size={13} />
@@ -2154,19 +2191,19 @@ export function ControlePKView() {
                         </tr>
 
                         {isExpanded && (
-                          <tr className="bg-slate-950/75">
+                          <tr className="bg-[#051424]/70">
                             <td colSpan={14} className="px-4 py-4">
-                              <div className="rounded-2xl border border-emerald-500/25 bg-[#0d1526] p-5 space-y-4">
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-white/[0.06]">
-                                  <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                              <div className="rounded-xl border border-[#273647] bg-[#122131] p-5 space-y-4">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[#273647]/60">
+                                  <h3 className="text-xs font-bold uppercase tracking-wider text-[#4edea3]">
                                     Detalhes Manuais — Aviso{" "}
-                                    <span className="font-mono text-white">
+                                    <span className="font-mono font-normal text-white">
                                       {row.aviso}
                                     </span>
                                   </h3>
 
                                   {rowEmbDur && (
-                                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-300 text-xs font-mono">
+                                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#159BFF]/10 border border-[#159BFF]/30 text-[#9fcaff] text-xs font-mono">
                                       <Clock size={12} />
                                       <span>
                                         Tempo Embalagem: {rowEmbDur.formatted}
@@ -2176,35 +2213,41 @@ export function ControlePKView() {
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-                                  <div className="rounded-xl bg-slate-900/70 border border-white/[0.06] px-3.5 py-2.5">
-                                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                                  <div className="rounded-xl bg-[#0d1c2d] border border-[#273647] px-3.5 py-2.5">
+                                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#89919e] mb-1">
                                       Embalador
                                     </span>
-                                    <p className="text-xs text-white break-words">
-                                      {row.embalador || (
-                                        <span className="text-slate-600">—</span>
+                                    <div className="text-xs text-[#d4e4fa]">
+                                      {row.embalador ? (
+                                        <span title={row.embalador} className="cursor-help">
+                                          {splitPeopleNames(row.embalador).length > 1
+                                            ? `${splitPeopleNames(row.embalador).length} pessoas (${row.embalador})`
+                                            : row.embalador}
+                                        </span>
+                                      ) : (
+                                        <span className="text-[#89919e]">—</span>
                                       )}
-                                    </p>
+                                    </div>
                                   </div>
 
-                                  <div className="rounded-xl bg-slate-900/70 border border-white/[0.06] px-3.5 py-2.5">
-                                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                                  <div className="rounded-xl bg-[#0d1c2d] border border-[#273647] px-3.5 py-2.5">
+                                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#89919e] mb-1">
                                       Horário Início Embalagem
                                     </span>
-                                    <p className="text-xs font-mono text-slate-200">
+                                    <p className="text-xs font-mono text-[#d4e4fa]">
                                       {row.horario_inicio_embalagem || (
-                                        <span className="text-slate-600">—</span>
+                                        <span className="text-[#89919e]">—</span>
                                       )}
                                     </p>
                                   </div>
 
-                                  <div className="rounded-xl bg-slate-900/70 border border-white/[0.06] px-3.5 py-2.5">
-                                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                                  <div className="rounded-xl bg-[#0d1c2d] border border-[#273647] px-3.5 py-2.5">
+                                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#89919e] mb-1">
                                       Horário Final Embalagem
                                     </span>
-                                    <p className="text-xs font-mono text-slate-200">
+                                    <p className="text-xs font-mono text-[#d4e4fa]">
                                       {row.horario_final_embalagem || (
-                                        <span className="text-slate-600">—</span>
+                                        <span className="text-[#89919e]">—</span>
                                       )}
                                     </p>
                                   </div>
