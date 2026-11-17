@@ -78,9 +78,21 @@ import EmbalagensTab from "@/components/EmbalagensTab"
 import { OriginDonutChart } from "@/components/OriginDonutChart"
 import { saveSnapshot, getSnapshot, setMetadata, getMetadata } from "@/lib/offlineDb"
 import { syncManager, ConnectionStatus } from "@/lib/syncManager"
+import * as XLSX from "xlsx"
+import {
+  ClassificacaoPalete,
+  CLASSIFICACAO_OPTIONS,
+  SQL_CLASSIFICACAO_MIGRATION,
+  extractRowClassificacao,
+  isDevolucao,
+  normalizeClassificacao,
+  getPalletCountTripletKey,
+  recomputePalletCounts,
+  isMissingClassificacaoColumnError,
+} from "@/lib/mapeamentoUtils"
 
 type ViewType = "geral" | "posicoes" | "nao_alocados" | "produtos" | "molhados" | "quarentena" | "retrabalho"
-type DisplayMode = "mapa" | "tabela" | "misto" | "nao_alocados" | "quarentena" | "retrabalho"
+type DisplayMode = "mapa" | "tabela" | "misto" | "nao_alocados" | "quarentena" | "retrabalho" | "devolucoes"
 type SortType = "none" | "qty_desc" | "qty_asc" | "alpha_asc"
 
 let nextTempId = 1;
@@ -526,9 +538,22 @@ function DashboardPage() {
   const [isCommitting, setIsCommitting] = useState(false)
   const [blockingError, setBlockingError] = useState<string | null>(null)
 
-  // -- APLICAÇÃO DE ALTERAÇÕES PENDENTES NO ESTADO GLOBAL --
+  // -- ESTADOS PARA CLASSIFICAÇÃO E CONSULTA POR CLASSIFICAÇÃO (REGRA B) --
+  const [devolucaoClassificacaoFilter, setDevolucaoClassificacaoFilter] = useState<"todas" | "Devolução" | "Normal" | "Não definido">("todas")
+  const [devolucaoSearch, setDevolucaoSearch] = useState("")
+  const [devolucaoLocalFilter, setDevolucaoLocalFilter] = useState<"todos" | "drive" | "chao" | "retrabalho" | "quarentena">("todos")
+  const [devolucaoNivelFilter, setDevolucaoNivelFilter] = useState<string>("todos")
+  const [devolucaoProfFilter, setDevolucaoProfFilter] = useState<string>("todos")
+  const [devolucaoAvariaFilter, setDevolucaoAvariaFilter] = useState<"todos" | "molhado" | "tombado" | "sem_avaria">("todos")
+  const [updatingClassificacaoId, setUpdatingClassificacaoId] = useState<string | null>(null)
+  const [isPrintingDevolucoes, setIsPrintingDevolucoes] = useState(false)
+  const [devolucaoPrintRows, setDevolucaoPrintRows] = useState<any[]>([])
+  const [missingClassificacaoColumn, setMissingClassificacaoColumn] = useState(false)
+  const [copiedMigrationSql, setCopiedMigrationSql] = useState(false)
+
+  // -- APLICAÇÃO DE ALTERAÇÕES PENDENTES + REGRA A (ID + Profundidade + Nível) --
   const effectiveData = useMemo(() => {
-    if (pendingChanges.length === 0) return data;
+    if (pendingChanges.length === 0) return recomputePalletCounts(data);
 
     const adds = [];
     const deletes = new Set();
@@ -537,7 +562,10 @@ function DashboardPage() {
     for (const change of pendingChanges) {
       const id = String(change.payload?.id || change.id);
       if (change.type === 'ADD') {
-        adds.push(change.payload);
+        adds.push({
+          ...change.payload,
+          classificacao: extractRowClassificacao(change.payload),
+        });
       } else if (change.type === 'DELETE') {
         deletes.add(id);
       } else if (change.type === 'UPDATE') {
@@ -549,10 +577,15 @@ function DashboardPage() {
       .filter(item => !deletes.has(String(item.id)))
       .map(item => {
         const update = updatesMap.get(String(item.id));
-        return update ? { ...item, ...update } : item;
+        if (!update) return item;
+        const merged = { ...item, ...update };
+        if ('classificacao' in update) {
+          merged.classificacao = extractRowClassificacao(update);
+        }
+        return merged;
       });
 
-    return [...result, ...adds];
+    return recomputePalletCounts([...result, ...adds]);
   }, [data, pendingChanges]);
 
   const processedHistory = useMemo(() => processHistoryMovements(movimentosRaw, movementPeriod, baseCodigosMap), [movimentosRaw, movementPeriod, baseCodigosMap]);
@@ -615,7 +648,8 @@ function DashboardPage() {
   const [newItemData, setNewItemData] = useState({
     produto: "",
     quantidade: "",
-    observacao: ""
+    observacao: "",
+    classificacao: "" as ClassificacaoPalete
   })
 
   const handleDragStart = (e: React.DragEvent, item: any) => {
@@ -703,9 +737,10 @@ function DashboardPage() {
          const { error } = await supabase.from('mapeamento').update({ 'Id Palete': finalTargetId }).eq('id', transferPayload.sourceItem.id);
          if (error) throw error;
       } else {
-         // Fracionamento de quantidade
+         // Fracionamento de quantidade (preservando classificação individual da linha)
          const src = transferPayload.sourceItem;
-         const insertSource = {
+         const rowClassif = extractRowClassificacao(src);
+         const insertSource: Record<string, any> = {
             'Posição': src.posicao,
             'Id Palete': finalTargetId,
             'Código': src.produto,
@@ -716,10 +751,17 @@ function DashboardPage() {
             'Parte Molhada': src.qtd_molhado || 0,
             'Observação': src.observacao || null,
             'Vencimento': src.vencimento || null,
-            'Lote': src.lote || null
+            'Lote': src.lote || null,
+            ...(rowClassif ? { classificacao: rowClassif } : {})
          };
          
-         const { error: insErr } = await supabase.from('mapeamento').insert(insertSource);
+         let { error: insErr } = await supabase.from('mapeamento').insert(insertSource);
+         if (insErr && isMissingClassificacaoColumnError(insErr)) {
+           setMissingClassificacaoColumn(true);
+           delete insertSource.classificacao;
+           const retryRes = await supabase.from('mapeamento').insert(insertSource);
+           insErr = retryRes.error;
+         }
          if (insErr) throw insErr;
          
          const { error: updErr } = await supabase.from('mapeamento').update({ 'Quantidade': dbQty - qtToMove }).eq('id', src.id);
@@ -794,7 +836,8 @@ function DashboardPage() {
         .eq('id', splitTarget.id);
       if (updErr) throw updErr;
 
-      const { error: insErr } = await supabase.from('mapeamento').insert([{
+      const splitClassif = extractRowClassificacao(splitTarget);
+      const splitInsertRow: Record<string, any> = {
         'Código': splitTarget.produto,
         'Quantidade': p2Qty,
         'Posição': 'Chão',
@@ -803,8 +846,16 @@ function DashboardPage() {
         'Parte Tombada': 0,
         'Parte Molhada': 0,
         'Id Palete': null,
-        'Observação': splitTarget.observacao || null
-      }]);
+        'Observação': splitTarget.observacao || null,
+        ...(splitClassif ? { classificacao: splitClassif } : {})
+      };
+      let { error: insErr } = await supabase.from('mapeamento').insert([splitInsertRow]);
+      if (insErr && isMissingClassificacaoColumnError(insErr)) {
+        setMissingClassificacaoColumn(true);
+        delete splitInsertRow.classificacao;
+        const retryRes = await supabase.from('mapeamento').insert([splitInsertRow]);
+        insErr = retryRes.error;
+      }
       if (insErr) throw insErr;
 
       await fetchData()
@@ -844,7 +895,8 @@ function DashboardPage() {
         }
 
         const src = itemsToMerge[0];
-        const newItems = [];
+        const srcClassif = extractRowClassificacao(src);
+        const newItems: Record<string, any>[] = [];
         const grade = Number(baseCodigosMap.get(mergeTarget.sku)?.grade) || 0;
         if (grade > 0) {
           let remaining = totalToAutoForm;
@@ -859,7 +911,8 @@ function DashboardPage() {
               'Parte Tombada': 0,
               'Parte Molhada': 0,
               'Id Palete': null,
-              'Observação': src?.observacao || null
+              'Observação': src?.observacao || null,
+              ...(srcClassif ? { classificacao: srcClassif } : {})
              });
              remaining = Math.round((remaining - qtyToInsert) * 1000) / 1000;
           }
@@ -873,12 +926,19 @@ function DashboardPage() {
               'Parte Tombada': 0,
               'Parte Molhada': 0,
               'Id Palete': null,
-              'Observação': src?.observacao || null
+              'Observação': src?.observacao || null,
+              ...(srcClassif ? { classificacao: srcClassif } : {})
            });
         }
         
         if (newItems.length > 0) {
-            const { error: insErr } = await supabase.from('mapeamento').insert(newItems);
+            let { error: insErr } = await supabase.from('mapeamento').insert(newItems);
+            if (insErr && isMissingClassificacaoColumnError(insErr)) {
+              setMissingClassificacaoColumn(true);
+              const fallbackItems = newItems.map(({ classificacao: _c, ...rest }) => rest);
+              const retryRes = await supabase.from('mapeamento').insert(fallbackItems);
+              insErr = retryRes.error;
+            }
             if (insErr) throw insErr;
         }
 
@@ -954,6 +1014,7 @@ function DashboardPage() {
     }
 
     const tempId = `novo_${nextTempId++}`;
+    const normClassif = normalizeClassificacao(newItemData.classificacao);
     setPendingChanges(prev => [...prev, {
       id: tempId,
       type: 'ADD',
@@ -964,6 +1025,7 @@ function DashboardPage() {
         'Observação': newItemData.observacao.trim() || null,
         'Posição': 'Chão',
         'Id Palete': null,
+        classificacao: normClassif || null,
         // Common access
         sku: newItemData.produto.trim().toUpperCase(),
         posicao: 'Chão',
@@ -975,7 +1037,8 @@ function DashboardPage() {
         acao: 'ADICIONAR_ESTOQUE',
         sku: newItemData.produto.trim().toUpperCase(),
         posicao: 'Chão',
-        quantidade: qty
+        quantidade: qty,
+        classificacao: normClassif || null
       }
     }]);
 
@@ -983,7 +1046,8 @@ function DashboardPage() {
     setNewItemData({
       produto: "",
       quantidade: "",
-      observacao: ""
+      observacao: "",
+      classificacao: ""
     });
   }
 
@@ -1118,7 +1182,10 @@ function DashboardPage() {
           'Profundidade': item.profundidade,
           'Parte Tombada': item.qtd_tombada || 0,
           'Parte Molhada': item.qtd_molhado || 0,
-          'Id Palete': item.id_palete || null
+          'Id Palete': item.id_palete || null,
+          'Observação': item.observacao || null,
+          'Última Alteração': item.ultima_alteracao || null,
+          'classificacao': extractRowClassificacao(item) || null
         }));
         await saveSnapshot('mapeamento', snapshotToSave);
 
@@ -1142,7 +1209,8 @@ function DashboardPage() {
         'Parte Tombada',
         'Parte Molhada',
         'Observação',
-        'Última Alteração'
+        'Última Alteração',
+        'classificacao'
       ];
 
       // 1. Process Additions
@@ -1158,7 +1226,7 @@ function DashboardPage() {
         const isFloor = !targetPos || ['chão', 'chao'].includes(targetPos.toLowerCase());
         if (!isFloor) {
           // ATOMIC RPC: Insert into position and consume from floor in a single PostgreSQL transaction
-          const rpcPayload = {
+          const rpcPayload: Record<string, any> = {
             "Posição": targetPos,
             "Código": String(cleanPayload['Código'] || '').trim().toUpperCase(),
             "Quantidade": Number(cleanPayload['Quantidade']) || 0,
@@ -1168,11 +1236,46 @@ function DashboardPage() {
             "Parte Molhada": cleanPayload['Parte Molhada'] ?? 0,
             "Id Palete": cleanPayload['Id Palete'] ?? null,
             "Observação": cleanPayload['Observação'] ?? null,
+            "classificacao": cleanPayload['classificacao'] ?? null,
           };
           const { error: rpcErr } = await supabase.rpc('rpc_add_to_position', { payload: rpcPayload });
           if (rpcErr) throw new Error(`[ERRO ATÔMICO ADICIONAR] ${rpcErr.message}`);
+
+          // Fallback para RPC v4 se classificacao veio preenchida e o SQL v5 ainda não foi aplicado na função
+          if (cleanPayload['classificacao']) {
+            try {
+              const { data: latestRow } = await supabase
+                .from('mapeamento')
+                .select('id, classificacao')
+                .eq('Posição', targetPos)
+                .eq('Código', String(cleanPayload['Código'] || '').trim().toUpperCase())
+                .order('id', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+              if (latestRow && !latestRow.classificacao) {
+                const { error: patchErr } = await supabase
+                  .from('mapeamento')
+                  .update({ classificacao: cleanPayload['classificacao'] })
+                  .eq('id', latestRow.id);
+                if (patchErr && isMissingClassificacaoColumnError(patchErr)) {
+                  setMissingClassificacaoColumn(true);
+                }
+              }
+            } catch {
+              // Silencioso caso a coluna ainda não exista
+            }
+          }
         } else {
-          const { error } = await supabase.from('mapeamento').insert(cleanPayload);
+          if (!cleanPayload['classificacao']) {
+            delete cleanPayload['classificacao'];
+          }
+          let { error } = await supabase.from('mapeamento').insert(cleanPayload);
+          if (error && isMissingClassificacaoColumnError(error)) {
+            setMissingClassificacaoColumn(true);
+            delete cleanPayload['classificacao'];
+            const retryRes = await supabase.from('mapeamento').insert(cleanPayload);
+            error = retryRes.error;
+          }
           if (error) throw error;
         }
       }
@@ -1219,12 +1322,14 @@ function DashboardPage() {
         const position = cleanPayload['Posição'] || change.audit?.posicao || '';
 
         if (typeof id === 'number' || (typeof id === 'string' && !id.startsWith('temp_'))) {
-          const extraJson = {
+          const hasClassifField = 'classificacao' in cleanPayload;
+          const extraJson: Record<string, any> = {
             "Nível": cleanPayload['Nível'],
             "Profundidade": cleanPayload['Profundidade'],
             "Parte Tombada": cleanPayload['Parte Tombada'],
             "Parte Molhada": cleanPayload['Parte Molhada'],
             "Id Palete": cleanPayload['Id Palete'],
+            ...(hasClassifField ? { "classificacao": cleanPayload['classificacao'] } : {}),
           };
           // ATOMIC RPC: Update pallet qty and adjust floor stock in single PostgreSQL transaction
           const { error: rpcErr } = await supabase.rpc('rpc_update_quantity', {
@@ -1236,6 +1341,16 @@ function DashboardPage() {
             p_extra: extraJson
           });
           if (rpcErr) throw new Error(`[ERRO ATÔMICO ATUALIZAR] ${rpcErr.message}`);
+
+          if (hasClassifField) {
+            const { error: clsErr } = await supabase
+              .from('mapeamento')
+              .update({ classificacao: cleanPayload['classificacao'] || null })
+              .eq('id', Number(id));
+            if (clsErr && isMissingClassificacaoColumnError(clsErr)) {
+              setMissingClassificacaoColumn(true);
+            }
+          }
         }
       }
 
@@ -1625,9 +1740,7 @@ function DashboardPage() {
         });
       });
 
-      // Join items in mapping with their position info
-      const usedPalletIds = new Set();
-      const usedLocationSlots = new Set();
+      // Join items in mapping with their position info (Regra A aplicada após filtrar linhas inválidas)
       const combinedData: any[] = mapeamentoRaw.map((m: any) => {
         const posId = String(m['Posição'] || "").trim();
         const posInfo = posLookup.get(posId) || {
@@ -1643,30 +1756,7 @@ function DashboardPage() {
         const palletId = (rawPalletId && typeof rawPalletId === 'string')
           ? rawPalletId.trim().toUpperCase()
           : (rawPalletId !== null && rawPalletId !== undefined) ? String(rawPalletId).trim().toUpperCase() : null;
-
-        let isFirstOccurrence = false;
         const isInvalidId = !palletId || palletId === "" || palletId === "NAN" || palletId === "-" || palletId === "S/ID" || palletId === "N/A";
-
-        if (!isInvalidId) {
-          if (!usedPalletIds.has(palletId)) {
-            usedPalletIds.add(palletId);
-            isFirstOccurrence = true;
-          }
-        } else {
-          // If no pallet ID, check if this physical slot (posicao + nivel + profundidade) was already counted
-          const nivelVal = m['Nível'] !== undefined && m['Nível'] !== null ? m['Nível'] : '';
-          const profVal = m['Profundidade'] !== undefined && m['Profundidade'] !== null ? m['Profundidade'] : '';
-          const slotKey = `${posId}_N${nivelVal}_P${profVal}`;
-
-          if (nivelVal !== '' || profVal !== '') {
-            if (!usedLocationSlots.has(slotKey)) {
-              usedLocationSlots.add(slotKey);
-              isFirstOccurrence = true;
-            }
-          } else {
-            isFirstOccurrence = true;
-          }
-        }
 
         // Normalized SKU lookup for consistency
         const mSku = String(m['Código'] || m['Codigo'] || '').trim().toUpperCase()
@@ -1705,9 +1795,9 @@ function DashboardPage() {
           qtd_molhado: parseBrNum(m['Parte Molhada']) || 0,
           ultima_alteracao: m['Última Alteração'],
           observacao: m['Observação'],
-          // Required calculations: 1 if it's the first time we see this ID, 0 otherwise
-          paletes: isFirstOccurrence ? 1 : 0,
-          fracao_paletes: isInvalidId ? (isFirstOccurrence ? 1 : 0) : fracaoPaletes
+          classificacao: extractRowClassificacao(m),
+          paletes: 0,
+          fracao_paletes: isInvalidId ? 1 : fracaoPaletes
         };
       });
 
@@ -1722,20 +1812,23 @@ function DashboardPage() {
             quantidade_total: 0,
             paletes: 0,
             id_palete: '',
+            classificacao: '',
             is_empty: true
           });
         }
       });
 
-      // Filter out invalid/corrupted ghost items (quantity <= 0 or missing product code)
-      const validCombinedData = combinedData.filter((d: any) => {
-        if (d.is_empty) return true;
-        const qty = Number(d.quantidade_total) || 0;
-        if (qty <= 0) return false;
-        const hasNoSku = !d.produto || d.produto === '-' || d.produto.trim() === '';
-        if (hasNoSku) return false;
-        return true;
-      });
+      // Filter out invalid/corrupted ghost items BEFORE Regra A pallet counting
+      const validCombinedData = recomputePalletCounts(
+        combinedData.filter((d: any) => {
+          if (d.is_empty) return true;
+          const qty = Number(d.quantidade_total) || 0;
+          if (qty <= 0) return false;
+          const hasNoSku = !d.produto || d.produto === '-' || d.produto.trim() === '';
+          if (hasNoSku) return false;
+          return true;
+        })
+      );
 
       setData(validCombinedData);
       setBaseCodigosMap(skuLookup);
@@ -1784,9 +1877,7 @@ function DashboardPage() {
             });
           });
 
-          const usedPalletIds = new Set();
-          const usedLocationSlots = new Set();
-          const combinedData: any[] = cachedMapeamento.map((m: any) => {
+          const combinedData: any[] = recomputePalletCounts(cachedMapeamento.map((m: any) => {
             const posId = String(m['Posição'] || "").trim();
             const posInfo = posLookup.get(posId) || {
               posicao: posId || 'S/P',
@@ -1795,34 +1886,6 @@ function DashboardPage() {
               observacao_pos: '',
               is_unallocated_source: !posId || posId === 'S/P' || posId.toUpperCase() === 'CHÃO'
             };
-
-            const rawPalletId = m['Id Palete'];
-            const palletId = (rawPalletId && typeof rawPalletId === 'string')
-              ? rawPalletId.trim().toUpperCase()
-              : (rawPalletId !== null && rawPalletId !== undefined) ? String(rawPalletId).trim().toUpperCase() : null;
-
-            let isFirstOccurrence = false;
-            const isInvalidId = !palletId || palletId === "" || palletId === "NAN" || palletId === "-" || palletId === "S/ID" || palletId === "N/A";
-
-            if (!isInvalidId) {
-              if (!usedPalletIds.has(palletId)) {
-                usedPalletIds.add(palletId);
-                isFirstOccurrence = true;
-              }
-            } else {
-              const nivelVal = m['Nível'] !== undefined && m['Nível'] !== null ? m['Nível'] : '';
-              const profVal = m['Profundidade'] !== undefined && m['Profundidade'] !== null ? m['Profundidade'] : '';
-              const slotKey = `${posId}_N${nivelVal}_P${profVal}`;
-
-              if (nivelVal !== '' || profVal !== '') {
-                if (!usedLocationSlots.has(slotKey)) {
-                  usedLocationSlots.add(slotKey);
-                  isFirstOccurrence = true;
-                }
-              } else {
-                isFirstOccurrence = true;
-              }
-            }
 
             const mSku = String(m['Código'] || m['Codigo'] || '').trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
             let mDesc = "-";
@@ -1843,10 +1906,11 @@ function DashboardPage() {
               qtd_molhado: Number(m['Parte Molhada']) || 0,
               ultima_alteracao: m['Última Alteração'],
               observacao: m['Observação'],
-              paletes: isFirstOccurrence ? 1 : 0,
-              fracao_paletes: isFirstOccurrence ? 1 : 0
+              classificacao: extractRowClassificacao(m),
+              paletes: 0,
+              fracao_paletes: 1
             };
-          });
+          }));
 
           setData(combinedData);
           setBaseCodigosMap(skuLookup);
@@ -2258,10 +2322,11 @@ function DashboardPage() {
           quantidade_total: total,
           paletes: item.paletes,
           nivel: item.nivel || "N/A",
-          profundidade: item.profundidade || item.Profundidade || "-",
+          profundidade: (item.profundidade !== undefined && item.profundidade !== null && item.profundidade !== "") ? item.profundidade : ((item.Profundidade !== undefined && item.Profundidade !== null && item.Profundidade !== "") ? item.Profundidade : "-"),
           qtd_por_palete: item.qtd_por_palete || item["Quantidade/palete"] || 0,
           qtd_tombada: item.qtd_tombada || 0,
           qtd_molhado: item.qtd_molhado || 0,
+          classificacao: extractRowClassificacao(item),
           pos_interna: item.posicao_interna || item.posicao?.split('-')?.pop() || "N/A"
         })
       }
@@ -3195,11 +3260,12 @@ function DashboardPage() {
         nivel: (typeof m.nivel === 'number' || (typeof m.nivel === 'string' && !isNaN(parseFloat(m.nivel)))) ? Math.floor(Number(m.nivel)) : 0,
         quantidade: m.quantidade_total || 0,
         paletes: m.paletes || 0,
-        profundidade: m.pos_interna || m.profundidade || m.Profundidade || "-",
+        profundidade: (m.pos_interna !== undefined && m.pos_interna !== null && m.pos_interna !== "") ? m.pos_interna : ((m.profundidade !== undefined && m.profundidade !== null && m.profundidade !== "") ? m.profundidade : ((m.Profundidade !== undefined && m.Profundidade !== null && m.Profundidade !== "") ? m.Profundidade : "-")),
         qtd_por_palete: m.qtd_por_palete || m["Quantidade/palete"] || 0,
         qtd_tombada: m.qtd_tombada || 0,
         qtd_molhado: m.qtd_molhado || 0,
-        id_palete: m.id_palete || ""
+        id_palete: m.id_palete || "",
+        classificacao: extractRowClassificacao(m)
       }))
     }
   }, [selectedPosition, effectiveData])
@@ -3248,6 +3314,445 @@ function DashboardPage() {
       items: items.sort((a, b) => (b.quantidade_total || 0) - (a.quantidade_total || 0))
     }
   }, [selectedPalletId, effectiveData])
+
+  // -- CLASSIFICAÇÃO INDIVIDUAL POR LINHA (REGRA B) --
+  const handleUpdateRowClassificacao = async (row: any, nextValue: ClassificacaoPalete) => {
+    if (!row || row.id === undefined || row.id === null) return;
+    const rowIdStr = String(row.id);
+    const normalized = normalizeClassificacao(nextValue);
+    const dbVal = normalized || null;
+
+    // Registro ainda pendente (novo/temp)
+    if (rowIdStr.startsWith('temp_') || rowIdStr.startsWith('novo_')) {
+      setPendingChanges(prev =>
+        prev.map(ch =>
+          String(ch.id) === rowIdStr || String(ch.payload?.id) === rowIdStr
+            ? {
+                ...ch,
+                payload: { ...ch.payload, classificacao: dbVal },
+                audit: ch.audit ? { ...ch.audit, classificacao: dbVal } : ch.audit,
+              }
+            : ch
+        )
+      );
+      return;
+    }
+
+    setUpdatingClassificacaoId(rowIdStr);
+    try {
+      const connected = await syncManager.checkRealConnection();
+      if (!connected) {
+        const updated = data.map(item =>
+          String(item.id) === rowIdStr ? { ...item, classificacao: normalized } : item
+        );
+        setData(updated);
+        await syncManager.addOperation({
+          type: 'UPDATE_FIELD',
+          table: 'mapeamento',
+          recordId: row.id,
+          changes: { classificacao: dbVal },
+          audit: {
+            acao: 'CLASSIFICACAO',
+            sku: row.produto || '',
+            posicao: row.posicao || '',
+            id_palete: row.id_palete || null,
+            classificacao: dbVal,
+          }
+        });
+        const snapshotToSave = updated.filter(i => !i.is_empty).map((item, idx) => ({
+          id: item.id !== undefined && item.id !== null ? item.id : idx + 1,
+          'Posição': item.posicao,
+          'Código': item.produto,
+          'Quantidade': item.quantidade_total,
+          'Nível': item.nivel,
+          'Profundidade': item.profundidade,
+          'Parte Tombada': item.qtd_tombada || 0,
+          'Parte Molhada': item.qtd_molhado || 0,
+          'Id Palete': item.id_palete || null,
+          'Observação': item.observacao || null,
+          'Última Alteração': item.ultima_alteracao || null,
+          'classificacao': extractRowClassificacao(item) || null
+        }));
+        await saveSnapshot('mapeamento', snapshotToSave);
+        return;
+      }
+
+      const { error } = await supabase
+        .from('mapeamento')
+        .update({ classificacao: dbVal })
+        .eq('id', Number(row.id));
+
+      if (error) {
+        if (isMissingClassificacaoColumnError(error)) {
+          setMissingClassificacaoColumn(true);
+          alert("⚠️ A coluna 'classificacao' ainda não foi criada na tabela 'mapeamento' do Supabase.\n\nUse o botão 'Copiar SQL' no banner de aviso no topo do Mapeamento e execute o comando no SQL Editor do Supabase.");
+          return;
+        }
+        throw error;
+      }
+
+      setData(prev =>
+        prev.map(item =>
+          String(item.id) === rowIdStr ? { ...item, classificacao: normalized } : item
+        )
+      );
+    } catch (err: any) {
+      alert("Erro ao atualizar classificação: " + (err?.message || err));
+    } finally {
+      setUpdatingClassificacaoId(null);
+    }
+  };
+
+  // REGRA B — Consulta por Classificação: avalia cada linha individualmente, SEM agrupamento da Regra A
+  const devolucoesBaseRows = useMemo(() => {
+    return effectiveData.filter(item =>
+      !item.is_empty &&
+      Number(item.quantidade_total || 0) > 0
+    );
+  }, [effectiveData]);
+
+  const classificacaoResumo = useMemo(() => {
+    const resumo = {
+      todas: { linhas: 0, pecas: 0 },
+      Normal: { linhas: 0, pecas: 0 },
+      Devolução: { linhas: 0, pecas: 0 },
+      "Não definido": { linhas: 0, pecas: 0 },
+    };
+    devolucoesBaseRows.forEach(item => {
+      const qty = Number(item.quantidade_total) || 0;
+      const cls = extractRowClassificacao(item);
+      resumo.todas.linhas += 1;
+      resumo.todas.pecas += qty;
+      if (cls === "Devolução") {
+        resumo.Devolução.linhas += 1;
+        resumo.Devolução.pecas += qty;
+      } else if (cls === "Normal") {
+        resumo.Normal.linhas += 1;
+        resumo.Normal.pecas += qty;
+      } else {
+        resumo["Não definido"].linhas += 1;
+        resumo["Não definido"].pecas += qty;
+      }
+    });
+    return resumo;
+  }, [devolucoesBaseRows]);
+
+  const devolucaoFilterOptions = useMemo(() => {
+    const niveis = new Set<string>();
+    const profs = new Set<string>();
+    devolucoesBaseRows.forEach(r => {
+      const n = r.nivel !== undefined && r.nivel !== null && String(r.nivel).trim() !== "" ? String(r.nivel).trim() : "";
+      const p = r.profundidade !== undefined && r.profundidade !== null && String(r.profundidade).trim() !== "" ? String(r.profundidade).trim() : "";
+      if (n) niveis.add(n);
+      if (p) profs.add(p);
+    });
+    return {
+      niveis: Array.from(niveis).sort((a, b) => Number(a) - Number(b) || a.localeCompare(b)),
+      profs: Array.from(profs).sort((a, b) => Number(a) - Number(b) || a.localeCompare(b)),
+    };
+  }, [devolucoesBaseRows]);
+
+  const filteredDevolucoes = useMemo(() => {
+    const q1 = devolucaoSearch.trim().toLowerCase();
+    const q2 = displayMode === "devolucoes" ? search.trim().toLowerCase() : "";
+    return devolucoesBaseRows.filter(item => {
+      const cls = extractRowClassificacao(item);
+      if (devolucaoClassificacaoFilter === "Devolução" && cls !== "Devolução") return false;
+      if (devolucaoClassificacaoFilter === "Normal" && cls !== "Normal") return false;
+      if (devolucaoClassificacaoFilter === "Não definido" && cls !== "") return false;
+
+      const posUpper = String(item.posicao || "").trim().toUpperCase();
+      const isRetrabalho = posUpper.includes("RETRABALHO");
+      const isQuarentena = posUpper.includes("QUARENTENA");
+      const isChao = !posUpper || posUpper === "S/P" || posUpper === "NÃO INFORMADO" || posUpper === "-" || posUpper === "CHÃO" || posUpper === "CHAO" || item.is_unallocated_source;
+      const isDrive = !isRetrabalho && !isQuarentena && !isChao;
+
+      if (devolucaoLocalFilter === "drive" && !isDrive) return false;
+      if (devolucaoLocalFilter === "chao" && !isChao) return false;
+      if (devolucaoLocalFilter === "retrabalho" && !isRetrabalho) return false;
+      if (devolucaoLocalFilter === "quarentena" && !isQuarentena) return false;
+
+      if (devolucaoNivelFilter !== "todos") {
+        const nv = item.nivel !== undefined && item.nivel !== null ? String(item.nivel).trim() : "";
+        if (nv !== devolucaoNivelFilter) return false;
+      }
+
+      if (devolucaoProfFilter !== "todos") {
+        const pr = item.profundidade !== undefined && item.profundidade !== null ? String(item.profundidade).trim() : "";
+        if (pr !== devolucaoProfFilter) return false;
+      }
+
+      const molh = Number(item.qtd_molhado || 0);
+      const tomb = Number(item.qtd_tombada || 0);
+      if (devolucaoAvariaFilter === "molhado" && molh <= 0) return false;
+      if (devolucaoAvariaFilter === "tombado" && tomb <= 0) return false;
+      if (devolucaoAvariaFilter === "sem_avaria" && (molh > 0 || tomb > 0)) return false;
+
+      if (q1 || q2) {
+        const haystack = [
+          item.id_palete,
+          item.posicao,
+          item.produto,
+          item.descricao,
+          item.profundidade,
+          item.nivel,
+          item.observacao,
+          cls || "Não definido",
+        ].map(v => String(v ?? "")).join(" ").toLowerCase();
+        if (q1 && !haystack.includes(q1)) return false;
+        if (q2 && !haystack.includes(q2)) return false;
+      }
+
+      return true;
+    });
+  }, [
+    devolucoesBaseRows,
+    devolucaoClassificacaoFilter,
+    devolucaoSearch,
+    search,
+    displayMode,
+    devolucaoLocalFilter,
+    devolucaoNivelFilter,
+    devolucaoProfFilter,
+    devolucaoAvariaFilter,
+  ]);
+
+  const devolucoesStats = useMemo(() => {
+    const totalLinhas = filteredDevolucoes.length;
+    const totalPecas = filteredDevolucoes.reduce((acc, r) => acc + (Number(r.quantidade_total) || 0), 0);
+    const totalTombado = filteredDevolucoes.reduce((acc, r) => acc + (Number(r.qtd_tombada) || 0), 0);
+    const totalMolhado = filteredDevolucoes.reduce((acc, r) => acc + (Number(r.qtd_molhado) || 0), 0);
+    const skusSet = new Set(filteredDevolucoes.map(r => String(r.produto || "").trim()).filter(Boolean));
+    const posSet = new Set(filteredDevolucoes.map(r => String(r.posicao || "Chão").trim() || "Chão"));
+    const physicalTriplets = new Set(
+      filteredDevolucoes.map(r => {
+        const tk = getPalletCountTripletKey(r);
+        if (tk) return tk;
+        return `NOID::${String(r.posicao || "")}::P:${String(r.profundidade ?? "")}::N:${String(r.nivel ?? "")}::ROW:${String(r.id)}`;
+      })
+    );
+    return {
+      totalLinhas,
+      totalPecas,
+      totalTombado,
+      totalMolhado,
+      skusDistintos: skusSet.size,
+      posicoesDistintas: posSet.size,
+      paletesFisicosUnicos: physicalTriplets.size,
+    };
+  }, [filteredDevolucoes]);
+
+  const devolucoesResumoPorSku = useMemo(() => {
+    const map = new Map<string, {
+      sku: string;
+      descricao: string;
+      linhas: number;
+      quantidade: number;
+      tombado: number;
+      molhado: number;
+      triplets: Set<string>;
+      posicoes: Set<string>;
+    }>();
+
+    filteredDevolucoes.forEach(r => {
+      const sku = String(r.produto || "SEM CÓDIGO").trim() || "SEM CÓDIGO";
+      if (!map.has(sku)) {
+        map.set(sku, {
+          sku,
+          descricao: String(r.descricao || "-"),
+          linhas: 0,
+          quantidade: 0,
+          tombado: 0,
+          molhado: 0,
+          triplets: new Set(),
+          posicoes: new Set(),
+        });
+      }
+      const entry = map.get(sku)!;
+      entry.linhas += 1;
+      entry.quantidade += Number(r.quantidade_total) || 0;
+      entry.tombado += Number(r.qtd_tombada) || 0;
+      entry.molhado += Number(r.qtd_molhado) || 0;
+      const tk = getPalletCountTripletKey(r) || `NOID::${String(r.posicao || "")}::P:${String(r.profundidade ?? "")}::N:${String(r.nivel ?? "")}::ROW:${String(r.id)}`;
+      entry.triplets.add(tk);
+      entry.posicoes.add(String(r.posicao || "Chão"));
+      if (entry.descricao === "-" && r.descricao) entry.descricao = String(r.descricao);
+    });
+
+    return Array.from(map.values())
+      .map(e => ({
+        sku: e.sku,
+        descricao: e.descricao,
+        linhas: e.linhas,
+        quantidade: e.quantidade,
+        tombado: e.tombado,
+        molhado: e.molhado,
+        paletesFisicos: e.triplets.size,
+        posicoesCount: e.posicoes.size,
+      }))
+      .sort((a, b) => b.quantidade - a.quantidade || a.sku.localeCompare(b.sku));
+  }, [filteredDevolucoes]);
+
+  const devolucoesResumoPorPosicao = useMemo(() => {
+    const map = new Map<string, {
+      posicao: string;
+      linhas: number;
+      quantidade: number;
+      tombado: number;
+      molhado: number;
+      triplets: Set<string>;
+      skus: Set<string>;
+    }>();
+
+    filteredDevolucoes.forEach(r => {
+      const pos = String(r.posicao || "Chão").trim() || "Chão";
+      if (!map.has(pos)) {
+        map.set(pos, {
+          posicao: pos,
+          linhas: 0,
+          quantidade: 0,
+          tombado: 0,
+          molhado: 0,
+          triplets: new Set(),
+          skus: new Set(),
+        });
+      }
+      const entry = map.get(pos)!;
+      entry.linhas += 1;
+      entry.quantidade += Number(r.quantidade_total) || 0;
+      entry.tombado += Number(r.qtd_tombada) || 0;
+      entry.molhado += Number(r.qtd_molhado) || 0;
+      const tk = getPalletCountTripletKey(r) || `NOID::${pos}::P:${String(r.profundidade ?? "")}::N:${String(r.nivel ?? "")}::ROW:${String(r.id)}`;
+      entry.triplets.add(tk);
+      if (r.produto) entry.skus.add(String(r.produto));
+    });
+
+    return Array.from(map.values())
+      .map(e => ({
+        posicao: e.posicao,
+        linhas: e.linhas,
+        quantidade: e.quantidade,
+        tombado: e.tombado,
+        molhado: e.molhado,
+        paletesFisicos: e.triplets.size,
+        skusUnicos: e.skus.size,
+      }))
+      .sort((a, b) => b.quantidade - a.quantidade || a.posicao.localeCompare(b.posicao));
+  }, [filteredDevolucoes]);
+
+  const handleExportDevolucoesExcel = () => {
+    if (filteredDevolucoes.length === 0) {
+      alert("Nenhum registro encontrado para a classificação e filtros aplicados.");
+      return;
+    }
+    const rows = filteredDevolucoes.map(r => ({
+      "ID": r.id_palete || "-",
+      "Profundidade": r.profundidade !== undefined && r.profundidade !== null && r.profundidade !== "" ? r.profundidade : "-",
+      "Nível": r.nivel !== undefined && r.nivel !== null && r.nivel !== "" ? r.nivel : "-",
+      "Classificação": extractRowClassificacao(r) || "Não definido",
+      "Posição": r.posicao || "Chão",
+      "Código": r.produto || "-",
+      "Descrição": r.descricao || "-",
+      "Quantidade": Number(r.quantidade_total) || 0,
+      "Parte Tombada": Number(r.qtd_tombada) || 0,
+      "Parte Molhada": Number(r.qtd_molhado) || 0,
+      "Observação": r.observacao || "-",
+      "Última Alteração": r.ultima_alteracao ? String(r.ultima_alteracao) : "-",
+    }));
+    const skuSummaryRows = devolucoesResumoPorSku.map(s => ({
+      "Código": s.sku,
+      "Descrição": s.descricao,
+      "Registros (Regra B)": s.linhas,
+      "Paletes Físicos (Regra A)": s.paletesFisicos,
+      "Posições": s.posicoesCount,
+      "Quantidade Total": s.quantidade,
+      "Parte Tombada": s.tombado,
+      "Parte Molhada": s.molhado,
+    }));
+    const posSummaryRows = devolucoesResumoPorPosicao.map(p => ({
+      "Posição": p.posicao,
+      "SKUs Distintos": p.skusUnicos,
+      "Registros (Regra B)": p.linhas,
+      "Paletes Físicos (Regra A)": p.paletesFisicos,
+      "Quantidade Total": p.quantidade,
+      "Parte Tombada": p.tombado,
+      "Parte Molhada": p.molhado,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wsSku = XLSX.utils.json_to_sheet(skuSummaryRows);
+    const wsPos = XLSX.utils.json_to_sheet(posSummaryRows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Registros");
+    XLSX.utils.book_append_sheet(wb, wsSku, "Resumo_por_SKU");
+    XLSX.utils.book_append_sheet(wb, wsPos, "Resumo_por_Posicao");
+    const stamp = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+    const slug = devolucaoClassificacaoFilter.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_");
+    XLSX.writeFile(wb, `relatorio_classificacao_${slug}_g300_${stamp}.xlsx`);
+  };
+
+  const handleExportDevolucoesCsv = () => {
+    if (filteredDevolucoes.length === 0) {
+      alert("Nenhum registro encontrado para a classificação e filtros aplicados.");
+      return;
+    }
+    const headers = [
+      "ID",
+      "Profundidade",
+      "Nível",
+      "Classificação",
+      "Posição",
+      "Código",
+      "Descrição",
+      "Quantidade",
+      "Parte Tombada",
+      "Parte Molhada",
+      "Observação",
+      "Última Alteração",
+    ];
+    const esc = (v: any) => `"${String(v ?? "-").replace(/"/g, '""')}"`;
+    const lines = filteredDevolucoes.map(r => [
+      esc(r.id_palete || "-"),
+      esc(r.profundidade !== undefined && r.profundidade !== null && r.profundidade !== "" ? r.profundidade : "-"),
+      esc(r.nivel !== undefined && r.nivel !== null && r.nivel !== "" ? r.nivel : "-"),
+      esc(extractRowClassificacao(r) || "Não definido"),
+      esc(r.posicao || "Chão"),
+      esc(r.produto || "-"),
+      esc(r.descricao || "-"),
+      Number(r.quantidade_total) || 0,
+      Number(r.qtd_tombada) || 0,
+      Number(r.qtd_molhado) || 0,
+      esc(r.observacao || "-"),
+      esc(r.ultima_alteracao || "-"),
+    ].join(";"));
+    const csv = "\uFEFF" + headers.join(";") + "\n" + lines.join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const stamp = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+    const slug = devolucaoClassificacaoFilter.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_");
+    a.href = url;
+    a.download = `relatorio_classificacao_${slug}_g300_${stamp}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePrintDevolucoes = () => {
+    if (filteredDevolucoes.length === 0) {
+      alert("Nenhum registro de devolução encontrado com os filtros aplicados.");
+      return;
+    }
+    setDevolucaoPrintRows([...filteredDevolucoes]);
+    setIsPrintingDevolucoes(true);
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => {
+        setIsPrintingDevolucoes(false);
+        setDevolucaoPrintRows([]);
+      }, 600);
+    }, 250);
+  };
 
   const handleExportProducts = () => {
     // Agora o botão apenas abre o modal de configuração
@@ -3509,8 +4014,73 @@ function DashboardPage() {
 
   return (
     <div className="relative">
+      {/* Printable Report: Consulta por Classificação (Regra B - sem agrupamento da contagem geral) */}
+      {isPrintingDevolucoes && devolucaoPrintRows.length > 0 && (
+        <div className="hidden print:block print:bg-white print:text-black print:p-4 print:w-full font-sans">
+          <div className="flex justify-between items-end border-b-2 border-black pb-2 mb-4">
+            <div>
+              <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-black/60">AG G300 — Consulta por Classificação (Regra B)</p>
+              <h1 className="text-lg font-bold uppercase tracking-tight">
+                Relatório Individual — Classificação: {devolucaoClassificacaoFilter === "todas" ? "Todas" : devolucaoClassificacaoFilter}
+              </h1>
+              <p className="text-[9px] text-black/80 mt-0.5">
+                Filtros aplicados: Classificação={devolucaoClassificacaoFilter === "todas" ? "Todas" : devolucaoClassificacaoFilter} • Local={devolucaoLocalFilter.toUpperCase()} • Nível={devolucaoNivelFilter === "todos" ? "Todos" : devolucaoNivelFilter} • Prof.={devolucaoProfFilter === "todos" ? "Todas" : devolucaoProfFilter} • Avaria={devolucaoAvariaFilter}{devolucaoSearch.trim() ? ` • Busca="${devolucaoSearch.trim()}"` : ""}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-[9px] font-semibold uppercase">{new Date().toLocaleString('pt-BR')}</p>
+              <p className="text-[10px] font-bold uppercase">
+                {devolucaoPrintRows.length} Registros • {fmtNum(devolucaoPrintRows.reduce((s, r) => s + (Number(r.quantidade_total) || 0), 0))} Peças
+              </p>
+            </div>
+          </div>
+
+          <table className="w-full border-collapse border border-black text-[9px]">
+            <thead>
+              <tr className="bg-slate-100">
+                <th className="border border-black p-1.5 text-left font-bold uppercase">ID</th>
+                <th className="border border-black p-1.5 text-center font-bold uppercase">Prof.</th>
+                <th className="border border-black p-1.5 text-center font-bold uppercase">Nível</th>
+                <th className="border border-black p-1.5 text-left font-bold uppercase">Classificação</th>
+                <th className="border border-black p-1.5 text-left font-bold uppercase">Posição</th>
+                <th className="border border-black p-1.5 text-left font-bold uppercase">Código</th>
+                <th className="border border-black p-1.5 text-left font-bold uppercase">Descrição</th>
+                <th className="border border-black p-1.5 text-right font-bold uppercase">Qtd</th>
+                <th className="border border-black p-1.5 text-right font-bold uppercase">Tomb.</th>
+                <th className="border border-black p-1.5 text-right font-bold uppercase">Molh.</th>
+                <th className="border border-black p-1.5 text-left font-bold uppercase">Observação</th>
+                <th className="border border-black p-1.5 text-left font-bold uppercase">Últ. Alteração</th>
+              </tr>
+            </thead>
+            <tbody>
+              {devolucaoPrintRows.map((row: any, idx: number) => (
+                <tr key={row.id ?? idx} className="border border-black break-inside-avoid">
+                  <td className="border border-black p-1.5 font-bold">{row.id_palete || "-"}</td>
+                  <td className="border border-black p-1.5 text-center">{row.profundidade !== undefined && row.profundidade !== null && row.profundidade !== "" ? row.profundidade : "-"}</td>
+                  <td className="border border-black p-1.5 text-center">{row.nivel !== undefined && row.nivel !== null && row.nivel !== "" ? row.nivel : "-"}</td>
+                  <td className="border border-black p-1.5 font-semibold">{extractRowClassificacao(row) || "Não definido"}</td>
+                  <td className="border border-black p-1.5">{row.posicao || "Chão"}</td>
+                  <td className="border border-black p-1.5 font-bold">{row.produto || "-"}</td>
+                  <td className="border border-black p-1.5 text-[8px]">{row.descricao || "-"}</td>
+                  <td className="border border-black p-1.5 text-right font-bold">{fmtNum(Number(row.quantidade_total) || 0)}</td>
+                  <td className="border border-black p-1.5 text-right">{fmtNum(Number(row.qtd_tombada) || 0)}</td>
+                  <td className="border border-black p-1.5 text-right">{fmtNum(Number(row.qtd_molhado) || 0)}</td>
+                  <td className="border border-black p-1.5 text-[8px]">{row.observacao || "-"}</td>
+                  <td className="border border-black p-1.5 text-[8px]">{row.ultima_alteracao ? String(row.ultima_alteracao) : "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="mt-6 pt-3 border-t border-black/30 flex justify-between text-[8px] uppercase text-black/70">
+            <span>Listagem linha a linha (sem agrupamento por ID/Profundidade/Nível)</span>
+            <span>Documento Interno — G300 Avarias</span>
+          </div>
+        </div>
+      )}
+
       {/* Printable Report (Hidden normally) */}
-      {printData.length > 0 && (
+      {!isPrintingDevolucoes && printData.length > 0 && (
         <div className="hidden print:block print:bg-white print:text-black print:p-2 print:w-full">
           {isExportingPDF ? (
             /* Layout 1: Relatório de Produtos (SKU Summary) */
@@ -5508,7 +6078,7 @@ function DashboardPage() {
                   className="space-y-8"
                 >
                   {/* Global Summary Metrics */}
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                     <MetricCard
                       title="Peças Totais"
                       value={(globalStats?.absolute_total_quantity || 0).toLocaleString('pt-BR')}
@@ -5533,6 +6103,41 @@ function DashboardPage() {
                       title="Pendências"
                       value={(globalStats?.pendenciasCount || 0).toLocaleString('pt-BR')}
                       icon={AlertTriangle}
+                    />
+                    <MetricCard
+                      title="Classificações"
+                      value={(classificacaoResumo.Devolução.linhas + classificacaoResumo.Normal.linhas).toLocaleString('pt-BR')}
+                      description={`Dev: ${classificacaoResumo.Devolução.linhas} • Norm: ${classificacaoResumo.Normal.linhas}`}
+                      icon={Tag}
+                      hoverContent={
+                        <div className="space-y-2 text-xs min-w-[200px]">
+                          <p className="font-bold uppercase tracking-wider text-[10px] text-slate-400">Resumo por Classificação</p>
+                          <div className="flex justify-between gap-4">
+                            <span className="text-amber-500 font-semibold">Devolução</span>
+                            <span className="font-bold">{classificacaoResumo.Devolução.linhas} ({fmtNum(classificacaoResumo.Devolução.pecas)} un)</span>
+                          </div>
+                          <div className="flex justify-between gap-4">
+                            <span className="text-emerald-500 font-semibold">Normal</span>
+                            <span className="font-bold">{classificacaoResumo.Normal.linhas} ({fmtNum(classificacaoResumo.Normal.pecas)} un)</span>
+                          </div>
+                          <div className="flex justify-between gap-4">
+                            <span className="text-slate-400">Não definido</span>
+                            <span className="font-bold">{classificacaoResumo["Não definido"].linhas} ({fmtNum(classificacaoResumo["Não definido"].pecas)} un)</span>
+                          </div>
+                        </div>
+                      }
+                      className={cn(
+                        displayMode === "devolucoes"
+                          ? "border-amber-500 ring-2 ring-amber-500/20"
+                          : "border-amber-500/30 hover:border-amber-500/70"
+                      )}
+                      onClick={() => {
+                        setDisplayMode("devolucoes");
+                        setActiveView("geral");
+                        setTimeout(() => {
+                          document.getElementById("mapeamento-filter-bar")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }, 60);
+                      }}
                     />
                   </div>
 
@@ -5669,83 +6274,134 @@ function DashboardPage() {
                     </motion.div>
                   </div>
 
+                  {missingClassificacaoColumn && (
+                    <div className="mb-4 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-start gap-3">
+                        <AlertTriangle size={18} className="text-amber-500 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wide">
+                            Coluna &quot;classificacao&quot; pendente no banco Supabase
+                          </p>
+                          <p className="text-[11px] text-amber-700/80 dark:text-amber-200/80 mt-0.5">
+                            Para gravar classificações (&quot;Normal&quot; / &quot;Devolução&quot;) por linha no Supabase, execute a migração SQL na tabela mapeamento.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => {
+                            navigator.clipboard?.writeText(SQL_CLASSIFICACAO_MIGRATION);
+                            setCopiedMigrationSql(true);
+                            setTimeout(() => setCopiedMigrationSql(false), 2500);
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-amber-500 text-slate-950 text-[10px] font-bold uppercase tracking-wider hover:bg-amber-400 transition-colors cursor-pointer"
+                        >
+                          {copiedMigrationSql ? "SQL Copiado!" : "Copiar SQL"}
+                        </button>
+                        <button
+                          onClick={() => setMissingClassificacaoColumn(false)}
+                          className="p-1.5 rounded-lg text-amber-600 dark:text-amber-300 hover:bg-amber-500/20 transition-colors"
+                          title="Dispensar aviso"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* REFINED FILTER BAR */}
-                  <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between py-6 border-y border-slate-100 dark:border-slate-800 transition-colors">
-                    <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-900 rounded-2xl w-fit max-w-full overflow-x-auto scrollbar-none border border-slate-200/50 dark:border-slate-800/50">
-                      <button
-                        onClick={() => { setDisplayMode("mapa"); setActiveView("geral"); }}
-                        className={cn(
-                          "flex items-center gap-2 rounded-xl px-4 py-2 text-[10px] font-semibold transition-all",
-                          displayMode === "mapa" ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                        )}
-                      >
-                        <MapPin size={14} /> MAPA
-                      </button>
-                      <button
-                        onClick={() => { setDisplayMode("misto"); setActiveView("geral"); }}
-                        className={cn(
-                          "flex items-center gap-2 rounded-xl px-4 py-2 text-[10px] font-semibold transition-all",
-                          displayMode === "misto" ? "bg-white dark:bg-slate-800 text-orange-600 dark:text-orange-400 shadow-sm" : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                        )}
-                      >
-                        <Layers size={14} /> PALETES MISTOS
-                      </button>
-                      <button
-                        onClick={() => { setDisplayMode("nao_alocados"); setActiveView("nao_alocados"); setSortMode("none"); setTableSort({ key: "produto", direction: "asc" }); }}
-                        className={cn(
-                          "flex items-center gap-2 rounded-xl px-4 py-2 text-[10px] uppercase font-semibold transition-all",
-                          displayMode === "nao_alocados" ? "bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-sm" : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                        )}
-                      >
-                        <AlertCircle size={14} /> Não alocados
-                      </button>
-                      <button
-                        onClick={() => { setDisplayMode("quarentena"); setActiveView("quarentena"); setSortMode("none"); setTableSort({ key: "produto", direction: "asc" }); }}
-                        className={cn(
-                          "flex items-center gap-2 rounded-xl px-4 py-2 text-[10px] uppercase font-semibold transition-all",
-                          displayMode === "quarentena" ? "bg-white dark:bg-slate-800 text-rose-600 dark:text-rose-400 shadow-sm" : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                        )}
-                      >
-                        <AlertTriangle size={14} /> Quarentena
-                      </button>
-                      <button
-                        onClick={() => { setDisplayMode("retrabalho"); setActiveView("retrabalho"); setSortMode("none"); setTableSort({ key: "produto", direction: "asc" }); }}
-                        className={cn(
-                          "flex items-center gap-2 rounded-xl px-4 py-2 text-[10px] uppercase font-semibold transition-all",
-                          displayMode === "retrabalho" ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                        )}
-                      >
-                        <RefreshCw size={14} /> Retrabalho
-                      </button>
-                    </div>
+                  <div id="mapeamento-filter-bar" className="flex flex-col gap-4 py-6 border-y border-slate-100 dark:border-slate-800 transition-colors">
+                    <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                      <div className="flex flex-wrap items-center gap-1 p-1.5 bg-slate-100 dark:bg-slate-900 rounded-2xl w-fit max-w-full border border-slate-200/50 dark:border-slate-800/50">
+                        <button
+                          onClick={() => { setDisplayMode("mapa"); setActiveView("geral"); }}
+                          className={cn(
+                            "flex items-center gap-2 rounded-xl px-3.5 py-2 text-[10px] font-semibold transition-all whitespace-nowrap cursor-pointer",
+                            displayMode === "mapa" ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                          )}
+                        >
+                          <MapPin size={14} /> MAPA
+                        </button>
+                        <button
+                          onClick={() => { setDisplayMode("misto"); setActiveView("geral"); }}
+                          className={cn(
+                            "flex items-center gap-2 rounded-xl px-3.5 py-2 text-[10px] font-semibold transition-all whitespace-nowrap cursor-pointer",
+                            displayMode === "misto" ? "bg-white dark:bg-slate-800 text-orange-600 dark:text-orange-400 shadow-sm" : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                          )}
+                        >
+                          <Layers size={14} /> PALETES MISTOS
+                        </button>
+                        <button
+                          onClick={() => { setDisplayMode("nao_alocados"); setActiveView("nao_alocados"); setSortMode("none"); setTableSort({ key: "produto", direction: "asc" }); }}
+                          className={cn(
+                            "flex items-center gap-2 rounded-xl px-3.5 py-2 text-[10px] uppercase font-semibold transition-all whitespace-nowrap cursor-pointer",
+                            displayMode === "nao_alocados" ? "bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-sm" : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                          )}
+                        >
+                          <AlertCircle size={14} /> Não alocados
+                        </button>
+                        <button
+                          onClick={() => { setDisplayMode("quarentena"); setActiveView("quarentena"); setSortMode("none"); setTableSort({ key: "produto", direction: "asc" }); }}
+                          className={cn(
+                            "flex items-center gap-2 rounded-xl px-3.5 py-2 text-[10px] uppercase font-semibold transition-all whitespace-nowrap cursor-pointer",
+                            displayMode === "quarentena" ? "bg-white dark:bg-slate-800 text-rose-600 dark:text-rose-400 shadow-sm" : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                          )}
+                        >
+                          <AlertTriangle size={14} /> Quarentena
+                        </button>
+                        <button
+                          onClick={() => { setDisplayMode("retrabalho"); setActiveView("retrabalho"); setSortMode("none"); setTableSort({ key: "produto", direction: "asc" }); }}
+                          className={cn(
+                            "flex items-center gap-2 rounded-xl px-3.5 py-2 text-[10px] uppercase font-semibold transition-all whitespace-nowrap cursor-pointer",
+                            displayMode === "retrabalho" ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                          )}
+                        >
+                          <RefreshCw size={14} /> Retrabalho
+                        </button>
+                        <button
+                          onClick={() => { setDisplayMode("devolucoes"); setActiveView("geral"); }}
+                          className={cn(
+                            "flex items-center gap-2 rounded-xl px-3.5 py-2 text-[10px] uppercase font-semibold transition-all whitespace-nowrap cursor-pointer border",
+                            displayMode === "devolucoes"
+                              ? "bg-amber-500 border-amber-500 text-slate-950 shadow-sm"
+                              : "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20"
+                          )}
+                        >
+                          <Tag size={14} /> Classificações
+                          <span className={cn(
+                            "px-1.5 py-0.5 rounded-full text-[9px] font-bold",
+                            displayMode === "devolucoes"
+                              ? "bg-slate-950/20 text-slate-950"
+                              : "bg-amber-500/20 text-amber-700 dark:text-amber-300"
+                          )}>
+                            {classificacaoResumo.Devolução.linhas + classificacaoResumo.Normal.linhas}
+                          </span>
+                        </button>
+                      </div>
 
-                    {/* Middle Legend (Map Only with Counts) */}
-                    <div className="hidden lg:flex items-center justify-center gap-8 flex-1 px-8">
-                      {displayMode === "mapa" && (
-                        <>
-                          <div className="flex items-center gap-2.5">
-                            <div className="h-2.5 w-2.5 rounded-full bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700" />
-                            <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
-                              VAZIO <span className="ml-1 text-slate-900 dark:text-white">{advancedStats.vazioCount}</span>
-                            </span>
+                      <div className="flex flex-wrap items-center gap-4">
+                        {displayMode === "mapa" && (
+                          <div className="hidden lg:flex items-center gap-5 px-2">
+                            <div className="flex items-center gap-2">
+                              <div className="h-2.5 w-2.5 rounded-full bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700" />
+                              <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
+                                VAZIO <span className="ml-1 text-slate-900 dark:text-white">{advancedStats.vazioCount}</span>
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="h-2.5 w-2.5 rounded-full bg-[#2D5A27] shadow-[0_0_8px_rgba(45,90,39,0.4)]" />
+                              <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
+                                DISPONÍVEL <span className="ml-1 text-slate-900 dark:text-white">{advancedStats.totalPositions - advancedStats.lotadoCount - advancedStats.vazioCount}</span>
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="h-2.5 w-2.5 rounded-full bg-[#7F1D1D] shadow-[0_0_8px_rgba(127,29,29,0.4)]" />
+                              <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
+                                LOTADO <span className="ml-1 text-slate-900 dark:text-white">{advancedStats.lotadoCount}</span>
+                              </span>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2.5">
-                            <div className="h-2.5 w-2.5 rounded-full bg-[#2D5A27] shadow-[0_0_8px_rgba(45,90,39,0.4)]" />
-                            <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
-                              DISPONÍVEL <span className="ml-1 text-slate-900 dark:text-white">{advancedStats.totalPositions - advancedStats.lotadoCount - advancedStats.vazioCount}</span>
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2.5">
-                            <div className="h-2.5 w-2.5 rounded-full bg-[#7F1D1D] shadow-[0_0_8px_rgba(127,29,29,0.4)]" />
-                            <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
-                              LOTADO <span className="ml-1 text-slate-900 dark:text-white">{advancedStats.lotadoCount}</span>
-                            </span>
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-4">
+                        )}
                       {/* Connection Health Status & Sync Manager Badge (hidden on PC per request) */}
                       <div className="shrink-0 hidden items-center gap-2">
                         {syncStatus === "syncing" ? (
@@ -5912,6 +6568,7 @@ function DashboardPage() {
                           </AnimatePresence>
                         </div>
                       )}
+                      </div>
                     </div>
                   </div>
 
@@ -6426,7 +7083,7 @@ function DashboardPage() {
                                 {isEmptyText}
                               </div>
                             ) : (
-                               <table className="w-full min-w-[500px] text-left">
+                               <table className="w-full min-w-[580px] text-left">
                                  <thead className="sticky top-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm z-10">
                                    <tr className="border-b border-slate-100 dark:border-slate-800">
                                      <th className="px-1 py-2 text-[8px] font-semibold uppercase tracking-widest text-slate-400 w-5"></th>
@@ -6434,6 +7091,7 @@ function DashboardPage() {
                                      <th className="px-2 py-2 text-[8px] font-semibold uppercase tracking-widest text-slate-400">Produto</th>
                                      <th className="px-2 py-2 text-[8px] font-semibold uppercase tracking-widest text-slate-400">Descrição</th>
                                      <th className="px-2 py-2 text-[8px] font-semibold uppercase tracking-widest text-slate-400 text-right">Qtd</th>
+                                     <th className="px-2 py-2 text-[8px] font-semibold uppercase tracking-widest text-slate-400">Classif.</th>
                                      <th className="px-2 py-2 text-[8px] font-semibold uppercase tracking-widest text-slate-400">Obs</th>
                                       {user && <th className="px-2 py-2 text-[8px] font-semibold uppercase tracking-widest text-slate-400 text-center whitespace-nowrap">Ação</th>}
                                    </tr>
@@ -6444,6 +7102,7 @@ function DashboardPage() {
                                      const totalQty = group.items.reduce((s: number, i: any) => s + (Number(i.quantidade_total) || 0), 0);
                                      const isComposite = !group.isSimple;
                                      const singleItem = group.items[0];
+                                     const compositeDevCount = isComposite ? group.items.filter((i: any) => isDevolucao(i)).length : 0;
                                      return (
                                        <React.Fragment key={group.key}>
                                          <tr 
@@ -6519,6 +7178,40 @@ function DashboardPage() {
                                           {/* Qtd Total */}
                                           <td className="px-2 py-1.5 text-right">
                                             <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">{fmtNum(totalQty)}</span>
+                                          </td>
+                                          {/* Classificação individual da linha */}
+                                          <td className="px-2 py-1.5" onClick={(e) => isComposite ? undefined : e.stopPropagation()}>
+                                            {isComposite ? (
+                                              compositeDevCount > 0 ? (
+                                                <span className="text-[8px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 whitespace-nowrap">
+                                                  {compositeDevCount} Dev.
+                                                </span>
+                                              ) : (
+                                                <span className="text-[9px] text-slate-400 italic">Por linha</span>
+                                              )
+                                            ) : (
+                                              <select
+                                                value={extractRowClassificacao(singleItem)}
+                                                disabled={updatingClassificacaoId === String(singleItem.id)}
+                                                onClick={(e) => e.stopPropagation()}
+                                                onMouseDown={(e) => e.stopPropagation()}
+                                                onChange={(e) => handleUpdateRowClassificacao(singleItem, e.target.value as ClassificacaoPalete)}
+                                                className={cn(
+                                                  "text-[9px] font-semibold rounded-lg px-1.5 py-1 border outline-none cursor-pointer transition-colors",
+                                                  isDevolucao(singleItem)
+                                                    ? "bg-amber-500/15 border-amber-500/40 text-amber-700 dark:text-amber-300"
+                                                    : extractRowClassificacao(singleItem) === "Normal"
+                                                    ? "bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200"
+                                                    : "bg-transparent border-slate-200 dark:border-slate-700/70 text-slate-400 dark:text-slate-500"
+                                                )}
+                                              >
+                                                {CLASSIFICACAO_OPTIONS.map(opt => (
+                                                  <option key={opt.value || 'empty'} value={opt.value} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">
+                                                    {opt.label}
+                                                  </option>
+                                                ))}
+                                              </select>
+                                            )}
                                           </td>
                                           {/* Observação */}
                                           <td className="px-2 py-1.5">
@@ -6668,6 +7361,29 @@ function DashboardPage() {
                                               <td className="px-2 py-1 text-right">
                                                 <span className="text-[10px] font-medium text-slate-600 dark:text-slate-400">{fmtNum(sub.quantidade_total)}</span>
                                               </td>
+                                              <td className="px-2 py-1" onClick={(e) => e.stopPropagation()}>
+                                                <select
+                                                  value={extractRowClassificacao(sub)}
+                                                  disabled={updatingClassificacaoId === String(sub.id)}
+                                                  onClick={(e) => e.stopPropagation()}
+                                                  onMouseDown={(e) => e.stopPropagation()}
+                                                  onChange={(e) => handleUpdateRowClassificacao(sub, e.target.value as ClassificacaoPalete)}
+                                                  className={cn(
+                                                    "text-[8px] font-semibold rounded-md px-1 py-0.5 border outline-none cursor-pointer transition-colors",
+                                                    isDevolucao(sub)
+                                                      ? "bg-amber-500/15 border-amber-500/40 text-amber-700 dark:text-amber-300"
+                                                      : extractRowClassificacao(sub) === "Normal"
+                                                      ? "bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200"
+                                                      : "bg-transparent border-slate-200 dark:border-slate-700/70 text-slate-400 dark:text-slate-500"
+                                                  )}
+                                                >
+                                                  {CLASSIFICACAO_OPTIONS.map(opt => (
+                                                    <option key={opt.value || 'empty'} value={opt.value} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">
+                                                      {opt.label}
+                                                    </option>
+                                                  ))}
+                                                </select>
+                                              </td>
                                               <td className="px-2 py-1">
                                                 {(() => {
                                                   const obs = sub.observacao;
@@ -6753,6 +7469,466 @@ function DashboardPage() {
                         </div>
                       );
                     })()
+                  }
+                  {
+                    displayMode === "devolucoes" && (
+                      <div className="space-y-6">
+                        {/* Cabeçalho e KPIs Dinâmicos — Card único representando a Classificação */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                          <div className="rounded-3xl bg-white dark:bg-slate-900 border border-amber-500/30 p-5 shadow-sm">
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                                <Tag size={13} className="text-amber-500" />
+                                Classificação
+                              </span>
+                              <select
+                                value={devolucaoClassificacaoFilter}
+                                onChange={(e) => setDevolucaoClassificacaoFilter(e.target.value as "todas" | "Devolução" | "Normal" | "Não definido")}
+                                aria-label="Selecionar classificação"
+                                className="h-7 px-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300 outline-none cursor-pointer"
+                              >
+                                <option value="todas" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">Todas</option>
+                                <option value="Devolução" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">Devolução</option>
+                                <option value="Normal" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">Normal</option>
+                                <option value="Não definido" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">Não definido</option>
+                              </select>
+                            </div>
+                            <p className="text-3xl font-light text-slate-900 dark:text-white tracking-tight">
+                              {devolucoesStats.totalLinhas.toLocaleString('pt-BR')}
+                            </p>
+                            <p className="text-[10px] text-slate-400 mt-1">
+                              Linhas individuais retornadas (Regra B)
+                            </p>
+                          </div>
+
+                          <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-5 shadow-sm">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                                Total de Peças
+                              </span>
+                              <Package size={16} className="text-blue-500" />
+                            </div>
+                            <p className="text-3xl font-light text-slate-900 dark:text-white tracking-tight">
+                              {fmtNum(devolucoesStats.totalPecas)}
+                            </p>
+                            <p className="text-[10px] text-slate-400 mt-1">
+                              Soma na classificação filtrada
+                            </p>
+                          </div>
+
+                          <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-5 shadow-sm">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                                Paletes Físicos (Regra A)
+                              </span>
+                              <Layers size={16} className="text-emerald-500" />
+                            </div>
+                            <p className="text-3xl font-light text-slate-900 dark:text-white tracking-tight">
+                              {devolucoesStats.paletesFisicosUnicos}
+                            </p>
+                            <p className="text-[10px] text-slate-400 mt-1">
+                              Únicos por ID + Prof. + Nível
+                            </p>
+                          </div>
+
+                          <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-5 shadow-sm">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                                SKUs e Posições
+                              </span>
+                              <MapPin size={16} className="text-slate-400" />
+                            </div>
+                            <p className="text-3xl font-light text-slate-900 dark:text-white tracking-tight">
+                              {devolucoesStats.skusDistintos} <span className="text-sm text-slate-400">/ {devolucoesStats.posicoesDistintas}</span>
+                            </p>
+                            <p className="text-[10px] text-slate-400 mt-1">
+                              Tomb: {fmtNum(devolucoesStats.totalTombado)} • Molh: {fmtNum(devolucoesStats.totalMolhado)}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Barra de Filtros + Impressão/Exportação */}
+                        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-5 shadow-sm space-y-4">
+                          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+                            <div className="relative flex-1 min-w-[240px]">
+                              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                              <input
+                                type="text"
+                                value={devolucaoSearch}
+                                onChange={(e) => setDevolucaoSearch(e.target.value)}
+                                placeholder="Filtrar por ID do palete, código, posição, descrição, observação..."
+                                className="w-full h-10 pl-10 pr-4 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200 outline-none focus:border-amber-500"
+                              />
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                onClick={handleExportDevolucoesExcel}
+                                disabled={filteredDevolucoes.length === 0}
+                                className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer"
+                              >
+                                <Download size={13} /> Excel (.xlsx)
+                              </button>
+                              <button
+                                onClick={handleExportDevolucoesCsv}
+                                disabled={filteredDevolucoes.length === 0}
+                                className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40 text-slate-700 dark:text-slate-200 text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer"
+                              >
+                                <FileText size={13} /> CSV
+                              </button>
+                              <button
+                                onClick={handlePrintDevolucoes}
+                                disabled={filteredDevolucoes.length === 0}
+                                className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-slate-950 text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer"
+                              >
+                                <Printer size={13} /> Imprimir (PDF)
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                            <div>
+                              <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">Classificação</label>
+                              <select
+                                value={devolucaoClassificacaoFilter}
+                                onChange={(e) => setDevolucaoClassificacaoFilter(e.target.value as any)}
+                                className="w-full h-9 px-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 outline-none"
+                              >
+                                <option value="todas">Todas</option>
+                                <option value="Devolução">Devolução</option>
+                                <option value="Normal">Normal</option>
+                                <option value="Não definido">Não definido</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">Local</label>
+                              <select
+                                value={devolucaoLocalFilter}
+                                onChange={(e) => setDevolucaoLocalFilter(e.target.value as any)}
+                                className="w-full h-9 px-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200 outline-none"
+                              >
+                                <option value="todos">Todos os Locais</option>
+                                <option value="drive">Drive-In</option>
+                                <option value="chao">Chão / S/P</option>
+                                <option value="retrabalho">Retrabalho</option>
+                                <option value="quarentena">Quarentena</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">Profundidade</label>
+                              <select
+                                value={devolucaoProfFilter}
+                                onChange={(e) => setDevolucaoProfFilter(e.target.value)}
+                                className="w-full h-9 px-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200 outline-none"
+                              >
+                                <option value="todos">Todas</option>
+                                {devolucaoFilterOptions.profs.map(p => (
+                                  <option key={p} value={p}>Prof. {p}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">Nível</label>
+                              <select
+                                value={devolucaoNivelFilter}
+                                onChange={(e) => setDevolucaoNivelFilter(e.target.value)}
+                                className="w-full h-9 px-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200 outline-none"
+                              >
+                                <option value="todos">Todos</option>
+                                {devolucaoFilterOptions.niveis.map(n => (
+                                  <option key={n} value={n}>Nível {n}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">Avaria</label>
+                              <select
+                                value={devolucaoAvariaFilter}
+                                onChange={(e) => setDevolucaoAvariaFilter(e.target.value as any)}
+                                className="w-full h-9 px-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200 outline-none"
+                              >
+                                <option value="todos">Todas</option>
+                                <option value="molhado">Com Molhado</option>
+                                <option value="tombado">Com Tombado</option>
+                                <option value="sem_avaria">Sem Avaria</option>
+                              </select>
+                            </div>
+
+                            <div className="flex items-end">
+                              <button
+                                onClick={() => {
+                                  setDevolucaoClassificacaoFilter("todas");
+                                  setDevolucaoSearch("");
+                                  setDevolucaoLocalFilter("todos");
+                                  setDevolucaoNivelFilter("todos");
+                                  setDevolucaoProfFilter("todos");
+                                  setDevolucaoAvariaFilter("todos");
+                                }}
+                                className="w-full h-9 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-800 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                              >
+                                Limpar Filtros
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Dados Sumarizados por Classificação (Por Produto e Por Posição) */}
+                        {filteredDevolucoes.length > 0 && (
+                          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                            {/* Sumário por Produto (SKU) */}
+                            <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
+                              <div className="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2 bg-slate-50/70 dark:bg-slate-800/40">
+                                <div className="flex items-center gap-2">
+                                  <Package size={15} className="text-amber-500" />
+                                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100">
+                                    Dados Sumarizados por Produto (SKU)
+                                  </h4>
+                                </div>
+                                <span className="text-[10px] font-semibold text-slate-500">
+                                  {devolucoesResumoPorSku.length} SKU(s)
+                                </span>
+                              </div>
+                              <div className="max-h-72 overflow-auto custom-scrollbar">
+                                <table className="w-full text-left">
+                                  <thead className="bg-slate-50/80 dark:bg-slate-900/95 sticky top-0 border-b border-slate-100 dark:border-slate-800">
+                                    <tr>
+                                      <th className="px-4 py-2.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">Código</th>
+                                      <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-wider text-slate-400 text-center">Linhas</th>
+                                      <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-wider text-slate-400 text-center">PTs (A)</th>
+                                      <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-wider text-slate-400 text-right">Peças</th>
+                                      <th className="px-4 py-2.5 text-[9px] font-bold uppercase tracking-wider text-slate-400 text-right">Tomb / Molh</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70">
+                                    {devolucoesResumoPorSku.map(s => (
+                                      <tr
+                                        key={s.sku}
+                                        onClick={() => setDevolucaoSearch(prev => prev === s.sku ? "" : s.sku)}
+                                        className="hover:bg-amber-500/5 cursor-pointer transition-colors"
+                                        title="Clique para filtrar/desfiltrar este SKU"
+                                      >
+                                        <td className="px-4 py-2.5">
+                                          <div className="text-xs font-bold text-slate-900 dark:text-white">{s.sku}</div>
+                                          <div className="text-[10px] text-slate-400 truncate max-w-[180px] uppercase">{s.descricao}</div>
+                                        </td>
+                                        <td className="px-3 py-2.5 text-center text-xs font-semibold text-amber-600 dark:text-amber-400">
+                                          {s.linhas}
+                                        </td>
+                                        <td className="px-3 py-2.5 text-center text-xs font-medium text-slate-600 dark:text-slate-300">
+                                          {s.paletesFisicos}
+                                        </td>
+                                        <td className="px-3 py-2.5 text-right text-xs font-bold text-slate-900 dark:text-white">
+                                          {fmtNum(s.quantidade)}
+                                        </td>
+                                        <td className="px-4 py-2.5 text-right text-[11px] whitespace-nowrap">
+                                          <span className="text-rose-500 font-medium">{s.tombado > 0 ? fmtNum(s.tombado) : "-"}</span>
+                                          <span className="text-slate-400 mx-1">/</span>
+                                          <span className="text-blue-500 font-medium">{s.molhado > 0 ? fmtNum(s.molhado) : "-"}</span>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+
+                            {/* Sumário por Posição / Local */}
+                            <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
+                              <div className="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2 bg-slate-50/70 dark:bg-slate-800/40">
+                                <div className="flex items-center gap-2">
+                                  <MapPin size={15} className="text-emerald-500" />
+                                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100">
+                                    Dados Sumarizados por Posição / Local
+                                  </h4>
+                                </div>
+                                <span className="text-[10px] font-semibold text-slate-500">
+                                  {devolucoesResumoPorPosicao.length} local(is)
+                                </span>
+                              </div>
+                              <div className="max-h-72 overflow-auto custom-scrollbar">
+                                <table className="w-full text-left">
+                                  <thead className="bg-slate-50/80 dark:bg-slate-900/95 sticky top-0 border-b border-slate-100 dark:border-slate-800">
+                                    <tr>
+                                      <th className="px-4 py-2.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">Posição / Local</th>
+                                      <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-wider text-slate-400 text-center">SKUs</th>
+                                      <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-wider text-slate-400 text-center">Linhas</th>
+                                      <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-wider text-slate-400 text-center">PTs (A)</th>
+                                      <th className="px-4 py-2.5 text-[9px] font-bold uppercase tracking-wider text-slate-400 text-right">Peças</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70">
+                                    {devolucoesResumoPorPosicao.map(p => (
+                                      <tr
+                                        key={p.posicao}
+                                        onClick={() => setDevolucaoSearch(prev => prev === p.posicao ? "" : p.posicao)}
+                                        className="hover:bg-emerald-500/5 cursor-pointer transition-colors"
+                                        title="Clique para filtrar/desfiltrar esta posição"
+                                      >
+                                        <td className="px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white">
+                                          {p.posicao}
+                                        </td>
+                                        <td className="px-3 py-2.5 text-center text-xs text-slate-600 dark:text-slate-300">
+                                          {p.skusUnicos}
+                                        </td>
+                                        <td className="px-3 py-2.5 text-center text-xs font-semibold text-amber-600 dark:text-amber-400">
+                                          {p.linhas}
+                                        </td>
+                                        <td className="px-3 py-2.5 text-center text-xs font-medium text-slate-600 dark:text-slate-300">
+                                          {p.paletesFisicos}
+                                        </td>
+                                        <td className="px-4 py-2.5 text-right text-xs font-bold text-slate-900 dark:text-white">
+                                          {fmtNum(p.quantidade)}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Tabela Individual Sem Agrupamento (Regra B) */}
+                        <div className="rounded-3xl md:rounded-[2.5rem] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-xl dark:shadow-slate-950/50 overflow-hidden">
+                          <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 bg-slate-50/70 dark:bg-slate-800/40">
+                            <div className="flex items-center gap-2">
+                              <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
+                              <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                                Registros Individuais — Classificação: {devolucaoClassificacaoFilter === "todas" ? "Todas" : devolucaoClassificacaoFilter}
+                              </h4>
+                            </div>
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                              IDs repetidos mantidos separadamente • {filteredDevolucoes.length} linha(s)
+                            </span>
+                          </div>
+
+                          {filteredDevolucoes.length === 0 ? (
+                            <div className="py-16 px-6 text-center space-y-2">
+                              <Tag size={32} className="mx-auto text-slate-300 dark:text-slate-700" />
+                              <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+                                Nenhum registro encontrado para a classificação &quot;{devolucaoClassificacaoFilter === "todas" ? "Todas" : devolucaoClassificacaoFilter}&quot;
+                              </p>
+                              <p className="text-xs text-slate-400 max-w-md mx-auto">
+                                Selecione outra classificação nos cards acima ou ajuste os filtros. Você também pode editar o campo Classificação de qualquer item diretamente na tabela.
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="overflow-x-auto custom-scrollbar">
+                              <table className="w-full min-w-[1050px] text-left">
+                                <thead className="bg-slate-50/90 dark:bg-slate-900/95 border-b border-slate-100 dark:border-slate-800">
+                                  <tr>
+                                    <th className="px-4 py-3 text-[9px] font-bold uppercase tracking-wider text-slate-400">ID</th>
+                                    <th className="px-3 py-3 text-[9px] font-bold uppercase tracking-wider text-slate-400 text-center">Prof.</th>
+                                    <th className="px-3 py-3 text-[9px] font-bold uppercase tracking-wider text-slate-400 text-center">Nível</th>
+                                    <th className="px-3 py-3 text-[9px] font-bold uppercase tracking-wider text-slate-400">Classificação</th>
+                                    <th className="px-3 py-3 text-[9px] font-bold uppercase tracking-wider text-slate-400">Posição</th>
+                                    <th className="px-3 py-3 text-[9px] font-bold uppercase tracking-wider text-slate-400">Código</th>
+                                    <th className="px-3 py-3 text-[9px] font-bold uppercase tracking-wider text-slate-400">Descrição</th>
+                                    <th className="px-3 py-3 text-[9px] font-bold uppercase tracking-wider text-slate-400 text-right">Qtd</th>
+                                    <th className="px-3 py-3 text-[9px] font-bold uppercase tracking-wider text-slate-400 text-right">Tomb.</th>
+                                    <th className="px-3 py-3 text-[9px] font-bold uppercase tracking-wider text-slate-400 text-right">Molh.</th>
+                                    <th className="px-3 py-3 text-[9px] font-bold uppercase tracking-wider text-slate-400">Observação</th>
+                                    <th className="px-3 py-3 text-[9px] font-bold uppercase tracking-wider text-slate-400">Últ. Alt.</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70">
+                                  {filteredDevolucoes.map((row: any, idx: number) => {
+                                    const rowIdStr = String(row.id ?? idx);
+                                    const rowClassif = extractRowClassificacao(row);
+                                    const posStr = String(row.posicao || "Chão");
+                                    const posUpper = posStr.toUpperCase();
+                                    const canOpenMap = posStr && !["CHÃO", "CHAO", "S/P", "RETRABALHO", "QUARENTENA", "-"].includes(posUpper) && !posUpper.includes("RETRABALHO") && !posUpper.includes("QUARENTENA");
+
+                                    return (
+                                      <tr
+                                        key={rowIdStr}
+                                        className="transition-colors hover:bg-slate-50/70 dark:hover:bg-slate-800/40"
+                                      >
+                                        <td className="px-4 py-2.5 whitespace-nowrap">
+                                          <span className="text-xs font-bold font-mono text-blue-600 dark:text-blue-400">
+                                            {row.id_palete || "S/ ID"}
+                                          </span>
+                                        </td>
+                                        <td className="px-3 py-2.5 text-center text-xs font-mono text-slate-700 dark:text-slate-300">
+                                          {row.profundidade !== undefined && row.profundidade !== null && row.profundidade !== "" ? row.profundidade : "-"}
+                                        </td>
+                                        <td className="px-3 py-2.5 text-center text-xs font-mono text-slate-700 dark:text-slate-300">
+                                          {row.nivel !== undefined && row.nivel !== null && row.nivel !== "" ? row.nivel : "-"}
+                                        </td>
+                                        <td className="px-3 py-2.5 whitespace-nowrap">
+                                          <select
+                                            value={rowClassif}
+                                            disabled={updatingClassificacaoId === rowIdStr}
+                                            onChange={(e) => handleUpdateRowClassificacao(row, e.target.value as ClassificacaoPalete)}
+                                            className={cn(
+                                              "text-[10px] font-bold rounded-lg px-2 py-1 border outline-none cursor-pointer",
+                                              rowClassif === "Devolução"
+                                                ? "bg-amber-500/15 border-amber-500/40 text-amber-700 dark:text-amber-300"
+                                                : rowClassif === "Normal"
+                                                ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-700 dark:text-emerald-300"
+                                                : "bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300"
+                                            )}
+                                          >
+                                            {CLASSIFICACAO_OPTIONS.map(opt => (
+                                              <option key={opt.value || 'empty'} value={opt.value} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">
+                                                {opt.label}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        </td>
+                                        <td className="px-3 py-2.5 whitespace-nowrap">
+                                          {canOpenMap ? (
+                                            <button
+                                              onClick={() => handleVerNoMapa(posStr)}
+                                              className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+                                              title="Abrir posição no mapa"
+                                            >
+                                              <MapPin size={11} />
+                                              {posStr}
+                                            </button>
+                                          ) : (
+                                            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{posStr}</span>
+                                          )}
+                                        </td>
+                                        <td className="px-3 py-2.5 text-xs font-semibold text-slate-800 dark:text-slate-100 whitespace-nowrap">
+                                          {row.produto || "-"}
+                                        </td>
+                                        <td className="px-3 py-2.5 max-w-[220px]">
+                                          <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate block uppercase">
+                                            {row.descricao || "-"}
+                                          </span>
+                                        </td>
+                                        <td className="px-3 py-2.5 text-right text-xs font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                                          {fmtNum(Number(row.quantidade_total) || 0)}
+                                        </td>
+                                        <td className="px-3 py-2.5 text-right text-xs text-rose-500 font-medium whitespace-nowrap">
+                                          {Number(row.qtd_tombada) > 0 ? fmtNum(Number(row.qtd_tombada)) : "-"}
+                                        </td>
+                                        <td className="px-3 py-2.5 text-right text-xs text-blue-500 font-medium whitespace-nowrap">
+                                          {Number(row.qtd_molhado) > 0 ? fmtNum(Number(row.qtd_molhado)) : "-"}
+                                        </td>
+                                        <td className="px-3 py-2.5 max-w-[160px]">
+                                          <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate block">
+                                            {row.observacao || "-"}
+                                          </span>
+                                        </td>
+                                        <td className="px-3 py-2.5 text-[10px] text-slate-400 whitespace-nowrap">
+                                          {row.ultima_alteracao ? String(row.ultima_alteracao) : "-"}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
                   }
                   {
                     displayMode === "tabela" && (
@@ -8238,14 +9414,16 @@ function DashboardPage() {
                       <table className="w-full">
                         <thead className="sticky top-0 z-10 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-sm">
                           <tr className="border-b border-slate-100 dark:border-slate-800 text-left">
-                            <th className="px-8 py-6 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Conteúdo / SKU</th>
-                            <th className="px-8 py-6 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Quantidade</th>
+                            <th className="px-6 py-5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Conteúdo / SKU</th>
+                            <th className="px-4 py-5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-center">Local / Coord.</th>
+                            <th className="px-4 py-5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Classificação</th>
+                            <th className="px-6 py-5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Quantidade</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
                           {palletDetail.items.map((item: any, idx: number) => (
-                            <tr key={`${item.produto}-${idx}`} className="group hover:bg-white dark:hover:bg-slate-800 transition-colors">
-                              <td className="px-8 py-6">
+                            <tr key={`${item.id ?? item.produto}-${idx}`} className="group hover:bg-white dark:hover:bg-slate-800 transition-colors">
+                              <td className="px-6 py-5">
                                 <div className="flex items-center gap-4">
                                   <div className="h-10 w-10 rounded-xl bg-orange-50 dark:bg-orange-950/30 flex items-center justify-center text-orange-600 dark:text-orange-400 group-hover:bg-orange-600 group-hover:text-white dark:group-hover:bg-orange-600 dark:group-hover:text-white transition-colors shadow-sm">
                                     <Package size={18} />
@@ -8253,14 +9431,43 @@ function DashboardPage() {
                                   <div className="flex flex-col">
                                     <span className="text-base font-semibold text-slate-800 dark:text-slate-200 transition-colors">{item.produto}</span>
                                     {item.descricao && item.descricao !== "-" && (
-                                      <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500 uppercase truncate max-w-[300px]">
+                                      <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500 uppercase truncate max-w-[260px]">
                                         {item.descricao}
                                       </span>
                                     )}
                                   </div>
                                 </div>
                               </td>
-                              <td className="px-8 py-6 text-right">
+                              <td className="px-4 py-5 text-center whitespace-nowrap">
+                                <div className="flex flex-col items-center">
+                                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{item.posicao || "S/P"}</span>
+                                  <span className="text-[10px] font-mono text-slate-400">
+                                    P{item.profundidade ?? "-"} • N{item.nivel ?? "-"}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-5 whitespace-nowrap">
+                                <select
+                                  value={extractRowClassificacao(item)}
+                                  disabled={updatingClassificacaoId === String(item.id)}
+                                  onChange={(e) => handleUpdateRowClassificacao(item, e.target.value as ClassificacaoPalete)}
+                                  className={cn(
+                                    "text-[11px] font-semibold rounded-xl px-2.5 py-1.5 border outline-none cursor-pointer transition-colors",
+                                    isDevolucao(item)
+                                      ? "bg-amber-500/15 border-amber-500/40 text-amber-700 dark:text-amber-300"
+                                      : extractRowClassificacao(item) === "Normal"
+                                      ? "bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200"
+                                      : "bg-transparent border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500"
+                                  )}
+                                >
+                                  {CLASSIFICACAO_OPTIONS.map(opt => (
+                                    <option key={opt.value || 'empty'} value={opt.value} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">
+                                      {opt.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="px-6 py-5 text-right">
                                 <span className="text-lg font-semibold text-slate-900 dark:text-slate-100 transition-colors">{fmtNum(item.quantidade_total)}</span>
                               </td>
                             </tr>
@@ -8935,7 +10142,7 @@ function DashboardPage() {
 
           {/* PDF Print Template (Multi-Page Support) */}
           {
-            isExportingPDF && printData.length > 0 && (
+            !isPrintingDevolucoes && isExportingPDF && printData.length > 0 && (
               <div className="hidden print:block relative bg-white min-h-screen w-full text-black font-sans leading-tight p-6">
 
                 {/* Header Corporativo Ultra Compacto */}
@@ -9760,6 +10967,25 @@ function DashboardPage() {
                       onChange={(e) => setNewItemData(prev => ({ ...prev, quantidade: e.target.value }))}
                       className="w-full h-12 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-4 text-sm font-bold text-slate-700 dark:text-white focus:border-blue-500 outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600"
                     />
+                  </div>
+
+                  {/* Classificação individual da linha */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest ml-1">Classificação</label>
+                    <select
+                      value={newItemData.classificacao}
+                      onChange={(e) => setNewItemData(prev => ({ ...prev, classificacao: e.target.value as ClassificacaoPalete }))}
+                      className={cn(
+                        "w-full h-12 bg-slate-50 dark:bg-slate-800/50 border rounded-xl px-4 text-sm font-bold outline-none transition-all",
+                        newItemData.classificacao === "Devolução"
+                          ? "border-amber-500 text-amber-600 dark:text-amber-400"
+                          : "border-slate-200 dark:border-slate-700 text-slate-700 dark:text-white focus:border-blue-500"
+                      )}
+                    >
+                      {CLASSIFICACAO_OPTIONS.map(opt => (
+                        <option key={opt.value || 'empty'} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
                   </div>
 
                   {/* Observação */}
