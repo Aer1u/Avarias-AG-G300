@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { Package, AlertCircle, Droplet, Lock, ArrowLeft, RefreshCw, Edit2, Trash2, Check, CheckSquare, Square, PlusSquare, XSquare, X } from "lucide-react"
+import { Package, AlertCircle, Droplet, Lock, ArrowLeft, RefreshCw, Edit2, Trash2, Check, CheckSquare, Square, PlusSquare, XSquare, X, Layers } from "lucide-react"
 import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
@@ -260,10 +260,137 @@ export function DriveInGrid({
       for (const key of targetKeys) {
         const [targetLvl, targetD] = key.split('-').map(Number);
         
-        // ... (slotExistingMixId logic kept if we want to guess the ID locally, 
-        // but for simplicity let's just use what's passed or generate one)
-        
-        let finalId: string | null = generatedId; // Use the one from the modal
+        // Localiza produtos já existentes fisicamente nesta célula
+        const existingInSlot = (grid[targetLvl]?.[targetD] || []).filter(
+          p => p.sku && p.sku !== "Posição Vazia" && Number(p.quantidade) > 0
+        );
+
+        // Identifica IDs de palete já registrados nesta célula
+        const existingIds = Array.from(
+          new Set(
+            existingInSlot
+              .map(p => normalizePalletId(p.id_palete))
+              .filter(Boolean)
+          )
+        );
+
+        let finalId: string | null = null;
+
+        if (existingIds.length > 0) {
+          // 1. A célula JÁ possui um ID de palete (é MIX ou identificado)
+          // O novo produto DEVE herdar esse mesmo ID para pertencer ao mesmo palete!
+          finalId = existingIds[0];
+
+          // Se a célula já possuía itens com IDs divergentes (ex: fragmentação prévia),
+          // unifica todos os produtos deste slot para este mesmo finalId
+          existingInSlot.forEach(ep => {
+            if (ep.id && normalizePalletId(ep.id_palete) !== finalId) {
+              newPendingChanges.push({
+                id: ep.id,
+                type: 'UPDATE',
+                payload: {
+                  id: ep.id,
+                  'Posição': positionId,
+                  'Código': ep.sku,
+                  'Quantidade': ep.quantidade,
+                  'Nível': targetLvl,
+                  'Profundidade': targetD,
+                  'Parte Tombada': ep.qtd_tombada || 0,
+                  'Parte Molhada': ep.qtd_molhado || 0,
+                  'Id Palete': finalId,
+                  posicao: positionId,
+                  produto: ep.sku,
+                  quantidade_total: ep.quantidade,
+                  nivel: targetLvl,
+                  profundidade: targetD,
+                  qtd_tombada: ep.qtd_tombada || 0,
+                  qtd_molhado: ep.qtd_molhado || 0,
+                  classificacao: ep.classificacao || null,
+                  id_palete: finalId,
+                  paletes: 0,
+                  cod: ep.sku,
+                  qtd: ep.quantidade,
+                  nv: targetLvl,
+                  pr: targetD
+                },
+                audit: {
+                  acao: 'EDITAR',
+                  sku: ep.sku,
+                  posicao: positionId,
+                  nivel: targetLvl,
+                  profundidade: targetD,
+                  quantidade: ep.quantidade,
+                  id_palete: finalId,
+                  detalhe: 'Unificação com ID do Palete MIX existente'
+                }
+              });
+            }
+          });
+        } else if (existingInSlot.length > 0) {
+          // 2. A célula já tem produto(s) mono sem ID de palete.
+          // Com a adição de novos itens, este palete se torna MIX!
+          // Geramos um novo ID MIX único e aplicamos tanto aos existentes quanto aos novos!
+          const newMixId = (generatedId && generatedId.trim() !== "")
+            ? generatedId
+            : (batchMixId || await getNextPalletIdFromDB());
+          finalId = newMixId;
+
+          existingInSlot.forEach(ep => {
+            if (ep.id) {
+              newPendingChanges.push({
+                id: ep.id,
+                type: 'UPDATE',
+                payload: {
+                  id: ep.id,
+                  'Posição': positionId,
+                  'Código': ep.sku,
+                  'Quantidade': ep.quantidade,
+                  'Nível': targetLvl,
+                  'Profundidade': targetD,
+                  'Parte Tombada': ep.qtd_tombada || 0,
+                  'Parte Molhada': ep.qtd_molhado || 0,
+                  'Id Palete': newMixId,
+                  posicao: positionId,
+                  produto: ep.sku,
+                  quantidade_total: ep.quantidade,
+                  nivel: targetLvl,
+                  profundidade: targetD,
+                  qtd_tombada: ep.qtd_tombada || 0,
+                  qtd_molhado: ep.qtd_molhado || 0,
+                  classificacao: ep.classificacao || null,
+                  id_palete: newMixId,
+                  paletes: 1,
+                  cod: ep.sku,
+                  qtd: ep.quantidade,
+                  nv: targetLvl,
+                  pr: targetD
+                },
+                audit: {
+                  acao: 'EDITAR',
+                  sku: ep.sku,
+                  posicao: positionId,
+                  nivel: targetLvl,
+                  profundidade: targetD,
+                  quantidade: ep.quantidade,
+                  id_palete: newMixId,
+                  detalhe: 'Atribuição de ID MIX para itens existentes do slot'
+                }
+              });
+            }
+          });
+        } else {
+          // 3. Célula estava vazia
+          const validItemsCount = items.filter(i => i.sku.trim() !== '' && Number(i.qty) > 0).length;
+          if (validItemsCount > 1) {
+            // MIX novo em célula vazia
+            finalId = (generatedId && generatedId.trim() !== "")
+              ? generatedId
+              : (batchMixId || await getNextPalletIdFromDB());
+          } else {
+            // Mono em célula vazia: sem ID de palete (ou generatedId se explicitado)
+            finalId = (generatedId && generatedId.trim() !== "") ? generatedId : null;
+          }
+        }
 
         items.forEach(item => {
           const tempId = `temp_${nextGridTempId++}`;
@@ -524,6 +651,66 @@ export function DriveInGrid({
     }
   }
 
+
+  // Unifica todos os produtos de uma célula sob um único ID de Palete MIX
+  const handleUnifyCellPalletIds = async () => {
+    if (!selectedCoords) return;
+    const prods = (grid[selectedCoords.lvl]?.[selectedCoords.d] || []).filter(
+      p => p.sku && p.sku !== "Posição Vazia" && Number(p.quantidade) > 0
+    );
+    if (prods.length <= 1) return;
+
+    const existingId = prods.map(p => normalizePalletId(p.id_palete)).find(Boolean) || await getNextPalletIdFromDB();
+
+    const updates: any[] = [];
+    prods.forEach(p => {
+      if (p.id && normalizePalletId(p.id_palete) !== existingId) {
+        updates.push({
+          id: p.id,
+          type: 'UPDATE',
+          payload: {
+            id: p.id,
+            'Posição': positionId,
+            'Código': p.sku,
+            'Quantidade': p.quantidade,
+            'Nível': selectedCoords.lvl,
+            'Profundidade': selectedCoords.d,
+            'Parte Tombada': p.qtd_tombada || 0,
+            'Parte Molhada': p.qtd_molhado || 0,
+            'Id Palete': existingId,
+            posicao: positionId,
+            produto: p.sku,
+            quantidade_total: p.quantidade,
+            nivel: selectedCoords.lvl,
+            profundidade: selectedCoords.d,
+            qtd_tombada: p.qtd_tombada || 0,
+            qtd_molhado: p.qtd_molhado || 0,
+            classificacao: p.classificacao || null,
+            id_palete: existingId,
+            paletes: 0,
+            cod: p.sku,
+            qtd: p.quantidade,
+            nv: selectedCoords.lvl,
+            pr: selectedCoords.d
+          },
+          audit: {
+            acao: 'EDITAR',
+            sku: p.sku,
+            posicao: positionId,
+            nivel: selectedCoords.lvl,
+            profundidade: selectedCoords.d,
+            quantidade: p.quantidade,
+            id_palete: existingId,
+            detalhe: 'Unificação manual de IDs de Palete MIX'
+          }
+        });
+      }
+    });
+
+    if (updates.length > 0) {
+      setPendingChanges(prev => [...prev, ...updates]);
+    }
+  };
 
   const handleMoveItemToFloor = async (product: Product) => {
     if (!product.id) {
@@ -1106,6 +1293,15 @@ export function DriveInGrid({
                   <p className="text-[9px] leading-snug opacity-85">
                     IDs diferentes na mesma coordenada (Prof. + Nível) somam paletes separados. Se for um único palete físico, unifique o ID na edição.
                   </p>
+                  {isEditModeActive && (
+                    <button
+                      type="button"
+                      onClick={handleUnifyCellPalletIds}
+                      className="mt-1.5 w-full py-1.5 px-3 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 shadow transition-colors cursor-pointer"
+                    >
+                      <Layers size={13} /> Unificar em 1 Palete MIX
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -1522,20 +1718,31 @@ export function DriveInGrid({
       )}
 
       {/* Modal de Adição Novo */}
-      <AddPalletModal 
-         isOpen={!!addingCoords}
-         onClose={() => setAddingCoords(null)}
-         onSave={handleModalSave}
-         availableStocks={availableStocks}
-         nextId={nextPalletId}
-         destinationLevel={addingCoords?.lvl ?? null}
-         destinationDepth={addingCoords?.d ?? null}
-         selectedSlotsCount={
-           addingCoords && selectedGaps.size > 0 && selectedGaps.has(`${addingCoords.lvl}-${addingCoords.d}`)
-             ? selectedGaps.size
-             : 1
-         }
-      />
+      {(() => {
+        const targetProds = addingCoords 
+          ? (grid[addingCoords.lvl]?.[addingCoords.d] || []).filter(p => p.sku && p.sku !== "Posição Vazia" && Number(p.quantidade) > 0)
+          : [];
+        const existingPalletId = targetProds.map(p => normalizePalletId(p.id_palete)).find(Boolean) || null;
+
+        return (
+          <AddPalletModal 
+             isOpen={!!addingCoords}
+             onClose={() => setAddingCoords(null)}
+             onSave={handleModalSave}
+             availableStocks={availableStocks}
+             nextId={nextPalletId}
+             destinationLevel={addingCoords?.lvl ?? null}
+             destinationDepth={addingCoords?.d ?? null}
+             existingPalletId={existingPalletId}
+             existingProductsCount={targetProds.length}
+             selectedSlotsCount={
+               addingCoords && selectedGaps.size > 0 && selectedGaps.has(`${addingCoords.lvl}-${addingCoords.d}`)
+                 ? selectedGaps.size
+                 : 1
+             }
+          />
+        );
+      })()}
 
       {/* Printable Sheet Element (only visible during print) */}
       <div className="hidden print:block fixed inset-0 bg-white text-black p-8 z-[99999] overflow-visible">

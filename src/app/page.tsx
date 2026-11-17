@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Tv, Fan, LayoutGrid, ArrowRight } from "lucide-react"
+import { Tv, Fan, LayoutGrid, ArrowRight, FlaskConical } from "lucide-react"
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
+import { supabase } from "@/lib/supabase"
 
 interface ModuleCard {
   id: string
@@ -22,9 +23,19 @@ interface ModuleCard {
 export default function HomePage() {
   const router = useRouter()
   const [mounted, setMounted] = useState(false)
+  const [session, setSession] = useState<any>(null)
 
   useEffect(() => {
     setMounted(true)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+    })
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+    })
+    return () => subscription.unsubscribe()
   }, [])
 
   const modules: ModuleCard[] = [
@@ -64,7 +75,24 @@ export default function HomePage() {
       iconColor: "text-purple-400",
       icon: <LayoutGrid size={28} strokeWidth={2} />,
     },
+    {
+      id: "laboratorio",
+      name: "Laboratório",
+      badge: "Dev",
+      subtitle: "Área de Testes e Experimentos",
+      description: "Ambiente isolado para protótipos, testes e experimentos de novos recursos.",
+      href: "/laboratorio",
+      accentColor: "#f59e0b",
+      iconBg: "bg-amber-950/40 border border-amber-800/40",
+      iconColor: "text-amber-400",
+      icon: <FlaskConical size={28} strokeWidth={2} />,
+    },
   ]
+
+  // O Laboratório só é exibido para quem estiver logado
+  const visibleModules = modules.filter(
+    (mod) => mod.id !== "laboratorio" || !!session?.user
+  )
 
   if (!mounted) return null
 
@@ -102,7 +130,7 @@ export default function HomePage() {
 
         {/* Grade de Módulos Estilo 2D Flat */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {modules.map(mod => (
+          {visibleModules.map(mod => (
             <div
               key={mod.id}
               onClick={() => router.push(mod.href)}

@@ -23,6 +23,8 @@ interface AddPalletModalProps {
   destinationLevel: number | null;
   destinationDepth: number | null;
   selectedSlotsCount?: number;
+  existingPalletId?: string | null;
+  existingProductsCount?: number;
 }
 
 export function AddPalletModal({
@@ -33,7 +35,9 @@ export function AddPalletModal({
   nextId,
   destinationLevel,
   destinationDepth,
-  selectedSlotsCount = 1
+  selectedSlotsCount = 1,
+  existingPalletId = null,
+  existingProductsCount = 0
 }: AddPalletModalProps) {
   const [items, setItems] = useState<PalletItemForm[]>([
     { id: '1', sku: '', qty: '', qtyWet: '', qtyTilted: '', descricao: '', classificacao: '' }
@@ -69,8 +73,10 @@ export function AddPalletModal({
 
   // Filter valid lines
   const activeProductsCount = items.filter(i => i.sku.trim() !== '').length;
-  // MIX is defined as having more than 1 SKU in the same pallet
-  const isMix = activeProductsCount > 1;
+  // MIX é verdadeiro se a célula já possuir produtos (está agregando) ou se o modal contiver mais de 1 produto
+  const isExistingSlotOccupied = Boolean(existingProductsCount && existingProductsCount > 0);
+  const isMix = isExistingSlotOccupied || Boolean(existingPalletId) || activeProductsCount > 1;
+  const targetMixId = existingPalletId || nextId;
 
   const handleAddItem = () => {
     setItems((prev) => [
@@ -129,8 +135,9 @@ export function AddPalletModal({
     });
     if (validItems.length === 0) return;
     
-    // Pass ID only if it is a MIX pallet
-    onSave(validItems, isMix ? nextId : "");
+    // Preserva o ID do palete existente se houver, ou usa targetMixId se for MIX, ou vazio se for mono novo
+    const finalPalletId = isMix ? targetMixId : "";
+    onSave(validItems, finalPalletId);
   };
 
   // Valid if there is at least 1 fully filled item AND its SKU exists in available stock AND totalReq <= available
@@ -164,7 +171,13 @@ export function AddPalletModal({
                 <Box size={14} className="sm:w-4 sm:h-4" strokeWidth={2.5} />
               </div>
               <div>
-                <h2 className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white tracking-tight">Adicionar Palete</h2>
+                <h2 className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white tracking-tight">
+                  {existingPalletId
+                    ? `Adicionar ao Palete Existente (${existingPalletId})`
+                    : isExistingSlotOccupied
+                    ? "Adicionar Produto (Novo MIX)"
+                    : "Adicionar Palete"}
+                </h2>
                 <span className="text-[9px] sm:text-[10px] font-medium text-slate-400 flex flex-wrap items-center gap-1 sm:gap-2">
                   <span>Nível {destinationLevel} · Prof. {destinationDepth}</span>
                   {slotsCount > 1 && (
@@ -172,7 +185,12 @@ export function AddPalletModal({
                       Mapeando em {slotsCount} células
                     </span>
                   )}
-                  {isMix && <span className="text-blue-500 font-semibold">· MIX {nextId}</span>}
+                  {isMix && (
+                    <span className="text-blue-500 font-semibold">
+                      · MIX {targetMixId}
+                      {existingProductsCount > 0 ? ` (${existingProductsCount} item(ns) no palete)` : ''}
+                    </span>
+                  )}
                 </span>
               </div>
             </div>
