@@ -6,6 +6,14 @@ import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-mo
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
 import { AddPalletModal, PalletItemForm } from "./AddPalletModal"
+import {
+  ClassificacaoPalete,
+  CLASSIFICACAO_OPTIONS,
+  isDevolucao,
+  normalizeClassificacao,
+  normalizePalletId,
+  recomputePalletCounts,
+} from "@/lib/mapeamentoUtils"
 
 interface Product {
   sku: string
@@ -20,6 +28,7 @@ interface Product {
   id_palete?: string
   id?: number | string
   fracao_paletes?: number
+  classificacao?: string
 }
 
 type LocalProduct = Product & { _original_nivel: string | number; _original_profundidade: string | number }
@@ -258,6 +267,7 @@ export function DriveInGrid({
 
         items.forEach(item => {
           const tempId = `temp_${nextGridTempId++}`;
+          const normClassif = normalizeClassificacao(item.classificacao);
           const changePayload = {
             id: tempId,
             'Posição': positionId,
@@ -277,7 +287,8 @@ export function DriveInGrid({
             profundidade: targetD,
             qtd_tombada: typeof item.qtyTilted === 'number' ? item.qtyTilted : 0,
             qtd_molhado: typeof item.qtyWet === 'number' ? item.qtyWet : 0,
-            paletes: 1, // Default for new entry in Drive-In
+            classificacao: normClassif || null,
+            paletes: 1, // Recalculado pela Regra A em effectiveData e totalPallets
             // Aliases
             cod: item.sku,
             qtd: typeof item.qty === 'number' ? item.qty : 0,
@@ -296,7 +307,8 @@ export function DriveInGrid({
               nivel: targetLvl,
               profundidade: targetD,
               quantidade: item.qty,
-              id_palete: finalId
+              id_palete: finalId,
+              classificacao: normClassif || null
             }
           });
         });
@@ -469,6 +481,7 @@ export function DriveInGrid({
         return;
       }
 
+      const normClassif = normalizeClassificacao(editingProduct.classificacao);
       setPendingChanges(prev => [...prev, {
         id: rowIdToUpdate,
         type: 'UPDATE',
@@ -487,6 +500,7 @@ export function DriveInGrid({
           profundidade: editingProduct.profundidade,
           qtd_tombada: parseFloat(String(editingProduct.qtd_tombada || 0)),
           qtd_molhado: parseFloat(String(editingProduct.qtd_molhado || 0)),
+          classificacao: normClassif || null,
           nv: editingProduct.nivel,
           pr: editingProduct.profundidade
         },
@@ -497,7 +511,8 @@ export function DriveInGrid({
           nivel: editingProduct.nivel,
           profundidade: editingProduct.profundidade,
           quantidade: newQty,
-          quantidade_anterior: originalQty
+          quantidade_anterior: originalQty,
+          classificacao: normClassif || null
         }
       }]);
 
@@ -661,29 +676,44 @@ export function DriveInGrid({
   const selectedCellProducts = selectedCoords ? grid[selectedCoords.lvl][selectedCoords.d] : []
   const selectedProduct = selectedCellProducts[0] || null
 
-  // Aggregated Position Stats - Use localProducts for reactivity
+  // Aggregated Position Stats - Use localProducts with Regra A (ID + Profundidade + Nível)
   const { totalQty, totalPallets, uniqueSkus, isMixed } = React.useMemo(() => {
-    const tQty = localProducts.reduce((sum, p) => sum + p.quantidade, 0)
-    const tPallets = localProducts.reduce((sum, p) => sum + p.paletes, 0)
-    const uSkus = new Set(localProducts.map(p => p.sku)).size
+    const activeItems = localProducts.filter(p => p.sku !== "Posição Vazia" && (Number(p.quantidade) || 0) > 0)
+    const tQty = activeItems.reduce((sum, p) => sum + (Number(p.quantidade) || 0), 0)
+    const counted = recomputePalletCounts(
+      activeItems.map(p => ({ ...p, posicao: positionId || "", produto: p.sku, quantidade_total: p.quantidade }))
+    )
+    const tPallets = counted.reduce((sum, p) => sum + (Number(p.paletes) || 0), 0)
+    const uSkus = new Set(activeItems.map(p => p.sku)).size
     return {
       totalQty: tQty,
       totalPallets: tPallets,
       uniqueSkus: uSkus,
       isMixed: uSkus > 1
     }
-  }, [localProducts])
+  }, [localProducts, positionId])
 
   // Cell Specific Stats
-  const { cellUniqueSkus, isCellMixed, cellTotalQty } = React.useMemo(() => {
+  const { cellUniqueSkus, isCellMixed, cellTotalQty, selectedCellPalletsCount, selectedCellIdSummary } = React.useMemo(() => {
     const u = new Set(selectedCellProducts.map(p => p.sku)).size
     const q = selectedCellProducts.reduce((sum, p) => sum + p.quantidade, 0)
+    const countedCell = recomputePalletCounts(
+      selectedCellProducts.map(p => ({ ...p, posicao: positionId || "", produto: p.sku, quantidade_total: p.quantidade }))
+    )
+    const pCount = countedCell.reduce((sum, p) => sum + (Number(p.paletes) || 0), 0)
+    const idGroups = new Map<string, number>()
+    selectedCellProducts.forEach(p => {
+      const idKey = normalizePalletId(p.id_palete) || "SEM ID"
+      idGroups.set(idKey, (idGroups.get(idKey) || 0) + 1)
+    })
     return {
       cellUniqueSkus: u,
       isCellMixed: u > 1,
-      cellTotalQty: q
+      cellTotalQty: q,
+      selectedCellPalletsCount: pCount,
+      selectedCellIdSummary: Array.from(idGroups.entries())
     }
-  }, [selectedCellProducts])
+  }, [selectedCellProducts, positionId])
 
   return (
     <div className="w-full flex flex-col gap-4 relative">
@@ -758,7 +788,16 @@ export function DriveInGrid({
                           const isSelected = selectedCoords?.lvl === lvl && selectedCoords?.d === d
                           const hasWet = cellProducts.some(p => p.qtd_molhado > 0)
                           const hasTilted = cellProducts.some(p => p.qtd_tombada > 0)
+                          const hasDevolucao = cellProducts.some(p => isDevolucao(p))
                           const isMixedCell = new Set(cellProducts.map(p => p.sku)).size > 1
+                          const cellCountedPallets = !isEmpty
+                            ? recomputePalletCounts(
+                                cellProducts.map(p => ({ ...p, posicao: positionId || "", produto: p.sku, quantidade_total: p.quantidade }))
+                              ).reduce((sum, p) => sum + (Number(p.paletes) || 0), 0)
+                            : 0
+                          const cellDistinctIds = !isEmpty
+                            ? Array.from(new Set(cellProducts.map(p => normalizePalletId(p.id_palete)).filter(Boolean)))
+                            : []
                           const sku = !isEmpty ? (isMixedCell ? `${cellProducts.length} Prods` : cellProducts[0].sku) : ""
                           const description = !isEmpty ? (isMixedCell ? "Múltiplos produtos neste palete" : cellProducts[0].descricao) : ""
                           const qty = !isEmpty ? Math.round(cellProducts.reduce((sum, p) => sum + p.quantidade, 0)) : 0
@@ -890,13 +929,32 @@ export function DriveInGrid({
                                       ? "shadow-[inset_0_0_20px_rgba(37,99,235,0.25)] border-[1.5px] border-blue-500/40" 
                                       : hasTilted
                                       ? "shadow-[inset_0_0_20px_rgba(220,38,38,0.25)] border-[1.5px] border-red-500/40"
+                                      : hasDevolucao
+                                      ? "shadow-[inset_0_0_20px_rgba(245,158,11,0.25)] border-[1.5px] border-amber-400/60"
                                       : isMixedCell
                                       ? "shadow-[inset_0_0_20px_rgba(217,119,6,0.25)] border-[1.5px] border-amber-500/40"
                                       : "shadow-[inset_0_1px_2px_rgba(255,255,255,0.1)] border-[1.5px] border-slate-700 hover:brightness-110"
                                   )}
                                 >
+                                  {/* Absolute Devolução Badge - Top Left */}
+                                  {hasDevolucao && (
+                                    <div className="absolute top-0.5 left-0.5 sm:top-1.5 sm:left-1.5 z-20">
+                                      <div className="px-1 sm:px-1.5 h-3 sm:h-3.5 rounded-full bg-amber-500 flex items-center justify-center shadow-lg" title="Contém item classificado como Devolução">
+                                        <span className="text-[6px] sm:text-[8px] font-bold text-slate-950 uppercase">DEV</span>
+                                      </div>
+                                    </div>
+                                  )}
+
                                   {/* Absolute Status Icons - Top Right */}
                                   <div className="absolute top-0.5 right-0.5 sm:top-1.5 sm:right-1.5 flex gap-0.5 sm:gap-1 z-20">
+                                      {cellCountedPallets > 1 && (
+                                          <div
+                                            className="px-1 sm:px-1.5 h-3 sm:h-3.5 rounded-full bg-rose-600 flex items-center justify-center shadow-lg"
+                                            title={`${cellCountedPallets} paletes nesta coordenada (${cellDistinctIds.join(', ')})`}
+                                          >
+                                              <span className="text-[6px] sm:text-[8px] font-bold text-white uppercase">{cellCountedPallets} PTs</span>
+                                          </div>
+                                      )}
                                       {hasWet && (
                                           <div className="h-3 w-3 sm:h-4 sm:w-4 rounded-full bg-blue-500 flex items-center justify-center shadow-lg">
                                               <Droplet size={8} className="text-white fill-white sm:w-2.5 sm:h-2.5" />
@@ -1029,6 +1087,28 @@ export function DriveInGrid({
                 </div>
               </div>
 
+              {selectedCellPalletsCount > 1 && (
+                <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-2.5 text-[10px] text-rose-700 dark:text-rose-300 space-y-1">
+                  <div className="font-bold uppercase tracking-wider flex items-center gap-1.5">
+                    <AlertCircle size={12} className="shrink-0 text-rose-500" />
+                    {selectedCellPalletsCount} paletes nesta célula (Regra A)
+                  </div>
+                  <div className="flex flex-wrap gap-1 pt-0.5">
+                    {selectedCellIdSummary.map(([idLabel, count]) => (
+                      <span
+                        key={idLabel}
+                        className="px-1.5 py-0.5 rounded bg-white/70 dark:bg-slate-800 font-mono text-[9px] font-semibold text-slate-800 dark:text-slate-200 border border-rose-500/20"
+                      >
+                        {idLabel} ({count} {count === 1 ? "item" : "itens"})
+                      </span>
+                    ))}
+                  </div>
+                  <p className="text-[9px] leading-snug opacity-85">
+                    IDs diferentes na mesma coordenada (Prof. + Nível) somam paletes separados. Se for um único palete físico, unifique o ID na edição.
+                  </p>
+                </div>
+              )}
+
               <div className="max-h-[35vh] md:max-h-[60vh] overflow-y-auto pr-1 custom-scrollbar">
                 <table className="w-full text-left border-collapse">
                   <thead>
@@ -1043,8 +1123,22 @@ export function DriveInGrid({
                       <tr key={idx} className="group hover:bg-slate-50 dark:bg-slate-900/50 dark:hover:bg-slate-800/30 transition-colors">
                         <td className="py-3 pr-2">
                           <div className="flex flex-col">
-                            <span className="text-xs font-semibold text-slate-900 dark:text-white dark:text-white leading-none mb-1">{p.sku}</span>
+                            <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                              <span className="text-xs font-semibold text-slate-900 dark:text-white leading-none">{p.sku}</span>
+                              {isDevolucao(p) ? (
+                                <span className="text-[8px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                                  Devolução
+                                </span>
+                              ) : normalizeClassificacao(p.classificacao) === 'Normal' ? (
+                                <span className="text-[8px] font-semibold uppercase px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                                  Normal
+                                </span>
+                              ) : null}
+                            </div>
                             <span className="text-[9px] text-slate-500 font-medium line-clamp-1 italic">{p.descricao}</span>
+                            {p.id_palete && (
+                              <span className="text-[8px] font-mono text-blue-500 dark:text-blue-400 mt-0.5">ID: {p.id_palete}</span>
+                            )}
                           </div>
                         </td>
                         <td className="py-3 text-center">
@@ -1324,6 +1418,25 @@ export function DriveInGrid({
                           <label className="text-[9px] font-semibold text-slate-400 uppercase">Nova Profundidade *</label>
                           <input type="number" value={editingProduct.profundidade ?? ""} onChange={e => setEditingProduct({...editingProduct, profundidade: Number(e.target.value)})} className="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-blue-500 p-2 rounded-lg text-slate-900 dark:text-white font-bold outline-none" required />
                         </div>
+                      </div>
+
+                      {/* Classificação Individual da Linha */}
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-semibold text-slate-400 uppercase">Classificação desta Linha</label>
+                        <select
+                          value={normalizeClassificacao(editingProduct.classificacao)}
+                          onChange={e => setEditingProduct({...editingProduct, classificacao: e.target.value as ClassificacaoPalete})}
+                          className={cn(
+                            "w-full text-xs bg-slate-50 dark:bg-slate-800 border p-2 rounded-lg font-bold outline-none transition-colors",
+                            isDevolucao(editingProduct)
+                              ? "border-amber-500 text-amber-600 dark:text-amber-400"
+                              : "border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                          )}
+                        >
+                          {CLASSIFICACAO_OPTIONS.map(opt => (
+                            <option key={opt.value || 'empty'} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
                       </div>
 
                       {/* Modal Action Buttons */}
