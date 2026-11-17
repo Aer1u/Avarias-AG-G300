@@ -192,7 +192,7 @@ class SyncManager {
 
     const ALLOWED_MAP_COLUMNS = [
       "Posição","Id Palete","Código","Quantidade","Nível","Profundidade",
-      "Parte Tombada","Parte Molhada","Observação","Última Alteração",
+      "Parte Tombada","Parte Molhada","Observação","Última Alteração","classificacao",
     ];
 
     const sanitizeMapPayload = (payload: Record<string, any>) => {
@@ -202,6 +202,9 @@ class SyncManager {
       if (!clean["Posição"] && (payload.posicao || payload.targetPosition)) clean["Posição"] = payload.posicao || payload.targetPosition;
       if (clean["Quantidade"] === undefined && (payload.quantidade !== undefined || payload.quantidade_total !== undefined)) {
         clean["Quantidade"] = payload.quantidade !== undefined ? payload.quantidade : payload.quantidade_total;
+      }
+      if (clean["classificacao"] === undefined && payload["Classificação"] !== undefined) {
+        clean["classificacao"] = payload["Classificação"];
       }
       return clean;
     };
@@ -219,19 +222,34 @@ class SyncManager {
 
         if (table === "mapeamento" && !isFloorOrRetrabalho && skuCode && delta !== 0) {
           // ATOMIC: update qty + adjust floor in one PostgreSQL transaction
+          const extraObj: Record<string, any> = {};
+          if (changes?.classificacao !== undefined) {
+            extraObj.classificacao = changes.classificacao || null;
+          }
           const { error: rpcErr } = await supabase.rpc("rpc_update_quantity", {
             p_record_id: Number(recordId),
             p_new_qty: newCalculatedQty,
             p_old_qty: currentLiveQty,
             p_sku: skuCode,
             p_position: liveData["Posição"],
-            p_extra: {}
+            p_extra: extraObj
           });
           if (rpcErr) throw new Error(`[DELTA atômico] ${rpcErr.message}`);
         } else {
           // Plain update (Chão/Retrabalho positions or other tables)
-          const { error: updErr } = await supabase.from(table).update({ [field]: newCalculatedQty }).eq("id", recordId);
-          if (updErr) throw updErr;
+          const updFields: Record<string, any> = { [field]: newCalculatedQty };
+          if (table === "mapeamento" && changes?.classificacao !== undefined) {
+            updFields.classificacao = changes.classificacao || null;
+          }
+          const { error: updErr } = await supabase.from(table).update(updFields).eq("id", recordId);
+          if (updErr) {
+            if (updFields.classificacao !== undefined && String(updErr.message || "").toLowerCase().includes("classificacao")) {
+              const { error: retryErr } = await supabase.from(table).update({ [field]: newCalculatedQty }).eq("id", recordId);
+              if (retryErr) throw retryErr;
+            } else {
+              throw updErr;
+            }
+          }
         }
       }
       await this.logToAuditTable(item, "synced");
@@ -239,7 +257,18 @@ class SyncManager {
     } else if (type === "UPDATE_FIELD" && recordId && changes) {
       const payloadToUpdate = table === "mapeamento" ? sanitizeMapPayload(changes) : changes;
       const { error: updErr } = await supabase.from(table).update(payloadToUpdate).eq("id", recordId);
-      if (updErr) throw updErr;
+      if (updErr) {
+        if (payloadToUpdate.classificacao !== undefined && String(updErr.message || "").toLowerCase().includes("classificacao")) {
+          const fallbackPayload = { ...payloadToUpdate };
+          delete fallbackPayload.classificacao;
+          if (Object.keys(fallbackPayload).length > 0) {
+            const { error: retryErr } = await supabase.from(table).update(fallbackPayload).eq("id", recordId);
+            if (retryErr) throw retryErr;
+          }
+        } else {
+          throw updErr;
+        }
+      }
       await this.logToAuditTable(item, "synced");
 
     } else if (type === "ADD" && changes) {
@@ -261,13 +290,23 @@ class SyncManager {
             "Parte Molhada": cleanPayload["Parte Molhada"] ?? 0,
             "Id Palete": cleanPayload["Id Palete"] ?? null,
             "Observação": cleanPayload["Observação"] ?? null,
+            "classificacao": cleanPayload["classificacao"] ?? null,
           };
           const { error: rpcErr } = await supabase.rpc("rpc_add_to_position", { payload: rpcPayload });
           if (rpcErr) throw new Error(`[ADD atômico] ${rpcErr.message}`);
         } else {
           // Adding directly to Chão — plain insert
           const { error: insErr } = await supabase.from(table).insert(cleanPayload);
-          if (insErr) throw insErr;
+          if (insErr) {
+            if (cleanPayload.classificacao !== undefined && String(insErr.message || "").toLowerCase().includes("classificacao")) {
+              const fallbackPayload = { ...cleanPayload };
+              delete fallbackPayload.classificacao;
+              const { error: retryErr } = await supabase.from(table).insert(fallbackPayload);
+              if (retryErr) throw retryErr;
+            } else {
+              throw insErr;
+            }
+          }
         }
       } else {
         const { error: insErr } = await supabase.from(table).insert(cleanPayload);
