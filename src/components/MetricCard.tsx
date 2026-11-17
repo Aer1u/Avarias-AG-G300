@@ -13,6 +13,7 @@ interface MetricCardProps {
     className?: string
     delay?: number
     hoverContent?: React.ReactNode
+    onClick?: () => void
 }
 
 export function MetricCard({
@@ -22,7 +23,8 @@ export function MetricCard({
     description,
     className,
     delay = 0,
-    hoverContent
+    hoverContent,
+    onClick
 }: MetricCardProps) {
     const [isHovered, setIsHovered] = useState(false)
     const timeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -50,8 +52,18 @@ export function MetricCard({
             transition={{ duration: 0.5, delay, ease: [0.21, 0.47, 0.32, 0.98] }}
             onPointerEnter={handleMouseEnter}
             onPointerLeave={handleMouseLeave}
+            onClick={onClick}
+            role={onClick ? "button" : undefined}
+            tabIndex={onClick ? 0 : undefined}
+            onKeyDown={onClick ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault()
+                    onClick()
+                }
+            } : undefined}
             className={cn(
                 "group relative rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 md:p-6 shadow-sm transition-all hover:border-blue-300 dark:hover:border-blue-900/50 hover:shadow-md dark:hover:shadow-slate-950/50",
+                onClick && "cursor-pointer",
                 className
             )}
         >
