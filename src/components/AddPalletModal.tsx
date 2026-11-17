@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, X, Box, Check, AlertCircle, Droplet, Package, Info, Calendar, TrendingUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { ClassificacaoPalete, CLASSIFICACAO_OPTIONS } from '@/lib/mapeamentoUtils'
 
 export interface PalletItemForm {
   id: string;
@@ -10,6 +11,7 @@ export interface PalletItemForm {
   qtyWet: number | '';
   qtyTilted: number | '';
   descricao?: string;
+  classificacao?: ClassificacaoPalete;
 }
 
 interface AddPalletModalProps {
@@ -34,7 +36,7 @@ export function AddPalletModal({
   selectedSlotsCount = 1
 }: AddPalletModalProps) {
   const [items, setItems] = useState<PalletItemForm[]>([
-    { id: '1', sku: '', qty: '', qtyWet: '', qtyTilted: '', descricao: '' }
+    { id: '1', sku: '', qty: '', qtyWet: '', qtyTilted: '', descricao: '', classificacao: '' }
   ]);
   const [currentTime, setCurrentTime] = useState<string>('');
   const [activeSearchIndex, setActiveSearchIndex] = useState<number | null>(null);
@@ -45,7 +47,7 @@ export function AddPalletModal({
 
   useEffect(() => {
     if (isOpen) {
-      setItems([{ id: Date.now().toString(), sku: '', qty: '', qtyWet: '', qtyTilted: '', descricao: '' }]);
+      setItems([{ id: Date.now().toString(), sku: '', qty: '', qtyWet: '', qtyTilted: '', descricao: '', classificacao: '' }]);
       setActiveSearchIndex(null);
       const now = new Date();
       setCurrentTime(now.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }));
@@ -73,7 +75,7 @@ export function AddPalletModal({
   const handleAddItem = () => {
     setItems((prev) => [
       ...prev,
-      { id: Date.now().toString(), sku: '', qty: '', qtyWet: '', qtyTilted: '', descricao: '' }
+      { id: Date.now().toString(), sku: '', qty: '', qtyWet: '', qtyTilted: '', descricao: '', classificacao: '' }
     ]);
   };
 
@@ -83,6 +85,10 @@ export function AddPalletModal({
 
   const handleChangeSku = (id: string, sku: string, descricao?: string) => {
     setItems(prev => prev.map(i => i.id === id ? { ...i, sku, descricao: descricao || i.descricao, qty: '', qtyWet: '', qtyTilted: '' } : i));
+  };
+
+  const handleChangeClassificacao = (id: string, classificacao: ClassificacaoPalete) => {
+    setItems(prev => prev.map(i => i.id === id ? { ...i, classificacao } : i));
   };
 
   const handleChangeQtyRaw = (id: string, field: 'qty' | 'qtyWet' | 'qtyTilted', val: string) => {
@@ -180,18 +186,19 @@ export function AddPalletModal({
 
           {/* ── Table ── */}
           <div className="w-full overflow-x-auto custom-scrollbar">
-            <table className="w-full min-w-[480px] sm:min-w-0 text-sm border-collapse">
+            <table className="w-full min-w-[600px] sm:min-w-0 text-sm border-collapse">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-700/50">
-                  <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-400 uppercase tracking-widest w-[40%]">Código</th>
-                  <th className="text-center px-2 py-2.5 text-[10px] font-semibold text-slate-400 uppercase tracking-widest w-[10%]">Disp.</th>
-                  <th className="text-center px-2 py-2.5 text-[10px] font-semibold text-slate-400 uppercase tracking-widest w-[16%]">Total</th>
-                  <th className="text-center px-2 py-2.5 text-[10px] font-semibold text-blue-400 uppercase tracking-widest w-[14%]">
+                  <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-400 uppercase tracking-widest w-[30%]">Código</th>
+                  <th className="text-center px-2 py-2.5 text-[10px] font-semibold text-slate-400 uppercase tracking-widest w-[9%]">Disp.</th>
+                  <th className="text-center px-2 py-2.5 text-[10px] font-semibold text-slate-400 uppercase tracking-widest w-[14%]">Total</th>
+                  <th className="text-center px-2 py-2.5 text-[10px] font-semibold text-blue-400 uppercase tracking-widest w-[12%]">
                     <span className="flex items-center justify-center gap-1"><Droplet size={9} />Molhado</span>
                   </th>
-                  <th className="text-center px-2 py-2.5 text-[10px] font-semibold text-rose-400 uppercase tracking-widest w-[14%]">
+                  <th className="text-center px-2 py-2.5 text-[10px] font-semibold text-rose-400 uppercase tracking-widest w-[12%]">
                     <span className="flex items-center justify-center gap-1"><AlertCircle size={9} />Tombado</span>
                   </th>
+                  <th className="text-center px-2 py-2.5 text-[10px] font-semibold text-amber-500 uppercase tracking-widest w-[17%]">Classif.</th>
                   <th className="w-8" />
                 </tr>
               </thead>
@@ -331,6 +338,26 @@ export function AddPalletModal({
                             (!item.sku || !item.qty) ? "opacity-30 cursor-not-allowed" : "text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-500/40"
                           )}
                         />
+                      </td>
+
+                      {/* CLASSIFICAÇÃO POR LINHA */}
+                      <td className="px-2 py-2">
+                        <select
+                          disabled={!item.sku}
+                          value={item.classificacao || ''}
+                          onChange={(e) => handleChangeClassificacao(item.id, e.target.value as ClassificacaoPalete)}
+                          className={cn(
+                            "w-full h-9 px-2 rounded-lg border outline-none text-[11px] font-semibold transition-all bg-white dark:bg-slate-800/80",
+                            !item.sku ? "opacity-30 cursor-not-allowed border-slate-200 dark:border-slate-700" :
+                            item.classificacao === 'Devolução'
+                              ? "border-amber-500 text-amber-600 dark:text-amber-400 bg-amber-50/40 dark:bg-amber-950/20"
+                              : "border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200"
+                          )}
+                        >
+                          {CLASSIFICACAO_OPTIONS.map(opt => (
+                            <option key={opt.value || 'empty'} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
                       </td>
 
                       {/* REMOVE */}
