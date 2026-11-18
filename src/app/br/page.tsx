@@ -24,6 +24,7 @@ import PaletesFormadosTab from "@/components/br/PaletesFormadosTab"
 import DashboardTab from "@/components/br/DashboardTab"
 import AvariaTiposManager from "@/components/br/AvariaTiposManager"
 import { useAvariaTipos } from "@/hooks/useAvariaTipos"
+import { GlobalAdminBar } from "@/components/IAM/GlobalAdminBar"
 
 function cn(...classes: (string | undefined | false | null)[]) {
   return classes.filter(Boolean).join(" ")
@@ -947,6 +948,9 @@ ${autoPrint ? `<script>window.onload=()=>{window.print()}</script>` : ''}
 
   return (
     <div className={cn("flex min-h-screen transition-colors duration-500", theme === "dark" ? "bg-[#020617]" : "bg-[#f8fafc]")}>
+
+      {/* IAM – oculto por padrão; ativar com Ctrl+Shift+D */}
+      <GlobalAdminBar currentWorkspaceId="ws_br" />
 
       {/* ─── Sidebar ─────────────────────────────────────────────────────── */}
       <aside className="group/sidebar hidden md:flex fixed left-0 top-0 z-50 flex h-full w-24 flex-col items-center border-none bg-white/80 py-8 backdrop-blur-xl dark:bg-slate-900/80 transition-all duration-300 hover:w-64 overflow-hidden">

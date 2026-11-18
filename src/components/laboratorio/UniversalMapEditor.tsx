@@ -27,6 +27,8 @@ import type {
 import { DEFAULT_G300_RULE } from "../MapLibrary/addressing"
 import MapLibraryPanel from "../MapLibrary/MapLibraryPanel"
 import MapCanvasContainer, { type MapCanvasHandle } from "../MapCanvas/MapCanvasContainer"
+import { SpatialViewer3D } from "../Map3D/SpatialViewer3D"
+import type { SpatialViewMode } from "../Map3D/types"
 import MapPropertiesPanel from "../MapProperties/MapPropertiesPanel"
 import MapToolbar from "../MapToolbar/MapToolbar"
 import UniversalSearchSpotlight from "../MapToolbar/UniversalSearchSpotlight"
@@ -37,6 +39,8 @@ import ModuleBuilderModal from "./ModuleBuilderModal"
 import DimensionConfigModal from "./DimensionConfigModal"
 import ResourceEngineModal from "../Resources/ResourceEngineModal"
 import SystemManagerModal from "../Systems/SystemManagerModal"
+import { AdminCenterModal } from "../IAM/AdminCenter/AdminCenterModal"
+import { useAuthz } from "../IAM/useAuthz"
 import type { DimensionConfig } from "../MapLibrary/dimensionsTypes"
 import type { PhysicalDimensions } from "../MapLibrary/types"
 import {
@@ -275,6 +279,7 @@ export default function UniversalMapEditor() {
   const { objects, setObjects, resetHistory, undo, redo, canUndo, canRedo } = useMapHistory([])
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [spatialMode, setSpatialMode] = useState<SpatialViewMode>("2d")
   const [tool, setTool] = useState<"select" | "pan" | "draw_area" | "draw_floor">("select")
   const [snapEnabled, setSnapEnabled] = useState(true)
   const [gridSize, setGridSize] = useState(20)
@@ -360,6 +365,11 @@ export default function UniversalMapEditor() {
   const [isNewFloorOpen, setIsNewFloorOpen] = useState(false)
   const [isResourceEngineOpen, setIsResourceEngineOpen] = useState(false)
   const [isSystemManagerOpen, setIsSystemManagerOpen] = useState(false)
+  const [isIAMOpen, setIsIAMOpen] = useState(false)
+
+  // Motor de Autorização & RBAC (NEXUS IAM)
+  const { can, activeUser, primaryRole, isPlatformOwner, isPlatformAdmin } = useAuthz("MAP-LAB-01")
+  const canViewIAM = isPlatformOwner || isPlatformAdmin || can('workspace.manage_roles')
 
   // Nomenclaturas Universais de Dimensões (Configuração por organização)
   const [levelsConfig, setLevelsConfig] = useState<DimensionConfig>(DEFAULT_G300_LEVELS_CONFIG)
@@ -434,26 +444,38 @@ export default function UniversalMapEditor() {
   const handleUpdateObject = useCallback(
     (partial: Partial<MapObject>) => {
       if (!selectedId) return
+      if (!can('object.edit', selectedId)) {
+        alert(`⚠️ Ação Bloqueada por Permissão (RBAC):\nSeu papel atual (${primaryRole?.name || 'Visualizador'}) não possui a permissão 'object.edit' para modificar este objeto.`);
+        return
+      }
       setObjects((prev) =>
         prev.map((obj) => (obj.id === selectedId ? { ...obj, ...partial } : obj))
       )
     },
-    [selectedId]
+    [selectedId, can, primaryRole]
   )
 
   const handleUpdateObjectById = useCallback(
     (id: string, partial: Partial<MapObject>) => {
+      if (!can('object.edit', id)) {
+        alert(`⚠️ Ação Bloqueada por Permissão (RBAC):\nSeu papel atual (${primaryRole?.name || 'Visualizador'}) não possui a permissão 'object.edit'.`);
+        return
+      }
       setObjects((prev) =>
         prev.map((obj) => (obj.id === id ? { ...obj, ...partial } : obj))
       )
     },
-    []
+    [can, primaryRole]
   )
 
   // ── Atualizar propriedade técnica parametrizada ──────────────
   const handleUpdateProp = useCallback(
     (key: string, value: unknown) => {
       if (!selectedId) return
+      if (!can('object.edit', selectedId)) {
+        alert(`⚠️ Ação Bloqueada por Permissão (RBAC):\nSeu papel atual (${primaryRole?.name || 'Visualizador'}) não possui a permissão 'object.edit'.`);
+        return
+      }
       setObjects((prev) =>
         prev.map((obj) => {
           if (obj.id !== selectedId) return obj
@@ -461,7 +483,7 @@ export default function UniversalMapEditor() {
         })
       )
     },
-    [selectedId]
+    [selectedId, can, primaryRole]
   )
 
   // ── Adicionar registro vinculado ─────────────────────────────
@@ -488,6 +510,10 @@ export default function UniversalMapEditor() {
   // ── Duplicar objeto ──────────────────────────────────────────
   const handleDuplicate = useCallback(() => {
     if (!selectedObject) return
+    if (!can('object.create')) {
+      alert(`⚠️ Ação Bloqueada por Permissão (RBAC):\nSeu papel atual (${primaryRole?.name || 'Sem Papel'}) não possui permissão 'object.create' para criar ou duplicar objetos.`);
+      return
+    }
     const newId = crypto.randomUUID()
     const cloned: MapObject = {
       ...selectedObject,
@@ -500,14 +526,18 @@ export default function UniversalMapEditor() {
     }
     setObjects((prev) => [...prev, cloned])
     setSelectedId(newId)
-  }, [selectedObject])
+  }, [selectedObject, can, primaryRole])
 
   // ── Excluir objeto ───────────────────────────────────────────
   const handleDelete = useCallback(() => {
     if (!selectedId) return
+    if (!can('object.delete', selectedId)) {
+      alert(`⚠️ Ação Bloqueada por Permissão (RBAC):\nSeu papel atual (${primaryRole?.name || 'Sem Papel'}) não possui permissão 'object.delete' para remover objetos.`);
+      return
+    }
     setObjects((prev) => prev.filter((o) => o.id !== selectedId))
     setSelectedId(null)
-  }, [selectedId])
+  }, [selectedId, can, primaryRole])
 
   // ── Ordenação de Camadas ─────────────────────────────────────
   const handleBringForward = useCallback(() => {
@@ -957,6 +987,8 @@ export default function UniversalMapEditor() {
         gridSize={gridSize}
         zoom={zoom}
         objectsCount={objects.length}
+        spatialMode={spatialMode}
+        onSpatialModeChange={setSpatialMode}
         onToolChange={setTool}
         onToggleSnap={() => setSnapEnabled((v) => !v)}
         onGridSizeChange={setGridSize}
@@ -974,6 +1006,7 @@ export default function UniversalMapEditor() {
         onOpenNewFloor={() => setIsNewFloorOpen(true)}
         onOpenResourceEngine={() => setIsResourceEngineOpen(true)}
         onOpenSystemManager={() => setIsSystemManagerOpen(true)}
+        onOpenIAM={canViewIAM ? () => setIsIAMOpen(true) : undefined}
         canUndo={canUndo}
         canRedo={canRedo}
         onUndo={undo}
@@ -1082,21 +1115,34 @@ export default function UniversalMapEditor() {
           </div>
         )}
 
-        {/* Canvas Konva 2D */}
-        <MapCanvasContainer
-          ref={canvasRef}
-          objects={objects}
-          selectedId={selectedId}
-          snapEnabled={snapEnabled}
-          gridSize={gridSize}
-          zoom={zoom}
-          tool={tool}
-          onToolChange={setTool}
-          onSelect={setSelectedId}
-          onUpdateObject={handleUpdateObjectById}
-          onZoomChange={setZoom}
-          onAddObject={handleAddObject}
-        />
+        {/* Renderizador Espacial Universal: 2D Konva ou 3D Three.js (Isométrico / 3D Livre) */}
+        {spatialMode === "2d" ? (
+          <MapCanvasContainer
+            ref={canvasRef}
+            objects={objects}
+            selectedId={selectedId}
+            snapEnabled={snapEnabled}
+            gridSize={gridSize}
+            zoom={zoom}
+            tool={tool}
+            onToolChange={setTool}
+            onSelect={setSelectedId}
+            onUpdateObject={handleUpdateObjectById}
+            onZoomChange={setZoom}
+            onAddObject={handleAddObject}
+          />
+        ) : (
+          <SpatialViewer3D
+            mode={spatialMode}
+            objects={objects}
+            selectedId={selectedId}
+            snapEnabled={snapEnabled}
+            gridSize={gridSize}
+            onSelect={setSelectedId}
+            onUpdateObject={handleUpdateObjectById}
+            onModeChange={setSpatialMode}
+          />
+        )}
 
         {/* Splitter arrastável da Direita */}
         {!isRightCollapsed && (
@@ -1220,6 +1266,13 @@ export default function UniversalMapEditor() {
         isOpen={isSystemManagerOpen}
         onClose={() => setIsSystemManagerOpen(false)}
         allObjects={objects}
+      />
+
+      {/* Modal da Central de Identidade, Papéis e Permissões (NEXUS IAM) */}
+      <AdminCenterModal
+        isOpen={isIAMOpen}
+        onClose={() => setIsIAMOpen(false)}
+        currentMapId="MAP-LAB-01"
       />
     </div>
   )

@@ -70,6 +70,12 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
     // Cache de nós Konva
     const nodeMapRef = useRef<Map<string, Konva.Group | Konva.Line>>(new Map())
 
+    // ── Refs sempre atualizadas para snap (evita closures stale nos handlers Konva) ──
+    const snapEnabledRef = useRef(snapEnabled)
+    const gridSizeRef = useRef(gridSize)
+    useEffect(() => { snapEnabledRef.current = snapEnabled }, [snapEnabled])
+    useEffect(() => { gridSizeRef.current = gridSize }, [gridSize])
+
     // Estado para Pan Livre com Espaço / Botão do Meio / Botão Direito / Fundo
     const isSpacePressedRef = useRef(false)
     const isPanningRef = useRef(false)
@@ -91,14 +97,58 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
       dots: Konva.Circle[]
     }>({ active: false, points: [], previewLine: null, guideLine: null, dots: [] })
 
-    // Snap helper
+    // Snap helper — lê sempre as refs (valor atual, sem closure stale)
     const snap = useCallback(
       (val: number) => {
-        if (!snapEnabled) return val
-        return Math.round(val / gridSize) * gridSize
+        if (!snapEnabledRef.current) return val
+        return Math.round(val / gridSizeRef.current) * gridSizeRef.current
       },
-      [snapEnabled, gridSize]
+      [] // sem dependências — usa refs
     )
+
+    // Helper de restrição de arrasto pelo grid em tempo real (movimento por grid durante o drag)
+    const createDragBoundFunc = useCallback((isPolyLine: boolean = false, baseObj?: MapObject) => {
+      return function (pos: Konva.Vector2d): Konva.Vector2d {
+        const stage = stageRef.current
+        if (!stage || !snapEnabledRef.current) return pos
+
+        const scaleX = stage.scaleX() || 1
+        const scaleY = stage.scaleY() || 1
+        const stageX = stage.x()
+        const stageY = stage.y()
+        const step = gridSizeRef.current || 20
+
+        if (isPolyLine && baseObj) {
+          const localDx = (pos.x - stageX) / scaleX
+          const localDy = (pos.y - stageY) / scaleY
+
+          const targetX = baseObj.x + localDx
+          const targetY = baseObj.y + localDy
+
+          const snappedTargetX = Math.round(targetX / step) * step
+          const snappedTargetY = Math.round(targetY / step) * step
+
+          const snappedDx = snappedTargetX - baseObj.x
+          const snappedDy = snappedTargetY - baseObj.y
+
+          return {
+            x: stageX + snappedDx * scaleX,
+            y: stageY + snappedDy * scaleY,
+          }
+        }
+
+        const localX = (pos.x - stageX) / scaleX
+        const localY = (pos.y - stageY) / scaleY
+
+        const snappedX = Math.round(localX / step) * step
+        const snappedY = Math.round(localY / step) * step
+
+        return {
+          x: stageX + snappedX * scaleX,
+          y: stageY + snappedY * scaleY,
+        }
+      }
+    }, [])
 
     // ── fitToScreen: Centraliza e Enquadra todo o Conteúdo ─────
     const fitToScreen = useCallback(() => {
@@ -415,17 +465,21 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
 
       gl.destroyChildren()
 
-      const w = st.width() * 6
-      const h = st.height() * 6
-      const step = gridSize
+      const step = Math.max(5, gridSize)
+      const w = Math.max(st.width() * 4, 4000)
+      const h = Math.max(st.height() * 4, 4000)
+
+      const strokeMinor = snapEnabled ? "#1e293b" : "#131b2e"
+      const strokeMajor = snapEnabled ? "#334155" : "#1e293b"
 
       for (let x = -w; x <= w; x += step) {
         const isMajor = x % (step * 5) === 0
         gl.add(
           new Konva.Line({
             points: [x, -h, x, h],
-            stroke: isMajor ? "#334155" : "#1e293b",
+            stroke: isMajor ? strokeMajor : strokeMinor,
             strokeWidth: isMajor ? 1 : 0.5,
+            listening: false,
           })
         )
       }
@@ -435,14 +489,15 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
         gl.add(
           new Konva.Line({
             points: [-w, y, w, y],
-            stroke: isMajor ? "#334155" : "#1e293b",
+            stroke: isMajor ? strokeMajor : strokeMinor,
             strokeWidth: isMajor ? 1 : 0.5,
+            listening: false,
           })
         )
       }
 
       gl.batchDraw()
-    }, [gridSize])
+    }, [gridSize, snapEnabled])
 
     useEffect(() => {
       drawGrid()
@@ -707,6 +762,7 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
           })
           polyLine.id(obj.id)
           polyLine.draggable(!obj.locked && tool === "select")
+          polyLine.dragBoundFunc(createDragBoundFunc(true, obj))
 
           polyLine.on("click tap", (e) => {
             e.cancelBubble = true
@@ -737,6 +793,8 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
           group.position({ x: obj.x, y: obj.y })
           group.rotation(obj.rotation || 0)
           group.draggable(!obj.locked && tool === "select")
+          group.dragBoundFunc(createDragBoundFunc(false))
+          group.dragBoundFunc(createDragBoundFunc(false))
           group.opacity(obj.opacity ?? 1)
 
           if (isStreet) {
@@ -911,6 +969,7 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
           group.position({ x: obj.x, y: obj.y })
           group.rotation(obj.rotation || 0)
           group.draggable(!obj.locked && tool === "select")
+          group.dragBoundFunc(createDragBoundFunc(false))
 
           group.on("click tap", (e) => {
             e.cancelBubble = true
@@ -976,7 +1035,7 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
       }
 
       layer.batchDraw()
-    }, [objects, selectedId, tool, onSelect, onUpdateObject, snap])
+    }, [objects, selectedId, tool, onSelect, onUpdateObject, snap, createDragBoundFunc])
 
     return (
       <div

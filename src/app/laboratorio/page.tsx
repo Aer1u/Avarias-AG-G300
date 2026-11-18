@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { FlaskConical, ArrowLeft, Map, Lock, ShieldAlert } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
+import { GlobalAdminBar } from "@/components/IAM/GlobalAdminBar"
 
 interface LabExperiment {
   id: string
@@ -85,8 +86,10 @@ export default function LaboratorioPage() {
   ]
 
   return (
-    <div className="min-h-screen w-full bg-slate-950 text-slate-100 flex flex-col p-6 md:p-12">
-      {/* Header */}
+    <div className="min-h-screen w-full bg-slate-950 text-slate-100 flex flex-col">
+      <GlobalAdminBar currentWorkspaceId="ws_lab" />
+      <div className="flex-1 flex flex-col p-6 md:p-12">
+        {/* Header */}
       <header className="max-w-6xl w-full mx-auto flex items-center justify-between pb-6 border-b border-slate-800/80">
         <div className="flex items-center gap-3">
           <button
@@ -146,6 +149,7 @@ export default function LaboratorioPage() {
         <p>Laboratório • Nexus ERP</p>
         <p className="font-mono text-[11px]">lab/v0.1</p>
       </footer>
+      </div>
     </div>
   )
 }

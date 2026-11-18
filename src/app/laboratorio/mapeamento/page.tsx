@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic"
 import { ArrowLeft, FlaskConical } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { GlobalAdminBar } from "@/components/IAM/GlobalAdminBar"
 
 // Konva só roda no browser — importação dinâmica sem SSR
 const UniversalMapEditor = dynamic(
@@ -19,6 +20,7 @@ export default function MapeamentoLabPage() {
 
   return (
     <div className="h-screen w-full bg-slate-950 text-slate-100 flex flex-col">
+      <GlobalAdminBar currentWorkspaceId="ws_lab" currentMapId="MAP-LAB-01" />
       {/* Header compacto */}
       <header className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-800/80 bg-slate-900 shrink-0">
         <button

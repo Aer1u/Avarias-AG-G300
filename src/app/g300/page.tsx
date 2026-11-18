@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { ChevronLeft } from "lucide-react"
+import { GlobalAdminBar } from "@/components/IAM/GlobalAdminBar"
 
 interface SubModule {
   id: string
@@ -43,6 +44,9 @@ export default function G300HubPage() {
       className="min-h-screen w-full flex flex-col items-center justify-center"
       style={{ background: "linear-gradient(135deg, #07090f 0%, #0b0f1a 100%)" }}
     >
+      {/* IAM – oculto por padrão; ativar com Ctrl+Shift+D */}
+      <GlobalAdminBar currentWorkspaceId="ws_g300" />
+
       {/* Top glow */}
       <div className="fixed inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse 70% 35% at 50% -5%, rgba(59,130,246,0.09) 0%, transparent 70%)" }} />
 

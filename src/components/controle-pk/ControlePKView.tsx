@@ -35,8 +35,13 @@ import {
   Hourglass,
   BarChart3,
   Table2,
+  Lock,
+  Shield,
+  ShieldAlert,
 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
+import { useAuthz } from "@/components/IAM/useAuthz"
+import { GlobalAdminBar } from "@/components/IAM/GlobalAdminBar"
 import { ControlePKDashboard } from "./ControlePKDashboard"
 import {
   ControlePKRow,
@@ -394,6 +399,37 @@ export function ControlePKView() {
   // Main navigation tab (Dashboard consolidated view vs Table view)
   const [mainTab, setMainTab] = useState<"dashboard" | "tabela">("dashboard")
 
+  // Governança e Controle de Acesso (IAM)
+  const {
+    activeUser,
+    authorityLevel,
+    isPlatformOwner,
+    isPlatformAdmin,
+    can
+  } = useAuthz(undefined, "ws_mkbr")
+
+  // Permissões granulares do módulo Controle PK vinculadas ao IAM:
+  // 1. O Proprietário Global (ProfissionalTrgm@gmail.com) e Admins possuem controle total
+  const isMasterOrAdmin = isPlatformOwner || isPlatformAdmin || authorityLevel <= 3
+
+  // 2. Edição: permitido para Dono/Admins ou papéis com permissão explícita no IAM
+  const canEdit = isMasterOrAdmin || can("pk.record.manage") || can("object.edit")
+
+  // 3. Visão do Dashboard: aberta por padrão no workspace, gerenciada pelo IAM
+  const canViewDashboard = true
+
+  // 4. Visão da Tabela: aberta por padrão no workspace, gerenciada pelo IAM
+  const canViewTable = true
+
+  // Sincroniza a aba ativa caso o usuário possua acesso a apenas uma das abas
+  useEffect(() => {
+    if (canViewTable && !canViewDashboard && mainTab === "dashboard") {
+      setMainTab("tabela")
+    } else if (!canViewTable && canViewDashboard && mainTab === "tabela") {
+      setMainTab("dashboard")
+    }
+  }, [canViewTable, canViewDashboard, mainTab])
+
   // Filters
   const [search, setSearch] = useState("")
   const [filterTab, setFilterTab] = useState<FilterTab>("todos")
@@ -564,6 +600,10 @@ export function ControlePKView() {
   // Add one or multiple avisos manually
   const handleAddAvisos = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
+    if (!canEdit) {
+      showToast("error", "Ação não permitida: seu usuário possui perfil de apenas leitura.")
+      return
+    }
     const { uniqueTokens, toInsert, duplicates } = addAvisosPreview
     if (uniqueTokens.length === 0) return
 
@@ -665,6 +705,10 @@ export function ControlePKView() {
 
   const handleSaveEditModal = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!canEdit) {
+      showToast("error", "Ação não permitida: seu usuário possui perfil de apenas leitura.")
+      return
+    }
     if (!editingRow) return
     const normalizedAviso = normalizeAviso(editDraft.aviso)
     if (!normalizedAviso) {
@@ -756,6 +800,10 @@ export function ControlePKView() {
   }
 
   const handleDeleteRow = async (row: ControlePKRow) => {
+    if (!canEdit) {
+      showToast("error", "Ação não permitida: seu usuário possui perfil de apenas leitura.")
+      return
+    }
     try {
       const { error } = await supabase
         .from("controle_pk")
@@ -827,6 +875,10 @@ export function ControlePKView() {
   }, [parseResult, rows])
 
   const handleApplyImport = async () => {
+    if (!canEdit) {
+      showToast("error", "Ação não permitida: seu usuário possui perfil de apenas leitura.")
+      return
+    }
     const updates = importAggregation.matchedUpdates
     if (updates.length === 0) {
       showToast(
@@ -1261,6 +1313,7 @@ export function ControlePKView() {
       className="min-h-screen w-full flex flex-col text-slate-100"
       style={{ background: "linear-gradient(135deg, #07090f 0%, #0b0f1a 100%)" }}
     >
+      <GlobalAdminBar currentWorkspaceId="ws_mkbr" />
       <div
         className="fixed inset-0 pointer-events-none"
         style={{
@@ -1403,55 +1456,66 @@ export function ControlePKView() {
         {/* Abas principais: Dashboard (Consolidado) vs Tabela */}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setMainTab("dashboard")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition-all border cursor-pointer ${
-                mainTab === "dashboard"
-                  ? "bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-600/20"
-                  : "bg-slate-900/60 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800"
-              }`}
-            >
-              <BarChart3 size={13} />
-              Dashboard
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setMainTab("tabela")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition-all border cursor-pointer ${
-                mainTab === "tabela"
-                  ? "bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-600/20"
-                  : "bg-slate-900/60 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800"
-              }`}
-            >
-              <Table2 size={13} />
-              Tabela
-              <span
-                className={`px-1.5 py-0.5 rounded-md font-mono text-[10px] leading-none ${
-                  mainTab === "tabela"
-                    ? "bg-white/20 text-white"
-                    : "bg-slate-800 text-slate-300"
+            {canViewDashboard && (
+              <button
+                type="button"
+                onClick={() => setMainTab("dashboard")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition-all border cursor-pointer ${
+                  mainTab === "dashboard"
+                    ? "bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-600/20"
+                    : "bg-slate-900/60 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800"
                 }`}
               >
-                {periodFilteredRows.length}
-              </span>
-            </button>
+                <BarChart3 size={13} />
+                Dashboard
+              </button>
+            )}
+
+            {canViewTable && (
+              <button
+                type="button"
+                onClick={() => setMainTab("tabela")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition-all border cursor-pointer ${
+                  mainTab === "tabela"
+                    ? "bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-600/20"
+                    : "bg-slate-900/60 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800"
+                }`}
+              >
+                <Table2 size={13} />
+                Tabela
+                <span
+                  className={`px-1.5 py-0.5 rounded-md font-mono text-[10px] leading-none ${
+                    mainTab === "tabela"
+                      ? "bg-white/20 text-white"
+                      : "bg-slate-800 text-slate-300"
+                  }`}
+                >
+                  {periodFilteredRows.length}
+                </span>
+              </button>
+            )}
           </div>
 
           {mainTab === "dashboard" && (
-            <button
-              type="button"
-              onClick={() => {
-                setMainTab("tabela")
-                setShowAddModal(true)
-              }}
-              disabled={tableMissing}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-slate-200 text-xs font-semibold tracking-wide transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <Plus size={14} className="text-emerald-400" />
-              <span>Novo Aviso</span>
-            </button>
+            canEdit ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setMainTab("tabela")
+                  setShowAddModal(true)
+                }}
+                disabled={tableMissing}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-slate-200 text-xs font-semibold tracking-wide transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Plus size={14} className="text-emerald-400" />
+                <span>Novo Aviso</span>
+              </button>
+            ) : (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-400 text-xs font-medium">
+                <Lock size={12} className="text-slate-500" />
+                <span>Modo Leitura</span>
+              </div>
+            )
           )}
         </div>
 
@@ -1885,16 +1949,23 @@ export function ControlePKView() {
               />
             </div>
 
-            <button
-              type="button"
-              onClick={() => setShowAddModal(true)}
-              disabled={tableMissing}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#4edea3] hover:bg-[#3cc990] text-[#003157] text-xs font-semibold tracking-wide transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap shrink-0"
-              title="Adicionar um ou vários avisos"
-            >
-              <Plus size={14} />
-              <span>Aviso</span>
-            </button>
+            {canEdit ? (
+              <button
+                type="button"
+                onClick={() => setShowAddModal(true)}
+                disabled={tableMissing}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#4edea3] hover:bg-[#3cc990] text-[#003157] text-xs font-semibold tracking-wide transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap shrink-0"
+                title="Adicionar um ou vários avisos"
+              >
+                <Plus size={14} />
+                <span>Aviso</span>
+              </button>
+            ) : (
+              <div className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800 text-slate-400 text-xs font-medium shrink-0">
+                <Lock size={12} className="text-slate-500" />
+                <span>Leitor</span>
+              </div>
+            )}
 
             <div className="relative" ref={actionsMenuRef}>
               <button
@@ -1920,18 +1991,20 @@ export function ControlePKView() {
                     transition={{ duration: 0.14 }}
                     className="absolute right-0 top-full mt-2 z-40 w-56 rounded-2xl border border-[#273647] bg-[#0d1c2d]/95 backdrop-blur-xl shadow-2xl p-1.5 space-y-1"
                   >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowActionsMenu(false)
-                        setShowImportModal(true)
-                      }}
-                      disabled={tableMissing}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left text-xs font-semibold text-[#9fcaff] hover:bg-[#159BFF]/15 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      <UploadCloud size={15} className="text-[#159BFF] shrink-0" />
-                      <span>Atualizar via Planilha</span>
-                    </button>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowActionsMenu(false)
+                          setShowImportModal(true)
+                        }}
+                        disabled={tableMissing}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left text-xs font-semibold text-[#9fcaff] hover:bg-[#159BFF]/15 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <UploadCloud size={15} className="text-[#159BFF] shrink-0" />
+                        <span>Atualizar via Planilha</span>
+                      </button>
+                    )}
 
                     <button
                       type="button"
@@ -2170,22 +2243,30 @@ export function ControlePKView() {
                           </td>
                           <td className="py-3 px-3 text-right whitespace-nowrap">
                             <div className="inline-flex items-center justify-end gap-0.5">
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEditModal(row)}
-                                className="p-1.5 rounded-lg text-[#89919e] hover:text-[#9fcaff] hover:bg-[#159BFF]/10 transition-colors cursor-pointer"
-                                title={`Editar aviso ${row.aviso}`}
-                              >
-                                <Pencil size={13} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void handleDeleteRow(row)}
-                                className="p-1.5 rounded-lg text-[#89919e] hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
-                                title={`Remover aviso ${row.aviso}`}
-                              >
-                                <Trash2 size={13} />
-                              </button>
+                              {canEdit ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditModal(row)}
+                                    className="p-1.5 rounded-lg text-[#89919e] hover:text-[#9fcaff] hover:bg-[#159BFF]/10 transition-colors cursor-pointer"
+                                    title={`Editar aviso ${row.aviso}`}
+                                  >
+                                    <Pencil size={13} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleDeleteRow(row)}
+                                    className="p-1.5 rounded-lg text-[#89919e] hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                                    title={`Remover aviso ${row.aviso}`}
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </>
+                              ) : (
+                                <span className="p-1.5 text-slate-600 cursor-not-allowed" title="Apenas visualização">
+                                  <Lock size={12} />
+                                </span>
+                              )}
                             </div>
                           </td>
                         </tr>

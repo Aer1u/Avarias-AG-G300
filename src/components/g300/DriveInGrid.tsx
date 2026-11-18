@@ -977,14 +977,17 @@ export function DriveInGrid({
                           const hasTilted = cellProducts.some(p => p.qtd_tombada > 0)
                           const hasDevolucao = cellProducts.some(p => isDevolucao(p))
                           const isMixedCell = new Set(cellProducts.map(p => p.sku)).size > 1
-                          const cellCountedPallets = !isEmpty
-                            ? recomputePalletCounts(
-                                cellProducts.map(p => ({ ...p, posicao: positionId || "", produto: p.sku, quantidade_total: p.quantidade }))
-                              ).reduce((sum, p) => sum + (Number(p.paletes) || 0), 0)
-                            : 0
+                          // Um slot de drive-in = 1 palete físico. IDs distintos na mesma célula
+                          // são fragmentação de dados, não paletes separados.
+                          // Detectamos fragmentação para exibir o aviso de unificação, mas NÃO
+                          // contamos como "2 PTs" — seria informação incorreta.
                           const cellDistinctIds = !isEmpty
                             ? Array.from(new Set(cellProducts.map(p => normalizePalletId(p.id_palete)).filter(Boolean)))
                             : []
+                          // Fragmentação = múltiplos IDs de palete distintos no mesmo slot
+                          const cellHasFragmentedIds = cellDistinctIds.length > 1
+                          // Para fins de exibição, 1 slot = 1 palete (MIX ou mono)
+                          const cellCountedPallets = isEmpty ? 0 : 1
                           const sku = !isEmpty ? (isMixedCell ? `${cellProducts.length} Prods` : cellProducts[0].sku) : ""
                           const description = !isEmpty ? (isMixedCell ? "Múltiplos produtos neste palete" : cellProducts[0].descricao) : ""
                           const qty = !isEmpty ? Math.round(cellProducts.reduce((sum, p) => sum + p.quantidade, 0)) : 0
@@ -1134,12 +1137,14 @@ export function DriveInGrid({
 
                                   {/* Absolute Status Icons - Top Right */}
                                   <div className="absolute top-0.5 right-0.5 sm:top-1.5 sm:right-1.5 flex gap-0.5 sm:gap-1 z-20">
-                                      {cellCountedPallets > 1 && (
+                                      {/* Badge de fragmentação: aparece quando o slot tem IDs de palete divergentes (dado legado).
+                                          Não significa "2 paletes físicos" — significa que os registros precisam ser unificados. */}
+                                      {cellHasFragmentedIds && (
                                           <div
-                                            className="px-1 sm:px-1.5 h-3 sm:h-3.5 rounded-full bg-rose-600 flex items-center justify-center shadow-lg"
-                                            title={`${cellCountedPallets} paletes nesta coordenada (${cellDistinctIds.join(', ')})`}
+                                            className="px-1 sm:px-1.5 h-3 sm:h-3.5 rounded-full bg-amber-500 flex items-center justify-center shadow-lg"
+                                            title={`IDs fragmentados nesta célula: ${cellDistinctIds.join(', ')} — Entre no modo edição e clique em "Unificar"`}
                                           >
-                                              <span className="text-[6px] sm:text-[8px] font-bold text-white uppercase">{cellCountedPallets} PTs</span>
+                                              <span className="text-[6px] sm:text-[8px] font-bold text-white uppercase">⚠️ ID</span>
                                           </div>
                                       )}
                                       {hasWet && (
@@ -1291,17 +1296,18 @@ export function DriveInGrid({
                     ))}
                   </div>
                   <p className="text-[9px] leading-snug opacity-85">
-                    IDs diferentes na mesma coordenada (Prof. + Nível) somam paletes separados. Se for um único palete físico, unifique o ID na edição.
+                    IDs diferentes na mesma coordenada (Prof. + Nível) somam paletes separados. Se for um único palete físico, clique abaixo para unificar sob o mesmo ID de Palete MIX.
                   </p>
-                  {isEditModeActive && (
-                    <button
-                      type="button"
-                      onClick={handleUnifyCellPalletIds}
-                      className="mt-1.5 w-full py-1.5 px-3 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 shadow transition-colors cursor-pointer"
-                    >
-                      <Layers size={13} /> Unificar em 1 Palete MIX
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!isEditModeActive) setIsEditModeActive(true);
+                      handleUnifyCellPalletIds();
+                    }}
+                    className="mt-1.5 w-full py-1.5 px-3 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 shadow transition-colors cursor-pointer"
+                  >
+                    <Layers size={13} /> Unificar em 1 Palete MIX
+                  </button>
                 </div>
               )}
 

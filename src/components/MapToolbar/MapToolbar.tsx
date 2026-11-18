@@ -13,6 +13,8 @@ interface MapToolbarProps {
   gridSize: number
   zoom: number
   objectsCount: number
+  spatialMode?: "2d" | "isometric" | "3d"
+  onSpatialModeChange?: (mode: "2d" | "isometric" | "3d") => void
   onToolChange: (tool: "select" | "pan" | "draw_area" | "draw_floor") => void
   onToggleSnap: () => void
   onGridSizeChange: (size: number) => void
@@ -30,6 +32,7 @@ interface MapToolbarProps {
   onOpenNewFloor: () => void
   onOpenResourceEngine?: () => void
   onOpenSystemManager?: () => void
+  onOpenIAM?: () => void
   canUndo?: boolean
   canRedo?: boolean
   onUndo?: () => void
@@ -42,6 +45,8 @@ export default function MapToolbar({
   gridSize,
   zoom,
   objectsCount,
+  spatialMode = "2d",
+  onSpatialModeChange,
   onToolChange,
   onToggleSnap,
   onGridSizeChange,
@@ -59,6 +64,7 @@ export default function MapToolbar({
   onOpenNewFloor,
   onOpenResourceEngine,
   onOpenSystemManager,
+  onOpenIAM,
   canUndo = false,
   canRedo = false,
   onUndo,
@@ -66,8 +72,52 @@ export default function MapToolbar({
 }: MapToolbarProps) {
   return (
     <div className="h-12 bg-slate-900 border-b border-slate-800 px-3 flex items-center justify-between text-slate-100 select-none shrink-0 gap-2">
-      {/* Esquerda: Modos de Interação */}
-      <div className="flex items-center gap-1.5">
+      {/* Esquerda: Modos de Visualização & Interação */}
+      <div className="flex items-center gap-2">
+        {/* Alternador Compacto de Visualização: 2D · Isométrico · 3D Livre */}
+        <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800 gap-0.5 shadow-inner">
+          <button
+            onClick={() => onSpatialModeChange?.("2d")}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all ${
+              spatialMode === "2d"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+            title="Visualização 2D — Planta Superior"
+          >
+            <span>📐</span>
+            <span>2D</span>
+          </button>
+
+          <button
+            onClick={() => onSpatialModeChange?.("isometric")}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all ${
+              spatialMode === "isometric"
+                ? "bg-purple-600 text-white shadow-sm"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+            title="Visualização Isométrica Técnica — Câmera Ortográfica Axonométrica"
+          >
+            <span>🧊</span>
+            <span>Isométrico</span>
+          </button>
+
+          <button
+            onClick={() => onSpatialModeChange?.("3d")}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all ${
+              spatialMode === "3d"
+                ? "bg-emerald-600 text-white shadow-sm"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+            title="Visualização 3D Livre — Câmera Perspectiva com Navegação Orbital 360°"
+          >
+            <span>🌐</span>
+            <span>3D Livre</span>
+          </button>
+        </div>
+
+        <div className="h-5 w-px bg-slate-800" />
+
         <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800 gap-0.5">
           {/* Selecionar */}
           <button
@@ -181,6 +231,7 @@ export default function MapToolbar({
 
         {/* Snap e Grade */}
         <div className="flex items-center gap-1 bg-slate-950 px-1.5 py-0.5 rounded-lg border border-slate-800">
+          {/* Botão Snap on/off */}
           <button
             onClick={onToggleSnap}
             className={`px-2 py-1 rounded text-xs font-medium flex items-center gap-1 transition-colors ${
@@ -188,7 +239,7 @@ export default function MapToolbar({
                 ? "bg-emerald-950/60 text-emerald-400 border border-emerald-800/40"
                 : "text-slate-500 hover:text-slate-300"
             }`}
-            title="Alinhar automaticamente na grade"
+            title={snapEnabled ? "Snap ativo — objetos encaixam na grade" : "Snap desativado — movimento livre"}
           >
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z" />
@@ -196,16 +247,42 @@ export default function MapToolbar({
             <span>Snap</span>
           </button>
 
-          <select
+          {/* Separador */}
+          <div className="h-4 w-px bg-slate-800 mx-0.5" />
+
+          {/* Label */}
+          <span className="text-[10px] text-slate-500 font-medium pr-0.5">Grade:</span>
+
+          {/* Chips de tamanho de grid */}
+          {([5, 10, 20, 25, 50, 100] as const).map((size) => (
+            <button
+              key={size}
+              onClick={() => onGridSizeChange(size)}
+              className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                gridSize === size
+                  ? "bg-blue-600 text-white"
+                  : "text-slate-500 hover:text-slate-200 hover:bg-slate-800"
+              }`}
+              title={`Grade de ${size}px${size <= 10 ? " — Fino" : size <= 25 ? " — Médio" : " — Grosso"}`}
+            >
+              {size}
+            </button>
+          ))}
+
+          {/* Input customizado */}
+          <input
+            type="number"
+            min={1}
+            max={200}
             value={gridSize}
-            onChange={(e) => onGridSizeChange(Number(e.target.value))}
-            className="bg-transparent text-xs text-slate-300 focus:outline-none cursor-pointer pr-1"
-          >
-            <option value="10" className="bg-slate-900">10px</option>
-            <option value="20" className="bg-slate-900">20px</option>
-            <option value="40" className="bg-slate-900">40px</option>
-            <option value="50" className="bg-slate-900">50px</option>
-          </select>
+            onChange={(e) => {
+              const v = Number(e.target.value)
+              if (v >= 1 && v <= 200) onGridSizeChange(v)
+            }}
+            className="w-10 bg-slate-900 border border-slate-700 text-[10px] text-slate-300 rounded px-1 py-0.5 text-center focus:outline-none focus:border-blue-500"
+            title="Tamanho personalizado da grade (1–200px)"
+          />
+          <span className="text-[10px] text-slate-600">px</span>
         </div>
       </div>
 
@@ -266,6 +343,17 @@ export default function MapToolbar({
           >
             <span>🔐</span>
             <span>Sistemas de Saldo</span>
+          </button>
+        )}
+
+        {onOpenIAM && (
+          <button
+            onClick={onOpenIAM}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-950/70 hover:bg-indigo-900/80 border border-indigo-800/60 text-indigo-300 hover:text-white text-xs font-bold transition-all shadow-sm"
+            title="NEXUS IAM — Gestão Central de Identidade, Papéis e Permissões"
+          >
+            <span>🛡️</span>
+            <span>IAM & Permissões</span>
           </button>
         )}
       </div>

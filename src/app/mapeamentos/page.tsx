@@ -44,6 +44,7 @@ import { MapeamentoWarehouseMap } from "@/components/mapeamentos/MapeamentoWareh
 import { MapeamentoTable } from "@/components/mapeamentos/MapeamentoTable"
 import { MapeamentoEmptyState } from "@/components/mapeamentos/MapeamentoEmptyState"
 import { MapeamentoPosicaoModal } from "@/components/mapeamentos/MapeamentoPosicaoModal"
+import { GlobalAdminBar } from "@/components/IAM/GlobalAdminBar"
 
 export default function MapeamentosPage() {
   const router = useRouter()
@@ -673,6 +674,7 @@ export default function MapeamentosPage() {
 
   return (
     <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-100">
+      <GlobalAdminBar currentWorkspaceId="ws_maps" />
       {/* ── HEADER SUPERIOR ───────────────────────────────────────────────── */}
       <header className="sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800/80 px-4 md:px-8 py-3.5 transition-colors">
         <div className="max-w-[1600px] mx-auto flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">

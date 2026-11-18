@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useState } from "react"
+import Link from "next/link"
 import { motion } from "framer-motion"
 import { ChevronLeft } from "lucide-react"
+import { GlobalAdminBar } from "@/components/IAM/GlobalAdminBar"
 
 interface SubModule {
   id: string
@@ -38,30 +39,24 @@ const subModules: SubModule[] = [
 ]
 
 export default function MkbrHubPage() {
-  const router = useRouter()
-  const [mounted, setMounted] = useState(false)
   const [hovered, setHovered] = useState<string | null>(null)
-  useEffect(() => { setMounted(true) }, [])
-  if (!mounted) return null
 
   return (
     <div
-      className="min-h-screen w-full flex flex-col items-center justify-center"
+      className="min-h-screen w-full flex flex-col items-center justify-between"
       style={{ background: "linear-gradient(135deg, #07090f 0%, #0b0f1a 100%)" }}
     >
+      <GlobalAdminBar currentWorkspaceId="ws_mkbr" />
       <div className="fixed inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse 70% 35% at 50% -5%, rgba(16,185,129,0.09) 0%, transparent 70%)" }} />
 
       <div className="relative z-10 w-full max-w-lg px-6 py-12 flex flex-col gap-10">
 
-        <motion.button
-          initial={{ opacity: 0, x: -12 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.4 }}
-          onClick={() => router.push("/")}
+        <Link
+          href="/"
           className="flex items-center gap-1.5 text-slate-500 hover:text-slate-300 text-xs font-semibold uppercase tracking-widest transition-colors cursor-pointer w-fit"
         >
           <ChevronLeft size={14} /> Módulos
-        </motion.button>
+        </Link>
 
         <motion.div
           initial={{ opacity: 0, y: -16 }}
@@ -93,13 +88,11 @@ export default function MkbrHubPage() {
                   </span>
                 </div>
               ) : (
-                <motion.button
-                  onHoverStart={() => setHovered(sub.id)}
-                  onHoverEnd={() => setHovered(null)}
-                  whileHover={{ scale: 1.015 }}
-                  whileTap={{ scale: 0.985 }}
-                  onClick={() => router.push(sub.href)}
-                  className="w-full flex items-center justify-between px-5 py-4 rounded-xl text-left cursor-pointer transition-all duration-200"
+                <Link
+                  href={sub.href}
+                  onMouseEnter={() => setHovered(sub.id)}
+                  onMouseLeave={() => setHovered(null)}
+                  className="w-full flex items-center justify-between px-5 py-4 rounded-xl text-left cursor-pointer transition-all duration-200 block"
                   style={{
                     background: hovered === sub.id ? "rgba(16,185,129,0.08)" : "rgba(255,255,255,0.02)",
                     border: `1px solid ${hovered === sub.id ? "rgba(16,185,129,0.35)" : "rgba(255,255,255,0.06)"}`,
@@ -111,15 +104,13 @@ export default function MkbrHubPage() {
                     <p className="text-sm font-bold text-slate-200">{sub.label}</p>
                     <p className="text-xs text-slate-500 mt-0.5">{sub.description}</p>
                   </div>
-                  <motion.svg
-                    animate={{ x: hovered === sub.id ? 3 : 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="w-4 h-4 text-emerald-400 flex-shrink-0 ml-4"
+                  <svg
+                    className={`w-4 h-4 text-emerald-400 flex-shrink-0 ml-4 transition-transform duration-200 ${hovered === sub.id ? "translate-x-1" : ""}`}
                     fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
-                  </motion.svg>
-                </motion.button>
+                  </svg>
+                </Link>
               )}
             </motion.div>
           ))}
