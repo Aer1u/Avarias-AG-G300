@@ -31,7 +31,7 @@ export async function searchBaseCodigos(
   try {
     let req = supabase
       .from("base_codigos")
-      .select('id, "Código", "Descrição", "Grade", "Tipo"')
+      .select('"Código", "Descrição", "Grade", "Tipo"')
 
     const q = query.trim().toUpperCase()
     if (q) {

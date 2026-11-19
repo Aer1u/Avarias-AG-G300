@@ -190,6 +190,8 @@ export default function SystemRecordsModal({
   const [isSearchingProduct, setIsSearchingProduct] = useState(false)
   const [selectedDropdownIdx, setSelectedDropdownIdx] = useState(0)
   const currentSearchQuery = useRef("")
+  const searchDebounceRef = useRef<NodeJS.Timeout | null>(null)
+  const skuCacheRef = useRef<Map<string, BaseCodigoItem>>(new Map())
   const productDropdownRef = useRef<HTMLDivElement>(null)
 
   // Modal de Importação de Recebimentos
@@ -352,7 +354,6 @@ export default function SystemRecordsModal({
           isDirty: true,
         }
 
-        // Mantém quantity sincronizado com entrada ou saida
         const ent = typeof nextRow.entrada === "number" ? nextRow.entrada : 0
         const sai = typeof nextRow.saida === "number" ? nextRow.saida : 0
         nextRow.quantity = ent > 0 ? ent : sai
@@ -362,25 +363,46 @@ export default function SystemRecordsModal({
     )
   }
 
-  // ── Autocomplete base_codigos ao digitar SKU ───────────────
+  // ── Autocomplete base_codigos com debounce para evitar travamentos ──
   const handleSkuInputChange = (id: string, query: string) => {
     updateRow(id, "sku", query.toUpperCase())
     setActiveSearchId(id)
     setSelectedDropdownIdx(0)
     currentSearchQuery.current = query
 
-    if (!query.trim()) {
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current)
+    }
+
+    const trimmed = query.trim().toUpperCase()
+    if (!trimmed) {
       setSearchResults([])
+      setIsSearchingProduct(false)
+      return
+    }
+
+    // Se já está no cache, exibe instantaneamente sem requisição de rede
+    if (skuCacheRef.current.has(trimmed)) {
+      setSearchResults([skuCacheRef.current.get(trimmed)!])
       return
     }
 
     setIsSearchingProduct(true)
-    searchBaseCodigos(query.trim(), 10).then(({ data }) => {
-      if (currentSearchQuery.current === query) {
-        setSearchResults(data)
-        setIsSearchingProduct(false)
-      }
-    })
+    searchDebounceRef.current = setTimeout(() => {
+      searchBaseCodigos(trimmed, 12)
+        .then(({ data }) => {
+          if (currentSearchQuery.current === query) {
+            data.forEach((item) => {
+              skuCacheRef.current.set(item["Código"].toUpperCase(), item)
+            })
+            setSearchResults(data)
+            setIsSearchingProduct(false)
+          }
+        })
+        .catch(() => {
+          setIsSearchingProduct(false)
+        })
+    }, 150)
   }
 
   const handleSelectProduct = (id: string, item: BaseCodigoItem) => {
@@ -405,9 +427,14 @@ export default function SystemRecordsModal({
     if (!trimmed) return
     const row = registros.find((r) => r.id === id)
     if (row && !row.description) {
+      if (skuCacheRef.current.has(trimmed)) {
+        handleSelectProduct(id, skuCacheRef.current.get(trimmed)!)
+        return
+      }
       const { data } = await searchBaseCodigos(trimmed, 5)
       const exact = data.find((d) => d["Código"].toUpperCase() === trimmed)
       if (exact) {
+        skuCacheRef.current.set(trimmed, exact)
         handleSelectProduct(id, exact)
       }
     }
@@ -586,10 +613,15 @@ export default function SystemRecordsModal({
     const descMap = new Map<string, string>()
 
     for (const sku of skus) {
-      const { data } = await searchBaseCodigos(sku, 3)
-      const exact = data.find((d) => d["Código"].toUpperCase() === sku)
-      if (exact) {
-        descMap.set(sku, exact["Descrição"])
+      if (skuCacheRef.current.has(sku)) {
+        descMap.set(sku, skuCacheRef.current.get(sku)!["Descrição"])
+      } else {
+        const { data } = await searchBaseCodigos(sku, 3)
+        const exact = data.find((d) => d["Código"].toUpperCase() === sku)
+        if (exact) {
+          skuCacheRef.current.set(sku, exact)
+          descMap.set(sku, exact["Descrição"])
+        }
       }
     }
 
@@ -1090,6 +1122,24 @@ export default function SystemRecordsModal({
                             value={row.sku}
                             onChange={(e) => handleSkuInputChange(row.id, e.target.value)}
                             onBlur={() => handleSkuBlur(row.id, row.sku)}
+                            onKeyDown={(e) => {
+                              if (isSearchActive && searchResults.length > 0) {
+                                if (e.key === "ArrowDown") {
+                                  e.preventDefault()
+                                  setSelectedDropdownIdx((p) => Math.min(p + 1, searchResults.length - 1))
+                                } else if (e.key === "ArrowUp") {
+                                  e.preventDefault()
+                                  setSelectedDropdownIdx((p) => Math.max(p - 1, 0))
+                                } else if (e.key === "Enter") {
+                                  e.preventDefault()
+                                  if (searchResults[selectedDropdownIdx]) {
+                                    handleSelectProduct(row.id, searchResults[selectedDropdownIdx])
+                                  }
+                                } else if (e.key === "Escape") {
+                                  setActiveSearchId(null)
+                                }
+                              }
+                            }}
                             placeholder="Buscar SKU..."
                             className={cn(
                               "w-full bg-transparent border rounded px-2 py-1 text-xs font-mono uppercase outline-none transition-colors",
@@ -1135,8 +1185,10 @@ export default function SystemRecordsModal({
                                       <button
                                         key={item["Código"]}
                                         type="button"
-                                        onMouseDown={(e) => e.preventDefault()}
-                                        onClick={() => handleSelectProduct(row.id, item)}
+                                        onMouseDown={(e) => {
+                                          e.preventDefault()
+                                          handleSelectProduct(row.id, item)
+                                        }}
                                         onMouseEnter={() => setSelectedDropdownIdx(idx)}
                                         className={cn(
                                           "w-full px-3 py-2 flex items-center justify-between text-left border-b border-slate-800 last:border-0 transition-colors",
