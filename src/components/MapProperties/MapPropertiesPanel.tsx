@@ -382,7 +382,23 @@ export default function MapPropertiesPanel({
   onSaveAsModelDefault,
   onOpenResourceEngine,
 }: MapPropertiesPanelProps) {
-  const [activeTab, setActiveTab] = useState<"visual" | "operational">("visual")
+  const isDrive = Boolean(
+    selectedObject &&
+      (selectedObject.type.includes("drive") ||
+        selectedObject.category === "storage" ||
+        Array.isArray(selectedObject.props?.channels))
+  )
+
+  const [activeTab, setActiveTab] = useState<"visual" | "operational">(
+    isDrive ? "operational" : "visual"
+  )
+
+  // Quando seleciona um Drive-In ou estrutura de armazenagem, abre direto na aba de Estrutura & Canais
+  React.useEffect(() => {
+    if (isDrive) {
+      setActiveTab("operational")
+    }
+  }, [selectedObject?.id, isDrive])
 
   if (!selectedObject) {
     return (
@@ -490,6 +506,71 @@ export default function MapPropertiesPanel({
           </>
         ) : (
           <>
+            {/* Atalho se for Drive-In e estiver na aba de geometria */}
+            {isDrive && (
+              <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-between">
+                <span className="text-[11px] font-bold text-amber-300">
+                  🏗️ Configuração de Canais & Teste
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("operational")}
+                  className="px-2 py-1 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[10px] transition-colors"
+                >
+                  Abrir Canais & Teste ▶
+                </button>
+              </div>
+            )}
+
+            {/* Ações Especiais para Palete (Padrão PBR em escala métrica real) */}
+            {selectedObject.type === "pallet" && (
+              <div className="p-2.5 rounded-lg bg-amber-950/30 border border-amber-600/40 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-amber-300 flex items-center gap-1.5">
+                    <span>📦</span>
+                    <span>Padronização PBR (1.0m × 1.2m)</span>
+                  </span>
+                  <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-mono">
+                    Escala Real
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 leading-tight">
+                  Calibra este palete para coincidir perfeitamente com os slots do Drive-In:
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onUpdateObject({
+                        width: 20,
+                        height: 24,
+                        physicalDimensions: {
+                          width: 1.0,
+                          length: 1.2,
+                          height: 0.14,
+                          elevationZ: 0,
+                          unit: "m",
+                          lockAspectRatio: false,
+                        },
+                      })
+                    }}
+                    className="flex-1 py-1 px-2 rounded bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold text-[10px] transition-colors shadow-sm"
+                  >
+                    📐 Calibrar para PBR (20×24 px)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onUpdateProp("loaded", !selectedObject.props?.loaded)
+                    }}
+                    className="py-1 px-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-semibold transition-colors"
+                  >
+                    {selectedObject.props?.loaded ? "📦 Carga Ativa" : "Vazio"}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Dimensões Físicas Reais (2D & 3D Ready) */}
             <PhysicalDimensionsCard
               selectedObject={selectedObject}

@@ -70,6 +70,7 @@ export interface InternalStructureConfig {
   hasLevels: boolean
   levelsCount: number
   depthsCount: number
+  lanesCount?: number
   baysCount?: number
   levelHeightM?: number
   bayWidthM?: number

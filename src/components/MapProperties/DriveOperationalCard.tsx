@@ -529,6 +529,41 @@ export default function DriveOperationalCard({
           Cada canal possui controle de preenchimento e simulador de paletes individual:
         </p>
 
+        {/* ── Painel de Ação Rápida de Teste de Preenchimento ── */}
+        <div className="p-2 bg-gradient-to-r from-amber-950/50 to-blue-950/50 rounded-lg border border-amber-500/40 flex items-center justify-between gap-2 shadow-sm">
+          <div>
+            <span className="text-[10px] font-bold text-amber-300 flex items-center gap-1">
+              <span>🧪</span>
+              <span>Simulador de Paletes (2D & 3D)</span>
+            </span>
+            <span className="text-[9px] text-slate-400 block">
+              Aloca paletes de teste para conferir na cena 2D e 3D
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                if (channels.length > 0) handleToggleSlotPallet(channels[0].id, 1, 1)
+              }}
+              className="px-2 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded text-[10px] shadow transition-colors"
+              title="Colocar palete no Vão 1 (Nível 1, Profundidade 1)"
+            >
+              + Palete (Vão 1)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                channels.forEach((c) => handleFillChannelQuick(c.id, 0.5))
+              }}
+              className="px-2 py-1 bg-blue-900 hover:bg-blue-800 text-blue-200 font-bold rounded text-[10px] border border-blue-700 transition-colors"
+              title="Preenche 50% dos slots de todos os canais"
+            >
+              Simular 50%
+            </button>
+          </div>
+        </div>
+
         <div className="space-y-2">
           {channels.map((chan) => {
             const isExpanded = expandedChannelId === chan.id

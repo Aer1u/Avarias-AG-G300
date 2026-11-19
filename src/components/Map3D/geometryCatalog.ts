@@ -232,9 +232,14 @@ function buildPalletRackGeometry(group: THREE.Group, spatial: UniversalSpatialOb
 // ─────────────────────────────────────────────────────────────
 function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObject) {
   const { width, depth, height } = spatial.dimensions
-  const lanes = Math.max(1, Number(spatial.props?.lanes) || 1)
-  const levels = spatial.internalStructure?.levelsCount || 4
-  const depths = spatial.internalStructure?.depthsCount || 3
+  const props = spatial.props || {}
+  const rawLanes = Number(props.lanes) || Number(spatial.internalStructure?.lanesCount)
+  const channelsCount = Array.isArray(props.channels) && props.channels.length > 0 ? props.channels.length : 0
+  const estimatedLanesByWidth = Math.max(1, Math.round(width / 1.35))
+  const lanes = Math.max(1, rawLanes || channelsCount || (width > 2.0 ? estimatedLanesByWidth : 1))
+
+  const levels = spatial.internalStructure?.levelsCount || Number(props.levels) || 4
+  const depths = spatial.internalStructure?.depthsCount || Number(props.depth) || 4
   const laneWidth = width / lanes
 
   const driveColumnMat = getMaterial("drive_col_indigo", () =>

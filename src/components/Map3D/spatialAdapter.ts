@@ -22,8 +22,32 @@ export function mapObjectToSpatial(
   const ppm = Math.max(1, pixelsPerMeter)
   const phys = ensurePhysicalDimensions(obj, ppm)
 
-  const widthM = phys.width > 0 ? phys.width : Math.max(0.2, pixelsToMeters(obj.width, ppm))
-  const depthM = phys.length > 0 ? phys.length : Math.max(0.2, pixelsToMeters(obj.height, ppm))
+  // Posição no 2D (top-left) convertida para metros
+  const topLeftXM = obj.x / ppm
+  const topLeftYM = obj.y / ppm
+
+  // Extrai estrutura interna e contagens reais do objeto (suporta levels, depth, lanes e channels)
+  const props = obj.props || {}
+  const levelsCount = typeof props.levels === "number"
+    ? props.levels
+    : typeof props.levelsCount === "number"
+    ? props.levelsCount
+    : 4
+  const depthsCount = typeof props.depth === "number"
+    ? props.depth
+    : typeof props.depthsCount === "number"
+    ? props.depthsCount
+    : 4
+  const lanesCount = typeof props.lanes === "number"
+    ? props.lanes
+    : Array.isArray(props.channels) && props.channels.length > 0
+    ? props.channels.length
+    : 1
+
+  // Dimensões físicas fiéis: prioriza as dimensões em pixels do objeto convertidas para metros
+  // para que qualquer redimensionamento de vãos/profundidade no 2D reflita fielmente no 3D
+  const widthM = obj.width > 0 ? pixelsToMeters(obj.width, ppm) : (phys.width > 0 ? phys.width : 1.4)
+  const depthM = obj.height > 0 ? pixelsToMeters(obj.height, ppm) : (phys.length > 0 ? phys.length : 4.0)
   
   // Altura padrão por categoria/tipo caso não definida
   let heightM = phys.height
@@ -38,22 +62,15 @@ export function mapObjectToSpatial(
 
   const elevationM = phys.elevationZ || 0
 
-  // Posição no 2D (top-left) convertida para metros
-  const topLeftXM = obj.x / ppm
-  const topLeftYM = obj.y / ppm
-
   // Âncora universal no centro da base (Z=elevationM)
-  // No 2D, Y cresce para baixo (+Y = sul/frente).
-  // No Three.js com Z vertical (camera.up = 0,0,1), a visão orbital canônica posiciona o observador
-  // em frente ao mapa olhando para o norte (+Y). Para eliminar qualquer espelhamento horizontal
-  // ou inversão de frente/fundo entre 2D e 3D, invertemos o eixo Y:
+  // No 2D: X cresce para a direita, Y cresce para baixo (+Y = frente/sul).
+  // No 3D (Z vertical): X cresce para a direita, Y cresce para o fundo/norte.
+  // Negamos Y para manter orientação canônica onde topo do 2D = fundo do 3D e frente = frente
   const centerX = topLeftXM + widthM / 2
   const centerY = -(topLeftYM + depthM / 2)
   const baseZ = elevationM
 
-  // Rotação em torno do eixo vertical Z:
-  // No 2D, rotação positiva é horária. No Three.js com Z-up, rotação padrão é anti-horária.
-  // Invertemos o sinal para sincronização angular perfeita:
+  // Rotação em torno do eixo vertical Z
   const rotDeg = obj.rotation || 0
   const rotRad = -(rotDeg * Math.PI) / 180
 
@@ -70,11 +87,6 @@ export function mapObjectToSpatial(
       })
     }
   }
-
-  // Extrai estrutura interna se for rack/drive-in
-  const props = obj.props || {}
-  const levelsCount = typeof props.levelsCount === "number" ? props.levelsCount : 4
-  const depthsCount = typeof props.depthsCount === "number" ? props.depthsCount : 3
 
   return {
     id: obj.id,
@@ -96,6 +108,7 @@ export function mapObjectToSpatial(
       hasLevels: obj.category === "storage" || obj.type.includes("drive") || obj.type.includes("rack"),
       levelsCount,
       depthsCount,
+      lanesCount,
       levelHeightM: heightM / Math.max(1, levelsCount),
     },
     props,

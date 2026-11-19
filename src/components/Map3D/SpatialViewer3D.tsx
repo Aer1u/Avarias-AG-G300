@@ -130,10 +130,10 @@ export function SpatialViewer3D({
     // ── CÂMERAS ───────────────────────────────────────────────
     const aspect = width / height
 
-    // Câmera Perspectiva (3D Livre)
+    // Câmera Perspectiva (3D Livre) — orientada frontalmente ao mapa (sem espelhamento)
     const perspCam = new THREE.PerspectiveCamera(50, aspect, 0.5, 1200)
     perspCam.up.set(0, 0, 1)
-    perspCam.position.set(45, -55, 40)
+    perspCam.position.set(20, -60, 45)
     perspCamRef.current = perspCam
 
     // Câmera Ortográfica (Isométrico técnico)
@@ -148,7 +148,7 @@ export function SpatialViewer3D({
     )
     orthoCam.up.set(0, 0, 1)
     const isoDist = 70
-    orthoCam.position.set(isoDist, -isoDist, isoDist * 0.816)
+    orthoCam.position.set(20, -isoDist, isoDist * 0.85)
     orthoCamRef.current = orthoCam
 
     // Controles OrbitControls configurados para Z-up
@@ -407,12 +407,12 @@ export function SpatialViewer3D({
       ortho.updateProjectionMatrix()
 
       const dist = maxDim * 2.2
-      ortho.position.set(center.x + dist, center.y - dist, center.z + dist * 0.816)
+      ortho.position.set(center.x, center.y - dist, center.z + dist * 0.9)
       ortho.lookAt(center)
     } else if (perspCamRef.current) {
       const persp = perspCamRef.current
       const dist = maxDim * 1.6
-      persp.position.set(center.x + dist * 0.8, center.y - dist * 1.1, center.z + dist * 0.8)
+      persp.position.set(center.x, center.y - dist * 1.2, center.z + dist * 0.85)
       persp.lookAt(center)
     }
 
