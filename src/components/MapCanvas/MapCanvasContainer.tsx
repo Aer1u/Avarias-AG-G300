@@ -31,6 +31,7 @@ interface MapCanvasContainerProps {
   gridSize: number
   zoom: number
   tool: "select" | "pan" | "draw_area" | "draw_floor"
+  readOnly?: boolean
   onToolChange?: (tool: "select" | "pan" | "draw_area" | "draw_floor") => void
   onSelect: (id: string | null) => void
   onUpdateObject: (id: string, partial: Partial<MapObject>) => void
@@ -53,6 +54,7 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
       gridSize,
       zoom,
       tool,
+      readOnly = false,
       onToolChange,
       onSelect,
       onUpdateObject,
@@ -761,7 +763,7 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
             listening: true,
           })
           polyLine.id(obj.id)
-          polyLine.draggable(!obj.locked && tool === "select")
+          polyLine.draggable(!readOnly && !obj.locked && tool === "select")
           polyLine.dragBoundFunc(createDragBoundFunc(true, obj))
 
           polyLine.on("click tap", (e) => {
@@ -792,7 +794,7 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
           group.id(obj.id)
           group.position({ x: obj.x, y: obj.y })
           group.rotation(obj.rotation || 0)
-          group.draggable(!obj.locked && tool === "select")
+          group.draggable(!readOnly && !obj.locked && tool === "select")
           group.dragBoundFunc(createDragBoundFunc(false))
           group.dragBoundFunc(createDragBoundFunc(false))
           group.opacity(obj.opacity ?? 1)
@@ -968,7 +970,7 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
           group.id(obj.id)
           group.position({ x: obj.x, y: obj.y })
           group.rotation(obj.rotation || 0)
-          group.draggable(!obj.locked && tool === "select")
+          group.draggable(!readOnly && !obj.locked && tool === "select")
           group.dragBoundFunc(createDragBoundFunc(false))
 
           group.on("click tap", (e) => {
@@ -1019,8 +1021,8 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
         void node
       })
 
-      // Atualiza nós no transformer
-      if (selectedId) {
+      // Atualiza nós no transformer (desativado em modo somente-leitura / visualizador)
+      if (selectedId && !readOnly) {
         const selectedNode = nodeMapRef.current.get(selectedId)
         const selectedObj = objects.find((o) => o.id === selectedId)
         if (selectedNode && selectedNode instanceof Konva.Group) {
@@ -1035,7 +1037,7 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
       }
 
       layer.batchDraw()
-    }, [objects, selectedId, tool, onSelect, onUpdateObject, snap, createDragBoundFunc])
+    }, [objects, selectedId, tool, readOnly, onSelect, onUpdateObject, snap, createDragBoundFunc])
 
     return (
       <div

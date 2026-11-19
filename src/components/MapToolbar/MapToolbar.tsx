@@ -14,6 +14,7 @@ interface MapToolbarProps {
   zoom: number
   objectsCount: number
   spatialMode?: "2d" | "isometric" | "3d"
+  readOnly?: boolean
   onSpatialModeChange?: (mode: "2d" | "isometric" | "3d") => void
   onToolChange: (tool: "select" | "pan" | "draw_area" | "draw_floor") => void
   onToggleSnap: () => void
@@ -46,6 +47,7 @@ export default function MapToolbar({
   zoom,
   objectsCount,
   spatialMode = "2d",
+  readOnly = false,
   onSpatialModeChange,
   onToolChange,
   onToggleSnap,
@@ -70,6 +72,154 @@ export default function MapToolbar({
   onUndo,
   onRedo,
 }: MapToolbarProps) {
+  // ── MODO VISUALIZADOR: SUMIR TUDO DE EDIÇÃO ──────────────────
+  if (readOnly) {
+    return (
+      <div className="h-12 bg-slate-900 border-b border-slate-800 px-3 flex items-center justify-between text-slate-100 select-none shrink-0 gap-2">
+        {/* Esquerda: Modos de Visualização & Interação (Leitura) */}
+        <div className="flex items-center gap-2">
+          {/* Alternador 2D · Isométrico · 3D Livre */}
+          <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800 gap-0.5 shadow-inner">
+            <button
+              onClick={() => onSpatialModeChange?.("2d")}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all ${
+                spatialMode === "2d"
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+              title="Visualização 2D — Planta Superior"
+            >
+              <span>📐</span>
+              <span>2D</span>
+            </button>
+
+            <button
+              onClick={() => onSpatialModeChange?.("isometric")}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all ${
+                spatialMode === "isometric"
+                  ? "bg-purple-600 text-white shadow-sm"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+              title="Visualização Isométrica Técnica"
+            >
+              <span>🧊</span>
+              <span>Isométrico</span>
+            </button>
+
+            <button
+              onClick={() => onSpatialModeChange?.("3d")}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all ${
+                spatialMode === "3d"
+                  ? "bg-emerald-600 text-white shadow-sm"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+              title="Visualização 3D Livre com Navegação Orbital 360°"
+            >
+              <span>🌐</span>
+              <span>3D Livre</span>
+            </button>
+          </div>
+
+          <div className="h-5 w-px bg-slate-800" />
+
+          {/* Ferramentas do Visualizador: Pan (Navegar) & Selecionar (Inspecionar) */}
+          <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800 gap-0.5">
+            <button
+              onClick={() => onToolChange("pan")}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                tool === "pan"
+                  ? "bg-blue-600 text-white font-bold"
+                  : "text-slate-400 hover:text-white"
+              }`}
+              title="Navegar pelo mapa (Arrastar tela / H)"
+            >
+              <span>🖐️</span>
+              <span>Navegar</span>
+            </button>
+
+            <button
+              onClick={() => onToolChange("select")}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                tool === "select"
+                  ? "bg-blue-600 text-white font-bold"
+                  : "text-slate-400 hover:text-white"
+              }`}
+              title="Inspecionar e selecionar estruturas (V)"
+            >
+              <span>🔍</span>
+              <span>Inspecionar</span>
+            </button>
+          </div>
+
+          <div className="h-5 w-px bg-slate-800" />
+
+          {/* Badge Visualizador */}
+          <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-lg bg-indigo-950/80 border border-indigo-700/60 text-indigo-300 flex items-center gap-1.5 shadow-sm">
+            <span>👁️</span>
+            <span>Modo Visualizador</span>
+          </span>
+        </div>
+
+        {/* Direita: Enquadrar + Zoom + Busca + Contagem */}
+        <div className="flex items-center gap-2">
+          {/* Busca Universal */}
+          <button
+            onClick={onOpenSearch}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700/60 text-slate-300 hover:text-white text-xs font-medium transition-all"
+            title="Buscar estruturas no mapa (Ctrl+K)"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.35-4.35" />
+            </svg>
+            <span>Buscar</span>
+            <kbd className="text-[9px] bg-slate-700 px-1 py-0.5 rounded font-mono">⌃K</kbd>
+          </button>
+
+          {/* Zoom */}
+          <div className="flex items-center gap-0.5 bg-slate-950 px-1.5 py-1 rounded-lg border border-slate-800">
+            <button
+              onClick={onZoomOut}
+              className="w-5 h-5 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 text-xs"
+            >
+              −
+            </button>
+            <button
+              onClick={onZoomReset}
+              className="text-xs font-mono text-slate-300 px-1.5 hover:text-blue-400 min-w-[36px] text-center"
+              title="Resetar zoom para 100%"
+            >
+              {zoom}%
+            </button>
+            <button
+              onClick={onZoomIn}
+              className="w-5 h-5 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 text-xs"
+            >
+              +
+            </button>
+          </div>
+
+          {/* Enquadrar */}
+          {onFitToScreen && (
+            <button
+              onClick={onFitToScreen}
+              className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white text-xs transition-colors flex items-center gap-1 px-2 font-medium"
+              title="Enquadrar todo o galpão na tela (Shift+1)"
+            >
+              <span>🎯</span>
+              <span>Enquadrar</span>
+            </button>
+          )}
+
+          <span className="text-[11px] font-mono text-slate-500 pl-1">
+            {objectsCount} estruturas
+          </span>
+        </div>
+      </div>
+    )
+  }
+
+  // ── MODO EDITOR NORMAL (ADMIN / PROPRIETÁRIO) ─────────────────
   return (
     <div className="h-12 bg-slate-900 border-b border-slate-800 px-3 flex items-center justify-between text-slate-100 select-none shrink-0 gap-2">
       {/* Esquerda: Modos de Visualização & Interação */}

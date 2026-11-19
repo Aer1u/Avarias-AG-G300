@@ -38,16 +38,16 @@ export function mapObjectToSpatial(
     : typeof props.depthsCount === "number"
     ? props.depthsCount
     : 4
-  const lanesCount = typeof props.lanes === "number"
-    ? props.lanes
-    : Array.isArray(props.channels) && props.channels.length > 0
-    ? props.channels.length
-    : 1
-
   // Dimensões físicas fiéis: prioriza as dimensões em pixels do objeto convertidas para metros
-  // para que qualquer redimensionamento de vãos/profundidade no 2D reflita fielmente no 3D
-  const widthM = obj.width > 0 ? pixelsToMeters(obj.width, ppm) : (phys.width > 0 ? phys.width : 1.4)
-  const depthM = obj.height > 0 ? pixelsToMeters(obj.height, ppm) : (phys.length > 0 ? phys.length : 4.0)
+  // Para palete com escala legada antiga (60x80 px), normaliza automaticamente para PBR (1.0m x 1.2m)
+  const isLegacyPallet = obj.type === "pallet" && (obj.width >= 40 || phys.width >= 2.0)
+  const widthM = isLegacyPallet ? 1.0 : (obj.width > 0 ? pixelsToMeters(obj.width, ppm) : (phys.width > 0 ? phys.width : 1.4))
+  const depthM = isLegacyPallet ? 1.2 : (obj.height > 0 ? pixelsToMeters(obj.height, ppm) : (phys.length > 0 ? phys.length : 4.0))
+
+  const channelsCount = Array.isArray(props.channels) && props.channels.length > 0 ? props.channels.length : 0
+  const propLanes = typeof props.lanes === "number" ? props.lanes : 0
+  const widthBasedLanes = Math.max(1, Math.round(widthM / 1.35))
+  const lanesCount = Math.max(1, propLanes, channelsCount, widthM > 2.0 ? widthBasedLanes : 1)
   
   // Altura padrão por categoria/tipo caso não definida
   let heightM = phys.height
@@ -63,14 +63,18 @@ export function mapObjectToSpatial(
   const elevationM = phys.elevationZ || 0
 
   // Âncora universal no centro da base (Z=elevationM)
-  // No 2D: X cresce para a direita, Y cresce para baixo (+Y = frente/sul).
-  // No 3D (Z vertical): X cresce para a direita, Y cresce para o fundo/norte.
-  // Negamos Y para manter orientação canônica onde topo do 2D = fundo do 3D e frente = frente
+  // No 2D: X cresce para a direita (tela), Y cresce para baixo (tela).
+  // No 3D (Z vertical, câmera olha de Y- para Y+):
+  //   • X 3D = X 2D (direita = direita)
+  //   • Y 3D = Y 2D (mesmo sentido; câmera posicionada em Y negativo olha para Y positivo)
+  // Mantemos o mesmo sinal para que esquerda/direita e topo/fundo sejam idênticos entre 2D e 3D.
   const centerX = topLeftXM + widthM / 2
-  const centerY = -(topLeftYM + depthM / 2)
+  const centerY = topLeftYM + depthM / 2
   const baseZ = elevationM
 
   // Rotação em torno do eixo vertical Z
+  // No 2D, rotação positiva = horário (CW). No 3D com Z-up, rotação positiva = anti-horário (CCW) vista de cima.
+  // Negamos para manter correspondência visual: 90° no 2D = 90° CW no 3D vista de cima.
   const rotDeg = obj.rotation || 0
   const rotRad = -(rotDeg * Math.PI) / 180
 
@@ -83,7 +87,7 @@ export function mapObjectToSpatial(
       const py = obj.points[i + 1]
       pointsM.push({
         x: px / ppm - widthM / 2,
-        y: -(py / ppm - depthM / 2),
+        y: py / ppm - depthM / 2,
       })
     }
   }
@@ -126,9 +130,9 @@ export function spatialToMapObjectPartial(
   const ppm = Math.max(1, pixelsPerMeter)
   const { width, depth, height } = spatial.dimensions
 
-  // Converte centro da base 3D de volta para Top-Left do 2D (revertendo a inversão do eixo Y)
+  // Converte centro da base 3D de volta para Top-Left do 2D (mesmo sistema de coordenadas sem negação)
   const topLeftXM = spatial.position.x - width / 2
-  const topLeftYM = -spatial.position.y - depth / 2
+  const topLeftYM = spatial.position.y - depth / 2
 
   const xPx = Math.round(topLeftXM * ppm)
   const yPx = Math.round(topLeftYM * ppm)

@@ -20,7 +20,8 @@ import {
   FlaskConical, 
   Shield, 
   Crown, 
-  Building, 
+  Building,
+  Building2, 
   UserCheck,
   Code2
 } from "lucide-react"
@@ -71,6 +72,15 @@ export default function HomePage() {
   useEffect(() => { setMounted(true) }, [])
 
   const modules: ModuleCard[] = [
+    {
+      id: "workspaces",
+      name: "Workspaces",
+      badge: "Multi-Tenant",
+      subtitle: "Gestão & Ambientes Operacionais",
+      description: "Visualização e criação oficial de workspaces, galpões e vinculação de módulos operacionais.",
+      href: "/workspaces",
+      icon: <Building2 size={28} strokeWidth={2} />,
+    },
     {
       id: "g300",
       name: "G300",
@@ -129,6 +139,7 @@ export default function HomePage() {
   if (!mounted) return null
 
   const iconBgMap: Record<string, string> = {
+    workspaces: "bg-amber-600",
     mkbr: "bg-emerald-600",
     g300: "bg-blue-600",
     iam: "bg-amber-600",

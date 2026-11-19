@@ -501,8 +501,11 @@ const pallet: MapElementDefinition = {
     ),
   renderKonva: (obj: MapObject) => {
     const group = new Konva.Group({ x: 0, y: 0 })
-    const w = obj.width || 20
-    const h = obj.height || 24
+    // Se o palete ainda estiver com dimensões herdadas antigas desproporcionais (ex: 60x80 px),
+    // normaliza visualmente para o padrão PBR (20x24 px a 20 PPM) perfeitamente coincidente com os slots do Drive-In
+    const isLegacyScale = Boolean((obj.width && obj.width >= 40) || (obj.height && obj.height >= 50))
+    const w = isLegacyScale ? 20 : (obj.width || 20)
+    const h = isLegacyScale ? 24 : (obj.height || 24)
     const isLoaded = Boolean(obj.props.loaded)
 
     // Base do Palete de Madeira (autêntico em tom madeira alinhado ao Drive-In)

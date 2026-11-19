@@ -12,18 +12,37 @@ import { DEFAULT_BUSINESS_SYSTEMS } from "./systemRegistry"
 
 const STORAGE_KEY = "nexus_balance_systems_v1"
 
+// IDs dos sistemas de exemplo antigos a serem purgados automaticamente do localStorage
+const LEGACY_EXAMPLE_IDS = new Set([
+  "AVARIAS_G300",
+  "RETRABALHO",
+  "QUARENTENA",
+  "ERP_PRINCIPAL",
+  "sys_avarias_g300",
+  "sys_retrabalho",
+  "sys_quarentena",
+  "sys_erp_principal",
+])
+
 export function useSystemStore() {
   const [systems, setSystems] = useState<BusinessSystem[]>([])
   const [isLoaded, setIsLoaded] = useState(false)
 
-  // Carrega do localStorage ou inicia com os padrões
+  // Carrega do localStorage — purga automaticamente sistemas de exemplo antigos
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY)
       if (raw) {
         const parsed = JSON.parse(raw)
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setSystems(parsed)
+        if (Array.isArray(parsed)) {
+          // Filtra quaisquer sistemas de exemplo antigos remanescentes
+          const cleaned = parsed.filter(
+            (s: BusinessSystem) => !LEGACY_EXAMPLE_IDS.has(s.id) && !LEGACY_EXAMPLE_IDS.has(s.code)
+          )
+          if (cleaned.length !== parsed.length) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned))
+          }
+          setSystems(cleaned)
           setIsLoaded(true)
           return
         }
@@ -31,7 +50,8 @@ export function useSystemStore() {
     } catch (e) {
       console.warn("Falha ao ler sistemas do localStorage:", e)
     }
-    setSystems(DEFAULT_BUSINESS_SYSTEMS)
+    // Nenhum dado: inicia com lista vazia (sem exemplos)
+    setSystems([])
     setIsLoaded(true)
   }, [])
 

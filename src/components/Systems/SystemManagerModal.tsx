@@ -8,10 +8,13 @@
 
 import React, { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { X, Plus, Shield, Layers, Check, Trash2, Edit3, ArrowRight, AlertCircle, Building2 } from "lucide-react"
+import { X, Plus, Shield, Layers, Check, Trash2, Edit3, ArrowRight, AlertCircle, Building2, GitCompare, Package, MapPin } from "lucide-react"
 import { useSystemStore } from "./useSystemStore"
 import { BusinessSystem, StockControlMode } from "./types"
 import type { MapObject } from "../MapLibrary/types"
+import SystemRecordsModal from "./SystemRecordsModal"
+import SystemMappingModal from "./SystemMappingModal"
+import SystemConfrontoModal from "./SystemConfrontoModal"
 
 interface SystemManagerModalProps {
   isOpen: boolean
@@ -25,9 +28,14 @@ export default function SystemManagerModal({
   allObjects = [],
 }: SystemManagerModalProps) {
   const { systems, addSystem, updateSystem, deleteSystem, resetToDefaults } = useSystemStore()
-  const [selectedSystemId, setSelectedSystemId] = useState<string>(systems[0]?.id || "sys_avarias_g300")
+  const [selectedSystemId, setSelectedSystemId] = useState<string>(systems[0]?.id || "")
   const [isEditing, setIsEditing] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
+
+  // Estados dos 3 Sub-Modais Integrados (Registro · Mapeamento · Confronto)
+  const [isRecordsOpen, setIsRecordsOpen] = useState(false)
+  const [isMappingOpen, setIsMappingOpen] = useState(false)
+  const [isConfrontoOpen, setIsConfrontoOpen] = useState(false)
 
   // Form State
   const [formData, setFormData] = useState<Partial<BusinessSystem>>({})
@@ -202,16 +210,6 @@ export default function SystemManagerModal({
                   </button>
                 )
               })}
-            </div>
-
-            <div className="pt-2 border-t border-slate-800/80">
-              <button
-                type="button"
-                onClick={resetToDefaults}
-                className="text-[10px] text-slate-500 hover:text-slate-400 underline transition-colors"
-              >
-                Restaurar sistemas padrão do laboratório
-              </button>
             </div>
           </div>
 
@@ -447,6 +445,93 @@ export default function SystemManagerModal({
                   </div>
                 </div>
 
+                {/* ── TRÍADE OPERACIONAL DO SISTEMA: REGISTRO · MAPEAMENTO · CONFRONTO ── */}
+                <div className="p-3.5 bg-gradient-to-r from-blue-950/40 via-purple-950/30 to-amber-950/40 border border-slate-800 rounded-2xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                      <span>⚡</span>
+                      <span>Módulos Operacionais deste Sistema</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      Configuração completa com persistência JSON
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+                    {/* 1. Modal de Registro */}
+                    <button
+                      type="button"
+                      onClick={() => setIsRecordsOpen(true)}
+                      className="p-3 rounded-xl bg-slate-900/90 hover:bg-blue-950/50 border border-slate-700/80 hover:border-blue-500/80 text-left transition-all group shadow-sm flex flex-col justify-between"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="p-1.5 rounded-lg bg-blue-950 text-blue-400 border border-blue-800/60 text-xs">
+                            📋
+                          </span>
+                          <strong className="text-xs text-white group-hover:text-blue-300 transition-colors">
+                            1. Registros
+                          </strong>
+                        </div>
+                        <p className="text-[10px] text-slate-400 leading-tight">
+                          Lançamento e controle de saldos físicos, lotes e quantidades.
+                        </p>
+                      </div>
+                      <span className="text-[10px] text-blue-400 font-bold mt-2 flex items-center gap-1">
+                        Abrir Registros →
+                      </span>
+                    </button>
+
+                    {/* 2. Modal de Mapeamento */}
+                    <button
+                      type="button"
+                      onClick={() => setIsMappingOpen(true)}
+                      className="p-3 rounded-xl bg-slate-900/90 hover:bg-purple-950/50 border border-slate-700/80 hover:border-purple-500/80 text-left transition-all group shadow-sm flex flex-col justify-between"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="p-1.5 rounded-lg bg-purple-950 text-purple-400 border border-purple-800/60 text-xs">
+                            🗺️
+                          </span>
+                          <strong className="text-xs text-white group-hover:text-purple-300 transition-colors">
+                            2. Mapeamento
+                          </strong>
+                        </div>
+                        <p className="text-[10px] text-slate-400 leading-tight">
+                          Vincular posições, Drives, Ruas e Áreas do mapa físico.
+                        </p>
+                      </div>
+                      <span className="text-[10px] text-purple-400 font-bold mt-2 flex items-center gap-1">
+                        Mapear Posições →
+                      </span>
+                    </button>
+
+                    {/* 3. Modal de Confronto */}
+                    <button
+                      type="button"
+                      onClick={() => setIsConfrontoOpen(true)}
+                      className="p-3 rounded-xl bg-slate-900/90 hover:bg-amber-950/50 border border-slate-700/80 hover:border-amber-500/80 text-left transition-all group shadow-sm flex flex-col justify-between"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="p-1.5 rounded-lg bg-amber-950 text-amber-400 border border-amber-800/60 text-xs">
+                            ⚖️
+                          </span>
+                          <strong className="text-xs text-white group-hover:text-amber-300 transition-colors">
+                            3. Confronto
+                          </strong>
+                        </div>
+                        <p className="text-[10px] text-slate-400 leading-tight">
+                          Nomear relação (ex: A501), importar e conciliar em JSON.
+                        </p>
+                      </div>
+                      <span className="text-[10px] text-amber-400 font-bold mt-2 flex items-center gap-1">
+                        Confrontar Saldo →
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
                 {/* Cartões Informativos de Parâmetros */}
                 <div className="grid grid-cols-2 gap-3 text-xs">
                   {/* Origem */}
@@ -553,6 +638,34 @@ export default function SystemManagerModal({
           </div>
         </div>
       </div>
+
+      {/* ── SUB-MODAIS INTEGRADOS DO SISTEMA DE SALDO ── */}
+      {selectedSystem && (
+        <>
+          {/* 1. Modal de Registros de Saldo */}
+          <SystemRecordsModal
+            isOpen={isRecordsOpen}
+            onClose={() => setIsRecordsOpen(false)}
+            system={selectedSystem}
+            allObjects={allObjects}
+          />
+
+          {/* 2. Modal de Mapeamento de Posições Físicas */}
+          <SystemMappingModal
+            isOpen={isMappingOpen}
+            onClose={() => setIsMappingOpen(false)}
+            system={selectedSystem}
+            allObjects={allObjects}
+          />
+
+          {/* 3. Modal de Confronto Analítico (com tabela JSON configurável) */}
+          <SystemConfrontoModal
+            isOpen={isConfrontoOpen}
+            onClose={() => setIsConfrontoOpen(false)}
+            system={selectedSystem}
+          />
+        </>
+      )}
     </div>
   )
 }

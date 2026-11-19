@@ -33,6 +33,7 @@ import MapPropertiesPanel from "../MapProperties/MapPropertiesPanel"
 import MapToolbar from "../MapToolbar/MapToolbar"
 import UniversalSearchSpotlight from "../MapToolbar/UniversalSearchSpotlight"
 import AreaHierarchyPanel from "../MapLayers/AreaHierarchyPanel"
+import ViewerNavigationSidebar from "../MapLayers/ViewerNavigationSidebar"
 import MassGeneratorModal from "./MassGeneratorModal"
 import HierarchyConfigModal from "./HierarchyConfigModal"
 import ModuleBuilderModal from "./ModuleBuilderModal"
@@ -273,8 +274,31 @@ function NewFloorModal({ isOpen, onClose, onConfirm }: NewFloorModalProps) {
   )
 }
 
+// ── Props opcionais do Workspace Oficial ─────────────────────
+export interface UniversalMapEditorProps {
+  /** ID do workspace no service (undefined = modo Lab, sem persistência automática) */
+  workspaceId?: string
+  /** Nome exibido no header do editor quando no modo workspace */
+  workspaceName?: string
+  /** Email do usuário dono/operador (para autorização no service) */
+  workspaceOwnerEmail?: string
+  /** Flag de admin (para autorização no service) */
+  workspaceIsAdmin?: boolean
+  /** Modo somente leitura para visualizadores (bloqueia edições e salvamentos) */
+  readOnly?: boolean
+  /** Callback chamado após cada save bem-sucedido (para atualizar UI pai) */
+  onWorkspaceSaved?: (objectsCount: number) => void
+}
+
 // ── Componente Principal ──────────────────────────────────────
-export default function UniversalMapEditor() {
+export default function UniversalMapEditor({
+  workspaceId,
+  workspaceName,
+  workspaceOwnerEmail,
+  workspaceIsAdmin = false,
+  readOnly = false,
+  onWorkspaceSaved,
+}: UniversalMapEditorProps = {}) {
   // Histórico de alterações com suporte a Desfazer / Refazer (Undo / Redo)
   const { objects, setObjects, resetHistory, undo, redo, canUndo, canRedo } = useMapHistory([])
 
@@ -284,6 +308,90 @@ export default function UniversalMapEditor() {
   const [snapEnabled, setSnapEnabled] = useState(true)
   const [gridSize, setGridSize] = useState(20)
   const [zoom, setZoom] = useState(100)
+
+  // ── Workspace: estado de save ─────────────────────────────────
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle")
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ── Workspace: carrega mapa salvo na montagem ─────────────────
+  useEffect(() => {
+    if (!workspaceId) return
+    // Import dinâmico para não quebrar SSR
+    import("@/lib/workspacesService").then(({ workspacesService }) => {
+      const ws = workspacesService.getWorkspaceById(workspaceId)
+      if (ws?.mapData) {
+        try {
+          const parsed = JSON.parse(ws.mapData)
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            resetHistory(parsed)
+          }
+        } catch {
+          // mapData corrompido — começa em branco
+        }
+      }
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId])
+
+  // ── Workspace: auto-save com debounce de 2s após qualquer mudança (apenas editores) ──
+  useEffect(() => {
+    if (readOnly) return // Visualizador NUNCA sobrescreve dados
+    if (!workspaceId || !workspaceOwnerEmail) return
+    if (objects.length === 0) return // Não sobrescreve com canvas vazio
+
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    setSaveStatus("saving")
+
+    saveTimerRef.current = setTimeout(() => {
+      import("@/lib/workspacesService").then(({ workspacesService }) => {
+        const result = workspacesService.saveMapData(
+          workspaceId,
+          JSON.stringify(objects),
+          objects.length,
+          workspaceOwnerEmail,
+          workspaceIsAdmin
+        )
+        if (result.success) {
+          setSaveStatus("saved")
+          onWorkspaceSaved?.(objects.length)
+          setTimeout(() => setSaveStatus("idle"), 2500)
+        } else {
+          setSaveStatus("error")
+          setTimeout(() => setSaveStatus("idle"), 4000)
+        }
+      })
+    }, 2000)
+
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [objects, workspaceId, workspaceOwnerEmail, workspaceIsAdmin, readOnly])
+
+  // ── Workspace: salvar imediatamente (Ctrl+S / botão manual) ──
+  const handleManualSave = useCallback(() => {
+    if (readOnly) return
+    if (!workspaceId || !workspaceOwnerEmail) return
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current) // Cancela debounce pendente
+    setSaveStatus("saving")
+    import("@/lib/workspacesService").then(({ workspacesService }) => {
+      const result = workspacesService.saveMapData(
+        workspaceId,
+        JSON.stringify(objects),
+        objects.length,
+        workspaceOwnerEmail,
+        workspaceIsAdmin
+      )
+      if (result.success) {
+        setSaveStatus("saved")
+        onWorkspaceSaved?.(objects.length)
+        setTimeout(() => setSaveStatus("idle"), 2500)
+      } else {
+        setSaveStatus("error")
+        setTimeout(() => setSaveStatus("idle"), 4000)
+      }
+    })
+  }, [workspaceId, workspaceOwnerEmail, workspaceIsAdmin, objects, onWorkspaceSaved, readOnly])
 
   // Dimensões padrão dos modelos (salvas explicitamente pelo usuário)
   const [modelDefaults, setModelDefaults] = useState<Record<string, PhysicalDimensions>>({})
@@ -952,6 +1060,16 @@ export default function UniversalMapEditor() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (["INPUT", "TEXTAREA", "SELECT"].includes((e.target as HTMLElement)?.tagName)) return
 
+      if (readOnly) {
+        if (e.key === "v" || e.key === "V") setTool("select")
+        if (e.key === "h" || e.key === "H") setTool("pan")
+        if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
+          e.preventDefault()
+          setIsSearchOpen((v) => !v)
+        }
+        return
+      }
+
       if (e.key === "v" || e.key === "V") setTool("select")
       if (e.key === "h" || e.key === "H") setTool("pan")
       if (e.key === "a" || e.key === "A") setTool("draw_area")
@@ -972,11 +1090,16 @@ export default function UniversalMapEditor() {
         e.preventDefault()
         setIsSearchOpen((v) => !v)
       }
+      // Ctrl+S → salva imediatamente (só no modo workspace)
+      if ((e.ctrlKey || e.metaKey) && (e.key === "s" || e.key === "S")) {
+        e.preventDefault()
+        handleManualSave()
+      }
     }
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [handleDelete, handleDuplicate])
+  }, [handleDelete, handleDuplicate, handleManualSave, readOnly, undo, redo])
 
   return (
     <div className="flex flex-col h-full w-full bg-slate-950 overflow-hidden">
@@ -988,6 +1111,7 @@ export default function UniversalMapEditor() {
         zoom={zoom}
         objectsCount={objects.length}
         spatialMode={spatialMode}
+        readOnly={readOnly}
         onSpatialModeChange={setSpatialMode}
         onToolChange={setTool}
         onToggleSnap={() => setSnapEnabled((v) => !v)}
@@ -1013,8 +1137,65 @@ export default function UniversalMapEditor() {
         onRedo={redo}
       />
 
+      {/* Barra de contexto do Workspace (Save status OU Banner de Visualizador) */}
+      {workspaceId && (
+        readOnly ? (
+          <div className="shrink-0 flex items-center gap-3 px-4 py-1.5 border-b border-indigo-900/60 bg-indigo-950/40 text-[11px] backdrop-blur">
+            <span className="flex items-center gap-1.5 text-indigo-400 font-bold uppercase tracking-wider bg-indigo-900/50 px-2 py-0.5 rounded-md border border-indigo-700/50">
+              <span>👁️</span>
+              <span>Modo Visualizador</span>
+            </span>
+            <span className="text-slate-400">
+              Navegação livre e inspeção (2D, 3D e Isométrico) · Alterações bloqueadas
+            </span>
+            <span className="text-slate-600">· {objects.length} objetos</span>
+            <div className="ml-auto text-slate-500 text-[10px]">
+              Workspace: <strong className="text-slate-300">{workspaceName || workspaceId}</strong>
+            </div>
+          </div>
+        ) : (
+          <div className="shrink-0 flex items-center gap-3 px-4 py-1 border-b border-slate-800 bg-slate-900/60 text-[11px]">
+            <span className="text-slate-500">Workspace:</span>
+            <span className="font-semibold text-amber-400 truncate max-w-xs">{workspaceName || workspaceId}</span>
+            <span className="text-slate-700">·</span>
+            <span className="text-slate-600">{objects.length} objetos</span>
+
+            <div className="ml-auto flex items-center gap-3">
+              {/* Status de save */}
+              {saveStatus === "saving" && (
+                <span className="flex items-center gap-1.5 text-slate-400">
+                  <span className="inline-block w-3 h-3 border-2 border-slate-500 border-t-slate-200 rounded-full animate-spin" />
+                  Salvando...
+                </span>
+              )}
+              {saveStatus === "saved" && (
+                <span className="flex items-center gap-1.5 text-emerald-400 font-medium">
+                  ✓ Salvo
+                </span>
+              )}
+              {saveStatus === "error" && (
+                <span className="flex items-center gap-1.5 text-red-400">
+                  ⚠ Erro ao salvar
+                </span>
+              )}
+
+              {/* Botão salvar manual */}
+              <button
+                onClick={handleManualSave}
+                disabled={saveStatus === "saving" || objects.length === 0}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-700 hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-colors"
+                title="Salvar agora (Ctrl+S)"
+              >
+                💾 Salvar
+                <kbd className="text-[9px] opacity-60 font-mono ml-0.5">Ctrl+S</kbd>
+              </button>
+            </div>
+          </div>
+        )
+      )}
+
       {/* Dica contextual do modo draw_area */}
-      {(tool === "draw_area" || tool === "draw_floor") && (
+      {!readOnly && (tool === "draw_area" || tool === "draw_floor") && (
         <div className="bg-amber-950/70 border-b border-amber-800/50 px-4 py-1.5 flex items-center gap-3 text-amber-200 text-xs shrink-0">
           <span className="text-sm">📐</span>
           <span>
@@ -1038,7 +1219,7 @@ export default function UniversalMapEditor() {
           </button>
         )}
 
-        {/* Painel Esquerdo: Biblioteca + Hierarquia */}
+        {/* Painel Esquerdo: ViewerNavigationSidebar no modo visualizador, ou Biblioteca + Hierarquia no modo editor */}
         <div
           style={{ width: isLeftCollapsed ? 0 : leftWidth }}
           className={`flex flex-col bg-slate-900 border-r border-slate-800 shrink-0 overflow-hidden transition-[width] duration-150 relative ${
@@ -1047,7 +1228,7 @@ export default function UniversalMapEditor() {
         >
           {/* Botão para recolher no topo do painel esquerdo */}
           <div className="h-6 bg-slate-950 px-2 flex items-center justify-between border-b border-slate-800 text-[10px] text-slate-500">
-            <span>PAINEL LATERAL</span>
+            <span>{readOnly ? "NAVEGAÇÃO & INSPEÇÃO" : "PAINEL LATERAL"}</span>
             <button
               onClick={() => setIsLeftCollapsed(true)}
               className="text-slate-400 hover:text-white px-1 py-0.5 rounded hover:bg-slate-800"
@@ -1057,51 +1238,65 @@ export default function UniversalMapEditor() {
             </button>
           </div>
 
-          {/* ── Abas: Biblioteca ↔ Hierarquia ─────────────────── */}
-          <div className="flex border-b border-slate-800 bg-slate-950 shrink-0">
-            <button
-              onClick={() => setLeftTab("library")}
-              className={`flex-1 h-8 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
-                leftTab === "library"
-                  ? "border-blue-500 text-blue-400 bg-slate-900"
-                  : "border-transparent text-slate-500 hover:text-slate-300 hover:bg-slate-800/60"
-              }`}
-              title="Biblioteca de Elementos"
-            >
-              📚 Biblioteca
-            </button>
-            <button
-              onClick={() => setLeftTab("hierarchy")}
-              className={`flex-1 h-8 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
-                leftTab === "hierarchy"
-                  ? "border-amber-500 text-amber-400 bg-slate-900"
-                  : "border-transparent text-slate-500 hover:text-slate-300 hover:bg-slate-800/60"
-              }`}
-              title="Hierarquia Estrutural do Mapa"
-            >
-              🌳 Hierarquia
-              {objects.filter((o) => o.visible === false).length > 0 && (
-                <span className="text-[9px] bg-red-900/80 text-red-400 border border-red-700/50 px-1 rounded-full">
-                  {objects.filter((o) => o.visible === false).length}
-                </span>
-              )}
-            </button>
-          </div>
-
-          {/* Conteúdo da aba ativa — ocupa todo o espaço restante */}
-          <div className="flex-1 overflow-hidden min-h-0">
-            {leftTab === "library" ? (
-              <MapLibraryPanel onAddElement={handleAddElement} />
-            ) : (
-              <AreaHierarchyPanel
+          {readOnly ? (
+            <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
+              <ViewerNavigationSidebar
                 objects={objects}
                 selectedId={selectedId}
                 onSelectAndLocate={handleSelectAndLocate}
                 onToggleVisibility={handleToggleVisibility}
                 onToggleAllVisibility={handleToggleAllVisibility}
               />
-            )}
-          </div>
+            </div>
+          ) : (
+            <>
+              {/* ── Abas: Biblioteca ↔ Hierarquia ─────────────────── */}
+              <div className="flex border-b border-slate-800 bg-slate-950 shrink-0">
+                <button
+                  onClick={() => setLeftTab("library")}
+                  className={`flex-1 h-8 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
+                    leftTab === "library"
+                      ? "border-blue-500 text-blue-400 bg-slate-900"
+                      : "border-transparent text-slate-500 hover:text-slate-300 hover:bg-slate-800/60"
+                  }`}
+                  title="Biblioteca de Elementos"
+                >
+                  📚 Biblioteca
+                </button>
+                <button
+                  onClick={() => setLeftTab("hierarchy")}
+                  className={`flex-1 h-8 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
+                    leftTab === "hierarchy"
+                      ? "border-amber-500 text-amber-400 bg-slate-900"
+                      : "border-transparent text-slate-500 hover:text-slate-300 hover:bg-slate-800/60"
+                  }`}
+                  title="Hierarquia Estrutural do Mapa"
+                >
+                  🌳 Hierarquia
+                  {objects.filter((o) => o.visible === false).length > 0 && (
+                    <span className="text-[9px] bg-red-900/80 text-red-400 border border-red-700/50 px-1 rounded-full">
+                      {objects.filter((o) => o.visible === false).length}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {/* Conteúdo da aba ativa — ocupa todo o espaço restante */}
+              <div className="flex-1 overflow-hidden min-h-0">
+                {leftTab === "library" ? (
+                  <MapLibraryPanel onAddElement={handleAddElement} />
+                ) : (
+                  <AreaHierarchyPanel
+                    objects={objects}
+                    selectedId={selectedId}
+                    onSelectAndLocate={handleSelectAndLocate}
+                    onToggleVisibility={handleToggleVisibility}
+                    onToggleAllVisibility={handleToggleAllVisibility}
+                  />
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Splitter arrastável da Esquerda */}
@@ -1125,6 +1320,7 @@ export default function UniversalMapEditor() {
             gridSize={gridSize}
             zoom={zoom}
             tool={tool}
+            readOnly={readOnly}
             onToolChange={setTool}
             onSelect={setSelectedId}
             onUpdateObject={handleUpdateObjectById}
@@ -1144,8 +1340,8 @@ export default function UniversalMapEditor() {
           />
         )}
 
-        {/* Splitter arrastável da Direita */}
-        {!isRightCollapsed && (
+        {/* Splitter arrastável da Direita (Apenas no Modo Editor) */}
+        {!readOnly && !isRightCollapsed && (
           <div
             onMouseDown={handleMouseDownResizeRight}
             className="w-1.5 hover:w-2 bg-slate-950 hover:bg-blue-500 cursor-col-resize transition-all z-20 shrink-0 border-l border-slate-800/80 group flex items-center justify-center"
@@ -1155,8 +1351,8 @@ export default function UniversalMapEditor() {
           </div>
         )}
 
-        {/* Botão flutuante para reabrir painel direito quando recolhido */}
-        {isRightCollapsed && (
+        {/* Botão flutuante para reabrir painel direito quando recolhido (Apenas no Modo Editor) */}
+        {!readOnly && isRightCollapsed && (
           <button
             onClick={() => setIsRightCollapsed(false)}
             className="absolute right-2 top-3 z-30 bg-slate-900 hover:bg-slate-800 text-slate-300 p-1.5 rounded-lg border border-slate-700 shadow-xl text-xs flex items-center gap-1 transition-all"
@@ -1167,45 +1363,47 @@ export default function UniversalMapEditor() {
           </button>
         )}
 
-        {/* Painel de Propriedades */}
-        <div
-          style={{ width: isRightCollapsed ? 0 : rightWidth }}
-          className={`flex flex-col bg-slate-900 border-l border-slate-800 shrink-0 overflow-hidden transition-[width] duration-150 relative ${
-            isRightCollapsed ? "invisible" : "visible"
-          }`}
-        >
-          {/* Botão para recolher no topo do painel direito */}
-          <div className="h-6 bg-slate-950 px-2 flex items-center justify-between border-b border-slate-800 text-[10px] text-slate-500 shrink-0">
-            <span>PROPRIEDADES & OPERAÇÃO</span>
-            <button
-              onClick={() => setIsRightCollapsed(true)}
-              className="text-slate-400 hover:text-white px-1 py-0.5 rounded hover:bg-slate-800"
-              title="Recolher painel direito"
-            >
-              Ocultar ▶
-            </button>
-          </div>
+        {/* Painel de Propriedades (Apenas no Modo Editor) */}
+        {!readOnly && (
+          <div
+            style={{ width: isRightCollapsed ? 0 : rightWidth }}
+            className={`flex flex-col bg-slate-900 border-l border-slate-800 shrink-0 overflow-hidden transition-[width] duration-150 relative ${
+              isRightCollapsed ? "invisible" : "visible"
+            }`}
+          >
+            {/* Botão para recolher no topo do painel direito */}
+            <div className="h-6 bg-slate-950 px-2 flex items-center justify-between border-b border-slate-800 text-[10px] text-slate-500 shrink-0">
+              <span>PROPRIEDADES & OPERAÇÃO</span>
+              <button
+                onClick={() => setIsRightCollapsed(true)}
+                className="text-slate-400 hover:text-white px-1 py-0.5 rounded hover:bg-slate-800"
+                title="Recolher painel direito"
+              >
+                Ocultar ▶
+              </button>
+            </div>
 
-          <div className="flex-1 overflow-hidden min-h-0">
-            <MapPropertiesPanel
-              selectedObject={selectedObject}
-              onUpdateObject={handleUpdateObject}
-              onUpdateProp={handleUpdateProp}
-              onDuplicate={handleDuplicate}
-              onDelete={handleDelete}
-              onBringForward={handleBringForward}
-              onSendBackward={handleSendBackward}
-              records={records}
-              onAddRecord={handleAddRecord}
-              allObjects={objects}
-              levelsConfig={levelsConfig}
-              depthConfig={depthConfig}
-              pixelsPerMeter={20}
-              onSaveAsModelDefault={handleSaveAsModelDefault}
-              onOpenResourceEngine={() => setIsResourceEngineOpen(true)}
-            />
+            <div className="flex-1 overflow-hidden min-h-0">
+              <MapPropertiesPanel
+                selectedObject={selectedObject}
+                onUpdateObject={handleUpdateObject}
+                onUpdateProp={handleUpdateProp}
+                onDuplicate={handleDuplicate}
+                onDelete={handleDelete}
+                onBringForward={handleBringForward}
+                onSendBackward={handleSendBackward}
+                records={records}
+                onAddRecord={handleAddRecord}
+                allObjects={objects}
+                levelsConfig={levelsConfig}
+                depthConfig={depthConfig}
+                pixelsPerMeter={20}
+                onSaveAsModelDefault={handleSaveAsModelDefault}
+                onOpenResourceEngine={() => setIsResourceEngineOpen(true)}
+              />
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Modais */}

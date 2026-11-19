@@ -9,7 +9,7 @@
 
 "use client"
 
-import React, { useMemo, useState } from "react"
+import React, { useMemo, useState, useEffect } from "react"
 import type { MapObject } from "../MapLibrary/types"
 import type { DimensionConfig, StorageChannel } from "../MapLibrary/dimensionsTypes"
 import { DEFAULT_G300_LEVELS_CONFIG, DEFAULT_G300_DEPTH_CONFIG } from "../MapLibrary/dimensionManager"
@@ -144,6 +144,13 @@ export default function DriveOperationalCard({
   const channels: StorageChannel[] = useMemo(() => {
     return ensureDriveChannels(selectedObject)
   }, [selectedObject])
+
+  // Garante sincronização bidirecional dos canais no objeto do mapa
+  useEffect(() => {
+    if (!props.channels || (Array.isArray(props.channels) && props.channels.length !== lanes)) {
+      onUpdateProp("channels", channels)
+    }
+  }, [lanes, channels, props.channels, onUpdateProp])
 
   const [expandedChannelId, setExpandedChannelId] = useState<string | null>(
     channels.length > 0 ? channels[0].id : null
@@ -713,10 +720,16 @@ export default function DriveOperationalCard({
                       <div className="space-y-1 bg-slate-950/80 p-1.5 rounded border border-slate-800">
                         {Array.from({ length: levels }, (_, lIdx) => {
                           const lvlNum = levels - lIdx // Nível mais alto no topo
+                          const isFloorLevel = lvlNum === 1
                           return (
                             <div key={lvlNum} className="flex items-center gap-1">
-                              <span className="text-[8px] font-mono font-bold text-slate-500 w-5 flex-shrink-0 text-right">
-                                N{lvlNum}
+                              <span
+                                className={`text-[8px] font-mono font-bold w-9 flex-shrink-0 text-right ${
+                                  isFloorLevel ? "text-amber-400" : "text-slate-500"
+                                }`}
+                                title={isFloorLevel ? "Nível 1: Chão / Piso do armazém (sem trilho aéreo)" : `Nível ${lvlNum}: Trilho aéreo suspenso`}
+                              >
+                                {isFloorLevel ? "N1 [Piso]" : `N${lvlNum}`}
                               </span>
                               <div className="grid grid-flow-col auto-cols-fr gap-1 flex-1">
                                 {Array.from({ length: depth }, (_, dIdx) => {
@@ -735,7 +748,7 @@ export default function DriveOperationalCard({
                                           ? "bg-amber-500 border-amber-400 text-slate-950 shadow-md ring-1 ring-amber-300"
                                           : "bg-slate-900 border-slate-800 text-slate-500 hover:border-slate-600 hover:text-slate-300"
                                       }`}
-                                      title={`Nível ${lvlNum} · Profundidade ${depNum} (${isOccupied ? "Ocupado com Palete - clique para remover" : "Vazio - clique para alocar palete"})`}
+                                      title={`Nível ${lvlNum} (${isFloorLevel ? "Piso" : "Trilho Aéreo"}) · Profundidade ${depNum} (${isOccupied ? "Ocupado com Palete - clique para remover" : "Vazio - clique para alocar palete"})`}
                                     >
                                       {isOccupied ? "📦" : `P${depNum}`}
                                     </button>
@@ -753,8 +766,9 @@ export default function DriveOperationalCard({
                           type="button"
                           onClick={() => handleToggleSlotPallet(chan.id, 1, 1)}
                           className="flex-1 py-1 px-1.5 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-[9px] font-semibold text-amber-300 transition-colors"
+                          title="Aloca um palete teste repousando diretamente no chão do armazém (Nível 1, Vão 1)"
                         >
-                          +1 Palete (N1-P1)
+                          +1 Palete N1 (Piso)
                         </button>
                         <button
                           type="button"

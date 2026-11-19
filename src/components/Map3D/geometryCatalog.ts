@@ -233,10 +233,11 @@ function buildPalletRackGeometry(group: THREE.Group, spatial: UniversalSpatialOb
 function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObject) {
   const { width, depth, height } = spatial.dimensions
   const props = spatial.props || {}
-  const rawLanes = Number(props.lanes) || Number(spatial.internalStructure?.lanesCount)
   const channelsCount = Array.isArray(props.channels) && props.channels.length > 0 ? props.channels.length : 0
-  const estimatedLanesByWidth = Math.max(1, Math.round(width / 1.35))
-  const lanes = Math.max(1, rawLanes || channelsCount || (width > 2.0 ? estimatedLanesByWidth : 1))
+  const propLanes = Number(props.lanes) || Number(spatial.internalStructure?.lanesCount) || 0
+  const widthBasedLanes = Math.max(1, Math.round(width / 1.35))
+  // Se canais ou propLanes > 1, ou largura > 2.0m, SEMPRE usa o número real de vãos consistente
+  const lanes = Math.max(1, propLanes, channelsCount, width > 2.0 ? widthBasedLanes : 1)
 
   const levels = spatial.internalStructure?.levelsCount || Number(props.levels) || 4
   const depths = spatial.internalStructure?.depthsCount || Number(props.depth) || 4
@@ -340,7 +341,15 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
   const pLoadGeo = new THREE.BoxGeometry(pWidth * 0.94, pDepth * 0.94, loadH)
 
   // Varre os canais e extrai posições ocupadas
-  rawChannels.forEach((chan, idx) => {
+  const channelsToRender = rawChannels.length > 0
+    ? rawChannels
+    : Array.from({ length: lanes }, (_, idx) => ({
+        id: `chan_auto_${idx + 1}`,
+        laneIndex: idx + 1,
+        occupiedPositions: [],
+      }))
+
+  channelsToRender.forEach((chan, idx) => {
     const laneIdx = (typeof chan.laneIndex === "number" ? chan.laneIndex : idx + 1) - 1
     if (laneIdx < 0 || laneIdx >= lanes) return
 
@@ -349,16 +358,17 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
       : []
 
     occupiedList.forEach((pos) => {
-      const lvl = Math.max(1, Math.min(levels, pos.level))
-      const dep = Math.max(1, Math.min(depths, pos.depth))
+      const lvl = Math.max(1, Math.min(levels, Number(pos.level) || 1))
+      const dep = Math.max(1, Math.min(depths, Number(pos.depth) || 1))
 
       const posX = -width / 2 + (laneIdx + 0.5) * laneWidth
       // No 2D, profundidade 1 fica no topo (+depth/2) e depth N fica na entrada (-depth/2)
       const posY = depth / 2 - (dep - 0.5) * slotStepY
 
-      // Nível 1 repousa diretamente no chão do galpão (Z=0).
-      // Níveis 2..N repousam sobre os trilhos aéreos correspondentes:
-      const posZ = lvl === 1 ? 0 : levelSpacing * (lvl - 1)
+      // Nível 1 repousa diretamente no chão do galpão (Z = 0.02 para assentar perfeitamente sobre o piso/grid).
+      // Níveis 2..N repousam sobre os trilhos aéreos correspondentes (lz + railThick / 2):
+      const railLz = levelSpacing * (lvl - 1)
+      const posZ = lvl === 1 ? 0.02 : railLz + railThick / 2
 
       const palletMeshGroup = new THREE.Group()
 
@@ -447,7 +457,12 @@ function buildDockGeometry(group: THREE.Group, spatial: UniversalSpatialObject) 
 // 6. PALETE DE MADEIRA COM CARGA PROCEDURAL
 // ─────────────────────────────────────────────────────────────
 function buildPalletWithLoadGeometry(group: THREE.Group, spatial: UniversalSpatialObject) {
-  const { width, depth, height } = spatial.dimensions
+  // Se as dimensões forem desproporcionais/herdadas do padrão antigo de 60x80px (ex: 3m x 4m),
+  // normaliza visualmente para o padrão PBR (1.0m x 1.2m) idêntico ao Drive-In
+  const isLegacy = spatial.dimensions.width > 1.8 || spatial.dimensions.depth > 2.0
+  const width = isLegacy ? 1.0 : spatial.dimensions.width
+  const depth = isLegacy ? 1.2 : spatial.dimensions.depth
+  const height = isLegacy ? 1.2 : spatial.dimensions.height
 
   const woodMat = getMaterial("pallet_wood", () =>
     new THREE.MeshStandardMaterial({ color: new THREE.Color("#b45309"), roughness: 0.85, metalness: 0.05 })
@@ -456,7 +471,7 @@ function buildPalletWithLoadGeometry(group: THREE.Group, spatial: UniversalSpati
     new THREE.MeshStandardMaterial({ color: new THREE.Color("#d97706"), roughness: 0.75, metalness: 0.05 })
   )
 
-  // Tablado de madeira inferior do palete (0.15m de altura)
+  // Tablado de madeira inferior do palete (0.14m de altura)
   const palletH = 0.14
   const palletGeo = new THREE.BoxGeometry(width, depth, palletH)
   const palletMesh = new THREE.Mesh(palletGeo, woodMat)

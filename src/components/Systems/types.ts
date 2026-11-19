@@ -56,3 +56,74 @@ export interface BusinessSystem {
 export interface SystemStore {
   systems: BusinessSystem[]
 }
+
+// ── REGISTROS DE SALDO DO SISTEMA ─────────────────────────────
+export interface SystemStockRecord {
+  id: string
+  systemId: string
+  sku: string
+  description: string
+  quantity: number
+  date?: string
+  data?: string
+  entrada?: number | null
+  saida?: number | null
+  tipo_avaria?: string | null
+  turno?: number | null
+  origem?: string | null
+  transportadora?: string | null
+  nota_fiscal?: number | string | null
+  placa?: string | null
+  container?: string | null
+  lacre?: string | null
+  observacao?: string | null
+  lotNumber?: string
+  positionLabel?: string       // ex: "CHÃO", "DRIVE G300-01", "BOX-04"
+  positionObjectId?: string   // MapObject.id se vinculado a uma estrutura física
+  registeredBy?: string
+  registeredAt: string
+  notes?: string
+  isNew?: boolean
+  isDirty?: boolean
+}
+
+// ── CONFRONTO ANALÍTICO CONFIGURÁVEL (JSON) ───────────────────
+export interface ConfrontoImportedItem {
+  sku: string
+  description: string
+  quantity: number
+  rawLine?: string
+}
+
+export interface SystemConfrontoConfig {
+  id: string
+  systemId: string
+  name: string                 // ex: "A501", "G501", "SAP-WMS", "ESTOQUE_BA"
+  description?: string
+  importedItems: ConfrontoImportedItem[]
+  totalItems: number
+  totalQuantity: number
+  importedAt: string
+  importedBy?: string
+  status: "ativo" | "arquivado"
+}
+
+// Linha de conciliação analítica resultante do confronto
+export interface ConfrontoComparisonRow {
+  sku: string
+  description: string
+  systemQty: number            // Saldo presente no Sistema / Mapeamento
+  confrontoQty: number         // Saldo da Relação Importada (ex: A501)
+  diff: number                 // systemQty - confrontoQty
+  status: "match" | "missing" | "excess" | "only_system" | "only_confronto"
+}
+
+export interface ConfrontoSummary {
+  confrontoName: string
+  totalSkus: number
+  totalSystemQty: number
+  totalConfrontoQty: number
+  matchCount: number
+  divergenceCount: number
+  accuracyPercentage: number
+}

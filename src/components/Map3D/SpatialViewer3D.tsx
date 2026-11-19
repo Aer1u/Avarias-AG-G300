@@ -130,10 +130,17 @@ export function SpatialViewer3D({
     // ── CÂMERAS ───────────────────────────────────────────────
     const aspect = width / height
 
-    // Câmera Perspectiva (3D Livre) — orientada frontalmente ao mapa (sem espelhamento)
+    // ── SISTEMA DE COORDENADAS (alinhado com o 2D) ────────────────
+    // 2D: X cresce para direita, Y cresce para baixo (origem top-left)
+    // 3D: X cresce para direita (igual), Y cresce para baixo/fundo (igual ao 2D)
+    // Câmera olha de Z positivo (cima) + Y negativo (atrás da tela) para Y positivo (frente)
+    // Assim esquerda/direita e topo/fundo são IDÊNTICOS entre 2D e 3D.
+
+    // Câmera Perspectiva (3D Livre) — vista isométrica padrão alinhada com 2D
     const perspCam = new THREE.PerspectiveCamera(50, aspect, 0.5, 1200)
     perspCam.up.set(0, 0, 1)
-    perspCam.position.set(20, -60, 45)
+    // Câmera posicionada atrás e acima: X = centro, Y negativo (atrás), Z positivo (acima)
+    perspCam.position.set(20, -50, 45)
     perspCamRef.current = perspCam
 
     // Câmera Ortográfica (Isométrico técnico)
@@ -148,7 +155,8 @@ export function SpatialViewer3D({
     )
     orthoCam.up.set(0, 0, 1)
     const isoDist = 70
-    orthoCam.position.set(20, -isoDist, isoDist * 0.85)
+    // Mesmo sistema: câmera atrás e acima do centro
+    orthoCam.position.set(20, -isoDist * 0.5, isoDist * 0.85)
     orthoCamRef.current = orthoCam
 
     // Controles OrbitControls configurados para Z-up
@@ -162,6 +170,7 @@ export function SpatialViewer3D({
     controls.maxPolarAngle = Math.PI / 2 - 0.01 // Não passa por baixo do solo
     controls.minDistance = 2
     controls.maxDistance = 500
+    // Target centralizado nos objetos (Y positivo = frente do mapa, igual ao 2D)
     controls.target.set(20, 20, 0)
     controls.update()
     controlsRef.current = controls
@@ -239,12 +248,12 @@ export function SpatialViewer3D({
       controls.enableRotate = true // Rotação liberada para inspecionar qualquer ângulo no isométrico!
       controls.maxPolarAngle = Math.PI / 2 - 0.01
 
-      // Mantém a direção atual ou orienta em ângulo isométrico se a câmera estiver fora
+      // Herda direção atual da câmera perspectiva para manter continuidade visual
       const dir = perspCam.position.clone().sub(currentTarget).normalize()
       const dist = 75
       orthoCam.position.set(
-        currentTarget.x + (dir.x !== 0 ? dir.x * dist : dist),
-        currentTarget.y + (dir.y !== 0 ? dir.y * dist : -dist),
+        currentTarget.x + (dir.x !== 0 ? dir.x * dist : -dist * 0.5),
+        currentTarget.y + (dir.y !== 0 ? dir.y * dist : -dist * 0.9),
         currentTarget.z + (dir.z > 0 ? dir.z * dist : dist * 0.816)
       )
       orthoCam.lookAt(currentTarget)
@@ -255,10 +264,11 @@ export function SpatialViewer3D({
       controls.enableRotate = true
       controls.maxPolarAngle = Math.PI / 2 - 0.01
 
+      // Herda direção atual da câmera ortográfica
       const dir = orthoCam.position.clone().sub(currentTarget).normalize()
       const dist = 60
       perspCam.position.set(
-        currentTarget.x + (dir.x !== 0 ? dir.x * dist : dist * 0.7),
+        currentTarget.x + (dir.x !== 0 ? dir.x * dist : -dist * 0.3),
         currentTarget.y + (dir.y !== 0 ? dir.y * dist : -dist * 0.9),
         currentTarget.z + (dir.z > 0 ? dir.z * dist : dist * 0.7)
       )
@@ -406,13 +416,15 @@ export function SpatialViewer3D({
       ortho.bottom = -fs / 2
       ortho.updateProjectionMatrix()
 
+      // Câmera iso: de trás (Y-) e acima (Z+), olhando para o centro
       const dist = maxDim * 2.2
-      ortho.position.set(center.x, center.y - dist, center.z + dist * 0.9)
+      ortho.position.set(center.x - dist * 0.5, center.y - dist * 0.9, center.z + dist * 0.816)
       ortho.lookAt(center)
     } else if (perspCamRef.current) {
       const persp = perspCamRef.current
       const dist = maxDim * 1.6
-      persp.position.set(center.x, center.y - dist * 1.2, center.z + dist * 0.85)
+      // Câmera 3D: de trás (Y-) e acima (Z+), olhando para o centro — igual orientação ao 2D
+      persp.position.set(center.x - dist * 0.3, center.y - dist * 1.0, center.z + dist * 0.75)
       persp.lookAt(center)
     }
 
