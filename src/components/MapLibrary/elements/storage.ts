@@ -169,44 +169,105 @@ const drive_in: MapElementDefinition = {
     )
 
     // ── Slots de Profundidade — 1 slot = 1 pallet do modelo ────
+    const rawChannels = Array.isArray(obj.props?.channels) ? (obj.props.channels as any[]) : []
+
     for (let d = 0; d < depth; d++) {
       const slotY = d * slotH
 
       for (let l = 0; l < lanes; l++) {
         const slotX = l * laneW
+        const chan = rawChannels[l]
+        const occupiedList: Array<{ level: number; depth: number }> = Array.isArray(chan?.occupiedPositions)
+          ? chan.occupiedPositions
+          : []
+        // Verifica se há palete alocado nesta profundidade (d + 1)
+        const occupiedAtSlot = occupiedList.filter((p) => p.depth === d + 1)
+        const isOccupied = occupiedAtSlot.length > 0
 
         // Contorno do pallet proporcional ao modelo escolhido
         // Margem lateral = folga dos trilhos (proporção real)
-        const marginX = Math.max(1.5, laneW * (clearancePerLane / 2) / (laneWidthM))
+        const marginX = Math.max(1.5, (laneW * (clearancePerLane / 2)) / laneWidthM)
         const marginY = Math.max(1.5, slotH * 0.06)
 
         const pw = laneW - marginX * 2
         const ph = slotH - marginY * 2
 
-        // Fundo do pallet (simulando a madeira)
-        group.add(
-          new Konva.Rect({
-            x: slotX + marginX,
-            y: slotY + marginY,
-            width: pw,
-            height: ph,
-            fill: "rgba(217, 119, 6, 0.15)",
-            stroke: "rgba(202, 138, 4, 0.7)",
-            strokeWidth: 1,
-            cornerRadius: 1,
-          })
-        )
-
-        // Travessa central do pallet (elemento visual de autenticidade)
-        if (ph > 8) {
+        if (isOccupied) {
+          // ── PALETE DE TESTE OCUPANDO A POSIÇÃO ─────────────────
           group.add(
-            new Konva.Line({
-              points: [slotX + marginX, slotY + slotH / 2, slotX + marginX + pw, slotY + slotH / 2],
-              stroke: "rgba(202, 138, 4, 0.35)",
-              strokeWidth: 0.8,
-              dash: [3, 2],
+            new Konva.Rect({
+              x: slotX + marginX,
+              y: slotY + marginY,
+              width: pw,
+              height: ph,
+              fill: "#f59e0b",
+              stroke: "#b45309",
+              strokeWidth: 1.5,
+              cornerRadius: 1,
+              shadowColor: "rgba(0,0,0,0.35)",
+              shadowBlur: 3,
+              shadowOffset: { x: 0, y: 1 },
             })
           )
+
+          // Caixa de carga sobre o palete
+          const boxMargin = Math.max(1, Math.round(pw * 0.1))
+          group.add(
+            new Konva.Rect({
+              x: slotX + marginX + boxMargin,
+              y: slotY + marginY + boxMargin,
+              width: pw - boxMargin * 2,
+              height: ph - boxMargin * 2,
+              fill: "#d97706",
+              stroke: "#92400e",
+              strokeWidth: 0.8,
+            })
+          )
+
+          // Indicador de nível ocupado se houver espaço
+          if (pw > 14 && ph > 10) {
+            const lvlText = occupiedAtSlot.map((p) => `N${p.level}`).join(",")
+            group.add(
+              new Konva.Text({
+                x: slotX + marginX,
+                y: slotY + marginY + ph / 2 - 4,
+                width: pw,
+                align: "center",
+                text: lvlText.length > 6 ? "📦" : lvlText,
+                fontSize: 7,
+                fontFamily: "monospace",
+                fontStyle: "bold",
+                fill: "#ffffff",
+                listening: false,
+              })
+            )
+          }
+        } else {
+          // ── SLOT VAZIO (transparente) ──────────────────────────
+          group.add(
+            new Konva.Rect({
+              x: slotX + marginX,
+              y: slotY + marginY,
+              width: pw,
+              height: ph,
+              fill: "rgba(217, 119, 6, 0.15)",
+              stroke: "rgba(202, 138, 4, 0.7)",
+              strokeWidth: 1,
+              cornerRadius: 1,
+            })
+          )
+
+          // Travessa central do pallet (elemento visual de autenticidade)
+          if (ph > 8) {
+            group.add(
+              new Konva.Line({
+                points: [slotX + marginX, slotY + slotH / 2, slotX + marginX + pw, slotY + slotH / 2],
+                stroke: "rgba(202, 138, 4, 0.35)",
+                strokeWidth: 0.8,
+                dash: [3, 2],
+              })
+            )
+          }
         }
       }
 
@@ -271,7 +332,6 @@ const drive_in: MapElementDefinition = {
     )
 
     // ── Rótulo dos Canais (Nomes Personalizados no Canvas 2D) ──
-    const rawChannels = Array.isArray(obj.props.channels) ? (obj.props.channels as any[]) : []
     for (let i = 0; i < lanes; i++) {
       const chan = rawChannels[i]
       if (chan && chan.name && !chan.name.startsWith("Canal ")) {

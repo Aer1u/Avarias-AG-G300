@@ -102,6 +102,14 @@ export interface StructurePositionSlot {
 // Unidade de armazenagem composta por um conjunto de posições-palete
 // distribuídas em níveis e profundidades no vão frontal do Drive-In.
 // NÃO é uma posição individual: é o agrupamento lógico e físico das posições.
+export interface StorageOccupiedSlot {
+  level: number       // 1, 2, ... levels
+  depth: number       // 1, 2, ... depth
+  palletModelId?: string
+  loaded?: boolean
+  tag?: string
+}
+
 export interface StorageChannel {
   id: string                      // ID único do canal
   code: string                    // Código identificador técnico (ex: "G300004G0281-C01")
@@ -120,5 +128,8 @@ export interface StorageChannel {
     heightM: number               // Altura útil vertical em metros
   }
   palletModelId?: string          // Padrão de pallet associado (PBR1, Euro, etc.)
+  stockControlMode?: "livre" | "vinculado_saldo"  // Controle individual por canal
+  stockSystemRef?: string                        // Sistema de saldo vinculado individual do canal
+  occupiedPositions?: StorageOccupiedSlot[]     // Posições com paletes (para teste ou operação)
   notes?: string                  // Observações operacionais
 }

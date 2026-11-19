@@ -478,10 +478,14 @@ const pallet: MapElementDefinition = {
   type: "pallet",
   category: "logistics",
   label: "Palete (PBR / EUR)",
-  description: "Palete de madeira com tábuas e blocos de suporte",
-  defaultWidth: 60,
-  defaultHeight: 80,
-  defaultProps: { type: "PBR", loaded: false },
+  description: "Palete de madeira padronizado proporcional à escala do armazém e compatível com Drive-In (1.0m x 1.2m)",
+  defaultWidth: 20,
+  defaultHeight: 24,
+  defaultProps: {
+    type: "PBR",
+    loaded: false,
+    physicalDimensions: { width: 1.0, length: 1.2, height: 0.14, elevationZ: 0 },
+  },
   propsSchema: [
     { key: "type", label: "Padrão", type: "select", options: [{ value: "PBR", label: "PBR (1.0 x 1.2m)" }, { value: "EUR", label: "Euro (0.8 x 1.2m)" }] },
     { key: "loaded", label: "Carga Carregada", type: "boolean" },
@@ -489,51 +493,84 @@ const pallet: MapElementDefinition = {
   PreviewSVG: ({ width, height }: SvgPreviewProps) =>
     React.createElement(
       "svg",
-      { width, height, viewBox: "0 0 40 50", xmlns: "http://www.w3.org/2000/svg" },
-      React.createElement("rect", { x: 4, y: 4, width: 32, height: 42, fill: "rgba(59,130,246,0.15)", stroke: "#3b82f6", strokeWidth: 1.5, rx: 1 }),
-      [12, 20, 28, 36].map((y) =>
-        React.createElement("line", { key: y, x1: 4, y1: y, x2: 36, y2: y, stroke: "#3b82f6", strokeWidth: 1 })
+      { width, height, viewBox: "0 0 20 24", xmlns: "http://www.w3.org/2000/svg" },
+      React.createElement("rect", { x: 1, y: 1, width: 18, height: 22, fill: "rgba(217,119,6,0.25)", stroke: "#ca8a04", strokeWidth: 1.2, rx: 1 }),
+      [6, 12, 18].map((y) =>
+        React.createElement("line", { key: y, x1: 1, y1: y, x2: 19, y2: y, stroke: "#ca8a04", strokeWidth: 0.8, strokeDasharray: "2 1" })
       )
     ),
   renderKonva: (obj: MapObject) => {
     const group = new Konva.Group({ x: 0, y: 0 })
-    const w = obj.width
-    const h = obj.height
+    const w = obj.width || 20
+    const h = obj.height || 24
     const isLoaded = Boolean(obj.props.loaded)
 
-    // Deck base
+    // Base do Palete de Madeira (autêntico em tom madeira alinhado ao Drive-In)
     group.add(
       new Konva.Rect({
         x: 0,
         y: 0,
         width: w,
         height: h,
-        fill: isLoaded ? "rgba(59,130,246,0.35)" : MAP_COLORS.pallet.fill,
-        stroke: MAP_COLORS.pallet.stroke,
-        strokeWidth: 1.5,
+        fill: isLoaded ? "rgba(217, 119, 6, 0.45)" : "rgba(217, 119, 6, 0.22)",
+        stroke: "#ca8a04",
+        strokeWidth: 1.2,
         cornerRadius: 1,
       })
     )
 
-    // Tábuas horizontais
-    const slats = 5
+    // Tábuas horizontais de ripas de madeira
+    const slats = 4
     for (let i = 1; i < slats; i++) {
       group.add(
         new Konva.Line({
-          points: [0, (i * h) / slats, w, (i * h) / slats],
-          stroke: MAP_COLORS.pallet.stroke,
+          points: [1, (i * h) / slats, w - 1, (i * h) / slats],
+          stroke: "rgba(202, 138, 4, 0.7)",
+          strokeWidth: 0.8,
+          dash: [3, 2],
+        })
+      )
+    }
+
+    // Blocos de apoio nos 4 cantos
+    const blockW = Math.max(2, Math.round(w * 0.18))
+    const blockH = Math.max(2, Math.round(h * 0.15))
+    const blockColor = "#b45309"
+
+    group.add(
+      new Konva.Rect({ x: 1, y: 1, width: blockW, height: blockH, fill: blockColor }),
+      new Konva.Rect({ x: w - 1 - blockW, y: 1, width: blockW, height: blockH, fill: blockColor }),
+      new Konva.Rect({ x: 1, y: h - 1 - blockH, width: blockW, height: blockH, fill: blockColor }),
+      new Konva.Rect({ x: w - 1 - blockW, y: h - 1 - blockH, width: blockW, height: blockH, fill: blockColor })
+    )
+
+    // Travessa central se o palete tiver tamanho suficiente
+    if (h > 12) {
+      group.add(
+        new Konva.Line({
+          points: [0, h / 2, w, h / 2],
+          stroke: "rgba(180, 83, 9, 0.5)",
           strokeWidth: 1,
         })
       )
     }
 
-    // Blocos de apoio visíveis nas laterais
-    group.add(
-      new Konva.Rect({ x: 2, y: 2, width: 6, height: 8, fill: "#1e3a8a" }),
-      new Konva.Rect({ x: w - 8, y: 2, width: 6, height: 8, fill: "#1e3a8a" }),
-      new Konva.Rect({ x: 2, y: h - 10, width: 6, height: 8, fill: "#1e3a8a" }),
-      new Konva.Rect({ x: w - 8, y: h - 10, width: 6, height: 8, fill: "#1e3a8a" })
-    )
+    // Se estiver com carga empilhada (caixas sobre o pallet)
+    if (isLoaded) {
+      const margin = Math.max(1.5, Math.round(w * 0.08))
+      group.add(
+        new Konva.Rect({
+          x: margin,
+          y: margin,
+          width: w - margin * 2,
+          height: h - margin * 2,
+          fill: "rgba(245, 158, 11, 0.4)",
+          stroke: "#d97706",
+          strokeWidth: 1,
+          dash: [2, 1],
+        })
+      )
+    }
 
     return group
   },

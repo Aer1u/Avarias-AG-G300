@@ -471,7 +471,7 @@ export function SpatialViewer3D({
             <span>Enquadrar</span>
           </button>
 
-          {/* Visão Superior (Top View 3D) */}
+          {/* Visão Superior (Top View 3D alinhada 100% com o 2D) */}
           <button
             onClick={() => {
               const controls = controlsRef.current
@@ -479,12 +479,13 @@ export function SpatialViewer3D({
               const cam = currentMode === "isometric" ? orthoCamRef.current : perspCamRef.current
               if (!controls || !cam) return
               const t = controls.target
-              cam.position.set(t.x, t.y - 0.001, t.z + 80)
+              cam.up.set(0, 1, 0)
+              cam.position.set(t.x, t.y, t.z + 90)
               cam.lookAt(t)
               controls.update()
             }}
             className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition-colors"
-            title="Vista Superior 3D (Planta)"
+            title="Vista Superior 3D (Planta 100% alinhada com o 2D)"
           >
             Topo
           </button>
@@ -497,6 +498,7 @@ export function SpatialViewer3D({
               const cam = currentMode === "isometric" ? orthoCamRef.current : perspCamRef.current
               if (!controls || !cam) return
               const t = controls.target
+              cam.up.set(0, 0, 1)
               cam.position.set(t.x, t.y - 80, t.z + 12)
               cam.lookAt(t)
               controls.update()
@@ -516,7 +518,8 @@ export function SpatialViewer3D({
               if (!controls || !cam) return
               const t = controls.target
               const d = 75
-              cam.position.set(t.x + d, t.y - d, t.z + d * 0.816)
+              cam.up.set(0, 0, 1)
+              cam.position.set(t.x + d * 0.7, t.y - d * 0.9, t.z + d * 0.816)
               cam.lookAt(t)
               controls.update()
             }}

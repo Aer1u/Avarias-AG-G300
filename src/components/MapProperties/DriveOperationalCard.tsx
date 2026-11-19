@@ -9,7 +9,7 @@
 
 "use client"
 
-import React, { useMemo } from "react"
+import React, { useMemo, useState } from "react"
 import type { MapObject } from "../MapLibrary/types"
 import type { DimensionConfig, StorageChannel } from "../MapLibrary/dimensionsTypes"
 import { DEFAULT_G300_LEVELS_CONFIG, DEFAULT_G300_DEPTH_CONFIG } from "../MapLibrary/dimensionManager"
@@ -145,9 +145,76 @@ export default function DriveOperationalCard({
     return ensureDriveChannels(selectedObject)
   }, [selectedObject])
 
-  const handleUpdateChannelName = (channelId: string, newName: string) => {
-    const updated = channels.map((c) => (c.id === channelId ? { ...c, name: newName } : c))
+  const [expandedChannelId, setExpandedChannelId] = useState<string | null>(
+    channels.length > 0 ? channels[0].id : null
+  )
+
+  const handleUpdateChannelProp = (channelId: string, partial: Partial<StorageChannel>) => {
+    const updated = channels.map((c) => (c.id === channelId ? { ...c, ...partial } : c))
     onUpdateProp("channels", updated)
+  }
+
+  const handleUpdateChannelName = (channelId: string, newName: string) => {
+    handleUpdateChannelProp(channelId, { name: newName })
+  }
+
+  // Alterna colocação de palete de teste na posição de um canal
+  const handleToggleSlotPallet = (channelId: string, lvl: number, dep: number) => {
+    const chan = channels.find((c) => c.id === channelId)
+    if (!chan) return
+    const occupied = chan.occupiedPositions || []
+    const exists = occupied.some((p) => p.level === lvl && p.depth === dep)
+    const updatedPositions = exists
+      ? occupied.filter((p) => !(p.level === lvl && p.depth === dep))
+      : [...occupied, { level: lvl, depth: dep, palletModelId: chan.palletModelId || palletModelId }]
+    handleUpdateChannelProp(channelId, {
+      occupiedPositions: updatedPositions,
+      occupancy: updatedPositions.length,
+    })
+  }
+
+  // Simulação rápida de preenchimento (ex: 50% ou 100%)
+  const handleFillChannelQuick = (channelId: string, ratio: number = 0.5) => {
+    const chan = channels.find((c) => c.id === channelId)
+    if (!chan) return
+    const totalSlots = levels * depth
+    const slotsToFill = Math.max(1, Math.round(totalSlots * ratio))
+    const newPositions: Array<{ level: number; depth: number }> = []
+
+    let count = 0
+    // Preenche a partir do fundo (P1, P2...) nos níveis inferiores
+    for (let l = 1; l <= levels && count < slotsToFill; l++) {
+      for (let d = 1; d <= depth && count < slotsToFill; d++) {
+        newPositions.push({ level: l, depth: d })
+        count++
+      }
+    }
+    handleUpdateChannelProp(channelId, {
+      occupiedPositions: newPositions,
+      occupancy: newPositions.length,
+    })
+  }
+
+  // Limpa paletes de teste de um canal
+  const handleClearChannelTest = (channelId: string) => {
+    handleUpdateChannelProp(channelId, {
+      occupiedPositions: [],
+      occupancy: 0,
+    })
+  }
+
+  // Aplica o modo de controle a todos os canais de uma vez
+  const handleApplyModeToAllChannels = (mode: "livre" | "vinculado_saldo", systemRef?: string) => {
+    const updated = channels.map((c) => ({
+      ...c,
+      stockControlMode: mode,
+      stockSystemRef: systemRef ?? c.stockSystemRef ?? "",
+    }))
+    onUpdateProp("channels", updated)
+    onUpdateProp("stockControlMode", mode)
+    if (systemRef !== undefined) {
+      onUpdateProp("stockSystemRef", systemRef)
+    }
   }
 
   // Redimensionamento Físico Dinâmico do Túnel no Canvas
@@ -459,33 +526,223 @@ export default function DriveOperationalCard({
         </div>
 
         <p className="text-[10px] text-slate-400 leading-tight">
-          O canal agrupa física e logicamente as posições do túnel. Nomeie cada canal livremente:
+          Cada canal possui controle de preenchimento e simulador de paletes individual:
         </p>
 
-        <div className="space-y-1.5">
-          {channels.map((chan) => (
-            <div
-              key={chan.id}
-              className="p-2 bg-slate-950/80 rounded border border-slate-800/80 space-y-1.5"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] font-mono text-slate-400 font-semibold">
-                  {chan.code}
-                </span>
-                <span className="text-[9px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono">
-                  Vão {chan.laneIndex} · {chan.capacity} paletes ({levels}N×{depth}P)
-                </span>
-              </div>
+        <div className="space-y-2">
+          {channels.map((chan) => {
+            const isExpanded = expandedChannelId === chan.id
+            const chanMode = chan.stockControlMode || stockControlMode
+            const chanSys = chan.stockSystemRef || stockSystemRef
+            const occupiedCount = chan.occupiedPositions?.length || 0
 
-              <input
-                type="text"
-                value={chan.name}
-                onChange={(e) => handleUpdateChannelName(chan.id, e.target.value)}
-                placeholder="Ex: Canal MKLOG, Canal Jaqueline, Canal Quarentena"
-                className="w-full bg-slate-900 border border-slate-700/80 rounded px-2 py-1 text-xs text-amber-300 font-semibold focus:outline-none focus:border-amber-500"
-              />
-            </div>
-          ))}
+            return (
+              <div
+                key={chan.id}
+                className={`p-2.5 rounded-lg border transition-all ${
+                  isExpanded
+                    ? "bg-slate-950 border-amber-500/50 shadow-lg ring-1 ring-amber-500/20"
+                    : "bg-slate-950/70 border-slate-800/80 hover:border-slate-700"
+                } space-y-2`}
+              >
+                {/* Header do Canal */}
+                <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-mono text-amber-300 font-bold">
+                      {chan.code}
+                    </span>
+                    <span className="text-[9px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono">
+                      Vão {chan.laneIndex}
+                    </span>
+                  </div>
+
+                  {/* Badges de Modo e Ocupação */}
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className={`text-[9px] font-semibold px-1.5 py-0.5 rounded border ${
+                        chanMode === "vinculado_saldo"
+                          ? "bg-blue-950/80 text-blue-300 border-blue-700/60"
+                          : "bg-emerald-950/60 text-emerald-300 border-emerald-700/50"
+                      }`}
+                    >
+                      {chanMode === "vinculado_saldo" ? "🔒 Saldo" : "🟢 Livre"}
+                    </span>
+
+                    {occupiedCount > 0 && (
+                      <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded font-mono font-bold animate-pulse">
+                        {occupiedCount} 📦
+                      </span>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => setExpandedChannelId(isExpanded ? null : chan.id)}
+                      className="text-[10px] text-slate-400 hover:text-white px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 transition-colors"
+                      title={isExpanded ? "Recolher canal" : "Configurar e testar canal"}
+                    >
+                      {isExpanded ? "▲ Fechar" : "▼ Ajustar & Testar"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Nome do Canal */}
+                <input
+                  type="text"
+                  value={chan.name}
+                  onChange={(e) => handleUpdateChannelName(chan.id, e.target.value)}
+                  placeholder="Nome do Canal (ex: Canal MKLOG, Canal Jaqueline)"
+                  className="w-full bg-slate-900 border border-slate-700/80 rounded px-2 py-1 text-xs text-amber-300 font-semibold focus:outline-none focus:border-amber-500"
+                />
+
+                {/* Opções Expandidas do Canal (Controle Individual + Teste de Preenchimento) */}
+                {isExpanded && (
+                  <div className="pt-2 border-t border-slate-800/80 space-y-2.5 animate-in fade-in duration-150">
+                    {/* ── CONTROLE DE PREENCHIMENTO INDIVIDUAL DESTE CANAL ── */}
+                    <div className="bg-slate-900/90 p-2 rounded border border-slate-800 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-slate-300 flex items-center gap-1">
+                          <span>🔐</span>
+                          <span>Controle deste Canal:</span>
+                        </span>
+                        <span className="text-[9px] text-slate-400 font-mono">
+                          {chanMode === "vinculado_saldo" ? "Exige saldo" : "Preenchimento livre"}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateChannelProp(chan.id, { stockControlMode: "livre" })}
+                          className={`px-2 py-1 rounded text-[10px] font-semibold border text-center transition-colors ${
+                            chanMode === "livre"
+                              ? "bg-slate-700 border-slate-500 text-white shadow-sm"
+                              : "bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700"
+                          }`}
+                        >
+                          🟢 Livre
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateChannelProp(chan.id, { stockControlMode: "vinculado_saldo" })}
+                          className={`px-2 py-1 rounded text-[10px] font-semibold border text-center transition-colors ${
+                            chanMode === "vinculado_saldo"
+                              ? "bg-blue-900/80 border-blue-500 text-blue-200 shadow-sm"
+                              : "bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700"
+                          }`}
+                        >
+                          🔒 Vinculado ao Saldo
+                        </button>
+                      </div>
+
+                      {/* Dropdown de Sistema de Saldo para este Canal */}
+                      {chanMode === "vinculado_saldo" && (
+                        <div className="pt-1.5 space-y-1">
+                          <label className="text-[9px] text-blue-300 font-medium block">
+                            Sistema de Saldo Vinculado a este Canal:
+                          </label>
+                          <select
+                            value={chanSys}
+                            onChange={(e) => handleUpdateChannelProp(chan.id, { stockSystemRef: e.target.value })}
+                            className="w-full bg-blue-950/70 border border-blue-700/60 rounded px-2 py-1 text-[11px] text-blue-100 font-semibold focus:outline-none focus:border-blue-400"
+                          >
+                            <option value="">— Selecionar Sistema de Saldo —</option>
+                            {systems.map((s) => (
+                              <option key={s.id} value={s.code}>
+                                {s.icon} {s.name} ({s.code})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── 🧪 TESTE DE PREENCHIMENTO VISUAL (2D & 3D) ── */}
+                    <div className="bg-amber-950/20 p-2 rounded border border-amber-500/30 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs">🧪</span>
+                          <span className="text-[10px] font-bold text-amber-300 uppercase tracking-wide">
+                            Teste de Preenchimento (2D & 3D)
+                          </span>
+                        </div>
+                        <span className="text-[9px] font-mono text-amber-400">
+                          {occupiedCount}/{levels * depth} ocupados
+                        </span>
+                      </div>
+
+                      <p className="text-[9px] text-slate-400 leading-tight">
+                        Clique nas posições abaixo para alocar/remover paletes de teste. Eles aparecerão instantaneamente no mapa 2D e no motor 3D:
+                      </p>
+
+                      {/* Grade Visual dos Slots: Níveis (de cima para baixo N4..N1) x Profundidades (P1..P4) */}
+                      <div className="space-y-1 bg-slate-950/80 p-1.5 rounded border border-slate-800">
+                        {Array.from({ length: levels }, (_, lIdx) => {
+                          const lvlNum = levels - lIdx // Nível mais alto no topo
+                          return (
+                            <div key={lvlNum} className="flex items-center gap-1">
+                              <span className="text-[8px] font-mono font-bold text-slate-500 w-5 flex-shrink-0 text-right">
+                                N{lvlNum}
+                              </span>
+                              <div className="grid grid-flow-col auto-cols-fr gap-1 flex-1">
+                                {Array.from({ length: depth }, (_, dIdx) => {
+                                  const depNum = dIdx + 1
+                                  const isOccupied = (chan.occupiedPositions || []).some(
+                                    (p) => p.level === lvlNum && p.depth === depNum
+                                  )
+
+                                  return (
+                                    <button
+                                      key={depNum}
+                                      type="button"
+                                      onClick={() => handleToggleSlotPallet(chan.id, lvlNum, depNum)}
+                                      className={`h-6 rounded text-[8px] font-mono font-bold transition-all flex items-center justify-center gap-0.5 border ${
+                                        isOccupied
+                                          ? "bg-amber-500 border-amber-400 text-slate-950 shadow-md ring-1 ring-amber-300"
+                                          : "bg-slate-900 border-slate-800 text-slate-500 hover:border-slate-600 hover:text-slate-300"
+                                      }`}
+                                      title={`Nível ${lvlNum} · Profundidade ${depNum} (${isOccupied ? "Ocupado com Palete - clique para remover" : "Vazio - clique para alocar palete"})`}
+                                    >
+                                      {isOccupied ? "📦" : `P${depNum}`}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      {/* Botões Rápidos de Simulação */}
+                      <div className="flex items-center gap-1.5 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleSlotPallet(chan.id, 1, 1)}
+                          className="flex-1 py-1 px-1.5 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-[9px] font-semibold text-amber-300 transition-colors"
+                        >
+                          +1 Palete (N1-P1)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleFillChannelQuick(chan.id, 0.5)}
+                          className="flex-1 py-1 px-1.5 rounded bg-blue-950 hover:bg-blue-900 border border-blue-700/50 text-[9px] font-semibold text-blue-300 transition-colors"
+                        >
+                          Simular 50%
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleClearChannelTest(chan.id)}
+                          className="py-1 px-2 rounded bg-slate-800 hover:bg-slate-700 text-[9px] font-semibold text-slate-400 hover:text-white transition-colors"
+                          title="Limpar paletes deste canal"
+                        >
+                          Limpar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       </div>
 
@@ -761,6 +1018,18 @@ export default function DriveOperationalCard({
             </p>
           </div>
         )}
+
+        {/* Botão de Aplicação Rápida em Lote */}
+        <div className="pt-1">
+          <button
+            type="button"
+            onClick={() => handleApplyModeToAllChannels(stockControlMode, stockSystemRef)}
+            className="w-full py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700/80 text-[10px] font-bold text-amber-300 hover:text-white flex items-center justify-center gap-1.5 transition-colors"
+          >
+            <span>⚡</span>
+            <span>Aplicar este Modo a Todos os Canais ({channels.length})</span>
+          </button>
+        </div>
 
         {/* Aviso de escopo */}
         <div className="flex items-start gap-1.5 p-1.5 bg-amber-950/30 border border-amber-900/40 rounded text-[9px] text-amber-700/80 leading-tight">

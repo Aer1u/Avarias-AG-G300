@@ -43,13 +43,19 @@ export function mapObjectToSpatial(
   const topLeftYM = obj.y / ppm
 
   // Âncora universal no centro da base (Z=elevationM)
+  // No 2D, Y cresce para baixo (+Y = sul/frente).
+  // No Three.js com Z vertical (camera.up = 0,0,1), a visão orbital canônica posiciona o observador
+  // em frente ao mapa olhando para o norte (+Y). Para eliminar qualquer espelhamento horizontal
+  // ou inversão de frente/fundo entre 2D e 3D, invertemos o eixo Y:
   const centerX = topLeftXM + widthM / 2
-  const centerY = topLeftYM + depthM / 2
+  const centerY = -(topLeftYM + depthM / 2)
   const baseZ = elevationM
 
-  // Rotação em torno do eixo vertical Z
+  // Rotação em torno do eixo vertical Z:
+  // No 2D, rotação positiva é horária. No Three.js com Z-up, rotação padrão é anti-horária.
+  // Invertemos o sinal para sincronização angular perfeita:
   const rotDeg = obj.rotation || 0
-  const rotRad = (rotDeg * Math.PI) / 180
+  const rotRad = -(rotDeg * Math.PI) / 180
 
   // Converte pontos de polígono (se houver) para metros relativos ao centro da base
   let pointsM: { x: number; y: number }[] | undefined
@@ -60,7 +66,7 @@ export function mapObjectToSpatial(
       const py = obj.points[i + 1]
       pointsM.push({
         x: px / ppm - widthM / 2,
-        y: py / ppm - depthM / 2,
+        y: -(py / ppm - depthM / 2),
       })
     }
   }
@@ -107,9 +113,9 @@ export function spatialToMapObjectPartial(
   const ppm = Math.max(1, pixelsPerMeter)
   const { width, depth, height } = spatial.dimensions
 
-  // Converte centro da base 3D de volta para Top-Left do 2D
+  // Converte centro da base 3D de volta para Top-Left do 2D (revertendo a inversão do eixo Y)
   const topLeftXM = spatial.position.x - width / 2
-  const topLeftYM = spatial.position.y - depth / 2
+  const topLeftYM = -spatial.position.y - depth / 2
 
   const xPx = Math.round(topLeftXM * ppm)
   const yPx = Math.round(topLeftYM * ppm)
@@ -123,7 +129,7 @@ export function spatialToMapObjectPartial(
     y: yPx,
     width: widthPx,
     height: heightPx,
-    rotation: Math.round(spatial.rotationZDeg % 360),
+    rotation: Math.round((-spatial.rotationZDeg) % 360),
     physicalDimensions: {
       ...curDims,
       width,
