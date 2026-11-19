@@ -40,6 +40,7 @@ import ModuleBuilderModal from "./ModuleBuilderModal"
 import DimensionConfigModal from "./DimensionConfigModal"
 import ResourceEngineModal from "../Resources/ResourceEngineModal"
 import SystemManagerModal from "../Systems/SystemManagerModal"
+import SystemDataPanel from "../Systems/SystemDataPanel"
 import { AdminCenterModal } from "../IAM/AdminCenter/AdminCenterModal"
 import { useAuthz } from "../IAM/useAuthz"
 import type { DimensionConfig } from "../MapLibrary/dimensionsTypes"
@@ -473,6 +474,7 @@ export default function UniversalMapEditor({
   const [isNewFloorOpen, setIsNewFloorOpen] = useState(false)
   const [isResourceEngineOpen, setIsResourceEngineOpen] = useState(false)
   const [isSystemManagerOpen, setIsSystemManagerOpen] = useState(false)
+  const [isSystemDataPanelOpen, setIsSystemDataPanelOpen] = useState(false)
   const [isIAMOpen, setIsIAMOpen] = useState(false)
 
   // Motor de Autorização & RBAC (NEXUS IAM)
@@ -1149,8 +1151,20 @@ export default function UniversalMapEditor({
               Navegação livre e inspeção (2D, 3D e Isométrico) · Alterações bloqueadas
             </span>
             <span className="text-slate-600">· {objects.length} objetos</span>
-            <div className="ml-auto text-slate-500 text-[10px]">
-              Workspace: <strong className="text-slate-300">{workspaceName || workspaceId}</strong>
+            <div className="ml-auto flex items-center gap-2">
+              {/* Botão de dados — disponível para ADMs no modo visualizador */}
+              {workspaceIsAdmin && (
+                <button
+                  onClick={() => setIsSystemDataPanelOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-semibold bg-emerald-700 hover:bg-emerald-600 text-white shadow transition-all"
+                  title="Gerenciar dados dos sistemas (Registros, Mapeamento, Confronto)"
+                >
+                  🗂️ Gerenciar Dados
+                </button>
+              )}
+              <span className="text-slate-500 text-[10px]">
+                Workspace: <strong className="text-slate-300">{workspaceName || workspaceId}</strong>
+              </span>
             </div>
           </div>
         ) : (
@@ -1459,12 +1473,23 @@ export default function UniversalMapEditor({
         onLocateObject={handleLocateById}
       />
 
-      {/* Modal de Sistemas de Saldo (Laboratório) */}
-      <SystemManagerModal
-        isOpen={isSystemManagerOpen}
-        onClose={() => setIsSystemManagerOpen(false)}
-        allObjects={objects}
-      />
+      {/* Modal de Sistemas de Saldo — apenas no Modo Edição (configuração de estrutura) */}
+      {!readOnly && (
+        <SystemManagerModal
+          isOpen={isSystemManagerOpen}
+          onClose={() => setIsSystemManagerOpen(false)}
+          allObjects={objects}
+        />
+      )}
+
+      {/* Painel de Dados dos Sistemas — apenas no Modo Visualização para ADMs */}
+      {readOnly && (
+        <SystemDataPanel
+          isOpen={isSystemDataPanelOpen}
+          onClose={() => setIsSystemDataPanelOpen(false)}
+          allObjects={objects}
+        />
+      )}
 
       {/* Modal da Central de Identidade, Papéis e Permissões (NEXUS IAM) */}
       <AdminCenterModal
