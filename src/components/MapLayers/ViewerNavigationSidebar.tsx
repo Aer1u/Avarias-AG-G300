@@ -37,6 +37,7 @@ interface ViewerNavigationSidebarProps {
   onSelectAndLocate: (obj: MapObject) => void
   onToggleVisibility: (id: string, visible: boolean) => void
   onToggleAllVisibility: (visible: boolean) => void
+  onOpenDriveInGrid?: (object: MapObject, channelId?: string) => void
 }
 
 interface TreeNode {
@@ -94,6 +95,7 @@ export default function ViewerNavigationSidebar({
   onSelectAndLocate,
   onToggleVisibility,
   onToggleAllVisibility,
+  onOpenDriveInGrid,
 }: ViewerNavigationSidebarProps) {
   const [activeTab, setActiveTab] = useState<"tree" | "details">("tree")
   const [search, setSearch] = useState("")
@@ -210,9 +212,17 @@ export default function ViewerNavigationSidebar({
 
           {/* Badge de tipo/capacidade */}
           {obj.type === "drive_in" && (
-            <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-950/70 text-amber-400 font-mono shrink-0 border border-amber-800/40">
-              Drive
-            </span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onOpenDriveInGrid?.(obj)
+              }}
+              className="text-[9px] px-2 py-0.5 rounded bg-blue-950/80 text-blue-300 font-mono shrink-0 border border-blue-800/60 hover:bg-blue-900 transition-colors flex items-center gap-1"
+              title="Abrir Grid de Paletes deste Drive"
+            >
+              <span>📥</span>
+              <span>Grid</span>
+            </button>
           )}
 
           {/* Botão de Localizar (Câmera) */}
@@ -442,6 +452,52 @@ export default function ViewerNavigationSidebar({
                       />
                     </div>
                   </div>
+
+                  {/* Botão de Abrir Grid Principal */}
+                  <button
+                    type="button"
+                    onClick={() => onOpenDriveInGrid?.(selectedObject)}
+                    className="w-full py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-900/30 transition-all cursor-pointer mt-2"
+                  >
+                    <span>📥</span>
+                    <span>Abrir Grid do Drive-In (Paletes)</span>
+                  </button>
+
+                  {/* Canais Individuais (se houver) */}
+                  {Array.isArray(selectedObject.props?.channels) && selectedObject.props.channels.length > 0 && (
+                    <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                        Canais Individuais deste Drive:
+                      </span>
+                      <div className="space-y-1">
+                        {(selectedObject.props.channels as any[]).map((chan) => (
+                          <button
+                            key={chan.id || chan.code}
+                            type="button"
+                            onClick={() => onOpenDriveInGrid?.(selectedObject, chan.code || chan.id)}
+                            className="w-full flex items-center justify-between p-2 rounded-xl bg-slate-900/90 hover:bg-blue-950/60 border border-slate-800 hover:border-blue-600/60 transition-all text-left group"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs">📥</span>
+                              <div>
+                                <span className="font-mono text-xs font-bold text-white group-hover:text-blue-300">
+                                  {chan.code}
+                                </span>
+                                {chan.name && (
+                                  <span className="text-[10px] text-slate-400 block">
+                                    {chan.name}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-blue-950 text-blue-400 border border-blue-800/60 font-semibold group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                              Ver Canal →
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

@@ -34,6 +34,7 @@ import MapToolbar from "../MapToolbar/MapToolbar"
 import UniversalSearchSpotlight from "../MapToolbar/UniversalSearchSpotlight"
 import AreaHierarchyPanel from "../MapLayers/AreaHierarchyPanel"
 import ViewerNavigationSidebar from "../MapLayers/ViewerNavigationSidebar"
+import ViewerDriveInModal from "../MapLayers/ViewerDriveInModal"
 import MassGeneratorModal from "./MassGeneratorModal"
 import HierarchyConfigModal from "./HierarchyConfigModal"
 import ModuleBuilderModal from "./ModuleBuilderModal"
@@ -476,6 +477,11 @@ export default function UniversalMapEditor({
   const [isSystemManagerOpen, setIsSystemManagerOpen] = useState(false)
   const [isSystemDataPanelOpen, setIsSystemDataPanelOpen] = useState(false)
   const [isIAMOpen, setIsIAMOpen] = useState(false)
+  const [driveInModalState, setDriveInModalState] = useState<{
+    isOpen: boolean
+    object: MapObject | null
+    channelId?: string
+  }>({ isOpen: false, object: null })
 
   // Motor de Autorização & RBAC (NEXUS IAM)
   const { can, activeUser, primaryRole, isPlatformOwner, isPlatformAdmin } = useAuthz("MAP-LAB-01")
@@ -1260,6 +1266,9 @@ export default function UniversalMapEditor({
                 onSelectAndLocate={handleSelectAndLocate}
                 onToggleVisibility={handleToggleVisibility}
                 onToggleAllVisibility={handleToggleAllVisibility}
+                onOpenDriveInGrid={(obj, chanId) =>
+                  setDriveInModalState({ isOpen: true, object: obj, channelId: chanId })
+                }
               />
             </div>
           ) : (
@@ -1352,6 +1361,30 @@ export default function UniversalMapEditor({
             onUpdateObject={handleUpdateObjectById}
             onModeChange={setSpatialMode}
           />
+        )}
+
+        {/* Pill Flutuante de Acesso Rápido ao Grid do Drive-In (Modo Visualizador) */}
+        {readOnly && selectedObject && (selectedObject.type === "drive_in" || selectedObject.category === "storage") && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 bg-slate-900/95 border border-blue-500/80 shadow-2xl rounded-2xl px-4 py-2.5 flex items-center gap-3 backdrop-blur-md animate-in fade-in slide-in-from-bottom-2">
+            <div className="flex items-center gap-2">
+              <span className="text-base">📥</span>
+              <div>
+                <span className="text-xs font-bold text-white block">
+                  {selectedObject.label || selectedObject.id}
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  {Number(selectedObject.props?.capacity) || 16} Paletes · Drive-In
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => setDriveInModalState({ isOpen: true, object: selectedObject })}
+              className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>Abrir Grid de Paletes (G300)</span>
+              <span>→</span>
+            </button>
+          </div>
         )}
 
         {/* Splitter arrastável da Direita (Apenas no Modo Editor) */}
@@ -1490,6 +1523,15 @@ export default function UniversalMapEditor({
           allObjects={objects}
         />
       )}
+
+      {/* Modal Drive-In Grid Oficial do Mapeamento G300 (Modo Visualizador) */}
+      <ViewerDriveInModal
+        isOpen={driveInModalState.isOpen}
+        onClose={() => setDriveInModalState({ isOpen: false, object: null })}
+        object={driveInModalState.object}
+        initialChannelId={driveInModalState.channelId}
+        isAdmin={workspaceIsAdmin}
+      />
 
       {/* Modal da Central de Identidade, Papéis e Permissões (NEXUS IAM) */}
       <AdminCenterModal
