@@ -269,17 +269,21 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
     }
   }
 
-  // 2. Trilhos Longitudinais de Apoio dos Paletes em Cada Vão e Nível
+  // 2. Trilhos Longitudinais de Apoio dos Paletes em Cada Vão
+  // No Drive-In real, o Nível 1 (chão) repousa sobre o piso de concreto.
+  // Os pares de trilhos aéreos sustentam os níveis elevados (N2, N3, N4...)
   const railThick = 0.06
   const railGeo = new THREE.BoxGeometry(railThick, depth, railThick)
   const bracketGeo = new THREE.BoxGeometry(0.12, 0.06, 0.04)
+  const levelSpacing = height / Math.max(1, levels)
 
   for (let l = 0; l < lanes; l++) {
     const vXLeft = -width / 2 + l * laneWidth + 0.07
     const vXRight = -width / 2 + (l + 1) * laneWidth - 0.07
 
-    for (let lvl = 1; lvl <= levels; lvl++) {
-      const lz = (height / (levels + 1)) * lvl
+    // Trilhos aéreos para os níveis superiores (a partir do nível 2)
+    for (let lvl = 2; lvl <= levels; lvl++) {
+      const lz = levelSpacing * (lvl - 1)
 
       // Trilho esquerdo e direito deste vão
       const railL = new THREE.Mesh(railGeo, driveRailMat)
@@ -330,7 +334,7 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
   const pWidth = Math.max(0.6, laneWidth * 0.72)
   const pDepth = Math.max(0.7, slotStepY * 0.82)
   const baseH = 0.12
-  const loadH = (height / (levels + 1)) * 0.75
+  const loadH = Math.min(1.4, levelSpacing * 0.75)
 
   const pDeckGeo = new THREE.BoxGeometry(pWidth, pDepth, baseH)
   const pLoadGeo = new THREE.BoxGeometry(pWidth * 0.94, pDepth * 0.94, loadH)
@@ -351,7 +355,10 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
       const posX = -width / 2 + (laneIdx + 0.5) * laneWidth
       // No 2D, profundidade 1 fica no topo (+depth/2) e depth N fica na entrada (-depth/2)
       const posY = depth / 2 - (dep - 0.5) * slotStepY
-      const posZ = (height / (levels + 1)) * lvl
+
+      // Nível 1 repousa diretamente no chão do galpão (Z=0).
+      // Níveis 2..N repousam sobre os trilhos aéreos correspondentes:
+      const posZ = lvl === 1 ? 0 : levelSpacing * (lvl - 1)
 
       const palletMeshGroup = new THREE.Group()
 
