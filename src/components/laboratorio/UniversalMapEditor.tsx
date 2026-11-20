@@ -1444,8 +1444,39 @@ export default function UniversalMapEditor({
           />
         )}
 
-        {/* Pill Flutuante de Acesso Rápido ao Grid do Drive-In (Modo Visualizador) */}
+        {/* Pill Flutuante de Acesso Rápido (Modo Visualizador) */}
         {readOnly && selectedObject && (selectedObject.type === "drive_in" || selectedObject.category === "storage") && (() => {
+          if (selectedObject.type === "compartment") {
+            const compLabel = String(selectedObject.props?.label || selectedObject.label || selectedObject.id)
+            return (
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 bg-slate-900/95 border border-amber-500/80 shadow-2xl rounded-2xl px-4 py-2.5 flex items-center gap-3 backdrop-blur-md animate-in fade-in slide-in-from-bottom-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">📦</span>
+                  <div>
+                    <span className="text-xs font-bold text-white block">
+                      {compLabel}
+                    </span>
+                    <span className="text-[10px] text-amber-300/90 font-mono">
+                      Armazenamento Aberto · Sem nível / profundidade
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() =>
+                    setDriveInModalState({
+                      isOpen: true,
+                      object: selectedObject,
+                    })
+                  }
+                  className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>Abrir Relação</span>
+                  <span>→</span>
+                </button>
+              </div>
+            )
+          }
+
           const channels = ensureDriveChannels(selectedObject)
           const currentChannel = selectedChannelId
             ? channels.find((c) => c.id === selectedChannelId || c.code === selectedChannelId) || channels[0]
@@ -1544,6 +1575,7 @@ export default function UniversalMapEditor({
                 pixelsPerMeter={20}
                 onSaveAsModelDefault={handleSaveAsModelDefault}
                 onOpenResourceEngine={() => setIsResourceEngineOpen(true)}
+                workspaceId={workspaceId}
               />
             </div>
           </div>
@@ -1609,6 +1641,7 @@ export default function UniversalMapEditor({
           isOpen={isSystemManagerOpen}
           onClose={() => setIsSystemManagerOpen(false)}
           allObjects={objects}
+          workspaceId={workspaceId}
         />
       )}
 
@@ -1618,16 +1651,23 @@ export default function UniversalMapEditor({
           isOpen={isSystemDataPanelOpen}
           onClose={() => setIsSystemDataPanelOpen(false)}
           allObjects={objects}
+          workspaceId={workspaceId}
+          levelsConfig={levelsConfig}
+          depthConfig={depthConfig}
         />
       )}
 
-      {/* Modal Drive-In Grid Oficial do Mapeamento G300 (Modo Visualizador) */}
+      {/* Modal Drive-In Grid Oficial / Relação de Compartimento (Modo Visualizador) */}
       <ViewerDriveInModal
         isOpen={driveInModalState.isOpen}
         onClose={() => setDriveInModalState({ isOpen: false, object: null })}
         object={driveInModalState.object}
         initialChannelId={driveInModalState.initialChannelId || driveInModalState.channelId}
         isAdmin={workspaceIsAdmin}
+        workspaceId={workspaceId}
+        allObjects={objects}
+        levelsConfig={levelsConfig}
+        depthConfig={depthConfig}
       />
 
       {/* Modal da Central de Identidade, Papéis e Permissões (NEXUS IAM) */}
