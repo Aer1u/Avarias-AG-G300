@@ -138,18 +138,22 @@ export default function ViewerNavigationSidebar({
     const hM = selectedObject.physicalDimensions?.height || 5.0
     const areaM2 = Math.round(wM * lM * 10) / 10
 
-    const levels = Number(selectedObject.props?.levels) || 4
-    const depth = Number(selectedObject.props?.depth) || 4
-    const lanes = Math.max(1, Number(selectedObject.props?.lanes) || 1)
-    const capacity = levels * depth * lanes
+    const isCompartment = selectedObject.type === "compartment"
+    const levels = isCompartment ? 0 : Number(selectedObject.props?.levels) || 4
+    const depth = isCompartment ? 0 : Number(selectedObject.props?.depth) || 4
+    const lanes = isCompartment ? 0 : Math.max(1, Number(selectedObject.props?.lanes) || 1)
+    const capacity = isCompartment ? 0 : levels * depth * lanes
 
-    const channels = Array.isArray(selectedObject.props?.channels) ? selectedObject.props.channels : []
+    const channels = !isCompartment && Array.isArray(selectedObject.props?.channels)
+      ? selectedObject.props.channels
+      : []
     let occupiedSlots = 0
     channels.forEach((c: any) => {
       if (Array.isArray(c.occupiedPositions)) occupiedSlots += c.occupiedPositions.length
     })
 
     return {
+      isCompartment,
       wM: wM.toFixed(2),
       lM: lM.toFixed(2),
       hM: hM.toFixed(2),
@@ -226,6 +230,19 @@ export default function ViewerNavigationSidebar({
             >
               <span>📥</span>
               <span>Grid</span>
+            </button>
+          )}
+          {obj.type === "compartment" && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onOpenDriveInGrid?.(obj)
+              }}
+              className="text-[9px] px-2 py-0.5 rounded bg-amber-950/80 text-amber-300 font-mono shrink-0 border border-amber-800/60 hover:bg-amber-900 transition-colors flex items-center gap-1"
+              title="Abrir Relação de Itens deste Compartimento"
+            >
+              <span>📦</span>
+              <span>Relação</span>
             </button>
           )}
 
@@ -413,8 +430,34 @@ export default function ViewerNavigationSidebar({
                 </div>
               </div>
 
-              {/* Se for Drive-In ou Armazenamento: Capacidade e Posições */}
-              {(selectedObject.type === "drive_in" || selectedObject.category === "storage") && (
+              {/* Se for Compartimento: Espaço Aberto (sem nível/profundidade) */}
+              {details.isCompartment && (
+                <div className="p-3.5 rounded-2xl bg-amber-950/20 border border-amber-800/40 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold text-amber-400 tracking-wider flex items-center gap-1">
+                      <span>📦</span>
+                      <span>Armazenamento Aberto</span>
+                    </span>
+                    <span className="text-[9px] font-bold text-amber-300 font-mono bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-full">
+                      Espaço Livre
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Compartimento sem subdivisão de nível ou profundidade. Visualize a relação de paletes agrupados e itens livres:
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => onOpenDriveInGrid?.(selectedObject)}
+                    className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-amber-900/30 transition-all cursor-pointer"
+                  >
+                    <span>📦</span>
+                    <span>Abrir Relação do Compartimento</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Se for Drive-In ou Armazenamento estruturado (exceto Compartimento): Capacidade e Posições */}
+              {!details.isCompartment && (selectedObject.type === "drive_in" || selectedObject.category === "storage") && (
                 <div className="p-3.5 rounded-2xl bg-amber-950/20 border border-amber-800/40 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] uppercase font-bold text-amber-400 tracking-wider flex items-center gap-1">
