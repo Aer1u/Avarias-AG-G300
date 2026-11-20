@@ -61,6 +61,7 @@ import {
   FLOOR_SURFACES_LIST,
   type FloorMaterialType,
 } from "../MapLibrary/floorSurfaces"
+import { ensureDriveChannels } from "../MapLibrary/spatialContainment"
 
 // ── Dados Iniciais: Hierarquia Configurável ───────────────────
 const INITIAL_HIERARCHY: HierarchyLevel[] = [
@@ -359,6 +360,7 @@ export default function UniversalMapEditor({
   const { objects, setObjects, resetHistory, undo, redo, canUndo, canRedo } = useMapHistory([])
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null)
   const [spatialMode, setSpatialMode] = useState<SpatialViewMode>("2d")
   const [tool, setTool] = useState<"select" | "pan" | "draw_area" | "draw_floor">("select")
   const [snapEnabled, setSnapEnabled] = useState(true)
@@ -535,6 +537,7 @@ export default function UniversalMapEditor({
     isOpen: boolean
     object: MapObject | null
     channelId?: string
+    initialChannelId?: string
   }>({ isOpen: false, object: null })
 
   // Motor de Autorização & RBAC (NEXUS IAM)
@@ -740,9 +743,16 @@ export default function UniversalMapEditor({
     })
   }, [selectedId])
 
+  // ── Seleção Geral e de Canal Individual ──────────────────────
+  const handleSelect = useCallback((id: string | null, channelId?: string | null) => {
+    setSelectedId(id)
+    setSelectedChannelId(channelId ?? null)
+  }, [])
+
   // ── Busca Universal: Localizar e Navegar ─────────────────────
-  const handleSelectAndLocate = useCallback((obj: MapObject) => {
+  const handleSelectAndLocate = useCallback((obj: MapObject, channelId?: string | null) => {
     setSelectedId(obj.id)
+    setSelectedChannelId(channelId ?? null)
     setIsSearchOpen(false)
     // Aguarda frame para o canvas ter o nó renderizado
     requestAnimationFrame(() => {
@@ -1331,11 +1341,13 @@ export default function UniversalMapEditor({
               <ViewerNavigationSidebar
                 objects={objects}
                 selectedId={selectedId}
+                selectedChannelId={selectedChannelId}
                 onSelectAndLocate={handleSelectAndLocate}
+                onSelectChannel={(obj, chanId) => handleSelect(obj.id, chanId)}
                 onToggleVisibility={handleToggleVisibility}
                 onToggleAllVisibility={handleToggleAllVisibility}
                 onOpenDriveInGrid={(obj, chanId) =>
-                  setDriveInModalState({ isOpen: true, object: obj, channelId: chanId })
+                  setDriveInModalState({ isOpen: true, object: obj, initialChannelId: chanId })
                 }
               />
             </div>
@@ -1407,13 +1419,14 @@ export default function UniversalMapEditor({
             ref={canvasRef}
             objects={objects}
             selectedId={selectedId}
+            selectedChannelId={selectedChannelId}
             snapEnabled={snapEnabled}
             gridSize={gridSize}
             zoom={zoom}
             tool={tool}
             readOnly={readOnly}
             onToolChange={setTool}
-            onSelect={setSelectedId}
+            onSelect={handleSelect}
             onUpdateObject={handleUpdateObjectById}
             onZoomChange={setZoom}
             onAddObject={handleAddObject}
@@ -1425,35 +1438,50 @@ export default function UniversalMapEditor({
             selectedId={selectedId}
             snapEnabled={snapEnabled}
             gridSize={gridSize}
-            onSelect={setSelectedId}
+            onSelect={handleSelect}
             onUpdateObject={handleUpdateObjectById}
             onModeChange={setSpatialMode}
           />
         )}
 
         {/* Pill Flutuante de Acesso Rápido ao Grid do Drive-In (Modo Visualizador) */}
-        {readOnly && selectedObject && (selectedObject.type === "drive_in" || selectedObject.category === "storage") && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 bg-slate-900/95 border border-blue-500/80 shadow-2xl rounded-2xl px-4 py-2.5 flex items-center gap-3 backdrop-blur-md animate-in fade-in slide-in-from-bottom-2">
-            <div className="flex items-center gap-2">
-              <span className="text-base">📥</span>
-              <div>
-                <span className="text-xs font-bold text-white block">
-                  {selectedObject.label || selectedObject.id}
-                </span>
-                <span className="text-[10px] text-slate-400 font-mono">
-                  {Number(selectedObject.props?.capacity) || 16} Paletes · Drive-In
-                </span>
+        {readOnly && selectedObject && (selectedObject.type === "drive_in" || selectedObject.category === "storage") && (() => {
+          const channels = ensureDriveChannels(selectedObject)
+          const currentChannel = selectedChannelId
+            ? channels.find((c) => c.id === selectedChannelId || c.code === selectedChannelId) || channels[0]
+            : channels[0]
+          const chanTitle = currentChannel?.name || currentChannel?.code || selectedObject.label || selectedObject.id
+          const chanCap = currentChannel?.capacity || Number(selectedObject.props?.capacity) || 16
+
+          return (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 bg-slate-900/95 border border-blue-500/80 shadow-2xl rounded-2xl px-4 py-2.5 flex items-center gap-3 backdrop-blur-md animate-in fade-in slide-in-from-bottom-2">
+              <div className="flex items-center gap-2">
+                <span className="text-base">📥</span>
+                <div>
+                  <span className="text-xs font-bold text-white block">
+                    {chanTitle}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {chanCap} Paletes · {selectedObject.label || selectedObject.id}
+                  </span>
+                </div>
               </div>
+              <button
+                onClick={() =>
+                  setDriveInModalState({
+                    isOpen: true,
+                    object: selectedObject,
+                    initialChannelId: currentChannel?.code || currentChannel?.id,
+                  })
+                }
+                className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>Abrir Grid do Canal (G300)</span>
+                <span>→</span>
+              </button>
             </div>
-            <button
-              onClick={() => setDriveInModalState({ isOpen: true, object: selectedObject })}
-              className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
-            >
-              <span>Abrir Grid de Paletes (G300)</span>
-              <span>→</span>
-            </button>
-          </div>
-        )}
+          )
+        })()}
 
         {/* Splitter arrastável da Direita (Apenas no Modo Editor) */}
         {!readOnly && !isRightCollapsed && (
@@ -1501,6 +1529,7 @@ export default function UniversalMapEditor({
             <div className="flex-1 overflow-hidden min-h-0">
               <MapPropertiesPanel
                 selectedObject={selectedObject}
+                selectedChannelId={selectedChannelId}
                 onUpdateObject={handleUpdateObject}
                 onUpdateProp={handleUpdateProp}
                 onDuplicate={handleDuplicate}
@@ -1597,7 +1626,7 @@ export default function UniversalMapEditor({
         isOpen={driveInModalState.isOpen}
         onClose={() => setDriveInModalState({ isOpen: false, object: null })}
         object={driveInModalState.object}
-        initialChannelId={driveInModalState.channelId}
+        initialChannelId={driveInModalState.initialChannelId || driveInModalState.channelId}
         isAdmin={workspaceIsAdmin}
       />
 

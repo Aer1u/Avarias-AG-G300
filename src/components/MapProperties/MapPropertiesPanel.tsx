@@ -32,6 +32,7 @@ interface MapPropertiesPanelProps {
   records: CustomEntityRecord[]
   onAddRecord: (record: Partial<CustomEntityRecord>) => void
   allObjects?: MapObject[]
+  selectedChannelId?: string | null
   levelsConfig?: DimensionConfig
   depthConfig?: DimensionConfig
   pixelsPerMeter?: number
@@ -427,6 +428,7 @@ export default function MapPropertiesPanel({
   records,
   onAddRecord,
   allObjects = [],
+  selectedChannelId,
   levelsConfig,
   depthConfig,
   pixelsPerMeter = 20,
@@ -544,6 +546,7 @@ export default function MapPropertiesPanel({
           <>
             <DriveOperationalCard
               selectedObject={selectedObject}
+              selectedChannelId={selectedChannelId}
               onUpdateObject={onUpdateObject}
               onUpdateProp={onUpdateProp}
               levelsConfig={levelsConfig}

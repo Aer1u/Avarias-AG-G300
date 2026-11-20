@@ -21,6 +21,7 @@ import { useSystemStore } from "../Systems/useSystemStore"
 
 interface DriveOperationalCardProps {
   selectedObject: MapObject
+  selectedChannelId?: string | null
   onUpdateObject: (partial: Partial<MapObject>) => void
   onUpdateProp: (key: string, value: unknown) => void
   levelsConfig?: DimensionConfig
@@ -30,6 +31,7 @@ interface DriveOperationalCardProps {
 
 export default function DriveOperationalCard({
   selectedObject,
+  selectedChannelId,
   onUpdateObject,
   onUpdateProp,
   levelsConfig = DEFAULT_G300_LEVELS_CONFIG,
@@ -155,6 +157,20 @@ export default function DriveOperationalCard({
   const [expandedChannelId, setExpandedChannelId] = useState<string | null>(
     channels.length > 0 ? channels[0].id : null
   )
+
+  // Sincroniza expansão quando o usuário clica em um canal específico no mapa
+  useEffect(() => {
+    if (selectedChannelId) {
+      const match = channels.find(
+        (c) => c.id === selectedChannelId || c.code === selectedChannelId
+      )
+      if (match) {
+        setExpandedChannelId(match.id)
+      } else {
+        setExpandedChannelId(selectedChannelId)
+      }
+    }
+  }, [selectedChannelId, channels])
 
   const handleUpdateChannelProp = (channelId: string, partial: Partial<StorageChannel>) => {
     const updated = channels.map((c) => (c.id === channelId ? { ...c, ...partial } : c))

@@ -19,6 +19,7 @@ import { ELEMENT_BY_TYPE } from "../MapLibrary/registry"
 import { INITIAL_AREA_CLASSIFICATIONS } from "../MapLibrary/areaClassifier"
 import { pixelsToReal, ensurePhysicalDimensions } from "../MapLibrary/unitConverter"
 import { FLOOR_SURFACES, type FloorMaterialType } from "../MapLibrary/floorSurfaces"
+import { ensureDriveChannels } from "../MapLibrary/spatialContainment"
 
 export interface MapCanvasHandle {
   navigateTo: (obj: MapObject) => void
@@ -28,13 +29,14 @@ export interface MapCanvasHandle {
 interface MapCanvasContainerProps {
   objects: MapObject[]
   selectedId: string | null
+  selectedChannelId?: string | null
   snapEnabled: boolean
   gridSize: number
   zoom: number
   tool: "select" | "pan" | "draw_area" | "draw_floor"
   readOnly?: boolean
   onToolChange?: (tool: "select" | "pan" | "draw_area" | "draw_floor") => void
-  onSelect: (id: string | null) => void
+  onSelect: (id: string | null, channelId?: string | null) => void
   onUpdateObject: (id: string, partial: Partial<MapObject>) => void
   onZoomChange: (newZoom: number) => void
   onAddObject?: (obj: MapObject) => void
@@ -53,6 +55,7 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
     {
       objects,
       selectedId,
+      selectedChannelId,
       snapEnabled,
       gridSize,
       zoom,
@@ -1045,9 +1048,111 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
           group.draggable(!readOnly && !obj.locked && tool === "select")
           group.dragBoundFunc(createDragBoundFunc(false))
 
+          // ── Suporte a Seleção Individual de Canal em Drive-In / Drive-Through ──
+          const isDriveIn = obj.type === "drive_in" || obj.type === "drive_through"
+          if (isDriveIn) {
+            const lanes = Math.max(1, Number(obj.props?.lanes) || 1)
+            const laneW = obj.width / lanes
+            const channels = ensureDriveChannels(obj)
+
+            for (let l = 0; l < lanes; l++) {
+              const chan = channels[l] || channels.find((c) => c.laneIndex === l + 1)
+              const chanId = chan ? (chan.id || chan.code) : `${obj.id}_chan_${l + 1}`
+              const isChannelSelected =
+                selectedId === obj.id &&
+                (selectedChannelId === chanId ||
+                  selectedChannelId === chan?.code ||
+                  (!selectedChannelId && l === 0))
+
+              const cx = l * laneW
+              const cy = 0
+              const cw = laneW
+              const ch = obj.height
+
+              // Hitbox interativo de seleção para cada canal individual
+              const chanHitbox = new Konva.Rect({
+                x: cx,
+                y: cy,
+                width: cw,
+                height: ch,
+                fill: isChannelSelected ? "rgba(56, 189, 248, 0.20)" : "transparent",
+                stroke: isChannelSelected ? "#38bdf8" : undefined,
+                strokeWidth: isChannelSelected ? 2.5 : 0,
+                shadowColor: isChannelSelected ? "#0284c7" : undefined,
+                shadowBlur: isChannelSelected ? 8 : 0,
+                listening: true,
+                name: `channel_hitbox_${l}`,
+              })
+
+              chanHitbox.on("click tap", (e) => {
+                e.cancelBubble = true
+                onSelect(obj.id, chanId)
+              })
+
+              // Se o canal estiver selecionado, desenha cantoneiras e badge em formato de objeto
+              if (isChannelSelected) {
+                const cornerSize = 5
+                const corners = [
+                  [cx - 1, cy - 1],
+                  [cx + cw - cornerSize + 1, cy - 1],
+                  [cx - 1, cy + ch - cornerSize + 1],
+                  [cx + cw - cornerSize + 1, cy + ch - cornerSize + 1],
+                ]
+                corners.forEach(([px, py]) => {
+                  group.add(
+                    new Konva.Rect({
+                      x: px,
+                      y: py,
+                      width: cornerSize,
+                      height: cornerSize,
+                      fill: "#38bdf8",
+                      stroke: "#ffffff",
+                      strokeWidth: 1,
+                      cornerRadius: 1,
+                      listening: false,
+                    })
+                  )
+                })
+
+                // Badge do canal selecionado
+                const chanTitle = chan ? (chan.name || chan.code) : `Canal ${l + 1}`
+                const badgeText = new Konva.Text({
+                  x: cx + 3,
+                  y: cy + 3,
+                  text: `📍 ${chanTitle}`,
+                  fontSize: Math.min(9, Math.max(7, Math.round(cw / 8))),
+                  fontStyle: "bold",
+                  fontFamily: "monospace",
+                  fill: "#ffffff",
+                  padding: 2,
+                  listening: false,
+                })
+                const badgeBg = new Konva.Rect({
+                  x: cx + 2,
+                  y: cy + 2,
+                  width: badgeText.width() + 4,
+                  height: badgeText.height() + 2,
+                  fill: "rgba(2, 132, 199, 0.9)",
+                  cornerRadius: 3,
+                  listening: false,
+                })
+                group.add(badgeBg)
+                group.add(badgeText)
+              }
+
+              group.add(chanHitbox)
+            }
+          }
+
           group.on("click tap", (e) => {
             e.cancelBubble = true
-            onSelect(obj.id)
+            if (isDriveIn) {
+              const channels = ensureDriveChannels(obj)
+              const firstId = channels[0]?.id || channels[0]?.code
+              onSelect(obj.id, firstId)
+            } else {
+              onSelect(obj.id)
+            }
           })
 
           group.on("dragend", () => {
@@ -1097,7 +1202,13 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
       if (selectedId && !readOnly) {
         const selectedNode = nodeMapRef.current.get(selectedId)
         const selectedObj = objects.find((o) => o.id === selectedId)
-        if (selectedNode && selectedNode instanceof Konva.Group) {
+        const isDriveIn = selectedObj?.type === "drive_in" || selectedObj?.type === "drive_through"
+
+        // Para Drive-In, o canal selecionado possui sua própria moldura e cantoneiras de objeto individual.
+        // Ocultamos o transformer externo para focar visualmente apenas naquele canal específico.
+        if (isDriveIn) {
+          tr.nodes([])
+        } else if (selectedNode && selectedNode instanceof Konva.Group) {
           tr.keepRatio(Boolean(selectedObj?.physicalDimensions?.lockAspectRatio))
           tr.nodes([selectedNode])
           tr.moveToTop()
@@ -1109,7 +1220,7 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
       }
 
       layer.batchDraw()
-    }, [objects, selectedId, tool, readOnly, onSelect, onUpdateObject, snap, createDragBoundFunc])
+    }, [objects, selectedId, selectedChannelId, tool, readOnly, onSelect, onUpdateObject, snap, createDragBoundFunc])
 
     return (
       <div

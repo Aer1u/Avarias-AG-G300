@@ -34,7 +34,9 @@ import { calculateAreaM2 } from "../MapLibrary/areaClassifier"
 interface ViewerNavigationSidebarProps {
   objects: MapObject[]
   selectedId: string | null
+  selectedChannelId?: string | null
   onSelectAndLocate: (obj: MapObject) => void
+  onSelectChannel?: (obj: MapObject, channelId: string) => void
   onToggleVisibility: (id: string, visible: boolean) => void
   onToggleAllVisibility: (visible: boolean) => void
   onOpenDriveInGrid?: (object: MapObject, channelId?: string) => void
@@ -92,7 +94,9 @@ function getObjectIcon(obj: MapObject): string {
 export default function ViewerNavigationSidebar({
   objects,
   selectedId,
+  selectedChannelId,
   onSelectAndLocate,
+  onSelectChannel,
   onToggleVisibility,
   onToggleAllVisibility,
   onOpenDriveInGrid,
@@ -470,31 +474,51 @@ export default function ViewerNavigationSidebar({
                         Canais Individuais deste Drive:
                       </span>
                       <div className="space-y-1">
-                        {(selectedObject.props.channels as any[]).map((chan) => (
-                          <button
-                            key={chan.id || chan.code}
-                            type="button"
-                            onClick={() => onOpenDriveInGrid?.(selectedObject, chan.code || chan.id)}
-                            className="w-full flex items-center justify-between p-2 rounded-xl bg-slate-900/90 hover:bg-blue-950/60 border border-slate-800 hover:border-blue-600/60 transition-all text-left group"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs">📥</span>
-                              <div>
-                                <span className="font-mono text-xs font-bold text-white group-hover:text-blue-300">
-                                  {chan.code}
-                                </span>
-                                {chan.name && (
-                                  <span className="text-[10px] text-slate-400 block">
-                                    {chan.name}
-                                  </span>
-                                )}
+                        {(selectedObject.props.channels as any[]).map((chan) => {
+                          const isChanActive =
+                            (chan.id && chan.id === selectedChannelId) ||
+                            (chan.code && chan.code === selectedChannelId)
+
+                          return (
+                            <button
+                              key={chan.id || chan.code}
+                              type="button"
+                              onClick={() => {
+                                onSelectChannel?.(selectedObject, chan.id || chan.code)
+                                onOpenDriveInGrid?.(selectedObject, chan.code || chan.id)
+                              }}
+                              className={`w-full flex items-center justify-between p-2 rounded-xl transition-all text-left group ${
+                                isChanActive
+                                  ? "bg-blue-950/80 border-2 border-blue-500 shadow-md ring-1 ring-blue-500/40"
+                                  : "bg-slate-900/90 hover:bg-blue-950/60 border border-slate-800 hover:border-blue-600/60"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs">📥</span>
+                                <div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-mono text-xs font-bold text-white group-hover:text-blue-300">
+                                      {chan.code}
+                                    </span>
+                                    {isChanActive && (
+                                      <span className="text-[9px] px-1 py-0.2 rounded bg-blue-500 text-white font-bold">
+                                        Ativo
+                                      </span>
+                                    )}
+                                  </div>
+                                  {chan.name && (
+                                    <span className="text-[10px] text-slate-400 block">
+                                      {chan.name}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                            <span className="text-[10px] px-2 py-0.5 rounded bg-blue-950 text-blue-400 border border-blue-800/60 font-semibold group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                              Ver Canal →
-                            </span>
-                          </button>
-                        ))}
+                              <span className="text-[10px] px-2 py-0.5 rounded bg-blue-950 text-blue-400 border border-blue-800/60 font-semibold group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                Ver Canal →
+                              </span>
+                            </button>
+                          )
+                        })}
                       </div>
                     </div>
                   )}
