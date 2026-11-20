@@ -11,10 +11,10 @@ import { useState, useEffect, useCallback } from "react"
 import { BusinessSystem, StorageParticipantConfig, StockControlMode } from "./types"
 import { DEFAULT_BUSINESS_SYSTEMS } from "./systemRegistry"
 import { supabase } from "@/lib/supabase"
+import { toWorkspaceUuid } from "@/lib/workspaceUuid"
+import { deleteSystemItemsFromSupabase } from "@/lib/workspaceItemsSync"
 
 const STORAGE_KEY_PREFIX = "nexus_balance_systems_v1"
-const DEFAULT_WORKSPACE_UUID = "00000000-0000-0000-0000-000000000000"
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // IDs legados dos modelos de exemplo que existiam na carga inicial do SQL
 const LEGACY_SEEDED_SYSTEM_IDS = new Set([
@@ -24,28 +24,36 @@ const LEGACY_SEEDED_SYSTEM_IDS = new Set([
   "c12db68d-94de-4102-89dc-18323837d2ef",
 ])
 
-/**
- * Converte qualquer workspaceId (ex: "ws_demo_g300" ou UUID) em um UUID válido
- * e determinístico para o campo UUID `workspace_id` do Supabase.
- */
-export function toWorkspaceUuid(workspaceId?: string | null): string {
-  if (!workspaceId || !workspaceId.trim()) return DEFAULT_WORKSPACE_UUID
-  const clean = workspaceId.trim()
-  if (UUID_REGEX.test(clean)) return clean.toLowerCase()
+export { toWorkspaceUuid }
 
-  // Hash determinístico de 128 bits (4 x 32 bits FNV-1a com seeds distintas)
-  const seeds = [0x811c9dc5, 0x9e3779b9, 0x85ebca6b, 0xc2b2ae35]
-  const hexParts = seeds.map((seed, idx) => {
-    let h = seed >>> 0
-    const input = `${idx}:${clean}`
-    for (let i = 0; i < input.length; i++) {
-      h ^= input.charCodeAt(i)
-      h = Math.imul(h, 0x01000193) >>> 0
-    }
-    return h.toString(16).padStart(8, "0")
-  })
-  const hex = hexParts.join("")
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`
+interface DbBusinessSystemRow {
+  id: string
+  code: string
+  name: string
+  description?: string | null
+  color?: string | null
+  icon?: string | null
+  status?: string | null
+  default_control_mode?: string | null
+  origin_storage_id?: string | null
+  origin_storage_label?: string | null
+  responsible?: string | null
+  workspace_id?: string | null
+  created_at: string
+  updated_at: string
+}
+
+interface DbParticipantRow {
+  system_id: string
+  storage_object_id: string
+  storage_object_label: string
+  storage_type: string
+  role: StorageParticipantConfig["role"]
+  stock_control_mode?: string | null
+  allow_inbound?: boolean | null
+  allow_outbound?: boolean | null
+  allow_return_to_origin?: boolean | null
+  configured_at?: string | null
 }
 
 export function useSystemStore(workspaceId?: string) {
@@ -68,39 +76,44 @@ export function useSystemStore(workspaceId?: string) {
         .order("created_at", { ascending: true })
 
       if (!sysError && Array.isArray(dbSystems)) {
-        const systemIds = dbSystems.map((r: any) => r.id)
-        let dbParticipants: any[] = []
+        const rows = dbSystems as DbBusinessSystemRow[]
+        const systemIds = rows.map((r) => r.id)
+        let dbParticipants: DbParticipantRow[] = []
         if (systemIds.length > 0) {
           const { data: partData } = await supabase
             .from("system_storage_participants")
             .select("*")
             .in("system_id", systemIds)
-          dbParticipants = partData || []
+          dbParticipants = (partData as DbParticipantRow[] | null) || []
         }
 
-        const mapped: BusinessSystem[] = dbSystems
-          .filter((row: any) => !LEGACY_SEEDED_SYSTEM_IDS.has(row.id))
-          .map((row: any) => ({
+        const mapped: BusinessSystem[] = rows
+          .filter(
+            (row) =>
+              !LEGACY_SEEDED_SYSTEM_IDS.has(row.id) &&
+              !String(row.code || "").startsWith("__NEXUS_")
+          )
+          .map((row) => ({
             id: row.id,
             code: row.code,
             name: row.name,
             description: row.description || "",
             color: row.color || "#3b82f6",
             icon: row.icon || "📦",
-            status: row.status || "ativo",
+            status: (row.status as BusinessSystem["status"]) || "ativo",
             defaultControlMode: (row.default_control_mode as StockControlMode) || "vinculado_saldo",
             originStorageId: row.origin_storage_id || "",
             originStorageLabel: row.origin_storage_label || "",
             responsible: row.responsible || "",
             workspaceId: row.workspace_id || wsUuid,
             participants: dbParticipants
-              .filter((p: any) => p.system_id === row.id)
-              .map((p: any) => ({
+              .filter((p) => p.system_id === row.id)
+              .map((p) => ({
                 storageObjectId: p.storage_object_id,
                 storageObjectLabel: p.storage_object_label,
                 storageType: p.storage_type,
                 role: p.role,
-                stockControlMode: p.stock_control_mode as StockControlMode,
+                stockControlMode: (p.stock_control_mode as StockControlMode) || "vinculado_saldo",
                 permissions: {
                   allowInbound: p.allow_inbound ?? true,
                   allowOutbound: p.allow_outbound ?? true,
@@ -137,7 +150,7 @@ export function useSystemStore(workspaceId?: string) {
         const parsed = JSON.parse(raw)
         if (Array.isArray(parsed)) {
           const cleaned = parsed.filter(
-            (sys: any) => sys && !LEGACY_SEEDED_SYSTEM_IDS.has(sys.id)
+            (sys: BusinessSystem) => sys && !LEGACY_SEEDED_SYSTEM_IDS.has(sys.id)
           )
           setSystems(cleaned)
           setIsLoaded(true)
@@ -153,7 +166,9 @@ export function useSystemStore(workspaceId?: string) {
   }, [wsUuid, storageKey, workspaceId])
 
   useEffect(() => {
-    loadSystems()
+    Promise.resolve().then(() => {
+      void loadSystems()
+    })
   }, [loadSystems])
 
   // Salva no cache local
@@ -242,7 +257,7 @@ export function useSystemStore(workspaceId?: string) {
       )
       persistLocally(updated)
 
-      const dbPatch: Record<string, any> = {
+      const dbPatch: Record<string, unknown> = {
         updated_at: new Date().toISOString(),
       }
       if (partial.code !== undefined) dbPatch.code = partial.code
@@ -283,6 +298,7 @@ export function useSystemStore(workspaceId?: string) {
 
       ;(async () => {
         try {
+          await deleteSystemItemsFromSupabase(id, wsUuid)
           await supabase.from("universal_movements").delete().eq("system_id", id)
           await supabase.from("universal_balances").delete().eq("system_id", id)
           await supabase.from("universal_records").delete().eq("system_id", id)
