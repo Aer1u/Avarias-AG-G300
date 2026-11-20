@@ -7,7 +7,7 @@
 
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect, useMemo } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import {
   X,
@@ -17,14 +17,30 @@ import {
   Lock,
   ArrowLeft,
   Box,
+  AlertCircle,
 } from "lucide-react"
 import { useSystemStore } from "./useSystemStore"
 import type { BusinessSystem, StorageParticipantConfig, StorageRole, StockControlMode } from "./types"
 import type { MapObject } from "../MapLibrary/types"
+import type { DimensionConfig } from "../MapLibrary/dimensionsTypes"
+import {
+  DEFAULT_G300_LEVELS_CONFIG,
+  DEFAULT_G300_DEPTH_CONFIG,
+  generateDimensionItems,
+} from "../MapLibrary/dimensionManager"
 import { MapeamentoDriveInGrid } from "../mapeamentos/MapeamentoDriveInGrid"
 import { MapeamentoItemModal } from "../mapeamentos/MapeamentoItemModal"
+import CompartmentRelationView from "../MapLayers/CompartmentRelationView"
 import type { MapeamentoItem, MapeamentoConfig } from "@/lib/mapeamentosStorage"
 import { getLocalItems, saveLocalItems } from "@/lib/mapeamentosStorage"
+import {
+  fetchAndSyncSystemBalances,
+  getOriginObjectId,
+  getSystemBalanceSnapshot,
+  getAvailableStocksFromOrigin,
+  applyNonOriginPositionChange,
+  syncSupabaseUniversalBalances,
+} from "./systemBalanceService"
 import { cn } from "@/lib/utils"
 
 interface SystemMappingModalProps {
@@ -32,6 +48,9 @@ interface SystemMappingModalProps {
   onClose: () => void
   system: BusinessSystem
   allObjects?: MapObject[]
+  workspaceId?: string
+  levelsConfig?: DimensionConfig
+  depthConfig?: DimensionConfig
 }
 
 /** Cria um MapeamentoConfig mínimo com base num MapObject para usar no DriveInGrid */
@@ -54,8 +73,11 @@ export default function SystemMappingModal({
   onClose,
   system,
   allObjects = [],
+  workspaceId,
+  levelsConfig: mapLevelsConfig = DEFAULT_G300_LEVELS_CONFIG,
+  depthConfig: mapDepthConfig = DEFAULT_G300_DEPTH_CONFIG,
 }: SystemMappingModalProps) {
-  const { updateSystem } = useSystemStore()
+  const { updateSystem } = useSystemStore(workspaceId)
   const [selectedObjectId, setSelectedObjectId] = useState("")
   const [role, setRole] = useState<StorageRole>("armazenamento")
   const [stockControlMode, setStockControlMode] = useState<StockControlMode>(system.defaultControlMode)
@@ -71,6 +93,33 @@ export default function SystemMappingModal({
   const [editingItem, setEditingItem] = useState<MapeamentoItem | null>(null)
   const [itemCoords, setItemCoords] = useState<{ lvl: number; prof: number }>({ lvl: 1, prof: 1 })
   const [batchCoords, setBatchCoords] = useState<{ lvl: number; prof: number }[] | null>(null)
+  const [balanceError, setBalanceError] = useState<string>("")
+
+  // Sincroniza registros -> saldo da Origem (Chão) ao abrir
+  useEffect(() => {
+    if (!isOpen) return
+    let active = true
+    fetchAndSyncSystemBalances(system).then(() => {
+      if (!active) return
+      setBalanceError("")
+      setItemsVersion((v) => v + 1)
+    })
+    return () => {
+      active = false
+    }
+  }, [isOpen, system])
+
+  const balanceSnapshot = useMemo(() => {
+    void itemsVersion
+    return getSystemBalanceSnapshot(system)
+  }, [system, itemsVersion])
+
+  const originObjectId = useMemo(() => getOriginObjectId(system), [system])
+
+  const availableStocks = useMemo(() => {
+    void itemsVersion
+    return getAvailableStocksFromOrigin(system)
+  }, [system, itemsVersion])
 
   if (!isOpen) return null
 
@@ -99,7 +148,15 @@ export default function SystemMappingModal({
       configuredAt: new Date().toISOString(),
     }
 
-    updateSystem(system.id, { participants: [...participants, newParticipant] })
+    const patch: Partial<BusinessSystem> = {
+      participants: [...participants, newParticipant],
+    }
+    if (role === "origem" && !system.originStorageId) {
+      patch.originStorageId = obj.id
+      patch.originStorageLabel = obj.label || obj.id
+    }
+
+    updateSystem(system.id, patch)
     setSelectedObjectId("")
   }
 
@@ -125,26 +182,35 @@ export default function SystemMappingModal({
     })
   }
 
-  // ── Inspecionar canal (abre DriveInGrid) ─────────────────────
+  // ── Inspecionar canal (abre DriveInGrid ou Relação do Compartimento) ──
   const handleInspect = (p: StorageParticipantConfig) => {
     const obj = allObjects.find(o => o.id === p.storageObjectId)
+    setBalanceError("")
     setInspectingParticipant(p)
     setInspectingObject(obj || null)
     setIsEditModeActive(false)
   }
 
   // ── Itens do canal (localStorage com chave = sys_{systemId}_{objectId}) ──
-  const channelKey = inspectingObject ? `sys_${system.id}_${inspectingObject.id}` : ""
-  // Depende de itemsVersion para forçar re-render ao salvar/remover
-  const channelItems: MapeamentoItem[] = (inspectingObject && itemsVersion >= 0)
+  const activeObjectId = inspectingObject?.id || inspectingParticipant?.storageObjectId || ""
+  const channelKey = activeObjectId ? `sys_${system.id}_${activeObjectId}` : ""
+  const channelItems: MapeamentoItem[] = (activeObjectId && itemsVersion >= 0)
     ? getLocalItems().filter(it => it.mapeamentoId === channelKey)
     : []
+
+  const isInspectingOrigin = Boolean(activeObjectId && originObjectId === activeObjectId)
+  const enforceDriveStockLimit = Boolean(
+    !isInspectingOrigin &&
+      (inspectingParticipant?.stockControlMode === "vinculado_saldo" ||
+        (!inspectingParticipant?.stockControlMode && system.defaultControlMode === "vinculado_saldo"))
+  )
 
   const handleAddItem = (
     nivel: number,
     profundidade: number,
     batch?: { lvl: number; prof: number }[]
   ) => {
+    setBalanceError("")
     setItemCoords({ lvl: nivel, prof: profundidade })
     setBatchCoords(batch || null)
     setEditingItem(null)
@@ -152,33 +218,92 @@ export default function SystemMappingModal({
   }
 
   const handleEditItem = (updated: MapeamentoItem) => {
-    setEditingItem(updated)
-    setItemCoords({ lvl: updated.nivel, prof: updated.profundidade })
-    setBatchCoords(null)
-    setIsItemModalOpen(true)
+    setBalanceError("")
+    const currentChannelItems = getLocalItems().filter((it) => it.mapeamentoId === channelKey)
+    const nextChannelItems =
+      updated.quantidade > 0
+        ? currentChannelItems.map((it) => (it.id === updated.id ? updated : it))
+        : currentChannelItems.filter((it) => it.id !== updated.id)
+
+    if (activeObjectId && !isInspectingOrigin) {
+      const res = applyNonOriginPositionChange(
+        system,
+        activeObjectId,
+        currentChannelItems,
+        nextChannelItems,
+        { enforceStockLimit: enforceDriveStockLimit }
+      )
+      if (!res.ok) {
+        setBalanceError(res.errorMessage)
+        return
+      }
+    } else {
+      const others = getLocalItems().filter((it) => it.mapeamentoId !== channelKey)
+      saveLocalItems([...others, ...nextChannelItems])
+      syncSupabaseUniversalBalances(system).catch(() => {})
+    }
+    setItemsVersion((v) => v + 1)
   }
 
   const handleSaveModalItems = (saved: MapeamentoItem[] | MapeamentoItem) => {
-    const all = getLocalItems()
+    setBalanceError("")
     const savedArr = Array.isArray(saved) ? saved : [saved]
 
     const formatted = savedArr.map(it => ({
       ...it,
       mapeamentoId: channelKey,
-      posicao: inspectingObject?.label || inspectingObject?.id || "POS",
+      posicao: inspectingObject?.label || inspectingParticipant?.storageObjectLabel || activeObjectId || "POS",
     }))
 
+    const currentChannelItems = getLocalItems().filter((it) => it.mapeamentoId === channelKey)
     const replacedIds = new Set(formatted.map(it => it.id))
-    const remaining = all.filter(it => !replacedIds.has(it.id))
+    const remainingInChannel = currentChannelItems.filter(it => !replacedIds.has(it.id))
+    const nextChannelItems = [...remainingInChannel, ...formatted]
 
-    saveLocalItems([...remaining, ...formatted])
+    if (activeObjectId && !isInspectingOrigin) {
+      const res = applyNonOriginPositionChange(
+        system,
+        activeObjectId,
+        currentChannelItems,
+        nextChannelItems,
+        { enforceStockLimit: enforceDriveStockLimit }
+      )
+      if (!res.ok) {
+        setBalanceError(res.errorMessage)
+        return
+      }
+    } else {
+      const others = getLocalItems().filter(it => it.mapeamentoId !== channelKey)
+      saveLocalItems([...others, ...nextChannelItems])
+      syncSupabaseUniversalBalances(system).catch(() => {})
+    }
+
     setIsItemModalOpen(false)
     setEditingItem(null)
     setItemsVersion(v => v + 1)
   }
 
   const handleDeleteItem = (itemId: string) => {
-    saveLocalItems(getLocalItems().filter(it => it.id !== itemId))
+    setBalanceError("")
+    const currentChannelItems = getLocalItems().filter((it) => it.mapeamentoId === channelKey)
+    const nextChannelItems = currentChannelItems.filter(it => it.id !== itemId)
+    if (activeObjectId && !isInspectingOrigin) {
+      const res = applyNonOriginPositionChange(
+        system,
+        activeObjectId,
+        currentChannelItems,
+        nextChannelItems,
+        { enforceStockLimit: enforceDriveStockLimit }
+      )
+      if (!res.ok) {
+        setBalanceError(res.errorMessage)
+        return
+      }
+    } else {
+      const others = getLocalItems().filter(it => it.mapeamentoId !== channelKey)
+      saveLocalItems([...others, ...nextChannelItems])
+      syncSupabaseUniversalBalances(system).catch(() => {})
+    }
     setItemsVersion(v => v + 1)
   }
 
@@ -202,15 +327,76 @@ export default function SystemMappingModal({
     setItemsVersion(v => v + 1)
   }
 
-  // Nível e profundidade do objeto selecionado
-  const levels = inspectingObject
-    ? Number(inspectingObject.props?.levels) || 4
-    : 4
-  const capacity = inspectingObject
-    ? (Number(inspectingObject.props?.levels) || 4) * (Number(inspectingObject.props?.depth) || 4)
-    : 16
+  const isInspectingCompartment =
+    inspectingObject?.type === "compartment" ||
+    inspectingParticipant?.storageType === "compartment"
 
-  const fakeConfig = inspectingObject ? buildFakeConfig(inspectingObject) : null
+  // Nível e profundidade do objeto selecionado (não aplicável a Compartimento)
+  const levels = !isInspectingCompartment && inspectingObject
+    ? Math.max(1, Number(inspectingObject.props?.levels) || 4)
+    : 4
+  const depthCount = !isInspectingCompartment && inspectingObject
+    ? Math.max(1, Number(inspectingObject.props?.depth) || 4)
+    : 4
+  const capacity = levels * depthCount
+
+  const resolvedLevelsConfig: DimensionConfig = (() => {
+    const cfg =
+      (inspectingObject?.props?.levelsConfig as DimensionConfig | undefined) || mapLevelsConfig
+    return {
+      ...cfg,
+      defaultCount: levels,
+      items: generateDimensionItems(
+        levels,
+        cfg.sequenceType,
+        cfg.orientation,
+        cfg.prefix,
+        cfg.suffix,
+        cfg.paddingDigits,
+        cfg.customValues
+      ),
+    }
+  })()
+
+  const resolvedDepthConfig: DimensionConfig = (() => {
+    const cfg =
+      (inspectingObject?.props?.depthConfig as DimensionConfig | undefined) || mapDepthConfig
+    return {
+      ...cfg,
+      defaultCount: depthCount,
+      items: generateDimensionItems(
+        depthCount,
+        cfg.sequenceType,
+        cfg.orientation,
+        cfg.prefix,
+        cfg.suffix,
+        cfg.paddingDigits,
+        cfg.customValues
+      ),
+    }
+  })()
+
+  const inspectingDisplayName =
+    inspectingObject?.label ||
+    inspectingParticipant?.storageObjectLabel ||
+    inspectingParticipant?.storageObjectId ||
+    ""
+
+  const fakeConfig = inspectingParticipant
+    ? inspectingObject
+      ? buildFakeConfig(inspectingObject)
+      : {
+          id: `sys_map_${inspectingParticipant.storageObjectId}`,
+          nome: inspectingParticipant.storageObjectLabel,
+          descricao: "Canal vinculado ao mapeamento do sistema",
+          categoria: "Sistema de Saldo",
+          cor: "blue" as const,
+          icone: "Box" as const,
+          camposPersonalizados: [],
+          criadoEm: new Date().toISOString(),
+          atualizadoEm: new Date().toISOString(),
+        }
+    : null
 
   return (
     <div className="fixed inset-0 z-[220] flex items-center justify-center p-3 md:p-6 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150">
@@ -270,7 +456,7 @@ export default function SystemMappingModal({
           </button>
         </div>
 
-        {/* ── Visualização do Canal (DriveInGrid) ── */}
+        {/* ── Visualização do Canal (DriveInGrid ou Relação do Compartimento) ── */}
         <AnimatePresence mode="wait">
           {inspectingParticipant && fakeConfig ? (
             <motion.div
@@ -280,11 +466,29 @@ export default function SystemMappingModal({
               exit={{ opacity: 0, x: -30 }}
               className="flex-1 overflow-y-auto custom-scrollbar p-4"
             >
+              {balanceError && (
+                <div className="mb-3 flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl bg-rose-950/60 border border-rose-700/60 text-xs text-rose-200">
+                  <span className="flex items-center gap-2">
+                    <AlertCircle size={14} className="text-rose-400 shrink-0" />
+                    <span>{balanceError}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setBalanceError("")}
+                    className="text-rose-300 hover:text-white"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+
               {/* Toggle Edição */}
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Box size={13} className="text-blue-400" />
-                  Canal de Armazenamento — {levels} Nível(is) · Capacidade: {capacity} posições
+                  <Box size={13} className={isInspectingCompartment ? "text-amber-400" : "text-blue-400"} />
+                  {isInspectingCompartment
+                    ? "Espaço Aberto — Armazenamento sem nível ou profundidade"
+                    : `Canal de Armazenamento — ${levels} Nível(is) · Capacidade: ${capacity} posições`}
                 </span>
                 <button
                   onClick={() => setIsEditModeActive(v => !v)}
@@ -299,20 +503,36 @@ export default function SystemMappingModal({
                 </button>
               </div>
 
-              <MapeamentoDriveInGrid
-                positionId={inspectingParticipant.storageObjectId}
-                items={channelItems}
-                capacity={capacity}
-                levelCount={levels}
-                config={fakeConfig}
-                isEditModeActive={isEditModeActive}
-                setIsEditModeActive={setIsEditModeActive}
-                onAddItem={handleAddItem}
-                onEditItem={handleEditItem}
-                onDeleteItem={handleDeleteItem}
-                onSwapItems={handleSwapItems}
-                isLoggedIn={true}
-              />
+              {isInspectingCompartment ? (
+                <CompartmentRelationView
+                  mapeamentoId={channelKey || `sys_${system.id}_${inspectingParticipant.storageObjectId}`}
+                  positionLabel={inspectingParticipant.storageObjectLabel}
+                  canEdit={isEditModeActive}
+                  onItemsChanged={() => setItemsVersion(v => v + 1)}
+                  system={system}
+                  objectId={inspectingParticipant.storageObjectId}
+                  allObjects={allObjects}
+                  stockControlMode={inspectingParticipant.stockControlMode}
+                />
+              ) : (
+                <MapeamentoDriveInGrid
+                  positionId={inspectingDisplayName}
+                  items={channelItems}
+                  capacity={capacity}
+                  levelCount={levels}
+                  startLevel={1}
+                  levelsConfig={resolvedLevelsConfig}
+                  depthConfig={resolvedDepthConfig}
+                  config={fakeConfig}
+                  isEditModeActive={isEditModeActive}
+                  setIsEditModeActive={setIsEditModeActive}
+                  onAddItem={handleAddItem}
+                  onEditItem={handleEditItem}
+                  onDeleteItem={handleDeleteItem}
+                  onSwapItems={handleSwapItems}
+                  isLoggedIn={true}
+                />
+              )}
             </motion.div>
           ) : (
             <motion.div
@@ -386,6 +606,25 @@ export default function SystemMappingModal({
                 </div>
               </form>
 
+              {/* Resumo de Conservação de Saldo */}
+              <div className="px-4 py-2.5 border-b border-slate-800 bg-slate-900/70 flex flex-wrap items-center justify-between gap-2 text-[11px] shrink-0">
+                <div className="flex flex-wrap items-center gap-3 font-mono">
+                  <span className="text-slate-300">
+                    Entradas - Saídas = <strong className="text-emerald-400">{balanceSnapshot.totalSystemNet} un.</strong>
+                  </span>
+                  <span className="text-slate-500">|</span>
+                  <span className="text-amber-300">
+                    Na Origem (Chão): <strong>{balanceSnapshot.totalOrigin} un.</strong>
+                  </span>
+                  <span className="text-blue-300">
+                    Em Posições: <strong>{balanceSnapshot.totalAllocated} un.</strong>
+                  </span>
+                </div>
+                <span className="text-[10px] text-slate-500">
+                  Clique em uma posição para gerenciar ou alocar saldo
+                </span>
+              </div>
+
               {/* Lista de Participantes */}
               <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-2">
                 <div className="flex items-center justify-between pb-1">
@@ -410,8 +649,11 @@ export default function SystemMappingModal({
                   <div className="space-y-2">
                     {participants.map(p => {
                       const obj = allObjects.find(o => o.id === p.storageObjectId)
+                      const isComp = obj?.type === "compartment" || p.storageType === "compartment"
                       const lvlCount = Number(obj?.props?.levels) || 4
                       const depth = Number(obj?.props?.depth) || 4
+                      const posTotal = balanceSnapshot.positionTotalsByObjectId.get(p.storageObjectId) || 0
+                      const isOriginCard = originObjectId === p.storageObjectId
                       return (
                         <div
                           key={p.storageObjectId}
@@ -421,22 +663,35 @@ export default function SystemMappingModal({
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                               <span className="w-9 h-9 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center text-base shadow group-hover:border-blue-600/60 transition-colors">
-                                {p.role === "origem" ? "📍" : p.role === "quarentena" ? "🛑" : "📥"}
+                                {isComp ? "📦" : p.role === "origem" ? "📍" : p.role === "quarentena" ? "🛑" : "📥"}
                               </span>
                               <div>
                                 <div className="flex items-center gap-2">
                                   <strong className="text-white text-xs">{p.storageObjectLabel}</strong>
                                   <span className="text-[9px] text-slate-500 font-mono">({p.storageType})</span>
+                                  {isOriginCard && (
+                                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                                      ORIGEM / CHÃO
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-400">
                                   <span>Papel: <strong>{p.role}</strong></span>
                                   <span>·</span>
-                                  <span>{lvlCount} nível(is) × {depth} prof.</span>
+                                  <span>
+                                    {isComp
+                                      ? "Armazenamento Aberto (sem nível / prof.)"
+                                      : `${lvlCount} nível(is) × ${depth} prof.`}
+                                  </span>
                                 </div>
                               </div>
                             </div>
 
                             <div className="flex items-center gap-2">
+                              <span className="px-2 py-0.5 rounded-lg bg-slate-900 border border-slate-700 text-[10px] font-mono font-bold text-emerald-300">
+                                {posTotal} un.
+                              </span>
+
                               <button
                                 onClick={e => { e.stopPropagation(); handleToggleControlMode(p.storageObjectId) }}
                                 className={cn(
@@ -461,7 +716,7 @@ export default function SystemMappingModal({
                               </button>
 
                               <span className="text-[10px] text-blue-400 font-semibold opacity-0 group-hover:opacity-100 transition-opacity pr-1">
-                                Ver canal →
+                                {isComp ? "Ver relação →" : "Ver canal →"}
                               </span>
                             </div>
                           </div>
@@ -488,7 +743,7 @@ export default function SystemMappingModal({
       </div>
 
       {/* Sub-modal de inserção/edição de Paletes (G300 MapeamentoItemModal) */}
-      {isItemModalOpen && fakeConfig && inspectingObject && (
+      {isItemModalOpen && fakeConfig && inspectingParticipant && (
         <MapeamentoItemModal
           isOpen={isItemModalOpen}
           onClose={() => {
@@ -497,12 +752,16 @@ export default function SystemMappingModal({
           }}
           onSave={handleSaveModalItems}
           config={fakeConfig}
-          posicao={inspectingObject.label || inspectingObject.id}
-          posicoesDisponiveis={[inspectingObject.label || inspectingObject.id]}
+          posicao={inspectingDisplayName}
+          posicoesDisponiveis={[inspectingDisplayName]}
           nivelInicial={itemCoords.lvl}
           profundidadeInicial={itemCoords.prof}
+          levelLabel={resolvedLevelsConfig.items[itemCoords.lvl - 1]?.identifier}
+          depthLabel={resolvedDepthConfig.items[itemCoords.prof - 1]?.identifier}
           itemParaEditar={editingItem}
           batchCoords={batchCoords}
+          availableStocks={!isInspectingOrigin ? availableStocks : []}
+          enforceStockLimit={enforceDriveStockLimit}
         />
       )}
     </div>
