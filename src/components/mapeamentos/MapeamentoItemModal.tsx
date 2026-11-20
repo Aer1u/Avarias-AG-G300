@@ -15,6 +15,12 @@ export interface PalletItemRow {
   customValues: Record<string, any>
 }
 
+export interface AvailableStockEntry {
+  sku: string
+  descricao?: string
+  available: number
+}
+
 export interface MapeamentoItemModalProps {
   isOpen: boolean
   onClose: () => void
@@ -27,6 +33,11 @@ export interface MapeamentoItemModalProps {
   itemParaEditar?: MapeamentoItem | null
   itensParaEditar?: MapeamentoItem[] | null
   batchCoords?: { lvl: number; prof: number }[] | null
+  isOpenSpace?: boolean
+  availableStocks?: AvailableStockEntry[]
+  enforceStockLimit?: boolean
+  levelLabel?: string
+  depthLabel?: string
 }
 
 export function MapeamentoItemModal({
@@ -41,6 +52,11 @@ export function MapeamentoItemModal({
   itemParaEditar,
   itensParaEditar,
   batchCoords,
+  isOpenSpace = false,
+  availableStocks = [],
+  enforceStockLimit = false,
+  levelLabel,
+  depthLabel,
 }: MapeamentoItemModalProps) {
   const [currentPosicao, setCurrentPosicao] = useState(posicao || posicoesDisponiveis[0] || "")
   const [destinationLevel, setDestinationLevel] = useState<number>(nivelInicial)
@@ -50,10 +66,11 @@ export function MapeamentoItemModal({
     { id: "1", sku: "", descricao: "", qty: "", customValues: {} },
   ])
 
-  // Busca na base_codigos
+  // Busca na base_codigos (ou saldo disponível na origem quando enforceStockLimit=true)
   const [activeSearchIndex, setActiveSearchIndex] = useState<number | null>(null)
-  const [searchResults, setSearchResults] = useState<{ codigo: string; descricao: string }[]>([])
+  const [searchResults, setSearchResults] = useState<{ codigo: string; descricao: string; available?: number }[]>([])
   const [isSearching, setIsSearching] = useState(false)
+  const [validationError, setValidationError] = useState<string>("")
   const dropdownRefs = useRef<(HTMLTableCellElement | null)[]>([])
 
   const itemsToLoad = (itensParaEditar && itensParaEditar.length > 0)
@@ -94,6 +111,7 @@ export function MapeamentoItemModal({
       }
       setActiveSearchIndex(null)
       setSearchResults([])
+      setValidationError("")
     }
   }, [isOpen, itemParaEditar, itensParaEditar, posicao, posicoesDisponiveis, nivelInicial, profundidadeInicial])
 
@@ -128,11 +146,50 @@ export function MapeamentoItemModal({
     setItems(prev => prev.filter(i => i.id !== id))
   }
 
+  const normCode = (s: string) =>
+    String(s || "")
+      .trim()
+      .toUpperCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+
+  const getAvailableForSku = (sku: string): number => {
+    const target = normCode(sku)
+    if (!target) return 0
+    const stock = availableStocks.find((s) => normCode(s.sku) === target)
+    const originAvail = stock ? stock.available : 0
+    const editingOwnQty = (itemsToLoad || [])
+      .filter((it) => normCode(it.sku) === target)
+      .reduce((sum, it) => sum + (Number(it.quantidade) || 0), 0)
+    return originAvail + editingOwnQty
+  }
+
   const handleSearchSku = async (index: number, term: string) => {
     const upper = term.toUpperCase()
+    setValidationError("")
     setItems(prev =>
       prev.map((it, i) => (i === index ? { ...it, sku: upper } : it))
     )
+
+    if (enforceStockLimit) {
+      const q = normCode(upper)
+      const stockMatches = availableStocks
+        .filter(
+          (s) =>
+            !q ||
+            normCode(s.sku).includes(q) ||
+            normCode(s.descricao || "").includes(q)
+        )
+        .slice(0, 12)
+        .map((s) => ({
+          codigo: s.sku,
+          descricao: s.descricao || "Disponível na Origem",
+          available: s.available,
+        }))
+      setSearchResults(stockMatches)
+      setActiveSearchIndex(index)
+      return
+    }
 
     if (upper.trim().length < 2) {
       setSearchResults([])
@@ -165,6 +222,7 @@ export function MapeamentoItemModal({
   }
 
   const handleSelectSku = (index: number, item: { codigo: string; descricao: string }) => {
+    setValidationError("")
     setItems(prev =>
       prev.map((it, i) =>
         i === index
@@ -177,6 +235,7 @@ export function MapeamentoItemModal({
   }
 
   const handleChangeQty = (index: number, val: string) => {
+    setValidationError("")
     const num = val === "" ? "" : Math.max(1, Math.floor(Number(val)))
     setItems(prev =>
       prev.map((it, i) => (i === index ? { ...it, qty: num } : it))
@@ -184,12 +243,33 @@ export function MapeamentoItemModal({
   }
 
   const handleSave = () => {
+    setValidationError("")
     const validItems = items.filter(
       i => i.sku.trim() !== "" && typeof i.qty === "number" && i.qty > 0
     )
     if (validItems.length === 0) {
-      alert("Preencha ao menos um código e quantidade válida.")
+      setValidationError("Preencha ao menos um código e quantidade válida.")
       return
+    }
+
+    const isBatch = !itemsToLoad && batchCoords && batchCoords.length > 1
+    const targets = isBatch ? batchCoords : [{ lvl: destinationLevel, prof: destinationDepth }]
+
+    if (enforceStockLimit) {
+      const requestedBySku = new Map<string, number>()
+      validItems.forEach((it) => {
+        const k = normCode(it.sku)
+        requestedBySku.set(k, (requestedBySku.get(k) || 0) + Number(it.qty) * targets.length)
+      })
+      for (const [skuKey, reqQty] of requestedBySku.entries()) {
+        const avail = getAvailableForSku(skuKey)
+        if (reqQty > avail) {
+          setValidationError(
+            `Saldo insuficiente na Origem (Chão) para ${skuKey}. Disponível: ${avail} un. · Solicitado: ${reqQty} un.`
+          )
+          return
+        }
+      }
     }
 
     const isMix = validItems.length > 1
@@ -199,8 +279,6 @@ export function MapeamentoItemModal({
       : undefined
 
     const now = new Date().toISOString()
-    const isBatch = !itemsToLoad && batchCoords && batchCoords.length > 1
-    const targets = isBatch ? batchCoords : [{ lvl: destinationLevel, prof: destinationDepth }]
 
     const mapeamentoItemsToSave: MapeamentoItem[] = []
 
@@ -273,7 +351,12 @@ export function MapeamentoItemModal({
                   <span className="font-mono font-bold text-white bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
                     {currentPosicao}
                   </span>
-                  {batchCoords && batchCoords.length > 1 ? (
+                  {isOpenSpace ? (
+                    <>
+                      <span>•</span>
+                      <span>Armazenamento Aberto</span>
+                    </>
+                  ) : batchCoords && batchCoords.length > 1 ? (
                     <>
                       <span>•</span>
                       <span>Aplicando em {batchCoords.length} células selecionadas</span>
@@ -281,9 +364,9 @@ export function MapeamentoItemModal({
                   ) : (
                     <>
                       <span>•</span>
-                      <span>Nível {destinationLevel}</span>
+                      <span>Nível {levelLabel ?? destinationLevel}</span>
                       <span>•</span>
-                      <span>Profundidade {destinationDepth}</span>
+                      <span>Profundidade {depthLabel ?? destinationDepth}</span>
                     </>
                   )}
                 </div>
@@ -300,19 +383,28 @@ export function MapeamentoItemModal({
 
           {/* Corpo com Tabela de Produtos (estilo G300 AddPalletModal) */}
           <div className="p-6 flex-1 overflow-y-auto custom-scrollbar space-y-4">
+            {validationError && (
+              <div className="px-4 py-2.5 rounded-xl bg-rose-950/60 border border-rose-700/60 text-xs text-rose-200 font-medium">
+                {validationError}
+              </div>
+            )}
             <div className="w-full overflow-visible border border-slate-800 rounded-2xl bg-slate-950/40">
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="bg-slate-950/80 border-b border-slate-800 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                    <th className="text-left px-4 py-3 w-[45%]">Código SKU</th>
-                    <th className="text-left px-4 py-3 w-[35%]">Descrição</th>
-                    <th className="text-center px-3 py-3 w-[15%]">Quantidade</th>
+                    <th className="text-left px-4 py-3 w-[40%]">Código SKU</th>
+                    <th className="text-left px-4 py-3 w-[32%]">Descrição</th>
+                    {enforceStockLimit && (
+                      <th className="text-center px-2 py-3 w-[12%] text-amber-400">Disp. Chão</th>
+                    )}
+                    <th className="text-center px-3 py-3 w-[14%]">Quantidade</th>
                     <th className="w-10 px-2 py-3" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
                   {items.map((item, index) => {
                     const isActive = activeSearchIndex === index
+                    const availForLine = enforceStockLimit ? getAvailableForSku(item.sku) : null
 
                     return (
                       <tr key={item.id} className="hover:bg-slate-800/20 transition-colors">
@@ -329,9 +421,15 @@ export function MapeamentoItemModal({
                               value={item.sku}
                               onChange={e => handleSearchSku(index, e.target.value)}
                               onFocus={() => {
-                                if (item.sku.length >= 2) handleSearchSku(index, item.sku)
+                                if (enforceStockLimit || item.sku.length >= 2) {
+                                  handleSearchSku(index, item.sku)
+                                }
                               }}
-                              placeholder="Buscar SKU (ex: 100234)..."
+                              placeholder={
+                                enforceStockLimit
+                                  ? "Selecionar saldo do Chão..."
+                                  : "Buscar SKU (ex: 100234)..."
+                              }
                               className="w-full h-9 px-3 rounded-xl border border-slate-700 bg-slate-800/90 text-xs font-mono font-bold text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 uppercase"
                             />
                             {isSearching && isActive && (
@@ -348,14 +446,21 @@ export function MapeamentoItemModal({
                                     <div
                                       key={sIdx}
                                       onClick={() => handleSelectSku(index, res)}
-                                      className="p-2.5 hover:bg-blue-600/20 hover:border-blue-500/30 rounded-xl cursor-pointer transition-colors"
+                                      className="p-2.5 hover:bg-blue-600/20 hover:border-blue-500/30 rounded-xl cursor-pointer transition-colors flex items-center justify-between gap-2"
                                     >
-                                      <p className="font-mono font-bold text-xs text-blue-400">
-                                        {res.codigo}
-                                      </p>
-                                      <p className="text-[11px] text-slate-300 truncate mt-0.5">
-                                        {res.descricao}
-                                      </p>
+                                      <div className="min-w-0">
+                                        <p className="font-mono font-bold text-xs text-blue-400">
+                                          {res.codigo}
+                                        </p>
+                                        <p className="text-[11px] text-slate-300 truncate mt-0.5">
+                                          {res.descricao}
+                                        </p>
+                                      </div>
+                                      {res.available !== undefined && (
+                                        <span className="shrink-0 px-2 py-0.5 rounded-lg bg-emerald-950/80 border border-emerald-700/50 text-[10px] font-mono font-bold text-emerald-300">
+                                          Disp: {res.available}
+                                        </span>
+                                      )}
                                     </div>
                                   ))}
                                 </div>
@@ -381,11 +486,28 @@ export function MapeamentoItemModal({
                           />
                         </td>
 
+                        {/* Disponível na Origem (Chão) */}
+                        {enforceStockLimit && (
+                          <td className="px-2 py-2.5 text-center">
+                            <span
+                              className={cn(
+                                "inline-block px-2 py-1 rounded-lg font-mono text-xs font-bold border",
+                                (availForLine || 0) > 0
+                                  ? "bg-amber-950/60 border-amber-700/60 text-amber-300"
+                                  : "bg-slate-800 border-slate-700 text-slate-500"
+                              )}
+                            >
+                              {availForLine ?? 0}
+                            </span>
+                          </td>
+                        )}
+
                         {/* Quantidade */}
                         <td className="px-3 py-2.5 text-center">
                           <input
                             type="number"
                             min={1}
+                            max={enforceStockLimit && availForLine !== null ? Math.max(1, availForLine) : undefined}
                             value={item.qty}
                             onChange={e => handleChangeQty(index, e.target.value)}
                             placeholder="Qtd"
