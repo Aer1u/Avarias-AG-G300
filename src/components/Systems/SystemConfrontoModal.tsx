@@ -28,12 +28,16 @@ import {
   RefreshCw,
 } from "lucide-react"
 import { systemDataService } from "./systemDataService"
+import { supabase } from "@/lib/supabase"
 import type {
   BusinessSystem,
   SystemConfrontoConfig,
+  SystemStockRecord,
   ConfrontoComparisonRow,
   ConfrontoSummary,
 } from "./types"
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 interface SystemConfrontoModalProps {
   isOpen: boolean
@@ -62,7 +66,9 @@ export default function SystemConfrontoModal({
   const [filterMode, setFilterMode] = useState<FilterMode>("all")
   const [search, setSearch] = useState("")
 
-  // Carrega confrontos do sistema
+  const [systemRecords, setSystemRecords] = useState<SystemStockRecord[]>([])
+
+  // Carrega confrontos e registros isolados do sistema
   const load = () => {
     const list = systemDataService.getConfrontosBySystem(system.id)
     setConfrontos(list)
@@ -72,9 +78,58 @@ export default function SystemConfrontoModal({
   }
 
   useEffect(() => {
-    if (isOpen) {
-      load()
+    if (!isOpen) return
+    load()
+
+    const fetchSystemRecords = async () => {
+      if (UUID_REGEX.test(system.id)) {
+        try {
+          const { data: dbRows, error } = await supabase
+            .from("universal_records")
+            .select("*")
+            .eq("system_id", system.id)
+            .order("created_at", { ascending: false })
+            .limit(300)
+
+          if (!error && Array.isArray(dbRows)) {
+            const mapped: SystemStockRecord[] = dbRows.map((row: any) => {
+              const meta = row.metadata && typeof row.metadata === "object" ? row.metadata : {}
+              const isEntrada = row.record_type === "entrada"
+              const entVal =
+                meta.entrada !== undefined
+                  ? meta.entrada
+                  : isEntrada
+                  ? Number(row.quantity)
+                  : null
+              const saiVal =
+                meta.saida !== undefined
+                  ? meta.saida
+                  : !isEntrada
+                  ? Number(row.quantity)
+                  : null
+              return {
+                id: String(row.id),
+                systemId: system.id,
+                sku: row.resource_id || "",
+                description: meta.description || row.resource_id || "",
+                quantity: Number(row.quantity) || 0,
+                entrada: entVal !== null && entVal !== undefined ? Number(entVal) : null,
+                saida: saiVal !== null && saiVal !== undefined ? Number(saiVal) : null,
+                registeredAt: row.created_at || new Date().toISOString(),
+              }
+            })
+            setSystemRecords(mapped)
+            systemDataService.replaceRecordsForSystem(system.id, mapped)
+            return
+          }
+        } catch {
+          // fallback to local cache below
+        }
+      }
+      setSystemRecords(systemDataService.getRecordsBySystem(system.id))
     }
+
+    fetchSystemRecords()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, system.id])
 
@@ -82,11 +137,6 @@ export default function SystemConfrontoModal({
   const activeConfronto = useMemo(() => {
     return confrontos.find((c) => c.id === activeConfrontoId) || null
   }, [confrontos, activeConfrontoId])
-
-  // Saldos do sistema para confronto
-  const systemRecords = useMemo(() => {
-    return systemDataService.getRecordsBySystem(system.id)
-  }, [system.id, isOpen])
 
   // Cálculo da conciliação analítica em tempo real
   const analysis = useMemo(() => {
