@@ -367,44 +367,95 @@ export default function UniversalMapEditor({
   const [gridSize, setGridSize] = useState(20)
   const [zoom, setZoom] = useState(100)
 
-  // ── Workspace: estado de save ─────────────────────────────────
+  // ── Workspace: estado de save & hidratação ────────────────────
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle")
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hasHydratedRef = useRef(false)
+  const skipNextAutoSaveRef = useRef(false)
 
-  // ── Workspace: carrega mapa salvo na montagem ─────────────────
+  // Nomenclaturas Universais de Dimensões (Configuração por organização)
+  const [levelsConfig, setLevelsConfig] = useState<DimensionConfig>(DEFAULT_G300_LEVELS_CONFIG)
+  const [depthConfig, setDepthConfig] = useState<DimensionConfig>(DEFAULT_G300_DEPTH_CONFIG)
+
+  // Dimensões padrão dos modelos (salvas explicitamente pelo usuário)
+  const [modelDefaults, setModelDefaults] = useState<Record<string, PhysicalDimensions>>({})
+
+  // ── Workspace: carrega mapa salvo do Supabase na montagem ─────
   useEffect(() => {
     if (!workspaceId) return
-    // Import dinâmico para não quebrar SSR
-    import("@/lib/workspacesService").then(({ workspacesService }) => {
-      const ws = workspacesService.getWorkspaceById(workspaceId)
-      if (ws?.mapData) {
-        try {
-          const parsed = JSON.parse(ws.mapData)
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            resetHistory(parsed)
+    let active = true
+    hasHydratedRef.current = false
+
+    Promise.all([
+      import("@/lib/workspacesService").then(({ workspacesService }) =>
+        workspacesService.fetchWorkspaceById(workspaceId)
+      ),
+      import("@/lib/workspaceItemsSync").then(({ hydrateWorkspaceItemsFromSupabase }) =>
+        hydrateWorkspaceItemsFromSupabase(workspaceId)
+      ),
+    ])
+      .then(([ws]) => {
+        if (!active) return
+        if (ws?.mapData) {
+          try {
+            const parsed = JSON.parse(ws.mapData)
+            if (Array.isArray(parsed)) {
+              skipNextAutoSaveRef.current = true
+              resetHistory(parsed)
+            } else if (parsed && typeof parsed === "object" && Array.isArray(parsed.objects)) {
+              skipNextAutoSaveRef.current = true
+              resetHistory(parsed.objects)
+              if (parsed.levelsConfig) setLevelsConfig(parsed.levelsConfig)
+              if (parsed.depthConfig) setDepthConfig(parsed.depthConfig)
+              if (parsed.modelDefaults && typeof parsed.modelDefaults === "object") {
+                setModelDefaults(parsed.modelDefaults)
+              }
+            }
+          } catch {
+            // mapData corrompido — começa em branco
           }
-        } catch {
-          // mapData corrompido — começa em branco
         }
-      }
-    })
+      })
+      .finally(() => {
+        if (active) {
+          hasHydratedRef.current = true
+        }
+      })
+
+    return () => {
+      active = false
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId])
 
-  // ── Workspace: auto-save com debounce de 2s após qualquer mudança (apenas editores) ──
+  const serializeMapPayload = useCallback(() => {
+    return JSON.stringify({
+      version: 2,
+      objects,
+      levelsConfig,
+      depthConfig,
+      modelDefaults,
+    })
+  }, [objects, levelsConfig, depthConfig, modelDefaults])
+
+  // ── Workspace: auto-save com debounce após qualquer mudança (apenas editores) ──
   useEffect(() => {
     if (readOnly) return // Visualizador NUNCA sobrescreve dados
     if (!workspaceId || !workspaceOwnerEmail) return
-    if (objects.length === 0) return // Não sobrescreve com canvas vazio
+    if (!hasHydratedRef.current) return
+    if (skipNextAutoSaveRef.current) {
+      skipNextAutoSaveRef.current = false
+      return
+    }
 
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     setSaveStatus("saving")
 
     saveTimerRef.current = setTimeout(() => {
-      import("@/lib/workspacesService").then(({ workspacesService }) => {
-        const result = workspacesService.saveMapData(
+      import("@/lib/workspacesService").then(async ({ workspacesService }) => {
+        const result = await workspacesService.saveMapDataAsync(
           workspaceId,
-          JSON.stringify(objects),
+          serializeMapPayload(),
           objects.length,
           workspaceOwnerEmail,
           workspaceIsAdmin
@@ -418,13 +469,13 @@ export default function UniversalMapEditor({
           setTimeout(() => setSaveStatus("idle"), 4000)
         }
       })
-    }, 2000)
+    }, 800)
 
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [objects, workspaceId, workspaceOwnerEmail, workspaceIsAdmin, readOnly])
+  }, [objects, levelsConfig, depthConfig, modelDefaults, workspaceId, workspaceOwnerEmail, workspaceIsAdmin, readOnly])
 
   // ── Workspace: salvar imediatamente (Ctrl+S / botão manual) ──
   const handleManualSave = useCallback(() => {
@@ -432,10 +483,10 @@ export default function UniversalMapEditor({
     if (!workspaceId || !workspaceOwnerEmail) return
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current) // Cancela debounce pendente
     setSaveStatus("saving")
-    import("@/lib/workspacesService").then(({ workspacesService }) => {
-      const result = workspacesService.saveMapData(
+    import("@/lib/workspacesService").then(async ({ workspacesService }) => {
+      const result = await workspacesService.saveMapDataAsync(
         workspaceId,
-        JSON.stringify(objects),
+        serializeMapPayload(),
         objects.length,
         workspaceOwnerEmail,
         workspaceIsAdmin
@@ -449,10 +500,7 @@ export default function UniversalMapEditor({
         setTimeout(() => setSaveStatus("idle"), 4000)
       }
     })
-  }, [workspaceId, workspaceOwnerEmail, workspaceIsAdmin, objects, onWorkspaceSaved, readOnly])
-
-  // Dimensões padrão dos modelos (salvas explicitamente pelo usuário)
-  const [modelDefaults, setModelDefaults] = useState<Record<string, PhysicalDimensions>>({})
+  }, [workspaceId, workspaceOwnerEmail, workspaceIsAdmin, objects.length, serializeMapPayload, onWorkspaceSaved, readOnly])
 
   // Painel esquerdo: aba ativa ("library" | "hierarchy")
   const [leftTab, setLeftTab] = useState<"library" | "hierarchy">("library")
@@ -543,10 +591,6 @@ export default function UniversalMapEditor({
   // Motor de Autorização & RBAC (NEXUS IAM)
   const { can, activeUser, primaryRole, isPlatformOwner, isPlatformAdmin } = useAuthz("MAP-LAB-01")
   const canViewIAM = isPlatformOwner || isPlatformAdmin || can('workspace.manage_roles')
-
-  // Nomenclaturas Universais de Dimensões (Configuração por organização)
-  const [levelsConfig, setLevelsConfig] = useState<DimensionConfig>(DEFAULT_G300_LEVELS_CONFIG)
-  const [depthConfig, setDepthConfig] = useState<DimensionConfig>(DEFAULT_G300_DEPTH_CONFIG)
 
   // Ref para o canvas (navegação programática)
   const canvasRef = useRef<MapCanvasHandle>(null)
@@ -1280,7 +1324,7 @@ export default function UniversalMapEditor({
               {/* Botão salvar manual */}
               <button
                 onClick={handleManualSave}
-                disabled={saveStatus === "saving" || objects.length === 0}
+                disabled={saveStatus === "saving"}
                 className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-700 hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-colors"
                 title="Salvar agora (Ctrl+S)"
               >
