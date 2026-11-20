@@ -21,6 +21,10 @@ import {
 } from "@/lib/mapeamentosStorage"
 import { systemDataService } from "./systemDataService"
 import { toWorkspaceUuid } from "./useSystemStore"
+import {
+  hydrateSystemItemsFromSupabase,
+  persistPositionItemsToSupabase,
+} from "@/lib/workspaceItemsSync"
 import type { BusinessSystem, SystemStockRecord } from "./types"
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -280,6 +284,7 @@ export function syncOriginWithSystemBalance(
   if (changed) {
     const cleanedOrigin = originItems.filter((it) => (Number(it.quantidade) || 0) > 0)
     saveLocalItems([...otherItems, ...cleanedOrigin])
+    persistPositionItemsToSupabase(originKey, cleanedOrigin, system.workspaceId).catch(() => {})
   }
 
   return getSystemBalanceSnapshot(system, recordsOverride)
@@ -367,7 +372,9 @@ export async function fetchAndSyncSystemBalances(
         })
 
         systemDataService.replaceRecordsForSystem(system.id, mapped)
+        await hydrateSystemItemsFromSupabase(system)
         const snapshot = syncOriginWithSystemBalance(system, mapped)
+        syncSupabaseUniversalBalances(system).catch(() => {})
         return { records: mapped, snapshot }
       }
     } catch (err) {
@@ -375,6 +382,7 @@ export async function fetchAndSyncSystemBalances(
     }
   }
 
+  await hydrateSystemItemsFromSupabase(system)
   const localRecords = systemDataService.getRecordsBySystem(system.id)
   const snapshot = syncOriginWithSystemBalance(system, localRecords)
   return { records: localRecords, snapshot }
@@ -489,6 +497,7 @@ export function applyNonOriginPositionChange(
   const targetKey = getSystemPositionKey(system.id, targetObjectId)
   const others = getLocalItems().filter((it) => it.mapeamentoId !== targetKey)
   saveLocalItems([...others, ...nextItems])
+  persistPositionItemsToSupabase(targetKey, nextItems, system.workspaceId).catch(() => {})
 
   // Atualiza a Origem (abate o que entrou na posição ou devolve o que saiu dela)
   syncOriginWithSystemBalance(system)
@@ -598,6 +607,17 @@ export function moveSkuBetweenSystemPositions(params: {
 
   updatedAll.push(newTargetItem)
   saveLocalItems(updatedAll)
+
+  persistPositionItemsToSupabase(
+    fromKey,
+    updatedAll.filter((it) => it.mapeamentoId === fromKey),
+    system.workspaceId
+  ).catch(() => {})
+  persistPositionItemsToSupabase(
+    toKey,
+    updatedAll.filter((it) => it.mapeamentoId === toKey),
+    system.workspaceId
+  ).catch(() => {})
 
   // Garante consistência da Origem
   syncOriginWithSystemBalance(system)
