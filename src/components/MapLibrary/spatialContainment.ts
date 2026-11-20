@@ -124,6 +124,7 @@ export function resolveSpatialContainment(objects: MapObject[]): {
 // Sincroniza a lista de canais de um Drive-In conforme seus vãos (lanes),
 // preservando nomes personalizados dados pelo usuário (ex: "Canal MKLOG").
 export function ensureDriveChannels(drive: MapObject): StorageChannel[] {
+  if (drive.type === "compartment") return []
   const props = drive.props || {}
   const driveCode = String(props.code || drive.label || drive.id.slice(0, 8))
   const lanes = Math.max(1, Number(props.lanes || 1))
