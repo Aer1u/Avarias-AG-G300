@@ -157,13 +157,3 @@ CREATE POLICY "Allow anon read/write on universal_balances"
 CREATE POLICY "Allow anon read/write on universal_movements" 
     ON public.universal_movements FOR ALL TO anon USING (true) WITH CHECK (true);
 
--- ==============================================================================
--- CARGA INICIAL: SISTEMAS PADRÃO DO NEXUS ERP
--- ==============================================================================
-INSERT INTO public.business_systems (code, name, description, color, icon, default_control_mode, origin_storage_label, status)
-VALUES 
-    ('AVARIAS_G300', 'Sistema de Avarias G300', 'Administra entradas de avarias recebidas no CHÃO e distribui em Drives autorizados.', '#f59e0b', '⚠️', 'vinculado_saldo', 'CHÃO G300 (Área de Recebimento)', 'ativo'),
-    ('RETRABALHO', 'Sistema de Retrabalho', 'Controla o saldo de itens que passam por recuperação técnica, troca de embalagem e montagem de kits.', '#3b82f6', '🔧', 'vinculado_saldo', 'Bancada Central de Retrabalho', 'ativo'),
-    ('QUARENTENA', 'Sistema de Quarentena', 'Isola lotes sob análise de qualidade, laudos de conformidade ou retenções administrativas.', '#ef4444', '🛑', 'livre', 'Gaiola / Bloco de Quarentena', 'ativo'),
-    ('ERP_PRINCIPAL', 'ERP Principal (Almoxarifado)', 'Sincronização de saldos de estoque contábil do ERP para armazenagem em Porta-Paletes.', '#10b981', '🏢', 'vinculado_saldo', 'Doca de Entrada WMS', 'ativo')
-ON CONFLICT (workspace_id, code) DO NOTHING;
