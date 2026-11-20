@@ -11,6 +11,7 @@ import React, { useState } from "react"
 import type { MapObject, MapPropField } from "../MapLibrary/types"
 import { ELEMENT_BY_TYPE } from "../MapLibrary/registry"
 import DriveOperationalCard from "./DriveOperationalCard"
+import CompartmentOperationalCard from "./CompartmentOperationalCard"
 import LinkedResourcesSection from "../Resources/LinkedResourcesSection"
 import type { CustomEntityRecord } from "../MapLibrary/modulesTypes"
 import { INITIAL_AREA_CLASSIFICATIONS, calculateAreaM2 } from "../MapLibrary/areaClassifier"
@@ -38,6 +39,7 @@ interface MapPropertiesPanelProps {
   pixelsPerMeter?: number
   onSaveAsModelDefault?: (modelType: string, dims: PhysicalDimensions) => void
   onOpenResourceEngine?: () => void
+  workspaceId?: string
 }
 
 // ── Card de Classificação e Atributos da Área ─────────────────
@@ -434,24 +436,27 @@ export default function MapPropertiesPanel({
   pixelsPerMeter = 20,
   onSaveAsModelDefault,
   onOpenResourceEngine,
+  workspaceId,
 }: MapPropertiesPanelProps) {
+  const isCompartment = selectedObject?.type === "compartment"
   const isDrive = Boolean(
     selectedObject &&
+      !isCompartment &&
       (selectedObject.type.includes("drive") ||
         selectedObject.category === "storage" ||
         Array.isArray(selectedObject.props?.channels))
   )
 
   const [activeTab, setActiveTab] = useState<"visual" | "operational">(
-    isDrive ? "operational" : "visual"
+    isDrive || isCompartment ? "operational" : "visual"
   )
 
   // Quando seleciona um Drive-In ou estrutura de armazenagem, abre direto na aba de Estrutura & Canais
   React.useEffect(() => {
-    if (isDrive) {
+    if (isDrive || isCompartment) {
       setActiveTab("operational")
     }
-  }, [selectedObject?.id, isDrive])
+  }, [selectedObject?.id, isDrive, isCompartment])
 
   if (!selectedObject) {
     return (
@@ -544,15 +549,26 @@ export default function MapPropertiesPanel({
           </>
         ) : activeTab === "operational" ? (
           <>
-            <DriveOperationalCard
-              selectedObject={selectedObject}
-              selectedChannelId={selectedChannelId}
-              onUpdateObject={onUpdateObject}
-              onUpdateProp={onUpdateProp}
-              levelsConfig={levelsConfig}
-              depthConfig={depthConfig}
-              allObjects={allObjects}
-            />
+            {isCompartment ? (
+              <CompartmentOperationalCard
+                selectedObject={selectedObject}
+                onUpdateObject={onUpdateObject}
+                onUpdateProp={onUpdateProp}
+                allObjects={allObjects}
+                workspaceId={workspaceId}
+              />
+            ) : (
+              <DriveOperationalCard
+                selectedObject={selectedObject}
+                selectedChannelId={selectedChannelId}
+                onUpdateObject={onUpdateObject}
+                onUpdateProp={onUpdateProp}
+                levelsConfig={levelsConfig}
+                depthConfig={depthConfig}
+                allObjects={allObjects}
+                workspaceId={workspaceId}
+              />
+            )}
             <LinkedResourcesSection
               selectedObject={selectedObject}
               onOpenResourceEngine={onOpenResourceEngine}
@@ -560,18 +576,18 @@ export default function MapPropertiesPanel({
           </>
         ) : (
           <>
-            {/* Atalho se for Drive-In e estiver na aba de geometria */}
-            {isDrive && (
+            {/* Atalho se for Drive-In ou Compartimento e estiver na aba de geometria */}
+            {(isDrive || isCompartment) && (
               <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-between">
                 <span className="text-[11px] font-bold text-amber-300">
-                  🏗️ Configuração de Canais & Teste
+                  {isCompartment ? "📦 Espaço Aberto & Vínculo" : "🏗️ Configuração de Canais & Teste"}
                 </span>
                 <button
                   type="button"
                   onClick={() => setActiveTab("operational")}
                   className="px-2 py-1 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[10px] transition-colors"
                 >
-                  Abrir Canais & Teste ▶
+                  {isCompartment ? "Abrir Espaço ▶" : "Abrir Canais & Teste ▶"}
                 </button>
               </div>
             )}
@@ -807,8 +823,8 @@ export default function MapPropertiesPanel({
               </div>
             )}
 
-            {/* Nomenclatura das Dimensões no Próprio Objeto (Porta-Paletes, Cantilever, etc) */}
-            {selectedObject.category === "storage" && selectedObject.type !== "drive_in" && (
+            {/* Nomenclatura das Dimensões no Próprio Objeto (Porta-Paletes, Cantilever, etc — nunca Compartimento) */}
+            {selectedObject.category === "storage" && selectedObject.type !== "drive_in" && selectedObject.type !== "compartment" && (
               <div className="pt-2 border-t border-slate-800/80">
                 <ObjectDimensionConfigSection
                   levelsCount={Number(selectedObject.props.levels || 4)}
