@@ -20,14 +20,16 @@ interface SystemManagerModalProps {
   isOpen: boolean
   onClose: () => void
   allObjects?: MapObject[]
+  workspaceId?: string
 }
 
 export default function SystemManagerModal({
   isOpen,
   onClose,
   allObjects = [],
+  workspaceId,
 }: SystemManagerModalProps) {
-  const { systems, addSystem, updateSystem, deleteSystem, resetToDefaults } = useSystemStore()
+  const { systems, addSystem, updateSystem, deleteSystem, linkStorageToSystem } = useSystemStore(workspaceId)
   const [selectedSystemId, setSelectedSystemId] = useState<string>(systems[0]?.id || "")
   const [isEditing, setIsEditing] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
@@ -74,6 +76,26 @@ export default function SystemManagerModal({
     e.preventDefault()
     if (!formData.name || !formData.code) return
 
+    const originObj = formData.originStorageId
+      ? allObjects.find((o) => o.id === formData.originStorageId)
+      : undefined
+    const originParticipant = originObj
+      ? {
+          storageObjectId: originObj.id,
+          storageObjectLabel:
+            formData.originStorageLabel || originObj.label || originObj.id,
+          storageType: originObj.type || originObj.category || "compartment",
+          role: "origem" as const,
+          stockControlMode: (formData.defaultControlMode || "vinculado_saldo") as StockControlMode,
+          permissions: {
+            allowInbound: true,
+            allowOutbound: true,
+            allowReturnToOrigin: true,
+          },
+          configuredAt: new Date().toISOString(),
+        }
+      : null
+
     if (isCreating) {
       const created = addSystem({
         code: formData.code.toUpperCase().trim(),
@@ -84,10 +106,10 @@ export default function SystemManagerModal({
         status: formData.status || "ativo",
         defaultControlMode: formData.defaultControlMode || "vinculado_saldo",
         originStorageId: formData.originStorageId || "",
-        originStorageLabel: formData.originStorageLabel || "",
+        originStorageLabel: formData.originStorageLabel || originObj?.label || "",
         responsible: formData.responsible || "",
-        workspaceId: "workspace_default",
-        participants: [],
+        workspaceId: workspaceId || "workspace_default",
+        participants: originParticipant ? [originParticipant] : [],
         allowedMovementTypes: formData.allowedMovementTypes || ["transferencia"],
       })
       setSelectedSystemId(created.id)
@@ -102,15 +124,19 @@ export default function SystemManagerModal({
         status: formData.status,
         defaultControlMode: formData.defaultControlMode,
         originStorageId: formData.originStorageId,
-        originStorageLabel: formData.originStorageLabel,
+        originStorageLabel: formData.originStorageLabel || originObj?.label || "",
         responsible: formData.responsible,
       })
+      if (originParticipant) {
+        linkStorageToSystem(selectedSystem.id, originParticipant)
+      }
       setIsEditing(false)
     }
   }
 
   const floorObjects = allObjects.filter(
     (o) =>
+      o.type === "compartment" ||
       o.type === "floor" ||
       o.category === "area" ||
       (o.label || "").toLowerCase().includes("chão") ||
@@ -295,7 +321,7 @@ export default function SystemManagerModal({
                         <option value="">— Selecionar Objeto do Mapa —</option>
                         {floorObjects.map((f) => (
                           <option key={f.id} value={f.id}>
-                            🏢 {f.label || f.id} ({f.classification || f.type})
+                            {f.type === "compartment" ? "📦" : "🏢"} {f.label || f.id} ({f.type === "compartment" ? "Compartimento" : f.classification || f.type})
                           </option>
                         ))}
                       </select>
@@ -428,20 +454,18 @@ export default function SystemManagerModal({
                     >
                       <Edit3 size={15} />
                     </button>
-                    {systems.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (confirm(`Remover sistema "${selectedSystem.name}"?`)) {
-                            deleteSystem(selectedSystem.id)
-                          }
-                        }}
-                        className="p-2 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 transition-colors"
-                        title="Remover Sistema"
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm(`Remover sistema "${selectedSystem.name}"?`)) {
+                          deleteSystem(selectedSystem.id)
+                        }
+                      }}
+                      className="p-2 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 transition-colors"
+                      title="Remover Sistema"
+                    >
+                      <Trash2 size={15} />
+                    </button>
                   </div>
                 </div>
 
@@ -656,6 +680,7 @@ export default function SystemManagerModal({
             onClose={() => setIsMappingOpen(false)}
             system={selectedSystem}
             allObjects={allObjects}
+            workspaceId={workspaceId}
           />
 
           {/* 3. Modal de Confronto Analítico (com tabela JSON configurável) */}
