@@ -66,11 +66,15 @@ export function buildSpatial3DObject(spatial: UniversalSpatialObject): THREE.Gro
   else if (type === "pallet" || type === "box") {
     buildPalletWithLoadGeometry(group, spatial)
   }
-  // 7. EQUIPAMENTOS (Empilhadeira, Carrinhos)
+  // 7. COMPARTIMENTO (ESPAÇO ABERTO DE ARMAZENAMENTO NO PISO)
+  else if (type === "compartment") {
+    buildCompartmentGeometry(group, spatial)
+  }
+  // 8. EQUIPAMENTOS (Empilhadeira, Carrinhos)
   else if (cat === "equipment" || type === "forklift") {
     buildForkliftGeometry(group, spatial)
   }
-  // 8. BLOCOS E ELEMENTOS GENÉRICOS
+  // 9. BLOCOS E ELEMENTOS GENÉRICOS
   else {
     buildGenericSolidGeometry(group, spatial)
   }
@@ -572,6 +576,38 @@ function buildGenericSolidGeometry(group: THREE.Group, spatial: UniversalSpatial
     new THREE.LineBasicMaterial({ color: new THREE.Color(spatial.strokeColor || "#94a3b8") })
   )
   const lines = new THREE.LineSegments(edges, lineMat)
+  lines.position.copy(mesh.position)
+  group.add(lines)
+}
+
+// ─────────────────────────────────────────────────────────────
+// 9. COMPARTIMENTO (ESPAÇO ABERTO DEMARCADO NO CHÃO)
+// ─────────────────────────────────────────────────────────────
+function buildCompartmentGeometry(group: THREE.Group, spatial: UniversalSpatialObject) {
+  const { width, depth } = spatial.dimensions
+  const padH = 0.08
+
+  const padMat = getMaterial("compartment_open_pad", () =>
+    new THREE.MeshStandardMaterial({
+      color: new THREE.Color("#ca8a04"),
+      roughness: 0.75,
+      metalness: 0.15,
+      transparent: true,
+      opacity: 0.25,
+    })
+  )
+
+  const geo = new THREE.BoxGeometry(width, depth, padH)
+  const mesh = new THREE.Mesh(geo, padMat)
+  mesh.position.set(0, 0, padH / 2)
+  mesh.receiveShadow = true
+  group.add(mesh)
+
+  const borderMat = getMaterial("compartment_open_border", () =>
+    new THREE.LineBasicMaterial({ color: new THREE.Color("#eab308") })
+  )
+  const edges = new THREE.EdgesGeometry(geo)
+  const lines = new THREE.LineSegments(edges, borderMat)
   lines.position.copy(mesh.position)
   group.add(lines)
 }
