@@ -27,6 +27,7 @@ interface DriveOperationalCardProps {
   levelsConfig?: DimensionConfig
   depthConfig?: DimensionConfig
   allObjects?: MapObject[]
+  workspaceId?: string
 }
 
 export default function DriveOperationalCard({
@@ -37,6 +38,7 @@ export default function DriveOperationalCard({
   levelsConfig = DEFAULT_G300_LEVELS_CONFIG,
   depthConfig = DEFAULT_G300_DEPTH_CONFIG,
   allObjects = [],
+  workspaceId,
 }: DriveOperationalCardProps) {
   const props = selectedObject.props || {}
   const code = String(props.code || selectedObject.label || selectedObject.id.slice(0, 8))
@@ -120,7 +122,7 @@ export default function DriveOperationalCard({
   const maxHeightPerLevelM = Number(props.maxHeightPerLevelM || 1.65)
 
   // Controle de Preenchimento & Vínculo de Saldo
-  const { systems, linkStorageToSystem } = useSystemStore()
+  const { systems, linkStorageToSystem } = useSystemStore(workspaceId)
   const stockControlMode = String(props.stockControlMode || "livre") as "livre" | "vinculado_saldo"
   const stockSystemRef = String(props.stockSystemRef || "")
 
