@@ -101,6 +101,13 @@ class SystemDataService {
     localStorage.setItem(RECORDS_STORAGE_KEY, JSON.stringify(updated))
   }
 
+  public replaceRecordsForSystem(systemId: string, records: SystemStockRecord[]): void {
+    const current = this.getAllRecords()
+    const otherSystems = current.filter(r => r.systemId !== systemId)
+    const updated = [...records, ...otherSystems]
+    localStorage.setItem(RECORDS_STORAGE_KEY, JSON.stringify(updated))
+  }
+
   public clearRecordsBySystem(systemId: string): void {
     const current = this.getAllRecords()
     const filtered = current.filter((r) => r.systemId !== systemId)
@@ -281,13 +288,19 @@ class SystemDataService {
     systemRecords: SystemStockRecord[],
     confronto: SystemConfrontoConfig
   ): { rows: ConfrontoComparisonRow[]; summary: ConfrontoSummary } {
-    // 1. Agrupa saldos do sistema por SKU
+    // 1. Agrupa saldos líquidos (Entradas - Saídas) do sistema por SKU
     const systemMap = new Map<string, { qty: number; desc: string }>()
     systemRecords.forEach((rec) => {
       const sku = rec.sku.toUpperCase().trim()
       const prev = systemMap.get(sku) || { qty: 0, desc: rec.description }
+      const hasSignedFields =
+        (rec.entrada !== undefined && rec.entrada !== null) ||
+        (rec.saida !== undefined && rec.saida !== null)
+      const signedQty = hasSignedFields
+        ? (Number(rec.entrada) || 0) - (Number(rec.saida) || 0)
+        : Number(rec.quantity) || 0
       systemMap.set(sku, {
-        qty: prev.qty + rec.quantity,
+        qty: prev.qty + signedQty,
         desc: rec.description || prev.desc,
       })
     })
