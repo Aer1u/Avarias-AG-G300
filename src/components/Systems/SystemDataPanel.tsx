@@ -11,6 +11,7 @@ import { X, ChevronRight, Package, Map, GitCompare, Database, ArrowLeft } from "
 import { useSystemStore } from "./useSystemStore"
 import type { BusinessSystem } from "./types"
 import type { MapObject } from "../MapLibrary/types"
+import type { DimensionConfig } from "../MapLibrary/dimensionsTypes"
 import SystemRecordsModal from "./SystemRecordsModal"
 import SystemMappingModal from "./SystemMappingModal"
 import SystemConfrontoModal from "./SystemConfrontoModal"
@@ -19,33 +20,41 @@ interface SystemDataPanelProps {
   isOpen: boolean
   onClose: () => void
   allObjects?: MapObject[]
+  workspaceId?: string
+  levelsConfig?: DimensionConfig
+  depthConfig?: DimensionConfig
 }
 
 export default function SystemDataPanel({
   isOpen,
   onClose,
   allObjects = [],
+  workspaceId,
+  levelsConfig,
+  depthConfig,
 }: SystemDataPanelProps) {
-  const { systems } = useSystemStore()
+  const { systems } = useSystemStore(workspaceId)
 
-  const [selectedSystem, setSelectedSystem] = useState<BusinessSystem | null>(null)
+  const [selectedSystemId, setSelectedSystemId] = useState<string | null>(null)
   const [isRecordsOpen, setIsRecordsOpen] = useState(false)
   const [isMappingOpen, setIsMappingOpen] = useState(false)
   const [isConfrontoOpen, setIsConfrontoOpen] = useState(false)
 
   if (!isOpen) return null
 
+  const selectedSystem = systems.find((s) => s.id === selectedSystemId) || null
+
   const handleClose = () => {
-    setSelectedSystem(null)
+    setSelectedSystemId(null)
     onClose()
   }
 
   const handleSelectSystem = (sys: BusinessSystem) => {
-    setSelectedSystem(sys)
+    setSelectedSystemId(sys.id)
   }
 
   const handleBack = () => {
-    setSelectedSystem(null)
+    setSelectedSystemId(null)
   }
 
   return (
@@ -292,6 +301,9 @@ export default function SystemDataPanel({
             onClose={() => setIsMappingOpen(false)}
             system={selectedSystem}
             allObjects={allObjects}
+            workspaceId={workspaceId}
+            levelsConfig={levelsConfig}
+            depthConfig={depthConfig}
           />
           <SystemConfrontoModal
             isOpen={isConfrontoOpen}
