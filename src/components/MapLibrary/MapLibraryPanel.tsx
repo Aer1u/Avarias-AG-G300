@@ -15,6 +15,7 @@ interface MapLibraryPanelProps {
 }
 
 const CATEGORIES: MapCategory[] = [
+  "area",
   "architectural",
   "storage",
   "equipment",

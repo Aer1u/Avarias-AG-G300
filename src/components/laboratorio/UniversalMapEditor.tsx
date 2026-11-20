@@ -56,6 +56,11 @@ import {
   realToPixels,
   toMeters,
 } from "../MapLibrary/unitConverter"
+import {
+  FLOOR_SURFACES,
+  FLOOR_SURFACES_LIST,
+  type FloorMaterialType,
+} from "../MapLibrary/floorSurfaces"
 
 // ── Dados Iniciais: Hierarquia Configurável ───────────────────
 const INITIAL_HIERARCHY: HierarchyLevel[] = [
@@ -172,37 +177,86 @@ const INITIAL_RECORDS: CustomEntityRecord[] = [
   },
 ]
 
-// ── Modal: Novo Piso ──────────────────────────────────────────
+// ── Modal: Novo Piso / Superfície de Apoio ───────────────────
 interface NewFloorModalProps {
   isOpen: boolean
   onClose: () => void
-  onConfirm: (floorName: string, widthM: number, heightM: number, ppm: number) => void
+  onConfirm: (
+    floorName: string,
+    widthM: number,
+    heightM: number,
+    ppm: number,
+    material: FloorMaterialType
+  ) => void
 }
 
 function NewFloorModal({ isOpen, onClose, onConfirm }: NewFloorModalProps) {
-  const [floorName, setFloorName] = useState("Piso 1")
+  const [floorName, setFloorName] = useState("Piso Concreto 1")
+  const [selectedMaterial, setSelectedMaterial] = useState<FloorMaterialType>("concrete")
   const [widthM, setWidthM] = useState(100)
   const [heightM, setHeightM] = useState(60)
   const [ppm, setPpm] = useState(5)
 
   if (!isOpen) return null
 
+  const handleSelectMaterial = (mat: FloorMaterialType) => {
+    setSelectedMaterial(mat)
+    const def = FLOOR_SURFACES[mat]
+    if (floorName.startsWith("Piso") || floorName.startsWith("Área") || floorName.startsWith("Pátio")) {
+      if (mat === "grass") setFloorName("Área de Grama 1")
+      else if (mat === "asphalt") setFloorName("Pátio Asfalto 1")
+      else if (mat === "gravel") setFloorName("Pátio Brita 1")
+      else setFloorName(`${def.name} 1`)
+    }
+  }
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center">
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-[400px] text-slate-100">
+    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-lg text-slate-100 max-h-[92vh] flex flex-col overflow-hidden">
         <div className="p-5 border-b border-slate-800 flex items-center gap-3">
           <span className="text-2xl">🏢</span>
           <div>
-            <h2 className="text-sm font-bold">Novo Piso</h2>
+            <h2 className="text-sm font-bold">Novo Piso / Superfície de Apoio</h2>
             <p className="text-[11px] text-slate-400">
-              Configure as dimensões reais e a escala do piso
+              Escolha o tipo de solo/material e configure as dimensões reais de apoio
             </p>
           </div>
           <button onClick={onClose} className="ml-auto text-slate-500 hover:text-white text-lg">×</button>
         </div>
-        <div className="p-5 space-y-4">
+
+        <div className="p-5 space-y-4 overflow-y-auto flex-1">
+          {/* Seletor de Tipo de Superfície / Material */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-400">Tipo de Solo / Superfície</label>
+            <div className="grid grid-cols-2 gap-2">
+              {FLOOR_SURFACES_LIST.map((mat) => {
+                const isSelected = selectedMaterial === mat.id
+                return (
+                  <button
+                    key={mat.id}
+                    type="button"
+                    onClick={() => handleSelectMaterial(mat.id)}
+                    className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-left transition-all ${
+                      isSelected
+                        ? "bg-slate-800 border-blue-500 text-white shadow-md ring-2 ring-blue-500/40"
+                        : "bg-slate-950/70 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700"
+                    }`}
+                  >
+                    <span className="text-2xl shrink-0 mt-0.5">{mat.icon}</span>
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold leading-snug">{mat.name}</div>
+                      <div className="text-[10px] text-slate-500 leading-tight line-clamp-2 mt-0.5">
+                        {mat.description}
+                      </div>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-400">Nome do Piso</label>
+            <label className="text-xs font-semibold text-slate-400">Nome do Piso / Apoio</label>
             <input
               type="text"
               value={floorName}
@@ -252,21 +306,21 @@ function NewFloorModal({ isOpen, onClose, onConfirm }: NewFloorModalProps) {
             </div>
           </div>
 
-          <div className="text-[11px] text-slate-500 bg-slate-950/60 rounded-lg p-2.5">
-            O piso será criado como uma área retangular de {widthM * ppm} × {heightM * ppm} pixels
-            no canvas. Você poderá desenhar áreas internas depois.
+          <div className="text-[11px] text-slate-400 bg-slate-950/70 border border-slate-800/80 rounded-lg p-2.5">
+            O piso funciona como base de apoio (<span className="text-blue-300 font-semibold">{widthM}m × {heightM}m</span>) e fica posicionado no nível inferior para suportar paletes, porta-paletes e estruturas.
           </div>
         </div>
-        <div className="p-4 border-t border-slate-800 flex gap-3 justify-end">
+
+        <div className="p-4 border-t border-slate-800 flex gap-3 justify-end bg-slate-950/50">
           <button onClick={onClose} className="px-4 py-2 text-xs text-slate-400 hover:text-slate-200">
             Cancelar
           </button>
           <button
             onClick={() => {
-              onConfirm(floorName, widthM, heightM, ppm)
+              onConfirm(floorName, widthM, heightM, ppm, selectedMaterial)
               onClose()
             }}
-            className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition-colors"
+            className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition-colors shadow-lg"
           >
             Criar Piso
           </button>
@@ -527,14 +581,20 @@ export default function UniversalMapEditor({
         rotation: 0,
         locked: false,
         visible: true,
-        layerId: "default",
+        layerId: elemDef.category === "area" || elemDef.type.startsWith("floor_") ? "areas" : "default",
         label: elemDef.label,
         physicalDimensions: customDefault
           ? { ...customDefault }
           : ensurePhysicalDimensions({ width: widthPx, height: heightPx, category: elemDef.category }, 20),
         props: { ...elemDef.defaultProps },
       }
-      setObjects((prev) => [...prev, newObj])
+      // Pisos e bases de apoio vão sempre para a camada de base (fundo do canvas)
+      const isFloorBase = elemDef.category === "area" || elemDef.type.startsWith("floor_")
+      if (isFloorBase) {
+        setObjects((prev) => [newObj, ...prev])
+      } else {
+        setObjects((prev) => [...prev, newObj])
+      }
       setSelectedId(id)
       setTool("select")
     },
@@ -697,9 +757,16 @@ export default function UniversalMapEditor({
     }
   }, [objects, handleSelectAndLocate])
 
-  // ── Criar Novo Piso ──────────────────────────────────────────
+  // ── Criar Novo Piso / Apoio ──────────────────────────────────
   const handleCreateFloor = useCallback(
-    (floorName: string, widthM: number, heightM: number, ppm: number) => {
+    (
+      floorName: string,
+      widthM: number,
+      heightM: number,
+      ppm: number,
+      material: FloorMaterialType = "concrete"
+    ) => {
+      const surface = FLOOR_SURFACES[material] || FLOOR_SURFACES.concrete
       const id = `floor_${crypto.randomUUID().slice(0, 8)}`
       const widthPx = widthM * ppm
       const heightPx = heightM * ppm
@@ -717,18 +784,19 @@ export default function UniversalMapEditor({
         visible: true,
         layerId: "areas",
         label: floorName,
-        classification: "piso_geral",
-        color: "rgba(30,41,59,0.4)",
-        strokeColor: "#475569",
-        opacity: 1,
+        classification: material === "grass" ? "grama" : material === "asphalt" ? "asfalto" : "piso_geral",
+        color: surface.color,
+        strokeColor: surface.strokeColor,
+        opacity: surface.opacity,
         props: {
           realWidthM: widthM,
           realHeightM: heightM,
           pixelsPerMeter: ppm,
           floorName,
+          floorMaterial: material,
         },
       }
-      setObjects((prev) => [floorObj, ...prev]) // Piso vai para o fundo
+      setObjects((prev) => [floorObj, ...prev]) // Piso vai para a base (fundo)
       setSelectedId(id)
     },
     []

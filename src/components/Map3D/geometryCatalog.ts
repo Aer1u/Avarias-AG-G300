@@ -14,6 +14,7 @@
 
 import * as THREE from "three"
 import type { UniversalSpatialObject } from "./types"
+import { FLOOR_SURFACES, type FloorMaterialType } from "../MapLibrary/floorSurfaces"
 
 // Cache compartilhado de materiais para máxima performance
 const materialsCache = new Map<string, THREE.Material>()
@@ -91,19 +92,29 @@ function buildAreaGeometry(group: THREE.Group, spatial: UniversalSpatialObject) 
     spatial.raw.classification === "circulacao" ||
     spatial.type === "street"
 
-  const areaColor = isStreet
+  // Detecção de material de solo / piso de apoio (Grama, Concreto, Asfalto, etc.)
+  const rawMat =
+    (spatial.raw.props?.floorMaterial as FloorMaterialType) ||
+    (spatial.raw.type.startsWith("floor_")
+      ? (spatial.raw.type.replace("floor_", "") as FloorMaterialType)
+      : undefined)
+  const surfaceDef = rawMat && FLOOR_SURFACES[rawMat] ? FLOOR_SURFACES[rawMat] : undefined
+
+  const areaColor = surfaceDef
+    ? surfaceDef.threeColor
+    : isStreet
     ? "#1e293b"
     : spatial.color || (spatial.type === "floor" ? "#0f172a" : "#334155")
-  const hThickness = 0.04
+  const hThickness = surfaceDef ? 0.05 : 0.04
 
   // Chão delimitado
-  const floorMat = getMaterial(`floor_${areaColor}`, () =>
+  const floorMat = getMaterial(`floor_${areaColor}_${surfaceDef ? surfaceDef.id : "default"}`, () =>
     new THREE.MeshStandardMaterial({
       color: new THREE.Color(areaColor),
-      roughness: 0.85,
-      metalness: 0.1,
+      roughness: surfaceDef ? surfaceDef.roughness : 0.85,
+      metalness: surfaceDef ? surfaceDef.metalness : 0.1,
       transparent: true,
-      opacity: isStreet ? 0.95 : 0.65,
+      opacity: isStreet ? 0.95 : surfaceDef ? 0.95 : 0.65,
     })
   )
 

@@ -14,6 +14,7 @@ import DriveOperationalCard from "./DriveOperationalCard"
 import LinkedResourcesSection from "../Resources/LinkedResourcesSection"
 import type { CustomEntityRecord } from "../MapLibrary/modulesTypes"
 import { INITIAL_AREA_CLASSIFICATIONS, calculateAreaM2 } from "../MapLibrary/areaClassifier"
+import { FLOOR_SURFACES, FLOOR_SURFACES_LIST, type FloorMaterialType } from "../MapLibrary/floorSurfaces"
 
 import type { DimensionConfig } from "../MapLibrary/dimensionsTypes"
 import type { PhysicalDimensions } from "../MapLibrary/types"
@@ -109,6 +110,56 @@ function AreaPropertiesCard({
             placeholder="Ex: AREA-001, G300-AVARIAS"
             className="w-full bg-slate-900 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-blue-500"
           />
+        </div>
+      </div>
+
+      {/* Superfície / Material de Apoio (Pisos e Solos) */}
+      <div className="space-y-1.5 p-2.5 bg-slate-950/60 rounded-lg border border-slate-800/60">
+        <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+          <span className="flex items-center gap-1.5">
+            <span>🏗️</span>
+            <span>Tipo de Superfície de Apoio</span>
+          </span>
+          <span className="text-[9px] text-blue-400 font-normal">Base do Chão</span>
+        </label>
+        <div className="grid grid-cols-2 gap-1.5">
+          {FLOOR_SURFACES_LIST.map((mat) => {
+            const isSelected =
+              obj.props.floorMaterial === mat.id ||
+              obj.type === `floor_${mat.id}` ||
+              (mat.id === "concrete" && !obj.props.floorMaterial && obj.type === "floor")
+
+            return (
+              <button
+                key={mat.id}
+                type="button"
+                onClick={() => {
+                  onUpdateObject({
+                    color: mat.color,
+                    strokeColor: mat.strokeColor,
+                    classification: mat.id === "grass" ? "grama" : mat.id === "asphalt" ? "asfalto" : "piso_geral",
+                    props: {
+                      ...obj.props,
+                      floorMaterial: mat.id,
+                      surfaceName: mat.name,
+                    },
+                  })
+                }}
+                className={`flex items-center gap-2 p-2 rounded-lg border text-left transition-all ${
+                  isSelected
+                    ? "bg-slate-800 border-blue-500 text-white shadow-sm ring-1 ring-blue-500/50"
+                    : "bg-slate-900/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700"
+                }`}
+                title={mat.description}
+              >
+                <span className="text-base shrink-0">{mat.icon}</span>
+                <div className="min-w-0">
+                  <div className="text-[11px] font-bold leading-tight truncate">{mat.name}</div>
+                  <div className="text-[9px] text-slate-500 capitalize">{mat.category === "external" ? "Externo" : "Interno"}</div>
+                </div>
+              </button>
+            )
+          })}
         </div>
       </div>
 

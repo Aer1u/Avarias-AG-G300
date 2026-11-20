@@ -11,9 +11,11 @@ import { architecturalElements } from "./elements/architectural"
 import { storageElements }       from "./elements/storage"
 import { equipmentElements }     from "./elements/equipment"
 import { orientationElements }   from "./elements/orientation"
+import { surfaceElements }       from "./elements/surfaces"
 
 // ── Registro plano de todos os elementos ────────────────────
 export const ALL_ELEMENTS: MapElementDefinition[] = [
+  ...surfaceElements,
   ...architecturalElements,
   ...storageElements,
   ...equipmentElements,
@@ -36,13 +38,13 @@ for (const el of ALL_ELEMENTS) {
 
 // ── Metadados das categorias (labels e ordem) ───────────────
 export const CATEGORY_META: Record<MapCategory, { label: string; order: number; icon: string }> = {
-  architectural: { label: "Arquitetura",   order: 1, icon: "🏗️" },
-  storage:       { label: "Armazenagem",   order: 2, icon: "📦" },
-  equipment:     { label: "Equipamentos",  order: 3, icon: "🔧" },
-  logistics:     { label: "Logística",     order: 4, icon: "🚛" },
-  orientation:   { label: "Orientação",    order: 5, icon: "🧭" },
-  geometric:     { label: "Geométricos",   order: 6, icon: "⬜" },
-  area:          { label: "Áreas",         order: 7, icon: "📐" },
+  area:          { label: "Pisos & Apoio", order: 1, icon: "🏢" },
+  architectural: { label: "Arquitetura",   order: 2, icon: "🏗️" },
+  storage:       { label: "Armazenagem",   order: 3, icon: "📦" },
+  equipment:     { label: "Equipamentos",  order: 4, icon: "🔧" },
+  logistics:     { label: "Logística",     order: 5, icon: "🚛" },
+  orientation:   { label: "Orientação",    order: 6, icon: "🧭" },
+  geometric:     { label: "Geométricos",   order: 7, icon: "⬜" },
 }
 
 // ── Helper: busca por texto ──────────────────────────────────

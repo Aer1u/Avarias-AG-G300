@@ -18,6 +18,7 @@ import type { MapObject } from "../MapLibrary/types"
 import { ELEMENT_BY_TYPE } from "../MapLibrary/registry"
 import { INITIAL_AREA_CLASSIFICATIONS } from "../MapLibrary/areaClassifier"
 import { pixelsToReal, ensurePhysicalDimensions } from "../MapLibrary/unitConverter"
+import { FLOOR_SURFACES, type FloorMaterialType } from "../MapLibrary/floorSurfaces"
 
 export interface MapCanvasHandle {
   navigateTo: (obj: MapObject) => void
@@ -40,6 +41,8 @@ interface MapCanvasContainerProps {
 }
 
 function getAreaFill(classification?: string): { fill: string; stroke: string } {
+  if (classification === "grama") return { fill: "rgba(22, 101, 52, 0.65)", stroke: "#22c55e" }
+  if (classification === "asfalto") return { fill: "rgba(15, 23, 42, 0.85)", stroke: "#334155" }
   const cls = INITIAL_AREA_CLASSIFICATIONS.find((c) => c.id === classification)
   if (cls) return { fill: cls.color, stroke: cls.borderColor }
   return { fill: "rgba(99,102,241,0.10)", stroke: "#6366f1" }
@@ -898,26 +901,95 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
             })
             group.add(streetLabel)
           } else {
-            // Retângulo padrão de Área / Bloco
+            // Retângulo padrão de Área / Bloco / Piso de Apoio
+            const isFloor = obj.type === "floor" || Boolean(obj.props?.floorMaterial)
+            const matType =
+              (obj.props?.floorMaterial as FloorMaterialType) ||
+              (obj.classification === "grama"
+                ? "grass"
+                : obj.classification === "asfalto"
+                ? "asphalt"
+                : "concrete")
+
             const rect = new Konva.Rect({
               width: obj.width,
               height: obj.height,
               fill: obj.color || fill,
               stroke: obj.strokeColor || stroke,
-              strokeWidth: obj.classification === "bloco" ? 2 : 1.5,
-              dash: obj.classification === "bloco" ? [6, 4] : [8, 4],
+              strokeWidth: isFloor ? 2 : obj.classification === "bloco" ? 2 : 1.5,
+              dash: isFloor ? undefined : obj.classification === "bloco" ? [6, 4] : [8, 4],
+              cornerRadius: isFloor ? 4 : 0,
             })
+            group.add(rect)
 
+            // Detalhes visuais do material de piso / apoio
+            if (isFloor) {
+              const w = obj.width
+              const h = obj.height
+              if (matType === "concrete") {
+                const step = 80
+                for (let x = step; x < w; x += step) {
+                  group.add(
+                    new Konva.Line({
+                      points: [x, 0, x, h],
+                      stroke: "rgba(148, 163, 184, 0.2)",
+                      strokeWidth: 1,
+                      dash: [4, 4],
+                      listening: false,
+                    })
+                  )
+                }
+                for (let y = step; y < h; y += step) {
+                  group.add(
+                    new Konva.Line({
+                      points: [0, y, w, y],
+                      stroke: "rgba(148, 163, 184, 0.2)",
+                      strokeWidth: 1,
+                      dash: [4, 4],
+                      listening: false,
+                    })
+                  )
+                }
+              } else if (matType === "grass") {
+                const step = 60
+                for (let x = 30; x < w - 20; x += step) {
+                  for (let y = 30; y < h - 20; y += step) {
+                    group.add(
+                      new Konva.Line({
+                        points: [x, y, x - 3, y - 6, x, y, x + 3, y - 6],
+                        stroke: "rgba(34, 197, 94, 0.4)",
+                        strokeWidth: 1.2,
+                        listening: false,
+                      })
+                    )
+                  }
+                }
+              } else if (matType === "asphalt") {
+                group.add(
+                  new Konva.Rect({
+                    x: 4,
+                    y: 4,
+                    width: w - 8,
+                    height: h - 8,
+                    stroke: "rgba(71, 85, 105, 0.4)",
+                    strokeWidth: 1,
+                    dash: [6, 6],
+                    listening: false,
+                  })
+                )
+              }
+            }
+
+            const surfaceDef = FLOOR_SURFACES[matType]
+            const prefix = isFloor && surfaceDef ? `${surfaceDef.icon} ` : ""
             const lbl = new Konva.Text({
-              text: obj.label || "",
+              text: `${prefix}${obj.label || ""}`,
               fontSize: 11,
               fill: obj.strokeColor || stroke,
               fontStyle: "bold",
               padding: 4,
               listening: false,
             })
-
-            group.add(rect)
             group.add(lbl)
           }
 
