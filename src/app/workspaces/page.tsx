@@ -97,20 +97,23 @@ export default function WorkspacesPage() {
     // Sincroniza do Supabase em segundo plano
     workspacesService.syncFromSupabase().then((synced) => {
       setWorkspaces(synced)
+      setAuthorizedCreators(workspacesService.getAuthorizedCreators())
     })
   }, [])
 
   useEffect(() => {
-    load()
+    Promise.resolve().then(() => {
+      load()
+    })
   }, [load])
 
   // ─── Criar Workspace ──────────────────────────────────────────
-  function handleCreate() {
+  async function handleCreate() {
     if (!newName.trim()) {
       setCreateError("O nome é obrigatório.")
       return
     }
-    const result = workspacesService.createWorkspace(
+    const result = await workspacesService.createWorkspaceAsync(
       {
         name: newName.trim(),
         description: newDesc.trim(),
