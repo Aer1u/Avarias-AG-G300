@@ -35,6 +35,10 @@ import {
   applyNonOriginPositionChange,
   syncSupabaseUniversalBalances,
 } from "../Systems/systemBalanceService"
+import {
+  hydratePositionKeyFromSupabase,
+  persistPositionItemsToSupabase,
+} from "@/lib/workspaceItemsSync"
 
 interface ChannelInfo {
   id: string
@@ -130,16 +134,20 @@ export default function ViewerDriveInModal({
     onClose()
   }, [onClose])
 
-  // Sincroniza registros -> saldo na Origem (Chão) sempre que abrir com sistema vinculado
+  // Sincroniza registros -> saldo na Origem (Chão) ou hidrata posição livre ao abrir
   useEffect(() => {
-    if (!isOpen || !object || !linkedSystem) return
+    if (!isOpen || !object) return
     let cancelled = false
     Promise.resolve()
-      .then(() => {
+      .then(async () => {
         if (cancelled) return
         setLoading(true)
         setBalanceError("")
-        return fetchAndSyncSystemBalances(linkedSystem)
+        if (linkedSystem) {
+          await fetchAndSyncSystemBalances(linkedSystem)
+        } else {
+          await hydratePositionKeyFromSupabase(objectMapeamentoKey, workspaceId)
+        }
       })
       .then(() => {
         if (!cancelled) {
@@ -154,7 +162,7 @@ export default function ViewerDriveInModal({
     return () => {
       cancelled = true
     }
-  }, [isOpen, object, linkedSystem])
+  }, [isOpen, object, linkedSystem, objectMapeamentoKey, workspaceId])
 
   // Extrai canais cadastrados no drive (nunca para compartimento)
   const channels: ChannelInfo[] = useMemo(() => {
@@ -360,6 +368,11 @@ export default function ViewerDriveInModal({
       } else {
         const others = getLocalItems().filter((it) => it.mapeamentoId !== objectMapeamentoKey)
         saveLocalItems([...others, ...nextObjectItems])
+        persistPositionItemsToSupabase(
+          objectMapeamentoKey,
+          nextObjectItems,
+          workspaceId || linkedSystem?.workspaceId
+        ).catch(() => {})
         if (linkedSystem) {
           syncSupabaseUniversalBalances(linkedSystem).catch(() => {})
         }
@@ -367,7 +380,7 @@ export default function ViewerDriveInModal({
       setItemsVersion((v) => v + 1)
       return true
     },
-    [object, objectMapeamentoKey, linkedSystem, isOriginObject, enforceStockLimit]
+    [object, objectMapeamentoKey, linkedSystem, isOriginObject, enforceStockLimit, workspaceId]
   )
 
   const handleAddItem = (
@@ -466,11 +479,17 @@ export default function ViewerDriveInModal({
         !(belongsToChannel(it) && it.nivel === source.lvl && it.profundidade === source.d) &&
         !(belongsToChannel(it) && it.nivel === target.lvl && it.profundidade === target.d)
     )
-    saveLocalItems([
+    const nextAll = [
       ...srcItems.map((it) => ({ ...it, nivel: target.lvl, profundidade: target.d })),
       ...tgtItems.map((it) => ({ ...it, nivel: source.lvl, profundidade: source.d })),
       ...others,
-    ])
+    ]
+    saveLocalItems(nextAll)
+    persistPositionItemsToSupabase(
+      objectMapeamentoKey,
+      nextAll.filter((it) => it.mapeamentoId === objectMapeamentoKey),
+      workspaceId || linkedSystem?.workspaceId
+    ).catch(() => {})
     setItemsVersion((v) => v + 1)
   }
 
