@@ -35,10 +35,19 @@ import { format, startOfWeek, endOfWeek, addWeeks, parseISO, isValid } from "dat
 import * as XLSX from "xlsx"
 import { searchBaseCodigos, type BaseCodigoItem } from "../Resources/baseCodigosService"
 import { systemDataService } from "./systemDataService"
+import {
+  syncOriginWithSystemBalance,
+  validateSystemRecordsChange,
+  syncSupabaseUniversalBalances,
+  getSystemBalanceSnapshot,
+} from "./systemBalanceService"
+import { toWorkspaceUuid } from "./useSystemStore"
 import { supabase } from "@/lib/supabase"
 import type { BusinessSystem, SystemStockRecord } from "./types"
 import type { MapObject } from "../MapLibrary/types"
 import { cn } from "@/lib/utils"
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export interface SystemRecordsModalProps {
   isOpen: boolean
@@ -516,56 +525,83 @@ export default function SystemRecordsModal({
     setTimeout(() => setToast((prev) => ({ ...prev, show: false })), 4000)
   }, [])
 
-  // ── Carregar Registros ──────────────────────────────────────
+  // ── Carregar Registros (isolado por system_id em universal_records) ──
   const fetchRegistros = useCallback(async () => {
     setLoading(true)
     try {
-      // 1. Tenta buscar da tabela oficial Registros do Supabase
-      const { data: dbRows, error } = await supabase
-        .from("Registros")
-        .select("*")
-        .order("Data", { ascending: false })
-        .limit(300)
+      if (UUID_REGEX.test(system.id)) {
+        const { data: dbRows, error } = await supabase
+          .from("universal_records")
+          .select("*")
+          .eq("system_id", system.id)
+          .order("created_at", { ascending: false })
+          .limit(300)
 
-      if (!error && dbRows && dbRows.length > 0) {
-        const mapped: SystemStockRecord[] = dbRows.map((row: any) => ({
-          id: String(row.id),
-          systemId: system.id,
-          sku: row.Produto || "",
-          description: row.descricao || row.Produto || "",
-          quantity: (Number(row.Entrada) || 0) > 0 ? Number(row.Entrada) : Number(row["Saída"] || 0),
-          data: row.Data || "",
-          entrada: row.Entrada !== null ? Number(row.Entrada) : null,
-          saida: row["Saída"] !== null ? Number(row["Saída"]) : null,
-          tipo_avaria: row.tipo_avaria || "Sem Avaria",
-          turno: row.turno || 1,
-          origem: row.Origem || "Recebimento",
-          transportadora: row.transportadora || "",
-          nota_fiscal: row.nota_fiscal || null,
-          placa: row.placa || "",
-          observacao: row["Observação"] || "",
-          positionLabel: system.originStorageLabel || "CHÃO",
-          registeredAt: row.Data || new Date().toISOString(),
-          isNew: false,
-          isDirty: false,
-        }))
-        setRegistros(mapped)
-        systemDataService.saveRecordsBatch(mapped)
-        setLoading(false)
-        return
+        if (!error && Array.isArray(dbRows)) {
+          const mapped: SystemStockRecord[] = dbRows.map((row: any) => {
+            const meta = row.metadata && typeof row.metadata === "object" ? row.metadata : {}
+            const isEntrada = row.record_type === "entrada"
+            const entVal =
+              meta.entrada !== undefined
+                ? meta.entrada
+                : isEntrada
+                ? Number(row.quantity)
+                : null
+            const saiVal =
+              meta.saida !== undefined
+                ? meta.saida
+                : !isEntrada
+                ? Number(row.quantity)
+                : null
+            const dateStr =
+              meta.data ||
+              (typeof row.created_at === "string" ? row.created_at.slice(0, 10) : "")
+
+            return {
+              id: String(row.id),
+              systemId: system.id,
+              sku: row.resource_id || "",
+              description: meta.description || row.resource_id || "",
+              quantity: Number(row.quantity) || 0,
+              data: dateStr,
+              entrada: entVal !== null && entVal !== undefined ? Number(entVal) : null,
+              saida: saiVal !== null && saiVal !== undefined ? Number(saiVal) : null,
+              tipo_avaria: meta.tipo_avaria || "Sem Avaria",
+              turno: meta.turno !== undefined && meta.turno !== null ? Number(meta.turno) : 1,
+              origem: meta.origem || "Recebimento",
+              transportadora: meta.transportadora || "",
+              nota_fiscal: meta.nota_fiscal ?? row.document_ref ?? null,
+              placa: meta.placa || "",
+              lacre: meta.lacre || "",
+              observacao: meta.observacao ?? row.justification ?? "",
+              positionLabel: meta.positionLabel || system.originStorageLabel || "CHÃO",
+              positionObjectId: row.storage_object_id || system.originStorageId,
+              registeredBy: row.responsible || undefined,
+              registeredAt: row.created_at || new Date().toISOString(),
+              isNew: false,
+              isDirty: false,
+            }
+          })
+          setRegistros(mapped)
+          systemDataService.replaceRecordsForSystem(system.id, mapped)
+          syncOriginWithSystemBalance(system, mapped)
+          return
+        }
       }
 
-      // Fallback ao cache local
+      // Fallback ao cache local isolado por system.id
       const all = systemDataService.getRecordsBySystem(system.id)
       setRegistros(all)
+      syncOriginWithSystemBalance(system, all)
     } catch (e) {
-      console.error("Erro ao ler registros do Supabase:", e)
+      console.error("Erro ao ler registros do sistema:", e)
       const all = systemDataService.getRecordsBySystem(system.id)
       setRegistros(all)
+      syncOriginWithSystemBalance(system, all)
     } finally {
       setLoading(false)
     }
-  }, [system.id, system.originStorageLabel])
+  }, [system])
 
   useEffect(() => {
     if (isOpen) {
@@ -600,19 +636,39 @@ export default function SystemRecordsModal({
   }, [system.id, system.originStorageLabel])
 
   const removeRow = useCallback((id: string) => {
-    setRegistros((prev) => {
-      const target = prev.find((r) => r.id === id)
-      if (!target?.isNew) {
-        systemDataService.deleteRecord(id)
-        // Deleta do Supabase se for id numérico
-        if (!id.startsWith("new_") && !id.startsWith("rec_")) {
-          supabase.from("Registros").delete().eq("id", Number(id)).then(() => {})
-        }
+    const target = registros.find((r) => r.id === id)
+    if (!target) return
+
+    const remaining = registros.filter((r) => r.id !== id)
+    if (!target.isNew) {
+      const check = validateSystemRecordsChange(
+        system,
+        remaining.filter((r) => !r.isNew),
+        target.sku ? [target.sku] : undefined
+      )
+      if (!check.ok) {
+        showToast(check.errorMessage, "error")
+        return
       }
-      return prev.filter((r) => r.id !== id)
-    })
-    showToast("Registro removido.", "info")
-  }, [showToast])
+
+      systemDataService.deleteRecord(id)
+      if (UUID_REGEX.test(id) && UUID_REGEX.test(system.id)) {
+        supabase
+          .from("universal_records")
+          .delete()
+          .eq("id", id)
+          .eq("system_id", system.id)
+          .then(({ error }) => {
+            if (error) console.error("Erro ao remover registro:", error)
+          })
+      }
+      syncOriginWithSystemBalance(system, remaining.filter((r) => !r.isNew))
+      syncSupabaseUniversalBalances(system).catch(() => {})
+    }
+
+    setRegistros(remaining)
+    showToast("Registro removido e saldo da origem atualizado.", "info")
+  }, [registros, showToast, system])
 
   const updateRowField = useCallback((id: string, field: keyof SystemStockRecord, value: any) => {
     setRegistros((prev) =>
@@ -630,10 +686,17 @@ export default function SystemRecordsModal({
           }
         }
 
-        const nextRow = {
+        const nextRow: SystemStockRecord = {
           ...r,
           [field]: finalValue,
           isDirty: true,
+        }
+
+        // Entrada e Saída são mutuamente exclusivas por linha
+        if (field === "entrada" && typeof finalValue === "number" && finalValue > 0) {
+          nextRow.saida = null
+        } else if (field === "saida" && typeof finalValue === "number" && finalValue > 0) {
+          nextRow.entrada = null
         }
 
         const ent = typeof nextRow.entrada === "number" ? nextRow.entrada : 0
@@ -688,67 +751,109 @@ export default function SystemRecordsModal({
       return
     }
 
+    // Validação de conservação:
+    // Saída só pode ocorrer se houver saldo no Objeto Origem (Chão)
+    const balanceCheck = validateSystemRecordsChange(
+      system,
+      registros,
+      rowsToSave.map((r) => r.sku)
+    )
+    if (!balanceCheck.ok) {
+      showToast(balanceCheck.errorMessage, "error")
+      return
+    }
+
     setSaving(true)
     try {
-      const sanitized = rowsToSave.map((r) => ({
-        ...r,
-        systemId: system.id,
-        sku: r.sku.trim().toUpperCase(),
-        description: r.description.trim(),
-        quantity: (Number(r.entrada) || 0) > 0 ? Number(r.entrada) : (Number(r.saida) || 0),
-        data: r.data || format(new Date(), "yyyy-MM-dd"),
-        isDirty: false,
-        isNew: false,
-      }))
+      const wsUuid = toWorkspaceUuid(system.workspaceId)
+      const savedByOrigId = new Map<string, SystemStockRecord>()
 
-      // 1. Salva no banco Supabase (tabela oficial Registros)
-      for (const row of sanitized) {
-        try {
+      for (const r of rowsToSave) {
+        const origId = r.id
+        const ent = r.entrada !== null && r.entrada !== undefined ? Number(r.entrada) : null
+        const sai = r.saida !== null && r.saida !== undefined ? Number(r.saida) : null
+        const isEntrada = (ent || 0) > 0
+        const qty = isEntrada ? Number(ent) : Number(sai || 0)
+        const dateStr = r.data || format(new Date(), "yyyy-MM-dd")
+
+        const sanitizedRow: SystemStockRecord = {
+          ...r,
+          systemId: system.id,
+          sku: r.sku.trim().toUpperCase(),
+          description: r.description.trim(),
+          quantity: qty,
+          data: dateStr,
+          isDirty: false,
+          isNew: false,
+        }
+
+        if (UUID_REGEX.test(system.id)) {
           const payload = {
-            Data: row.data || format(new Date(), "yyyy-MM-dd"),
-            Produto: row.sku,
-            Origem: row.origem || "Recebimento",
-            Entrada: row.entrada !== null ? Number(row.entrada) : 0,
-            "Saída": row.saida !== null ? Number(row.saida) : 0,
-            tipo_avaria: row.tipo_avaria || "Sem Avaria",
-            turno: row.turno ? String(row.turno) : "1",
-            transportadora: row.transportadora || null,
-            nota_fiscal: row.nota_fiscal ? String(row.nota_fiscal) : null,
-            placa: row.placa || null,
-            "Observação": row.observacao || "",
-            "Movimentação Sistema": false,
+            workspace_id: wsUuid,
+            system_id: system.id,
+            record_type: isEntrada ? "entrada" : "saida",
+            resource_id: sanitizedRow.sku,
+            storage_object_id:
+              sanitizedRow.positionObjectId ||
+              system.originStorageId ||
+              system.originStorageLabel ||
+              "CHAO",
+            quantity: qty,
+            unit: "un",
+            document_ref: sanitizedRow.nota_fiscal ? String(sanitizedRow.nota_fiscal) : null,
+            responsible: sanitizedRow.registeredBy || null,
+            justification: sanitizedRow.observacao || null,
+            status: "concluido",
+            metadata: {
+              data: dateStr,
+              description: sanitizedRow.description,
+              entrada: ent,
+              saida: sai,
+              tipo_avaria: sanitizedRow.tipo_avaria || "Sem Avaria",
+              turno: sanitizedRow.turno ?? 1,
+              origem: sanitizedRow.origem || "Recebimento",
+              transportadora: sanitizedRow.transportadora || "",
+              nota_fiscal: sanitizedRow.nota_fiscal || null,
+              placa: sanitizedRow.placa || "",
+              lacre: sanitizedRow.lacre || "",
+              observacao: sanitizedRow.observacao || "",
+              positionLabel:
+                sanitizedRow.positionLabel || system.originStorageLabel || "CHÃO",
+            },
           }
 
-          if (row.id.startsWith("new_") || row.id.startsWith("rec_")) {
+          if (r.isNew || !UUID_REGEX.test(origId)) {
             const { data: insData, error: insErr } = await supabase
-              .from("Registros")
+              .from("universal_records")
               .insert(payload)
               .select("id")
-            if (!insErr && insData && insData[0]) {
-              row.id = String(insData[0].id)
+            if (insErr) throw insErr
+            if (insData && insData[0]?.id) {
+              sanitizedRow.id = String(insData[0].id)
             }
           } else {
-            await supabase
-              .from("Registros")
+            const { error: updErr } = await supabase
+              .from("universal_records")
               .update(payload)
-              .eq("id", Number(row.id))
+              .eq("id", origId)
+              .eq("system_id", system.id)
+            if (updErr) throw updErr
           }
-        } catch (dbErr) {
-          console.warn("Aviso ao salvar registro individual no Supabase:", dbErr)
         }
+
+        savedByOrigId.set(origId, sanitizedRow)
       }
 
-      // 2. Salva no cache local
-      systemDataService.saveRecordsBatch(sanitized)
+      const nextRegistros = registros.map((r) => savedByOrigId.get(r.id) || r)
+      const persistedRegistros = nextRegistros.filter((r) => !r.isNew)
+      setRegistros(nextRegistros)
+      systemDataService.replaceRecordsForSystem(system.id, persistedRegistros)
 
-      setRegistros((prev) =>
-        prev.map((r) => {
-          const match = sanitized.find((s) => s.id === r.id)
-          return match || r
-        })
-      )
+      // Atualiza automaticamente o saldo do Objeto Origem (Chão) e universal_balances
+      syncOriginWithSystemBalance(system, persistedRegistros)
+      syncSupabaseUniversalBalances(system).catch(() => {})
 
-      showToast(`✅ ${rowsToSave.length} registro(s) salvo(s) no Supabase com sucesso!`, "success")
+      showToast(`✅ ${rowsToSave.length} registro(s) salvo(s) e saldo na origem atualizado!`, "success")
     } catch (err: any) {
       console.error("Erro ao salvar:", err)
       showToast(`Erro ao salvar registros: ${err.message || "Falha"}`, "error")
@@ -1015,6 +1120,20 @@ export default function SystemRecordsModal({
               <p className="text-[10px] text-slate-400">
                 {registros.length} registros cadastrados · Origem física:{" "}
                 <strong className="text-slate-200">{system.originStorageLabel || "CHÃO"}</strong>
+                {(() => {
+                  const snap = getSystemBalanceSnapshot(system, registros)
+                  return (
+                    <>
+                      {" · "}
+                      Saldo Líquido: <strong className="text-emerald-400">{snap.totalSystemNet}</strong>
+                      {" ("}
+                      Chão: <strong className="text-amber-300">{snap.totalOrigin}</strong>
+                      {" + "}
+                      Posições: <strong className="text-blue-300">{snap.totalAllocated}</strong>
+                      {")"}
+                    </>
+                  )
+                })()}
               </p>
             </div>
           </div>
