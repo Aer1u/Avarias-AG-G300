@@ -35,6 +35,7 @@ import { format, startOfWeek, endOfWeek, addWeeks, parseISO, isValid } from "dat
 import * as XLSX from "xlsx"
 import { searchBaseCodigos, type BaseCodigoItem } from "../Resources/baseCodigosService"
 import { systemDataService } from "./systemDataService"
+import { supabase } from "@/lib/supabase"
 import type { BusinessSystem, SystemStockRecord } from "./types"
 import type { MapObject } from "../MapLibrary/types"
 import { cn } from "@/lib/utils"
@@ -516,18 +517,55 @@ export default function SystemRecordsModal({
   }, [])
 
   // ── Carregar Registros ──────────────────────────────────────
-  const fetchRegistros = useCallback(() => {
+  const fetchRegistros = useCallback(async () => {
     setLoading(true)
     try {
+      // 1. Tenta buscar da tabela oficial Registros do Supabase
+      const { data: dbRows, error } = await supabase
+        .from("Registros")
+        .select("*")
+        .order("Data", { ascending: false })
+        .limit(300)
+
+      if (!error && dbRows && dbRows.length > 0) {
+        const mapped: SystemStockRecord[] = dbRows.map((row: any) => ({
+          id: String(row.id),
+          systemId: system.id,
+          sku: row.Produto || "",
+          description: row.descricao || row.Produto || "",
+          quantity: (Number(row.Entrada) || 0) > 0 ? Number(row.Entrada) : Number(row["Saída"] || 0),
+          data: row.Data || "",
+          entrada: row.Entrada !== null ? Number(row.Entrada) : null,
+          saida: row["Saída"] !== null ? Number(row["Saída"]) : null,
+          tipo_avaria: row.tipo_avaria || "Sem Avaria",
+          turno: row.turno || 1,
+          origem: row.Origem || "Recebimento",
+          transportadora: row.transportadora || "",
+          nota_fiscal: row.nota_fiscal || null,
+          placa: row.placa || "",
+          observacao: row["Observação"] || "",
+          positionLabel: system.originStorageLabel || "CHÃO",
+          registeredAt: row.Data || new Date().toISOString(),
+          isNew: false,
+          isDirty: false,
+        }))
+        setRegistros(mapped)
+        systemDataService.saveRecordsBatch(mapped)
+        setLoading(false)
+        return
+      }
+
+      // Fallback ao cache local
       const all = systemDataService.getRecordsBySystem(system.id)
       setRegistros(all)
     } catch (e) {
-      console.error("Erro ao ler registros do sistema:", e)
-      showToast("Erro ao carregar registros do sistema", "error")
+      console.error("Erro ao ler registros do Supabase:", e)
+      const all = systemDataService.getRecordsBySystem(system.id)
+      setRegistros(all)
     } finally {
       setLoading(false)
     }
-  }, [system.id, showToast])
+  }, [system.id, system.originStorageLabel])
 
   useEffect(() => {
     if (isOpen) {
@@ -566,6 +604,10 @@ export default function SystemRecordsModal({
       const target = prev.find((r) => r.id === id)
       if (!target?.isNew) {
         systemDataService.deleteRecord(id)
+        // Deleta do Supabase se for id numérico
+        if (!id.startsWith("new_") && !id.startsWith("rec_")) {
+          supabase.from("Registros").delete().eq("id", Number(id)).then(() => {})
+        }
       }
       return prev.filter((r) => r.id !== id)
     })
@@ -659,6 +701,44 @@ export default function SystemRecordsModal({
         isNew: false,
       }))
 
+      // 1. Salva no banco Supabase (tabela oficial Registros)
+      for (const row of sanitized) {
+        try {
+          const payload = {
+            Data: row.data || format(new Date(), "yyyy-MM-dd"),
+            Produto: row.sku,
+            Origem: row.origem || "Recebimento",
+            Entrada: row.entrada !== null ? Number(row.entrada) : 0,
+            "Saída": row.saida !== null ? Number(row.saida) : 0,
+            tipo_avaria: row.tipo_avaria || "Sem Avaria",
+            turno: row.turno ? String(row.turno) : "1",
+            transportadora: row.transportadora || null,
+            nota_fiscal: row.nota_fiscal ? String(row.nota_fiscal) : null,
+            placa: row.placa || null,
+            "Observação": row.observacao || "",
+            "Movimentação Sistema": false,
+          }
+
+          if (row.id.startsWith("new_") || row.id.startsWith("rec_")) {
+            const { data: insData, error: insErr } = await supabase
+              .from("Registros")
+              .insert(payload)
+              .select("id")
+            if (!insErr && insData && insData[0]) {
+              row.id = String(insData[0].id)
+            }
+          } else {
+            await supabase
+              .from("Registros")
+              .update(payload)
+              .eq("id", Number(row.id))
+          }
+        } catch (dbErr) {
+          console.warn("Aviso ao salvar registro individual no Supabase:", dbErr)
+        }
+      }
+
+      // 2. Salva no cache local
       systemDataService.saveRecordsBatch(sanitized)
 
       setRegistros((prev) =>
@@ -668,7 +748,7 @@ export default function SystemRecordsModal({
         })
       )
 
-      showToast(`✅ ${rowsToSave.length} registro(s) salvo(s) com sucesso!`, "success")
+      showToast(`✅ ${rowsToSave.length} registro(s) salvo(s) no Supabase com sucesso!`, "success")
     } catch (err: any) {
       console.error("Erro ao salvar:", err)
       showToast(`Erro ao salvar registros: ${err.message || "Falha"}`, "error")

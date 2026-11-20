@@ -93,6 +93,11 @@ export default function WorkspacesPage() {
     const list = workspacesService.getAllWorkspaces()
     setWorkspaces(list)
     setAuthorizedCreators(workspacesService.getAuthorizedCreators())
+
+    // Sincroniza do Supabase em segundo plano
+    workspacesService.syncFromSupabase().then((synced) => {
+      setWorkspaces(synced)
+    })
   }, [])
 
   useEffect(() => {

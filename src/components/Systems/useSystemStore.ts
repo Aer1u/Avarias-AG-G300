@@ -1,7 +1,7 @@
 // ============================================================
 // NEXUS ERP — Systems / useSystemStore.ts
 // Hook de Gerenciamento de Sistemas de Saldo (Laboratório)
-// Persistência local isolada em localStorage
+// Persistência Híbrida: Supabase (business_systems & system_storage_participants) + localStorage
 // ============================================================
 
 "use client"
@@ -9,40 +9,77 @@
 import { useState, useEffect, useCallback } from "react"
 import { BusinessSystem, StorageParticipantConfig, StockControlMode } from "./types"
 import { DEFAULT_BUSINESS_SYSTEMS } from "./systemRegistry"
+import { supabase } from "@/lib/supabase"
 
 const STORAGE_KEY = "nexus_balance_systems_v1"
-
-// IDs dos sistemas de exemplo antigos a serem purgados automaticamente do localStorage
-const LEGACY_EXAMPLE_IDS = new Set([
-  "AVARIAS_G300",
-  "RETRABALHO",
-  "QUARENTENA",
-  "ERP_PRINCIPAL",
-  "sys_avarias_g300",
-  "sys_retrabalho",
-  "sys_quarentena",
-  "sys_erp_principal",
-])
 
 export function useSystemStore() {
   const [systems, setSystems] = useState<BusinessSystem[]>([])
   const [isLoaded, setIsLoaded] = useState(false)
 
-  // Carrega do localStorage — purga automaticamente sistemas de exemplo antigos
-  useEffect(() => {
+  // ── Carregar do Supabase com fallback ao localStorage ──────
+  const loadSystems = useCallback(async () => {
+    try {
+      // 1. Tenta carregar do Supabase
+      const { data: dbSystems, error: sysError } = await supabase
+        .from("business_systems")
+        .select("*")
+        .order("created_at", { ascending: true })
+
+      const { data: dbParticipants } = await supabase
+        .from("system_storage_participants")
+        .select("*")
+
+      if (!sysError && dbSystems && dbSystems.length > 0) {
+        const mapped: BusinessSystem[] = dbSystems.map((row: any) => ({
+          id: row.id,
+          code: row.code,
+          name: row.name,
+          description: row.description || "",
+          color: row.color || "#3b82f6",
+          icon: row.icon || "📦",
+          status: row.status || "ativo",
+          defaultControlMode: (row.default_control_mode as StockControlMode) || "vinculado_saldo",
+          originStorageId: row.origin_storage_id || "",
+          originStorageLabel: row.origin_storage_label || "",
+          responsible: row.responsible || "",
+          workspaceId: row.workspace_id || "00000000-0000-0000-0000-000000000000",
+          participants: (dbParticipants || [])
+            .filter((p: any) => p.system_id === row.id)
+            .map((p: any) => ({
+              storageObjectId: p.storage_object_id,
+              storageObjectLabel: p.storage_object_label,
+              storageType: p.storage_type,
+              role: p.role,
+              stockControlMode: p.stock_control_mode as StockControlMode,
+              permissions: {
+                allowInbound: p.allow_inbound ?? true,
+                allowOutbound: p.allow_outbound ?? true,
+                allowReturnToOrigin: p.allow_return_to_origin ?? true,
+              },
+              configuredAt: p.configured_at || row.created_at,
+            })),
+          allowedMovementTypes: ["entrada", "transferencia", "baixa"],
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        }))
+
+        setSystems(mapped)
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(mapped))
+        setIsLoaded(true)
+        return
+      }
+    } catch (e) {
+      console.warn("Falha ao buscar sistemas do Supabase, tentando cache local:", e)
+    }
+
+    // 2. Fallback ao cache local (localStorage)
     try {
       const raw = localStorage.getItem(STORAGE_KEY)
       if (raw) {
         const parsed = JSON.parse(raw)
-        if (Array.isArray(parsed)) {
-          // Filtra quaisquer sistemas de exemplo antigos remanescentes
-          const cleaned = parsed.filter(
-            (s: BusinessSystem) => !LEGACY_EXAMPLE_IDS.has(s.id) && !LEGACY_EXAMPLE_IDS.has(s.code)
-          )
-          if (cleaned.length !== parsed.length) {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned))
-          }
-          setSystems(cleaned)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setSystems(parsed)
           setIsLoaded(true)
           return
         }
@@ -50,13 +87,17 @@ export function useSystemStore() {
     } catch (e) {
       console.warn("Falha ao ler sistemas do localStorage:", e)
     }
-    // Nenhum dado: inicia com lista vazia (sem exemplos)
+
     setSystems([])
     setIsLoaded(true)
   }, [])
 
-  // Salva no localStorage quando o estado mudar
-  const persistSystems = useCallback((newSystems: BusinessSystem[]) => {
+  useEffect(() => {
+    loadSystems()
+  }, [loadSystems])
+
+  // Salva no cache local
+  const persistLocally = useCallback((newSystems: BusinessSystem[]) => {
     setSystems(newSystems)
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(newSystems))
@@ -65,22 +106,47 @@ export function useSystemStore() {
     }
   }, [])
 
-  // Cadastrar novo sistema
+  // Cadastrar novo sistema (Supabase + local)
   const addSystem = useCallback(
     (newSystem: Omit<BusinessSystem, "id" | "createdAt" | "updatedAt">) => {
+      const sysId = crypto.randomUUID()
+      const now = new Date().toISOString()
       const system: BusinessSystem = {
         ...newSystem,
-        id: `sys_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        id: sysId,
+        createdAt: now,
+        updatedAt: now,
       }
-      persistSystems([...systems, system])
+
+      persistLocally([...systems, system])
+
+      // Persiste no Supabase em segundo plano
+      supabase
+        .from("business_systems")
+        .insert({
+          id: sysId,
+          workspace_id: "00000000-0000-0000-0000-000000000000",
+          code: newSystem.code,
+          name: newSystem.name,
+          description: newSystem.description || "",
+          color: newSystem.color || "#3b82f6",
+          icon: newSystem.icon || "📦",
+          default_control_mode: newSystem.defaultControlMode || "vinculado_saldo",
+          origin_storage_id: newSystem.originStorageId || null,
+          origin_storage_label: newSystem.originStorageLabel || null,
+          status: newSystem.status || "ativo",
+          responsible: newSystem.responsible || null,
+        })
+        .then(({ error }) => {
+          if (error) console.error("Erro salvando sistema no Supabase:", error)
+        })
+
       return system
     },
-    [systems, persistSystems]
+    [systems, persistLocally]
   )
 
-  // Atualizar sistema
+  // Atualizar sistema (Supabase + local)
   const updateSystem = useCallback(
     (id: string, partial: Partial<BusinessSystem>) => {
       const updated = systems.map((sys) =>
@@ -88,18 +154,47 @@ export function useSystemStore() {
           ? { ...sys, ...partial, updatedAt: new Date().toISOString() }
           : sys
       )
-      persistSystems(updated)
+      persistLocally(updated)
+
+      // Atualiza no Supabase
+      supabase
+        .from("business_systems")
+        .update({
+          code: partial.code,
+          name: partial.name,
+          description: partial.description,
+          color: partial.color,
+          icon: partial.icon,
+          default_control_mode: partial.defaultControlMode,
+          origin_storage_id: partial.originStorageId || null,
+          origin_storage_label: partial.originStorageLabel || null,
+          status: partial.status,
+          responsible: partial.responsible || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+        .then(({ error }) => {
+          if (error) console.error("Erro atualizando sistema no Supabase:", error)
+        })
     },
-    [systems, persistSystems]
+    [systems, persistLocally]
   )
 
-  // Remover sistema
+  // Remover sistema (Supabase + local)
   const deleteSystem = useCallback(
     (id: string) => {
       const filtered = systems.filter((sys) => sys.id !== id)
-      persistSystems(filtered)
+      persistLocally(filtered)
+
+      supabase
+        .from("business_systems")
+        .delete()
+        .eq("id", id)
+        .then(({ error }) => {
+          if (error) console.error("Erro removendo sistema no Supabase:", error)
+        })
     },
-    [systems, persistSystems]
+    [systems, persistLocally]
   )
 
   // Vincular objeto de armazenamento (Drive, Área, etc.) a um sistema
@@ -119,9 +214,27 @@ export function useSystemStore() {
         }
         return { ...sys, participants: newParticipants, updatedAt: new Date().toISOString() }
       })
-      persistSystems(updated)
+      persistLocally(updated)
+
+      // Salva participante no Supabase
+      supabase
+        .from("system_storage_participants")
+        .upsert(
+          {
+            system_id: systemId,
+            storage_object_id: participant.storageObjectId,
+            storage_object_label: participant.storageObjectLabel,
+            storage_type: participant.storageType || "drive_in",
+            role: participant.role || "armazenamento",
+            stock_control_mode: participant.stockControlMode || "vinculado_saldo",
+          },
+          { onConflict: "system_id,storage_object_id" }
+        )
+        .then(({ error }) => {
+          if (error) console.error("Erro salvando participante no Supabase:", error)
+        })
     },
-    [systems, persistSystems]
+    [systems, persistLocally]
   )
 
   // Desvincular objeto de armazenamento de um sistema
@@ -137,9 +250,18 @@ export function useSystemStore() {
           updatedAt: new Date().toISOString(),
         }
       })
-      persistSystems(updated)
+      persistLocally(updated)
+
+      supabase
+        .from("system_storage_participants")
+        .delete()
+        .eq("system_id", systemId)
+        .eq("storage_object_id", storageObjectId)
+        .then(({ error }) => {
+          if (error) console.error("Erro desvinculando participante no Supabase:", error)
+        })
     },
-    [systems, persistSystems]
+    [systems, persistLocally]
   )
 
   // Obter todos os sistemas dos quais um objeto participa
@@ -168,8 +290,8 @@ export function useSystemStore() {
 
   // Restaurar sistemas padrão de fábrica
   const resetToDefaults = useCallback(() => {
-    persistSystems(DEFAULT_BUSINESS_SYSTEMS)
-  }, [persistSystems])
+    persistLocally(DEFAULT_BUSINESS_SYSTEMS)
+  }, [persistLocally])
 
   return {
     systems,

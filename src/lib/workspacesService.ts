@@ -10,6 +10,8 @@
 // Persistência: localStorage ("nexus_ws_maps_v1" & "nexus_ws_authorized_creators_v1")
 // =============================================================================
 
+import { supabase } from "./supabase"
+
 export type WorkspaceStatus = "active" | "archived"
 
 export interface WorkspaceMap {
@@ -161,6 +163,52 @@ class WorkspacesService {
     }
   }
 
+  /**
+   * Sincroniza workspaces do Supabase para o cache local
+   */
+  public async syncFromSupabase(): Promise<WorkspaceMap[]> {
+    try {
+      const { data, error } = await supabase
+        .from("workspaces")
+        .select("*")
+        .order("created_at", { ascending: false })
+
+      if (!error && data && data.length > 0) {
+        const fromDb: WorkspaceMap[] = data.map((row: any) => ({
+          id: row.id,
+          name: row.name,
+          description: row.description || "",
+          status: "active" as WorkspaceStatus,
+          ownerEmail: row.settings?.ownerEmail || "admin@nexus.local",
+          ownerName: row.settings?.ownerName || row.name,
+          objectsCount: Number(row.settings?.objectsCount) || 0,
+          mapData: row.settings?.mapData,
+          thumbnail: row.settings?.thumbnail,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+          tags: row.settings?.tags || [],
+        }))
+
+        // Mescla com workspaces locais
+        const local = this.getAllWorkspaces()
+        const merged = [...fromDb]
+        for (const l of local) {
+          if (!merged.some(m => m.id === l.id)) {
+            merged.push(l)
+          }
+        }
+
+        if (typeof window !== "undefined") {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(merged))
+        }
+        return merged
+      }
+    } catch (err) {
+      console.warn("Aviso ao sincronizar workspaces do Supabase:", err)
+    }
+    return this.getAllWorkspaces()
+  }
+
   /** Retorna workspaces para listagem geral (todos visualizam todos) */
   public getVisibleWorkspaces(): WorkspaceMap[] {
     return this.getAllWorkspaces()
@@ -213,6 +261,24 @@ class WorkspacesService {
     const updated = [newWs, ...current]
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
 
+    // Tenta persistir no Supabase em segundo plano
+    supabase
+      .from("workspaces")
+      .insert({
+        name: newWs.name,
+        slug: `ws-${newWs.id.replace(/[^a-zA-Z0-9]/g, "").toLowerCase()}`,
+        description: newWs.description,
+        settings: {
+          ownerEmail: newWs.ownerEmail,
+          ownerName: newWs.ownerName,
+          objectsCount: newWs.objectsCount,
+          tags: newWs.tags,
+        },
+      })
+      .then(({ error }) => {
+        if (error) console.warn("Aviso ao salvar workspace no Supabase (verifique RLS):", error.message)
+      })
+
     return { success: true, workspace: newWs }
   }
 
@@ -248,6 +314,27 @@ class WorkspacesService {
 
     current[idx] = updatedWs
     localStorage.setItem(STORAGE_KEY, JSON.stringify(current))
+
+    // Tenta atualizar no Supabase em segundo plano
+    supabase
+      .from("workspaces")
+      .update({
+        name: updatedWs.name,
+        description: updatedWs.description,
+        settings: {
+          ownerEmail: updatedWs.ownerEmail,
+          ownerName: updatedWs.ownerName,
+          objectsCount: updatedWs.objectsCount,
+          mapData: updatedWs.mapData,
+          thumbnail: updatedWs.thumbnail,
+          tags: updatedWs.tags,
+        },
+        updated_at: new Date().toISOString(),
+      })
+      .eq("name", updatedWs.name)
+      .then(({ error }) => {
+        if (error) console.warn("Aviso ao atualizar workspace no Supabase:", error.message)
+      })
 
     return { success: true, workspace: updatedWs }
   }
