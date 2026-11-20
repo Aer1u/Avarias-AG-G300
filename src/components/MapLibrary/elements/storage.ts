@@ -803,18 +803,17 @@ const mezzanine: MapElementDefinition = {
   },
 }
 
-// ── 9. compartment — Compartimento ──────────────────────────
+// ── 9. compartment — Compartimento (Armazenamento Aberto) ─────
 const compartment: MapElementDefinition = {
   type: "compartment",
   category: "storage",
   label: "Compartimento",
-  description: "Célula única ou gaveta com código de posição",
-  defaultWidth: 60,
-  defaultHeight: 60,
-  defaultProps: { label: "A1", capacity: 1 },
+  description: "Espaço de armazenamento aberto (sem profundidade e sem nível)",
+  defaultWidth: 80,
+  defaultHeight: 80,
+  defaultProps: { label: "A1" },
   propsSchema: [
     { key: "label", label: "Identificador", type: "text" },
-    { key: "capacity", label: "Capacidade Máxima", type: "number", min: 1, max: 100 },
   ],
   PreviewSVG: ({ width, height }: SvgPreviewProps) =>
     React.createElement(
