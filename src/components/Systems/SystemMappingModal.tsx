@@ -41,6 +41,7 @@ import {
   applyNonOriginPositionChange,
   syncSupabaseUniversalBalances,
 } from "./systemBalanceService"
+import { persistPositionItemsToSupabase } from "@/lib/workspaceItemsSync"
 import { cn } from "@/lib/utils"
 
 interface SystemMappingModalProps {
@@ -240,6 +241,7 @@ export default function SystemMappingModal({
     } else {
       const others = getLocalItems().filter((it) => it.mapeamentoId !== channelKey)
       saveLocalItems([...others, ...nextChannelItems])
+      persistPositionItemsToSupabase(channelKey, nextChannelItems, system.workspaceId).catch(() => {})
       syncSupabaseUniversalBalances(system).catch(() => {})
     }
     setItemsVersion((v) => v + 1)
@@ -275,6 +277,7 @@ export default function SystemMappingModal({
     } else {
       const others = getLocalItems().filter(it => it.mapeamentoId !== channelKey)
       saveLocalItems([...others, ...nextChannelItems])
+      persistPositionItemsToSupabase(channelKey, nextChannelItems, system.workspaceId).catch(() => {})
       syncSupabaseUniversalBalances(system).catch(() => {})
     }
 
@@ -302,6 +305,7 @@ export default function SystemMappingModal({
     } else {
       const others = getLocalItems().filter(it => it.mapeamentoId !== channelKey)
       saveLocalItems([...others, ...nextChannelItems])
+      persistPositionItemsToSupabase(channelKey, nextChannelItems, system.workspaceId).catch(() => {})
       syncSupabaseUniversalBalances(system).catch(() => {})
     }
     setItemsVersion(v => v + 1)
@@ -319,11 +323,17 @@ export default function SystemMappingModal({
       !(isInChannel(it) && it.nivel === source.lvl && it.profundidade === source.d) &&
       !(isInChannel(it) && it.nivel === target.lvl && it.profundidade === target.d)
     )
-    saveLocalItems([
+    const nextAll = [
       ...srcItems.map(it => ({ ...it, nivel: target.lvl, profundidade: target.d })),
       ...tgtItems.map(it => ({ ...it, nivel: source.lvl, profundidade: source.d })),
       ...others,
-    ])
+    ]
+    saveLocalItems(nextAll)
+    persistPositionItemsToSupabase(
+      channelKey,
+      nextAll.filter((it) => it.mapeamentoId === channelKey),
+      system.workspaceId
+    ).catch(() => {})
     setItemsVersion(v => v + 1)
   }
 
