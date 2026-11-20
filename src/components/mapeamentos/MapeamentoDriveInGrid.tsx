@@ -18,12 +18,17 @@ import {
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { MapeamentoConfig, MapeamentoItem, COLOR_THEMES } from "@/lib/mapeamentosStorage"
+import type { DimensionConfig } from "@/components/MapLibrary/dimensionsTypes"
+import { generateDimensionItems } from "@/components/MapLibrary/dimensionManager"
 
 interface MapeamentoDriveInGridProps {
   positionId: string
   items: MapeamentoItem[]
   capacity: number
   levelCount: number
+  startLevel?: number
+  levelsConfig?: DimensionConfig
+  depthConfig?: DimensionConfig
   isBlocked?: boolean
   observation?: string
   config: MapeamentoConfig
@@ -49,6 +54,9 @@ export function MapeamentoDriveInGrid({
   items,
   capacity,
   levelCount,
+  startLevel,
+  levelsConfig,
+  depthConfig,
   isBlocked,
   observation,
   config,
@@ -61,6 +69,7 @@ export function MapeamentoDriveInGrid({
   onSwapItems,
   isLoggedIn = false,
 }: MapeamentoDriveInGridProps) {
+  const effectiveStartLevel = startLevel ?? (levelsConfig ? 1 : 0)
   const [selectedCoords, setSelectedCoords] = useState<{ lvl: number; d: number } | null>(null)
   const [internalEditMode, setInternalEditMode] = useState(false)
   const isEditModeActive =
@@ -86,10 +95,16 @@ export function MapeamentoDriveInGrid({
   const justDragged = useRef(false)
   const [draggingCoords, setDraggingCoords] = useState<{ lvl: number; d: number } | null>(null)
 
-  // Levels: from top to bottom (e.g. 3, 2, 1, 0), ou [0] para Chão
+  const totalLevels = Math.max(1, levelCount)
+  const maxAllowedLevel = effectiveStartLevel + totalLevels - 1
+
+  // Levels: do topo para a base (ex: 4, 3, 2, 1 quando startLevel=1; ou 3, 2, 1, 0 quando startLevel=0)
   const levels = useMemo(
-    () => Array.from({ length: Math.max(1, levelCount) }, (_, i) => i).sort((a, b) => b - a),
-    [levelCount]
+    () =>
+      Array.from({ length: totalLevels }, (_, i) => i + effectiveStartLevel).sort(
+        (a, b) => b - a
+      ),
+    [totalLevels, effectiveStartLevel]
   )
 
   // Calculate max depth from capacity and levelCount
@@ -98,6 +113,56 @@ export function MapeamentoDriveInGrid({
     () => Array.from({ length: Math.max(maxDepth, 1) }, (_, i) => i + 1),
     [maxDepth]
   )
+
+  // Nomenclatura resolvida de níveis e profundidades (fiel ao objeto)
+  const resolvedLevelItems = useMemo(() => {
+    if (!levelsConfig) return null
+    return generateDimensionItems(
+      totalLevels,
+      levelsConfig.sequenceType,
+      levelsConfig.orientation,
+      levelsConfig.prefix,
+      levelsConfig.suffix,
+      levelsConfig.paddingDigits,
+      levelsConfig.customValues
+    )
+  }, [levelsConfig, totalLevels])
+
+  const resolvedDepthItems = useMemo(() => {
+    if (!depthConfig) return null
+    return generateDimensionItems(
+      depths.length,
+      depthConfig.sequenceType,
+      depthConfig.orientation,
+      depthConfig.prefix,
+      depthConfig.suffix,
+      depthConfig.paddingDigits,
+      depthConfig.customValues
+    )
+  }, [depthConfig, depths.length])
+
+  const getLevelLabel = (lvl: number): string => {
+    const idx = lvl - effectiveStartLevel
+    if (resolvedLevelItems && resolvedLevelItems[idx]) {
+      return resolvedLevelItems[idx].identifier
+    }
+    if (effectiveStartLevel === 0 && levelCount <= 1) {
+      return "CHÃO"
+    }
+    return String(lvl)
+  }
+
+  const getDepthLabel = (d: number): string => {
+    const idx = d - 1
+    if (resolvedDepthItems && resolvedDepthItems[idx]) {
+      return resolvedDepthItems[idx].identifier
+    }
+    return String(d)
+  }
+
+  const formatCoord = (prefix: string, label: string): string => {
+    return /^\d+$/.test(label) ? `${prefix}${label}` : label
+  }
 
   // Index items by slot [nivel]_[profundidade]
   const grid = useMemo(() => {
@@ -110,7 +175,13 @@ export function MapeamentoDriveInGrid({
     })
     items.forEach(item => {
       let lvl = item.nivel
-      if (levelCount <= 1) lvl = 0
+      if (effectiveStartLevel === 0 && levelCount <= 1) {
+        lvl = 0
+      } else if (lvl < effectiveStartLevel) {
+        lvl = effectiveStartLevel
+      } else if (lvl > maxAllowedLevel) {
+        lvl = maxAllowedLevel
+      }
       const d = item.profundidade
       if (g[lvl] && g[lvl][d] !== undefined) {
         g[lvl][d].push(item)
@@ -124,7 +195,7 @@ export function MapeamentoDriveInGrid({
       }
     })
     return g
-  }, [items, levels, depths, levelCount])
+  }, [items, levels, depths, levelCount, effectiveStartLevel, maxAllowedLevel])
 
   const toggleGapSelection = (lvl: number, d: number) => {
     const key = `${lvl}-${d}`
@@ -245,7 +316,7 @@ export function MapeamentoDriveInGrid({
               <div className="flex mb-4">
                 <div className="w-8 md:w-14 shrink-0 pr-1 md:pr-4 text-right">
                   <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
-                    {levelCount <= 1 ? "SOLO" : "NÍVEL"}
+                    {levelsConfig?.displayName || (effectiveStartLevel === 0 && levelCount <= 1 ? "SOLO" : "NÍVEL")}
                   </span>
                 </div>
               </div>
@@ -258,7 +329,7 @@ export function MapeamentoDriveInGrid({
                       {/* Level Label */}
                       <div className="w-8 md:w-14 shrink-0 pr-1 md:pr-4 text-right">
                         <span className="text-[13px] font-semibold text-slate-900 dark:text-white uppercase tracking-tighter">
-                          {levelCount <= 1 ? "CHÃO" : lvl}
+                          {getLevelLabel(lvl)}
                         </span>
                       </div>
 
@@ -517,64 +588,64 @@ export function MapeamentoDriveInGrid({
                               ) : (
                                 /* Célula Vazia: exibe botão + circular azul quando Mapear/Editar está ativo (G300) */
                                 <div className="flex flex-col items-center justify-center w-full h-full gap-1 transition-opacity">
-                                  {isEditModeActive ? (
-                                    <button
-                                      onClick={e => {
-                                        e.stopPropagation()
-                                        onAddItem(lvl, d)
-                                      }}
-                                      title={`Adicionar Palete no Nível ${lvl}, Profundidade ${d}`}
-                                      className="add-pallete-btn h-10 w-10 flex items-center justify-center bg-blue-600 hover:bg-blue-500 rounded-full text-white shadow-lg hover:scale-110 active:scale-95 transition-all cursor-pointer opacity-100 ring-4 ring-blue-500/20 z-20"
-                                    >
-                                      <span className="text-2xl font-light mb-1 leading-none">+</span>
-                                    </button>
-                                  ) : (
-                                    <div className="w-full h-full flex flex-col items-center justify-center select-none pointer-events-none">
-                                      <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500 uppercase tracking-widest text-center px-1">
-                                        VAZIO
-                                      </span>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          )
-                        })}
+                                    {isEditModeActive ? (
+                                      <button
+                                        onClick={e => {
+                                          e.stopPropagation()
+                                          onAddItem(lvl, d)
+                                        }}
+                                        title={`Adicionar Palete no Nível ${getLevelLabel(lvl)}, Profundidade ${getDepthLabel(d)}`}
+                                        className="add-pallete-btn h-10 w-10 flex items-center justify-center bg-blue-600 hover:bg-blue-500 rounded-full text-white shadow-lg hover:scale-110 active:scale-95 transition-all cursor-pointer opacity-100 ring-4 ring-blue-500/20 z-20"
+                                      >
+                                        <span className="text-2xl font-light mb-1 leading-none">+</span>
+                                      </button>
+                                    ) : (
+                                      <div className="w-full h-full flex flex-col items-center justify-center select-none pointer-events-none">
+                                        <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500 uppercase tracking-widest text-center px-1">
+                                          VAZIO
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
                       </div>
+                    ))}
+                  </div>
+
+                  {/* Front indicator — idêntico ao DriveInGrid do G300 */}
+                  <div className="self-stretch flex flex-col items-center justify-center pl-4 mb-8">
+                    <div className="flex flex-col items-center gap-1 opacity-40 hover:opacity-100 transition-opacity">
+                      <ArrowLeft size={16} className="text-slate-900 dark:text-white" />
+                      <span className="text-[9px] font-semibold uppercase tracking-[0.3em] text-slate-900 dark:text-white">
+                        FRENTE
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer Row: Numeric Indicators */}
+                <div className="flex gap-1.5 md:gap-4 ml-8 md:ml-14 mb-2 md:mb-4">
+                  {depths.map(d => (
+                    <div key={`head-${d}`} className="w-16 sm:w-28 md:w-28 shrink-0 text-center">
+                      <span className="text-[11px] font-semibold text-slate-900 dark:text-white uppercase tracking-tighter">
+                        {getDepthLabel(d)}
+                      </span>
                     </div>
                   ))}
                 </div>
 
-                {/* Front indicator — idêntico ao DriveInGrid do G300 */}
-                <div className="self-stretch flex flex-col items-center justify-center pl-4 mb-8">
-                  <div className="flex flex-col items-center gap-1 opacity-40 hover:opacity-100 transition-opacity">
-                    <ArrowLeft size={16} className="text-slate-900 dark:text-white" />
-                    <span className="text-[9px] font-semibold uppercase tracking-[0.3em] text-slate-900 dark:text-white">
-                      FRENTE
+                {/* Footer Axis Label */}
+                <div className="flex ml-8 md:ml-14 pt-2 border-t border-slate-100 dark:border-slate-800/50">
+                  <div className="flex-1 flex justify-center">
+                    <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                      {depthConfig?.displayName || (effectiveStartLevel === 0 && levelCount <= 1 ? "VAGAS / POSIÇÕES NO CHÃO" : "PROFUNDIDADE")}
                     </span>
                   </div>
                 </div>
-              </div>
-
-              {/* Footer Row: Numeric Indicators */}
-              <div className="flex gap-1.5 md:gap-4 ml-8 md:ml-14 mb-2 md:mb-4">
-                {depths.map(d => (
-                  <div key={`head-${d}`} className="w-16 sm:w-28 md:w-28 shrink-0 text-center">
-                    <span className="text-[11px] font-semibold text-slate-900 dark:text-white uppercase tracking-tighter">
-                      {d}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Footer Axis Label */}
-              <div className="flex ml-8 md:ml-14 pt-2 border-t border-slate-100 dark:border-slate-800/50">
-                <div className="flex-1 flex justify-center">
-                  <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
-                    {levelCount <= 1 ? "VAGAS / POSIÇÕES NO CHÃO" : "PROFUNDIDADE"}
-                  </span>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -595,7 +666,7 @@ export function MapeamentoDriveInGrid({
                       Célula Selecionada
                     </span>
                     <h4 className="text-base font-bold text-slate-900 dark:text-white font-mono">
-                      N{selectedCoords.lvl} · P{selectedCoords.d}
+                      {formatCoord("N", getLevelLabel(selectedCoords.lvl))} · {formatCoord("P", getDepthLabel(selectedCoords.d))}
                     </h4>
                   </div>
                   <div className="flex items-center gap-1.5">
@@ -851,7 +922,7 @@ export function MapeamentoDriveInGrid({
                       Posição Original
                     </span>
                     <span className="text-xs font-bold text-blue-600 dark:text-blue-400 font-mono">
-                      N{editingItem.origLvl} · P{editingItem.origProf}
+                      {formatCoord("N", getLevelLabel(editingItem.origLvl))} · {formatCoord("P", getDepthLabel(editingItem.origProf))}
                     </span>
                   </div>
                 </div>
@@ -921,37 +992,77 @@ export function MapeamentoDriveInGrid({
                       <label className="text-[9px] font-semibold text-slate-400 uppercase">
                         Novo Nível *
                       </label>
-                      <input
-                        type="number"
-                        min={0}
-                        value={editingItem.newNivel}
-                        onChange={e =>
-                          setEditingItem({
-                            ...editingItem,
-                            newNivel: Number(e.target.value),
-                          })
-                        }
-                        className="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-blue-500 p-2 rounded-lg text-slate-900 dark:text-white font-bold outline-none font-mono"
-                        required
-                      />
+                      {levelsConfig || effectiveStartLevel > 0 ? (
+                        <select
+                          value={editingItem.newNivel}
+                          onChange={e =>
+                            setEditingItem({
+                              ...editingItem,
+                              newNivel: Number(e.target.value),
+                            })
+                          }
+                          className="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-blue-500 p-2 rounded-lg text-slate-900 dark:text-white font-bold outline-none font-mono"
+                        >
+                          {[...levels].reverse().map(lvl => (
+                            <option key={lvl} value={lvl}>
+                              {getLevelLabel(lvl)}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type="number"
+                          min={effectiveStartLevel}
+                          max={maxAllowedLevel}
+                          value={editingItem.newNivel}
+                          onChange={e =>
+                            setEditingItem({
+                              ...editingItem,
+                              newNivel: Number(e.target.value),
+                            })
+                          }
+                          className="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-blue-500 p-2 rounded-lg text-slate-900 dark:text-white font-bold outline-none font-mono"
+                          required
+                        />
+                      )}
                     </div>
                     <div className="space-y-1">
                       <label className="text-[9px] font-semibold text-slate-400 uppercase">
                         Nova Profundidade *
                       </label>
-                      <input
-                        type="number"
-                        min={1}
-                        value={editingItem.newProf}
-                        onChange={e =>
-                          setEditingItem({
-                            ...editingItem,
-                            newProf: Number(e.target.value),
-                          })
-                        }
-                        className="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-blue-500 p-2 rounded-lg text-slate-900 dark:text-white font-bold outline-none font-mono"
-                        required
-                      />
+                      {depthConfig || effectiveStartLevel > 0 ? (
+                        <select
+                          value={editingItem.newProf}
+                          onChange={e =>
+                            setEditingItem({
+                              ...editingItem,
+                              newProf: Number(e.target.value),
+                            })
+                          }
+                          className="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-blue-500 p-2 rounded-lg text-slate-900 dark:text-white font-bold outline-none font-mono"
+                        >
+                          {depths.map(d => (
+                            <option key={d} value={d}>
+                              {getDepthLabel(d)}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type="number"
+                          min={1}
+                          max={depths.length}
+                          value={editingItem.newProf}
+                          onChange={e =>
+                            setEditingItem({
+                              ...editingItem,
+                              newProf: Number(e.target.value),
+                            })
+                          }
+                          className="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-blue-500 p-2 rounded-lg text-slate-900 dark:text-white font-bold outline-none font-mono"
+                          required
+                        />
+                      )}
                     </div>
                   </div>
 
