@@ -48,6 +48,10 @@ import {
   moveSkuBetweenSystemPositions,
   syncSupabaseUniversalBalances,
 } from "../Systems/systemBalanceService"
+import {
+  hydratePositionKeyFromSupabase,
+  persistPositionItemsToSupabase,
+} from "@/lib/workspaceItemsSync"
 
 const fmtNum = (val: number, locale = "pt-BR") =>
   val !== 0 && Math.abs(val) < 1
@@ -135,14 +139,18 @@ export default function CompartmentRelationView({
         (!stockControlMode && system.defaultControlMode === "vinculado_saldo"))
   )
 
-  // Sincroniza saldo da Origem (Chão) com universal_records sempre que abrir ou trocar de sistema
+  // Sincroniza saldo da Origem (Chão) ou hidrata compartimento livre ao abrir
   useEffect(() => {
-    if (!system) return
+    if (!system && !mapeamentoId) return
     let active = true
     Promise.resolve()
-      .then(() => {
+      .then(async () => {
         if (active) setIsSyncing(true)
-        return fetchAndSyncSystemBalances(system)
+        if (system) {
+          await fetchAndSyncSystemBalances(system)
+        } else {
+          await hydratePositionKeyFromSupabase(mapeamentoId)
+        }
       })
       .then(() => {
         if (active) setItemsVersion((v) => v + 1)
@@ -153,7 +161,7 @@ export default function CompartmentRelationView({
     return () => {
       active = false
     }
-  }, [system])
+  }, [system, mapeamentoId])
 
   // Carrega itens do compartimento a partir do storage
   const items: MapeamentoItem[] = useMemo(() => {
@@ -215,6 +223,9 @@ export default function CompartmentRelationView({
 
       const others = getLocalItems().filter((it) => it.mapeamentoId !== mapeamentoId)
       saveLocalItems([...others, ...nextChannelItems])
+      persistPositionItemsToSupabase(mapeamentoId, nextChannelItems, system?.workspaceId).catch(
+        () => {}
+      )
       if (system) {
         syncSupabaseUniversalBalances(system).catch(() => {})
       }
