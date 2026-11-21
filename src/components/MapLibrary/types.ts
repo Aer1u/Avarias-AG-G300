@@ -94,6 +94,10 @@ export interface MapPropField {
   unit?: string                       // ex: "m", "kg", "un"
 }
 
+export interface RenderKonvaOptions {
+  readOnly?: boolean
+}
+
 // ── Definição de um tipo de elemento ─────────────────────────
 export interface MapElementDefinition {
   type: string
@@ -109,7 +113,7 @@ export interface MapElementDefinition {
   // Preview SVG no painel da biblioteca (componente React puro)
   PreviewSVG: React.FC<SvgPreviewProps>
   // Renderizador Konva: cria e retorna um Group posicionado em (0,0)
-  renderKonva: (obj: MapObject) => Konva.Group
+  renderKonva: (obj: MapObject, options?: RenderKonvaOptions) => Konva.Group
 }
 
 // ── Props padrão do PreviewSVG ────────────────────────────────
@@ -142,7 +146,7 @@ export interface MapEditorState {
   pan: { x: number; y: number }
 }
 
-// ── Cores padrão do sistema ──────────────────────────────────
+// ── Cores padrão do sistema (Modo Edição) ────────────────────
 export const MAP_COLORS = {
   wall:        { fill: "#475569", stroke: "#94a3b8" },
   door:        { fill: "#1e293b", stroke: "#64748b" },
@@ -157,6 +161,23 @@ export const MAP_COLORS = {
   arrow:       { fill: "#f59e0b", stroke: "#d97706" },
   marker:      { fill: "#ef4444", stroke: "#dc2626" },
   geometric:   { fill: "rgba(100,116,139,0.12)", stroke: "#64748b" },
+} as const
+
+// ── Cores vibrantes do sistema (Modo Visualizador / Leitura) ─
+export const MAP_VIEWER_COLORS = {
+  wall:        { fill: "#64748b", stroke: "#cbd5e1" },
+  door:        { fill: "#92400e", stroke: "#f59e0b" },
+  window:      { fill: "#0369a1", stroke: "#38bdf8" },
+  column:      { fill: "#475569", stroke: "#94a3b8" },
+  area:        { fill: "rgba(99,102,241,0.28)", stroke: "#818cf8" },
+  rack:        { fill: "rgba(245,158,11,0.42)", stroke: "#fbbf24" },
+  shelf:       { fill: "rgba(217,119,6,0.40)", stroke: "#f59e0b" },
+  pallet:      { fill: "rgba(217,119,6,0.78)", stroke: "#fbbf24" },
+  box:         { fill: "rgba(16,185,129,0.55)", stroke: "#34d399" },
+  forklift:    { fill: "#f59e0b", stroke: "#fbbf24" },
+  arrow:       { fill: "#f59e0b", stroke: "#fbbf24" },
+  marker:      { fill: "#ef4444", stroke: "#f87171" },
+  geometric:   { fill: "rgba(100,116,139,0.38)", stroke: "#94a3b8" },
 } as const
 
 // ── Utilitários de geometria ─────────────────────────────────

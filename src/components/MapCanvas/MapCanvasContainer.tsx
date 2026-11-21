@@ -42,12 +42,60 @@ interface MapCanvasContainerProps {
   onAddObject?: (obj: MapObject) => void
 }
 
-function getAreaFill(classification?: string): { fill: string; stroke: string } {
+function getAreaFill(classification?: string, readOnly: boolean = false): { fill: string; stroke: string } {
+  if (readOnly) {
+    if (classification === "grama") return { fill: "rgba(22, 163, 74, 0.78)", stroke: "#4ade80" }
+    if (classification === "asfalto") return { fill: "rgba(39, 39, 42, 0.94)", stroke: "#71717a" }
+    if (classification === "piso_geral") return { fill: "rgba(71, 85, 105, 0.72)", stroke: "#94a3b8" }
+    if (classification === "area_avarias") return { fill: "rgba(245, 158, 11, 0.28)", stroke: "#fbbf24" }
+    if (classification === "rua") return { fill: "rgba(51, 65, 85, 0.85)", stroke: "#facc15" }
+    if (classification === "circulacao") return { fill: "rgba(14, 165, 233, 0.26)", stroke: "#38bdf8" }
+    if (classification === "bloco") return { fill: "rgba(99, 102, 241, 0.26)", stroke: "#818cf8" }
+    if (classification === "picking") return { fill: "rgba(16, 185, 129, 0.28)", stroke: "#34d399" }
+    if (classification === "quarentena") return { fill: "rgba(239, 68, 68, 0.30)", stroke: "#f87171" }
+    if (classification === "expedicao") return { fill: "rgba(139, 92, 246, 0.28)", stroke: "#a78bfa" }
+    const cls = INITIAL_AREA_CLASSIFICATIONS.find((c) => c.id === classification)
+    if (cls) return { fill: boostRgbaColor(cls.color, 0.28), stroke: cls.borderColor }
+    return { fill: "rgba(99, 102, 241, 0.28)", stroke: "#818cf8" }
+  }
   if (classification === "grama") return { fill: "rgba(22, 101, 52, 0.65)", stroke: "#22c55e" }
   if (classification === "asfalto") return { fill: "rgba(15, 23, 42, 0.85)", stroke: "#334155" }
   const cls = INITIAL_AREA_CLASSIFICATIONS.find((c) => c.id === classification)
   if (cls) return { fill: cls.color, stroke: cls.borderColor }
   return { fill: "rgba(99,102,241,0.10)", stroke: "#6366f1" }
+}
+
+function boostRgbaColor(colorStr: string, minAlpha: number): string {
+  const m = colorStr.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$/i)
+  if (!m) return colorStr
+  const r = Number(m[1])
+  const g = Number(m[2])
+  const b = Number(m[3])
+  const a = m[4] !== undefined ? Number(m[4]) : 1
+  const nextAlpha = Math.max(minAlpha, Math.min(0.88, a < minAlpha ? Math.max(minAlpha, a * 2.4) : a))
+  return `rgba(${r}, ${g}, ${b}, ${nextAlpha.toFixed(2)})`
+}
+
+function resolveViewerAreaFill(
+  objColor: string | undefined,
+  fallbackFill: string,
+  readOnly: boolean,
+  isDarkBaseSlate: boolean
+): string {
+  if (!readOnly) return objColor || fallbackFill
+  if (!objColor) return fallbackFill
+  const norm = objColor.replace(/\s+/g, "").toLowerCase()
+  // Pisos salvos com slate muito escuro/apagado ganham o tom rico do visualizador
+  if (
+    isDarkBaseSlate &&
+    (norm.startsWith("rgba(30,41,59") ||
+      norm.startsWith("rgba(15,23,42") ||
+      norm === "#0f172a" ||
+      norm === "#1e293b")
+  ) {
+    return fallbackFill
+  }
+  return boostRgbaColor(objColor, 0.28)
 }
 
 const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
@@ -78,11 +126,13 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
     // Cache de nós Konva
     const nodeMapRef = useRef<Map<string, Konva.Group | Konva.Line>>(new Map())
 
-    // ── Refs sempre atualizadas para snap (evita closures stale nos handlers Konva) ──
+    // ── Refs sempre atualizadas para snap e readOnly (evita closures stale nos handlers Konva) ──
     const snapEnabledRef = useRef(snapEnabled)
     const gridSizeRef = useRef(gridSize)
+    const readOnlyRef = useRef(readOnly)
     useEffect(() => { snapEnabledRef.current = snapEnabled }, [snapEnabled])
     useEffect(() => { gridSizeRef.current = gridSize }, [gridSize])
+    useEffect(() => { readOnlyRef.current = readOnly }, [readOnly])
 
     // Estado para Pan Livre com Espaço / Botão do Meio / Botão Direito / Fundo
     const isSpacePressedRef = useRef(false)
@@ -465,13 +515,18 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
       }
     }, [tool])
 
-    // ── Atualiza Grade ─────────────────────────────────────────
+    // ── Atualiza Grade (oculta automaticamente no Modo Visualizador) ──
     const drawGrid = useCallback(() => {
       const gl = gridLayerRef.current
       const st = stageRef.current
       if (!gl || !st) return
 
       gl.destroyChildren()
+
+      if (readOnlyRef.current || readOnly) {
+        gl.batchDraw()
+        return
+      }
 
       const step = Math.max(5, gridSize)
       const w = Math.max(st.width() * 4, 4000)
@@ -505,7 +560,7 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
       }
 
       gl.batchDraw()
-    }, [gridSize, snapEnabled])
+    }, [gridSize, snapEnabled, readOnly])
 
     useEffect(() => {
       drawGrid()
@@ -751,21 +806,24 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
       renderOrder.forEach((obj) => {
         // Se o usuário ocultou o objeto (olhinho na hierarquia), não renderiza no canvas
         if (obj.visible === false) return
+        // Oculta guias puramente de CAD/edição no modo visualizador
+        if (readOnly && (obj.type === "coordinates" || obj.type === "dimension_line")) return
 
         let node: Konva.Group | Konva.Line
 
         if (obj.category === "area" && obj.points && obj.points.length >= 6) {
-          const { fill, stroke } = getAreaFill(obj.classification)
+          const { fill, stroke } = getAreaFill(obj.classification, readOnly)
           const absPoints = obj.points.map((v, i) => (i % 2 === 0 ? v + obj.x : v + obj.y))
+          const isDarkBase = obj.type === "floor" || obj.classification === "piso_geral" || obj.classification === "rua"
 
           const polyLine = new Konva.Line({
             points: absPoints,
-            fill: obj.color || fill,
+            fill: resolveViewerAreaFill(obj.color, fill, readOnly, isDarkBase),
             stroke: obj.strokeColor || stroke,
             strokeWidth: 2,
             closed: true,
             opacity: obj.opacity ?? 1,
-            dash: [8, 4],
+            dash: readOnly ? undefined : [8, 4],
             listening: true,
           })
           polyLine.id(obj.id)
@@ -795,13 +853,12 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
           node = polyLine as unknown as Konva.Group
         } else if (obj.category === "area") {
           const isStreet = obj.classification === "rua" || obj.classification === "circulacao"
-          const { fill, stroke } = getAreaFill(obj.classification)
+          const { fill, stroke } = getAreaFill(obj.classification, readOnly)
           const group = new Konva.Group()
           group.id(obj.id)
           group.position({ x: obj.x, y: obj.y })
           group.rotation(obj.rotation || 0)
           group.draggable(!readOnly && !obj.locked && tool === "select")
-          group.dragBoundFunc(createDragBoundFunc(false))
           group.dragBoundFunc(createDragBoundFunc(false))
           group.opacity(obj.opacity ?? 1)
 
@@ -815,8 +872,13 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
               new Konva.Rect({
                 width: w,
                 height: h,
-                fill: obj.color || "rgba(15, 23, 42, 0.45)",
-                stroke: "#334155",
+                fill: resolveViewerAreaFill(
+                  obj.color,
+                  readOnly ? "rgba(51, 65, 85, 0.85)" : "rgba(15, 23, 42, 0.45)",
+                  readOnly,
+                  true
+                ),
+                stroke: readOnly ? "#475569" : "#334155",
                 strokeWidth: 1,
                 cornerRadius: 2,
               })
@@ -829,17 +891,17 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
               group.add(
                 new Konva.Line({
                   points: [2, 0, 2, h],
-                  stroke: "#eab308",
+                  stroke: readOnly ? "#facc15" : "#eab308",
                   strokeWidth: 1.5,
-                  dash: [8, 4],
-                  opacity: 0.85,
+                  dash: readOnly ? undefined : [8, 4],
+                  opacity: readOnly ? 0.9 : 0.85,
                 }),
                 new Konva.Line({
                   points: [w - 2, 0, w - 2, h],
-                  stroke: "#eab308",
+                  stroke: readOnly ? "#facc15" : "#eab308",
                   strokeWidth: 1.5,
-                  dash: [8, 4],
-                  opacity: 0.85,
+                  dash: readOnly ? undefined : [8, 4],
+                  opacity: readOnly ? 0.9 : 0.85,
                 })
               )
               // Linha divisória de pista no centro (se a rua for larga)
@@ -847,43 +909,45 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
                 group.add(
                   new Konva.Line({
                     points: [w / 2, 8, w / 2, h - 8],
-                    stroke: "rgba(234, 179, 8, 0.35)",
+                    stroke: "rgba(234, 179, 8, 0.45)",
                     strokeWidth: 1,
                     dash: [12, 10],
                   })
                 )
               }
-              // Setas de sentido de tráfego discretas
-              const step = Math.max(120, h / 3)
-              for (let y = step / 2; y < h; y += step) {
-                group.add(
-                  new Konva.Arrow({
-                    points: [w / 2, y + 14, w / 2, y - 6],
-                    pointerLength: 4,
-                    pointerWidth: 4,
-                    fill: "rgba(56, 189, 248, 0.4)",
-                    stroke: "rgba(56, 189, 248, 0.4)",
-                    strokeWidth: 1,
-                    listening: false,
-                  })
-                )
+              // Setas de sentido de tráfego (apenas no editor)
+              if (!readOnly) {
+                const step = Math.max(120, h / 3)
+                for (let y = step / 2; y < h; y += step) {
+                  group.add(
+                    new Konva.Arrow({
+                      points: [w / 2, y + 14, w / 2, y - 6],
+                      pointerLength: 4,
+                      pointerWidth: 4,
+                      fill: "rgba(56, 189, 248, 0.4)",
+                      stroke: "rgba(56, 189, 248, 0.4)",
+                      strokeWidth: 1,
+                      listening: false,
+                    })
+                  )
+                }
               }
             } else {
               // Rua horizontal
               group.add(
                 new Konva.Line({
                   points: [0, 2, w, 2],
-                  stroke: "#eab308",
+                  stroke: readOnly ? "#facc15" : "#eab308",
                   strokeWidth: 1.5,
-                  dash: [8, 4],
-                  opacity: 0.85,
+                  dash: readOnly ? undefined : [8, 4],
+                  opacity: readOnly ? 0.9 : 0.85,
                 }),
                 new Konva.Line({
                   points: [0, h - 2, w, h - 2],
-                  stroke: "#eab308",
+                  stroke: readOnly ? "#facc15" : "#eab308",
                   strokeWidth: 1.5,
-                  dash: [8, 4],
-                  opacity: 0.85,
+                  dash: readOnly ? undefined : [8, 4],
+                  opacity: readOnly ? 0.9 : 0.85,
                 })
               )
             }
@@ -898,14 +962,14 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
               fontSize: Math.min(10, Math.max(8, Math.round(w / 6))),
               fontFamily: "monospace",
               fontStyle: "bold",
-              fill: "rgba(226, 232, 240, 0.75)",
+              fill: readOnly ? "rgba(241, 245, 249, 0.9)" : "rgba(226, 232, 240, 0.75)",
               letterSpacing: 1.5,
               listening: false,
             })
             group.add(streetLabel)
           } else {
             // Retângulo padrão de Área / Bloco / Piso de Apoio
-            const isFloor = obj.type === "floor" || Boolean(obj.props?.floorMaterial)
+            const isFloor = obj.type === "floor" || Boolean(obj.props?.floorMaterial) || obj.classification === "piso_geral"
             const matType =
               (obj.props?.floorMaterial as FloorMaterialType) ||
               (obj.classification === "grama"
@@ -913,14 +977,24 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
                 : obj.classification === "asfalto"
                 ? "asphalt"
                 : "concrete")
+            const surfaceDef = FLOOR_SURFACES[matType]
+            const viewerSurfaceFill = isFloor && surfaceDef ? surfaceDef.viewerColor : fill
+            const viewerSurfaceStroke = isFloor && surfaceDef ? surfaceDef.viewerStrokeColor : stroke
 
             const rect = new Konva.Rect({
               width: obj.width,
               height: obj.height,
-              fill: obj.color || fill,
-              stroke: obj.strokeColor || stroke,
+              fill: resolveViewerAreaFill(
+                obj.color,
+                readOnly ? viewerSurfaceFill : fill,
+                readOnly,
+                isFloor
+              ),
+              stroke: readOnly && isFloor && (!obj.strokeColor || obj.strokeColor === "#475569")
+                ? viewerSurfaceStroke
+                : obj.strokeColor || stroke,
               strokeWidth: isFloor ? 2 : obj.classification === "bloco" ? 2 : 1.5,
-              dash: isFloor ? undefined : obj.classification === "bloco" ? [6, 4] : [8, 4],
+              dash: readOnly || isFloor ? undefined : obj.classification === "bloco" ? [6, 4] : [8, 4],
               cornerRadius: isFloor ? 4 : 0,
             })
             group.add(rect)
@@ -929,7 +1003,7 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
             if (isFloor) {
               const w = obj.width
               const h = obj.height
-              if (matType === "concrete") {
+              if (matType === "concrete" && !readOnly) {
                 const step = 80
                 for (let x = step; x < w; x += step) {
                   group.add(
@@ -960,14 +1034,14 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
                     group.add(
                       new Konva.Line({
                         points: [x, y, x - 3, y - 6, x, y, x + 3, y - 6],
-                        stroke: "rgba(34, 197, 94, 0.4)",
+                        stroke: readOnly ? "rgba(74, 222, 128, 0.55)" : "rgba(34, 197, 94, 0.4)",
                         strokeWidth: 1.2,
                         listening: false,
                       })
                     )
                   }
                 }
-              } else if (matType === "asphalt") {
+              } else if (matType === "asphalt" && !readOnly) {
                 group.add(
                   new Konva.Rect({
                     x: 4,
@@ -983,12 +1057,13 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
               }
             }
 
-            const surfaceDef = FLOOR_SURFACES[matType]
             const prefix = isFloor && surfaceDef ? `${surfaceDef.icon} ` : ""
             const lbl = new Konva.Text({
               text: `${prefix}${obj.label || ""}`,
               fontSize: 11,
-              fill: obj.strokeColor || stroke,
+              fill: readOnly && isFloor && (!obj.strokeColor || obj.strokeColor === "#475569")
+                ? viewerSurfaceStroke
+                : obj.strokeColor || stroke,
               fontStyle: "bold",
               padding: 4,
               listening: false,
@@ -1041,7 +1116,7 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
           const def = ELEMENT_BY_TYPE.get(obj.type)
           if (!def) return
 
-          const group = def.renderKonva(obj)
+          const group = def.renderKonva(obj, { readOnly })
           group.id(obj.id)
           group.position({ x: obj.x, y: obj.y })
           group.rotation(obj.rotation || 0)
@@ -1089,30 +1164,32 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
                 onSelect(obj.id, chanId)
               })
 
-              // Se o canal estiver selecionado, desenha cantoneiras e badge em formato de objeto
+              // Se o canal estiver selecionado, desenha cantoneiras (apenas no editor) e badge do canal
               if (isChannelSelected) {
-                const cornerSize = 5
-                const corners = [
-                  [cx - 1, cy - 1],
-                  [cx + cw - cornerSize + 1, cy - 1],
-                  [cx - 1, cy + ch - cornerSize + 1],
-                  [cx + cw - cornerSize + 1, cy + ch - cornerSize + 1],
-                ]
-                corners.forEach(([px, py]) => {
-                  group.add(
-                    new Konva.Rect({
-                      x: px,
-                      y: py,
-                      width: cornerSize,
-                      height: cornerSize,
-                      fill: "#38bdf8",
-                      stroke: "#ffffff",
-                      strokeWidth: 1,
-                      cornerRadius: 1,
-                      listening: false,
-                    })
-                  )
-                })
+                if (!readOnly) {
+                  const cornerSize = 5
+                  const corners = [
+                    [cx - 1, cy - 1],
+                    [cx + cw - cornerSize + 1, cy - 1],
+                    [cx - 1, cy + ch - cornerSize + 1],
+                    [cx + cw - cornerSize + 1, cy + ch - cornerSize + 1],
+                  ]
+                  corners.forEach(([px, py]) => {
+                    group.add(
+                      new Konva.Rect({
+                        x: px,
+                        y: py,
+                        width: cornerSize,
+                        height: cornerSize,
+                        fill: "#38bdf8",
+                        stroke: "#ffffff",
+                        strokeWidth: 1,
+                        cornerRadius: 1,
+                        listening: false,
+                      })
+                    )
+                  })
+                }
 
                 // Badge do canal selecionado
                 const chanTitle = chan ? (chan.name || chan.code) : `Canal ${l + 1}`

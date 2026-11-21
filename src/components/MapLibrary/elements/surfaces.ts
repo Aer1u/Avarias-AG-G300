@@ -66,25 +66,33 @@ function createSurfaceElement(matType: FloorMaterialType): MapElementDefinition 
         )
       )
     },
-    renderKonva: (obj: MapObject) => {
+    renderKonva: (obj: MapObject, options) => {
+      const readOnly = Boolean(options?.readOnly)
       const group = new Konva.Group({ x: 0, y: 0 })
       const w = obj.width
       const h = obj.height
+
+      const fillColor = readOnly
+        ? surface.viewerColor
+        : (obj.color || surface.color)
+      const borderColor = readOnly
+        ? surface.viewerStrokeColor
+        : (obj.strokeColor || surface.strokeColor)
 
       // Retângulo de base do piso
       const rect = new Konva.Rect({
         width: w,
         height: h,
-        fill: obj.color || surface.color,
-        stroke: obj.strokeColor || surface.strokeColor,
+        fill: fillColor,
+        stroke: borderColor,
         strokeWidth: 2,
         cornerRadius: 3,
       })
       group.add(rect)
 
       // Detalhes visuais específicos do material
-      if (matType === "concrete") {
-        // Juntas de dilatação em cruz
+      if (matType === "concrete" && !readOnly) {
+        // Juntas de dilatação em cruz (no editor ajudam alinhamento; no visualizador ficam limpas)
         const step = 80
         for (let x = step; x < w; x += step) {
           group.add(
@@ -116,15 +124,15 @@ function createSurfaceElement(matType: FloorMaterialType): MapElementDefinition 
             group.add(
               new Konva.Line({
                 points: [x, y, x - 3, y - 6, x, y, x + 3, y - 6],
-                stroke: "rgba(34, 197, 94, 0.4)",
+                stroke: readOnly ? "rgba(134, 239, 172, 0.55)" : "rgba(34, 197, 94, 0.4)",
                 strokeWidth: 1.2,
                 listening: false,
               })
             )
           }
         }
-      } else if (matType === "asphalt") {
-        // Borda dupla técnica de pavimento
+      } else if (matType === "asphalt" && !readOnly) {
+        // Borda dupla técnica de pavimento (somente no editor)
         group.add(
           new Konva.Rect({
             x: 4,
@@ -144,7 +152,7 @@ function createSurfaceElement(matType: FloorMaterialType): MapElementDefinition 
           group.add(
             new Konva.Line({
               points: [0, y, w, y],
-              stroke: "rgba(180, 83, 9, 0.35)",
+              stroke: readOnly ? "rgba(245, 158, 11, 0.35)" : "rgba(180, 83, 9, 0.35)",
               strokeWidth: 1,
               listening: false,
             })
@@ -161,7 +169,7 @@ function createSurfaceElement(matType: FloorMaterialType): MapElementDefinition 
         fontSize: 10,
         fontFamily: "sans-serif",
         fontStyle: "bold",
-        fill: surface.strokeColor,
+        fill: borderColor,
         listening: false,
       })
       group.add(badge)

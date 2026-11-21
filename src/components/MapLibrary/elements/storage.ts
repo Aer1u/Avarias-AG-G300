@@ -7,7 +7,7 @@
 import React from "react"
 import Konva from "konva"
 import type { MapElementDefinition, SvgPreviewProps, MapObject } from "../types"
-import { MAP_COLORS } from "../types"
+import { MAP_COLORS, MAP_VIEWER_COLORS } from "../types"
 import { STANDARD_PALLET_MODELS } from "../palletModels"
 
 // Escala padrão do canvas: 20px = 1 metro
@@ -36,7 +36,9 @@ const pallet_rack: MapElementDefinition = {
       React.createElement("line", { x1: 40, y1: 5, x2: 40, y2: 35, stroke: "#ca8a04", strokeWidth: 1.5 }),
       React.createElement("line", { x1: 2, y1: 20, x2: 58, y2: 20, stroke: "#eab308", strokeWidth: 1, strokeDasharray: "2 2" })
     ),
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
+    const colors = readOnly ? MAP_VIEWER_COLORS : MAP_COLORS
     const group = new Konva.Group({ x: 0, y: 0 })
     const modules = Math.max(1, Number(obj.props.modules) || 3)
     const w = obj.width
@@ -49,8 +51,8 @@ const pallet_rack: MapElementDefinition = {
         y: 0,
         width: w,
         height: h,
-        fill: MAP_COLORS.rack.fill,
-        stroke: MAP_COLORS.rack.stroke,
+        fill: colors.rack.fill,
+        stroke: colors.rack.stroke,
         strokeWidth: 2,
         cornerRadius: 2,
       })
@@ -67,7 +69,7 @@ const pallet_rack: MapElementDefinition = {
           y: 0,
           width: 4,
           height: h,
-          fill: "#ca8a04",
+          fill: readOnly ? "#f59e0b" : "#ca8a04",
         })
       )
     }
@@ -79,9 +81,9 @@ const pallet_rack: MapElementDefinition = {
       group.add(
         new Konva.Line({
           points: [0, j * posH, w, j * posH],
-          stroke: "#eab308",
+          stroke: readOnly ? "#fbbf24" : "#eab308",
           strokeWidth: 1,
-          dash: [4, 4],
+          dash: readOnly ? undefined : [4, 4],
         })
       )
     }
@@ -113,7 +115,8 @@ const drive_in: MapElementDefinition = {
       React.createElement("line", { x1: 40, y1: 4, x2: 40, y2: 46, stroke: "#ca8a04", strokeWidth: 1, strokeDasharray: "2 2" }),
       React.createElement("polygon", { points: "30,12 26,20 34,20", fill: "#eab308" })
     ),
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
     const group = new Konva.Group({ x: 0, y: 0 })
     const lanes  = Math.max(1, Number(obj.props.lanes)  || 1)
     const depth  = Math.max(1, Number(obj.props.depth)  || 4)
@@ -140,8 +143,6 @@ const drive_in: MapElementDefinition = {
     const realWidthM  = lanes * laneWidthM                          // ex: 1×1.40 = 1.40m
 
     // Dimensões em pixels (respeitando o tamanho real do objeto no canvas)
-    // O objeto pode ter sido redimensionado manualmente pelo usuário — usamos o tamanho real
-    // calculado a partir do pallet, mas pintamos dentro do bounding-box do objeto
     const w = obj.width  || Math.round(realWidthM  * ppm)
     const h = obj.height || Math.round(realLengthM * ppm)
 
@@ -149,7 +150,197 @@ const drive_in: MapElementDefinition = {
     const slotH  = (h - Math.round(entryClearance * ppm)) / depth   // px por slot de profundidade
     const laneW  = w / lanes                                          // px por vão
 
-    // ── Fundo do Bloco ─────────────────────────────────────────
+    type DriveChannelData = {
+      name?: string
+      status?: string
+      occupiedPositions?: Array<{ level: number; depth: number }>
+    }
+    const rawChannels: DriveChannelData[] = Array.isArray(obj.props?.channels)
+      ? (obj.props.channels as DriveChannelData[])
+      : []
+    const isAllBlocked = rawChannels.length > 0 && rawChannels.every((c) => c?.status === "bloqueado")
+
+    // ── MODO VISUALIZADOR (LEITURA): Estrutura Industrial Azul & Laranja Limpa ─────
+    if (readOnly) {
+      // Fundo transparente (ou destaque sutil em vermelho somente se todo o bloco estiver bloqueado)
+      group.add(
+        new Konva.Rect({
+          x: 0,
+          y: 0,
+          width: w,
+          height: h,
+          fill: isAllBlocked ? "rgba(239, 68, 68, 0.16)" : "transparent",
+          stroke: isAllBlocked ? "#ef4444" : "#60a5fa",
+          strokeWidth: 1.4,
+          cornerRadius: 2,
+        })
+      )
+
+      // Detalhes estruturais por canal (sem preenchimento laranja e sem slots de paletes)
+      const railInset = Math.min(3.5, laneW * 0.14)
+      const arrowLen = Math.min(14, Math.max(9, Math.round(h * 0.13)))
+      const tipLen = Math.min(7, Math.max(4, Math.round(h * 0.06)))
+
+      for (let l = 0; l < lanes; l++) {
+        const cx = l * laneW
+        const centerX = cx + laneW / 2
+        const chan = rawChannels[l]
+        const isChanBlocked = chan?.status === "bloqueado"
+
+        if (!isAllBlocked && isChanBlocked) {
+          group.add(
+            new Konva.Rect({
+              x: cx,
+              y: 0,
+              width: laneW,
+              height: h,
+              fill: "rgba(239, 68, 68, 0.16)",
+              listening: false,
+            })
+          )
+        }
+
+        // Trilhos longitudinais discretos em azul nas laterais internas do vão + ponteiras laranjas na entrada
+        if (laneW > railInset * 3) {
+          const railColor = isChanBlocked ? "#f87171" : "#38bdf8"
+          const tipColor = isChanBlocked ? "#ef4444" : "#f97316"
+
+          group.add(
+            new Konva.Line({
+              points: [cx + railInset, 3, cx + railInset, h - 3],
+              stroke: railColor,
+              strokeWidth: 0.9,
+              opacity: 0.45,
+              listening: false,
+            })
+          )
+          group.add(
+            new Konva.Line({
+              points: [cx + laneW - railInset, 3, cx + laneW - railInset, h - 3],
+              stroke: railColor,
+              strokeWidth: 0.9,
+              opacity: 0.45,
+              listening: false,
+            })
+          )
+
+          // Pequenas guias de entrada laranjas nas pontas dos trilhos (protetores de embocadura)
+          if (h > tipLen + 6) {
+            group.add(
+              new Konva.Line({
+                points: [cx + railInset, h - 2, cx + railInset, h - 2 - tipLen],
+                stroke: tipColor,
+                strokeWidth: 1.6,
+                lineCap: "round",
+                opacity: 0.9,
+                listening: false,
+              })
+            )
+            group.add(
+              new Konva.Line({
+                points: [cx + laneW - railInset, h - 2, cx + laneW - railInset, h - 2 - tipLen],
+                stroke: tipColor,
+                strokeWidth: 1.6,
+                lineCap: "round",
+                opacity: 0.9,
+                listening: false,
+              })
+            )
+          }
+        }
+
+        // Seta indicativa na entrada do canal
+        if (h > 14 && laneW > 10) {
+          const arrowColor = isChanBlocked ? "#f87171" : "#38bdf8"
+          group.add(
+            new Konva.Arrow({
+              points: [centerX, h - 2.5, centerX, h - 2.5 - arrowLen],
+              pointerLength: 4.5,
+              pointerWidth: 4.5,
+              fill: arrowColor,
+              stroke: arrowColor,
+              strokeWidth: 1.4,
+              opacity: 0.92,
+              listening: false,
+            })
+          )
+        }
+      }
+
+      // Divisórias metálicas entre canais (azul-aço)
+      for (let i = 1; i < lanes; i++) {
+        group.add(
+          new Konva.Line({
+            points: [i * laneW, 0, i * laneW, h],
+            stroke: isAllBlocked ? "#ef4444" : "#3b82f6",
+            strokeWidth: 1.25,
+            opacity: 0.8,
+            listening: false,
+          })
+        )
+      }
+
+      // Montantes estruturais azuis com pequenos protetores laranjas na base de entrada
+      const postSize = 3
+      const postYPositions = h > 55 ? [0, Math.round(h / 2 - postSize / 2), Math.max(0, h - postSize)] : [0, Math.max(0, h - postSize)]
+      for (let i = 0; i <= lanes; i++) {
+        const px = Math.min(w - postSize, Math.max(0, i * laneW - postSize / 2))
+        const postFill = isAllBlocked ? "#fca5a5" : "#3b82f6"
+        postYPositions.forEach((py, idx) => {
+          group.add(
+            new Konva.Rect({
+              x: px,
+              y: py,
+              width: postSize,
+              height: postSize,
+              fill: postFill,
+              cornerRadius: 0.5,
+              listening: false,
+            })
+          )
+          // Pequeno detalhe laranja de proteção de coluna na entrada
+          if (idx === postYPositions.length - 1 && !isAllBlocked) {
+            group.add(
+              new Konva.Rect({
+                x: px,
+                y: Math.max(0, py - 1.5),
+                width: postSize,
+                height: 1.5,
+                fill: "#f97316",
+                listening: false,
+              })
+            )
+          }
+        })
+      }
+
+      // Rótulo de canais personalizados
+      for (let i = 0; i < lanes; i++) {
+        const chan = rawChannels[i]
+        if (chan && chan.name && !chan.name.startsWith("Canal ")) {
+          const cx = i * laneW
+          const isChanBlocked = chan?.status === "bloqueado"
+          group.add(
+            new Konva.Text({
+              x: cx + 1,
+              y: 4,
+              width: laneW - 2,
+              align: "center",
+              text: chan.name.slice(0, 10),
+              fontSize: 7,
+              fontFamily: "sans-serif",
+              fontStyle: "bold",
+              fill: isChanBlocked ? "#fca5a5" : "#e2e8f0",
+              listening: false,
+            })
+          )
+        }
+      }
+
+      return group
+    }
+
+    // ── MODO EDIÇÃO: Fundo do Bloco ────────────────────────────
     group.add(
       new Konva.Rect({
         x: 0, y: 0, width: w, height: h,
@@ -169,8 +360,6 @@ const drive_in: MapElementDefinition = {
     )
 
     // ── Slots de Profundidade — 1 slot = 1 pallet do modelo ────
-    const rawChannels = Array.isArray(obj.props?.channels) ? (obj.props.channels as any[]) : []
-
     for (let d = 0; d < depth; d++) {
       const slotY = d * slotH
 
@@ -185,7 +374,6 @@ const drive_in: MapElementDefinition = {
         const isOccupied = occupiedAtSlot.length > 0
 
         // Contorno do pallet proporcional ao modelo escolhido
-        // Margem lateral = folga dos trilhos (proporção real)
         const marginX = Math.max(1.5, (laneW * (clearancePerLane / 2)) / laneWidthM)
         const marginY = Math.max(1.5, slotH * 0.06)
 
@@ -193,7 +381,7 @@ const drive_in: MapElementDefinition = {
         const ph = slotH - marginY * 2
 
         if (isOccupied) {
-          // ── PALETE DE TESTE OCUPANDO A POSIÇÃO ─────────────────
+          // ── PALETE OCUPANDO A POSIÇÃO ──────────────────────────
           group.add(
             new Konva.Rect({
               x: slotX + marginX,
@@ -243,7 +431,7 @@ const drive_in: MapElementDefinition = {
             )
           }
         } else {
-          // ── SLOT VAZIO (transparente) ──────────────────────────
+          // ── SLOT VAZIO ─────────────────────────────────────────
           group.add(
             new Konva.Rect({
               x: slotX + marginX,
@@ -257,7 +445,7 @@ const drive_in: MapElementDefinition = {
             })
           )
 
-          // Travessa central do pallet (elemento visual de autenticidade)
+          // Travessa central tracejada (apenas no editor)
           if (ph > 8) {
             group.add(
               new Konva.Line({
@@ -285,8 +473,8 @@ const drive_in: MapElementDefinition = {
       }
     }
 
-    // ── Folga de Entrada da Empilhadeira (zona livre na boca) ───
     const entryZoneH = Math.round(entryClearance * ppm)
+    // ── Folga de Entrada da Empilhadeira (guia técnica do editor) ──
     group.add(
       new Konva.Rect({
         x: 0,
@@ -313,7 +501,7 @@ const drive_in: MapElementDefinition = {
       }
     }
 
-    // ── Rótulo Central com Níveis × Profundidade = Capacidade ──
+    // ── Rótulo Central com Níveis × Profundidade = Capacidade (guia do editor) ──
     const labelText = `${levels}N×${depth}P=${capacity}`
     const fontSize = Math.max(6, Math.min(9, Math.round(w / (labelText.length * 0.7))))
     group.add(
@@ -353,7 +541,7 @@ const drive_in: MapElementDefinition = {
       }
     }
 
-    // ── Seta de Entrada (embocadura) ───────────────────────────
+    // ── Seta de Entrada (embocadura - detalhe auxiliar de edição) ──
     for (let i = 0; i < lanes; i++) {
       const cx = i * laneW + laneW / 2
       group.add(
@@ -393,7 +581,8 @@ const drive_through: MapElementDefinition = {
       React.createElement("polygon", { points: "30,8 26,16 34,16", fill: "#eab308" }),
       React.createElement("polygon", { points: "30,34 26,42 34,42", fill: "#eab308" })
     ),
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
     const group = new Konva.Group({ x: 0, y: 0 })
     const lanes = Math.max(1, Number(obj.props.lanes) || 4)
     const w = obj.width
@@ -405,9 +594,10 @@ const drive_through: MapElementDefinition = {
         y: 0,
         width: w,
         height: h,
-        fill: "rgba(202,138,4,0.12)",
-        stroke: "#ca8a04",
-        strokeWidth: 2,
+        fill: readOnly ? "transparent" : "rgba(202,138,4,0.12)",
+        stroke: readOnly ? "#60a5fa" : "#ca8a04",
+        strokeWidth: readOnly ? 1.4 : 2,
+        cornerRadius: readOnly ? 2 : 0,
       })
     )
 
@@ -416,26 +606,96 @@ const drive_through: MapElementDefinition = {
       group.add(
         new Konva.Line({
           points: [i * laneW, 0, i * laneW, h],
-          stroke: "#ca8a04",
-          strokeWidth: 1.5,
-          dash: [6, 4],
+          stroke: readOnly ? "#3b82f6" : "#ca8a04",
+          strokeWidth: readOnly ? 1.25 : 1.5,
+          opacity: readOnly ? 0.8 : 1,
+          dash: readOnly ? undefined : [6, 4],
         })
       )
     }
 
-    // Setas de passagem contínua (entrada sul -> saída norte)
-    for (let i = 0; i < lanes; i++) {
-      const cx = i * laneW + laneW / 2
-      group.add(
-        new Konva.Arrow({
-          points: [cx, h - 10, cx, 10],
-          pointerLength: 6,
-          pointerWidth: 6,
-          fill: "#eab308",
-          stroke: "#eab308",
-          strokeWidth: 1.5,
-        })
-      )
+    if (readOnly) {
+      const railInset = Math.min(3.5, laneW * 0.14)
+      const arrowLen = Math.min(14, Math.max(9, Math.round(h * 0.13)))
+      const tipLen = Math.min(7, Math.max(4, Math.round(h * 0.06)))
+
+      for (let l = 0; l < lanes; l++) {
+        const cx = l * laneW
+        const centerX = cx + laneW / 2
+
+        if (laneW > railInset * 3) {
+          group.add(
+            new Konva.Line({
+              points: [cx + railInset, 3, cx + railInset, h - 3],
+              stroke: "#38bdf8",
+              strokeWidth: 0.9,
+              opacity: 0.45,
+              listening: false,
+            })
+          )
+          group.add(
+            new Konva.Line({
+              points: [cx + laneW - railInset, 3, cx + laneW - railInset, h - 3],
+              stroke: "#38bdf8",
+              strokeWidth: 0.9,
+              opacity: 0.45,
+              listening: false,
+            })
+          )
+          if (h > tipLen + 6) {
+            group.add(
+              new Konva.Line({
+                points: [cx + railInset, h - 2, cx + railInset, h - 2 - tipLen],
+                stroke: "#f97316",
+                strokeWidth: 1.6,
+                lineCap: "round",
+                opacity: 0.9,
+                listening: false,
+              })
+            )
+            group.add(
+              new Konva.Line({
+                points: [cx + laneW - railInset, h - 2, cx + laneW - railInset, h - 2 - tipLen],
+                stroke: "#f97316",
+                strokeWidth: 1.6,
+                lineCap: "round",
+                opacity: 0.9,
+                listening: false,
+              })
+            )
+          }
+        }
+
+        if (h > 14 && laneW > 10) {
+          group.add(
+            new Konva.Arrow({
+              points: [centerX, h - 2.5, centerX, h - 2.5 - arrowLen],
+              pointerLength: 4.5,
+              pointerWidth: 4.5,
+              fill: "#38bdf8",
+              stroke: "#38bdf8",
+              strokeWidth: 1.4,
+              opacity: 0.92,
+              listening: false,
+            })
+          )
+        }
+      }
+    } else {
+      // Setas de passagem contínua (apenas no editor)
+      for (let i = 0; i < lanes; i++) {
+        const cx = i * laneW + laneW / 2
+        group.add(
+          new Konva.Arrow({
+            points: [cx, h - 10, cx, 10],
+            pointerLength: 6,
+            pointerWidth: 6,
+            fill: "#eab308",
+            stroke: "#eab308",
+            strokeWidth: 1.5,
+          })
+        )
+      }
     }
 
     return group
@@ -462,7 +722,8 @@ const push_back: MapElementDefinition = {
       React.createElement("line", { x1: 4, y1: 36, x2: 56, y2: 4, stroke: "#eab308", strokeWidth: 1, strokeDasharray: "3 2" }),
       React.createElement("polygon", { points: "30,16 25,24 35,24", fill: "#eab308" })
     ),
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
     const group = new Konva.Group({ x: 0, y: 0 })
     const lanes = Math.max(1, Number(obj.props.lanes) || 3)
     const w = obj.width
@@ -474,8 +735,8 @@ const push_back: MapElementDefinition = {
         y: 0,
         width: w,
         height: h,
-        fill: "rgba(202,138,4,0.12)",
-        stroke: "#ca8a04",
+        fill: readOnly ? "rgba(245,158,11,0.34)" : "rgba(202,138,4,0.12)",
+        stroke: readOnly ? "#fbbf24" : "#ca8a04",
         strokeWidth: 2,
       })
     )
@@ -487,31 +748,33 @@ const push_back: MapElementDefinition = {
         group.add(
           new Konva.Line({
             points: [lx, 0, lx, h],
-            stroke: "#ca8a04",
+            stroke: readOnly ? "#f59e0b" : "#ca8a04",
             strokeWidth: 1.5,
           })
         )
       }
-      // Rampa de roletes simulada por trilhos inclinados
-      group.add(
-        new Konva.Line({
-          points: [lx + 4, h - 4, lx + laneW - 4, 4],
-          stroke: "#a16207",
-          strokeWidth: 1,
-          dash: [4, 4],
-        })
-      )
-      // Seta indicativa
-      group.add(
-        new Konva.Arrow({
-          points: [lx + laneW / 2, h - 10, lx + laneW / 2, 20],
-          pointerLength: 6,
-          pointerWidth: 6,
-          fill: "#eab308",
-          stroke: "#eab308",
-          strokeWidth: 1.5,
-        })
-      )
+      if (!readOnly) {
+        // Rampa de roletes simulada por trilhos inclinados (guia do editor)
+        group.add(
+          new Konva.Line({
+            points: [lx + 4, h - 4, lx + laneW - 4, 4],
+            stroke: "#a16207",
+            strokeWidth: 1,
+            dash: [4, 4],
+          })
+        )
+        // Seta indicativa
+        group.add(
+          new Konva.Arrow({
+            points: [lx + laneW / 2, h - 10, lx + laneW / 2, 20],
+            pointerLength: 6,
+            pointerWidth: 6,
+            fill: "#eab308",
+            stroke: "#eab308",
+            strokeWidth: 1.5,
+          })
+        )
+      }
     }
 
     return group
@@ -540,7 +803,8 @@ const flow_rack: MapElementDefinition = {
       ),
       React.createElement("polygon", { points: "30,14 36,20 30,26", fill: "#eab308" })
     ),
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
     const group = new Konva.Group({ x: 0, y: 0 })
     const w = obj.width
     const h = obj.height
@@ -552,8 +816,8 @@ const flow_rack: MapElementDefinition = {
         y: 0,
         width: w,
         height: h,
-        fill: "rgba(234,179,8,0.1)",
-        stroke: "#ca8a04",
+        fill: readOnly ? "rgba(245,158,11,0.34)" : "rgba(234,179,8,0.1)",
+        stroke: readOnly ? "#fbbf24" : "#ca8a04",
         strokeWidth: 2,
       })
     )
@@ -564,27 +828,29 @@ const flow_rack: MapElementDefinition = {
       group.add(
         new Konva.Line({
           points: [r * 12, 0, r * 12, h],
-          stroke: "#a16207",
+          stroke: readOnly ? "rgba(245,158,11,0.45)" : "#a16207",
           strokeWidth: 0.8,
-          dash: [2, 3],
+          dash: readOnly ? undefined : [2, 3],
         })
       )
     }
 
-    // Setas indicando fluxo da esquerda para direita
-    const laneH = h / lanes
-    for (let l = 0; l < lanes; l++) {
-      const cy = l * laneH + laneH / 2
-      group.add(
-        new Konva.Arrow({
-          points: [15, cy, w - 15, cy],
-          pointerLength: 6,
-          pointerWidth: 6,
-          fill: "#ca8a04",
-          stroke: "#ca8a04",
-          strokeWidth: 1.5,
-        })
-      )
+    if (!readOnly) {
+      // Setas indicando fluxo (apenas no editor)
+      const laneH = h / lanes
+      for (let l = 0; l < lanes; l++) {
+        const cy = l * laneH + laneH / 2
+        group.add(
+          new Konva.Arrow({
+            points: [15, cy, w - 15, cy],
+            pointerLength: 6,
+            pointerWidth: 6,
+            fill: "#ca8a04",
+            stroke: "#ca8a04",
+            strokeWidth: 1.5,
+          })
+        )
+      }
     }
 
     return group
@@ -615,7 +881,8 @@ const cantilever: MapElementDefinition = {
         )
       )
     ),
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
     const group = new Konva.Group({ x: 0, y: 0 })
     const w = obj.width
     const h = obj.height
@@ -626,7 +893,7 @@ const cantilever: MapElementDefinition = {
     group.add(
       new Konva.Line({
         points: [0, centerY, w, centerY],
-        stroke: "#713f12",
+        stroke: readOnly ? "#b45309" : "#713f12",
         strokeWidth: 6,
       })
     )
@@ -642,8 +909,8 @@ const cantilever: MapElementDefinition = {
           y: centerY - 6,
           width: 8,
           height: 12,
-          fill: "#ca8a04",
-          stroke: "#713f12",
+          fill: readOnly ? "#f59e0b" : "#ca8a04",
+          stroke: readOnly ? "#b45309" : "#713f12",
           strokeWidth: 1,
         })
       )
@@ -651,7 +918,7 @@ const cantilever: MapElementDefinition = {
       group.add(
         new Konva.Line({
           points: [ax, centerY - 6, ax, 0],
-          stroke: "#eab308",
+          stroke: readOnly ? "#fbbf24" : "#eab308",
           strokeWidth: 2,
         })
       )
@@ -659,7 +926,7 @@ const cantilever: MapElementDefinition = {
       group.add(
         new Konva.Line({
           points: [ax, centerY + 6, ax, h],
-          stroke: "#eab308",
+          stroke: readOnly ? "#fbbf24" : "#eab308",
           strokeWidth: 2,
         })
       )
@@ -690,7 +957,9 @@ const shelf: MapElementDefinition = {
       React.createElement("line", { x1: 30, y1: 6, x2: 30, y2: 24, stroke: "#a16207", strokeWidth: 1 }),
       React.createElement("line", { x1: 44, y1: 6, x2: 44, y2: 24, stroke: "#a16207", strokeWidth: 1 })
     ),
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
+    const colors = readOnly ? MAP_VIEWER_COLORS : MAP_COLORS
     const group = new Konva.Group({ x: 0, y: 0 })
     const w = obj.width
     const h = obj.height
@@ -702,8 +971,8 @@ const shelf: MapElementDefinition = {
         y: 0,
         width: w,
         height: h,
-        fill: MAP_COLORS.shelf.fill,
-        stroke: MAP_COLORS.shelf.stroke,
+        fill: colors.shelf.fill,
+        stroke: colors.shelf.stroke,
         strokeWidth: 1.5,
         cornerRadius: 1,
       })
@@ -714,7 +983,7 @@ const shelf: MapElementDefinition = {
       group.add(
         new Konva.Line({
           points: [s * secW, 0, s * secW, h],
-          stroke: MAP_COLORS.shelf.stroke,
+          stroke: colors.shelf.stroke,
           strokeWidth: 1,
         })
       )
@@ -744,7 +1013,8 @@ const mezzanine: MapElementDefinition = {
       React.createElement("line", { x1: 3, y1: 20, x2: 57, y2: 20, stroke: "#64748b", strokeWidth: 0.8 }),
       React.createElement("rect", { x: 40, y: 25, width: 14, height: 14, fill: "#334155", stroke: "#cbd5e1", strokeWidth: 1 })
     ),
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
     const group = new Konva.Group({ x: 0, y: 0 })
     const w = obj.width
     const h = obj.height
@@ -756,10 +1026,10 @@ const mezzanine: MapElementDefinition = {
         y: 0,
         width: w,
         height: h,
-        fill: "rgba(100,116,139,0.1)",
-        stroke: "#94a3b8",
+        fill: readOnly ? "rgba(100,116,139,0.34)" : "rgba(100,116,139,0.1)",
+        stroke: readOnly ? "#cbd5e1" : "#94a3b8",
         strokeWidth: 2,
-        dash: [6, 4],
+        dash: readOnly ? undefined : [6, 4],
       })
     )
 
@@ -769,7 +1039,7 @@ const mezzanine: MapElementDefinition = {
       group.add(
         new Konva.Line({
           points: [0, (b * h) / beams, w, (b * h) / beams],
-          stroke: "#475569",
+          stroke: readOnly ? "#64748b" : "#475569",
           strokeWidth: 1,
         })
       )
@@ -784,7 +1054,7 @@ const mezzanine: MapElementDefinition = {
         y: h - stairH,
         width: stairW,
         height: stairH,
-        fill: "#1e293b",
+        fill: readOnly ? "#334155" : "#1e293b",
         stroke: "#cbd5e1",
         strokeWidth: 1.5,
       })
@@ -793,7 +1063,7 @@ const mezzanine: MapElementDefinition = {
       group.add(
         new Konva.Line({
           points: [w - stairW, h - stairH + (st * stairH) / 5, w, h - stairH + (st * stairH) / 5],
-          stroke: "#64748b",
+          stroke: readOnly ? "#94a3b8" : "#64748b",
           strokeWidth: 1,
         })
       )
@@ -822,7 +1092,9 @@ const compartment: MapElementDefinition = {
       React.createElement("rect", { x: 4, y: 4, width: 32, height: 32, fill: "rgba(234,179,8,0.15)", stroke: "#ca8a04", strokeWidth: 1.5, rx: 2 }),
       React.createElement("text", { x: 20, y: 24, fill: "#eab308", fontSize: 11, fontWeight: "bold", textAnchor: "middle" }, "A1")
     ),
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
+    const colors = readOnly ? MAP_VIEWER_COLORS : MAP_COLORS
     const group = new Konva.Group({ x: 0, y: 0 })
     const w = obj.width
     const h = obj.height
@@ -833,8 +1105,8 @@ const compartment: MapElementDefinition = {
         y: 0,
         width: w,
         height: h,
-        fill: MAP_COLORS.rack.fill,
-        stroke: MAP_COLORS.rack.stroke,
+        fill: obj.color || colors.rack.fill,
+        stroke: obj.strokeColor || colors.rack.stroke,
         strokeWidth: 1.5,
         cornerRadius: 3,
       })
@@ -851,7 +1123,7 @@ const compartment: MapElementDefinition = {
         fontSize: Math.min(14, Math.max(10, h * 0.25)),
         fontFamily: "sans-serif",
         fontStyle: "bold",
-        fill: "#eab308",
+        fill: readOnly ? "#fef08a" : "#eab308",
       })
     )
 
@@ -882,7 +1154,8 @@ const storage_module: MapElementDefinition = {
       React.createElement("line", { x1: 4, y1: 18, x2: 46, y2: 18, stroke: "#ca8a04", strokeWidth: 1 }),
       React.createElement("line", { x1: 4, y1: 32, x2: 46, y2: 32, stroke: "#ca8a04", strokeWidth: 1 })
     ),
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
     const group = new Konva.Group({ x: 0, y: 0 })
     const w = obj.width
     const h = obj.height
@@ -895,8 +1168,8 @@ const storage_module: MapElementDefinition = {
         y: 0,
         width: w,
         height: h,
-        fill: "rgba(234,179,8,0.08)",
-        stroke: "#ca8a04",
+        fill: readOnly ? "rgba(245,158,11,0.32)" : "rgba(234,179,8,0.08)",
+        stroke: readOnly ? "#fbbf24" : "#ca8a04",
         strokeWidth: 2,
       })
     )
@@ -908,7 +1181,7 @@ const storage_module: MapElementDefinition = {
       group.add(
         new Konva.Line({
           points: [c * cellW, 0, c * cellW, h],
-          stroke: "#a16207",
+          stroke: readOnly ? "#f59e0b" : "#a16207",
           strokeWidth: 1,
         })
       )
@@ -918,7 +1191,7 @@ const storage_module: MapElementDefinition = {
       group.add(
         new Konva.Line({
           points: [0, r * cellH, w, r * cellH],
-          stroke: "#a16207",
+          stroke: readOnly ? "#f59e0b" : "#a16207",
           strokeWidth: 1,
         })
       )
@@ -948,7 +1221,8 @@ const shelf_rack: MapElementDefinition = {
       React.createElement("line", { x1: 8, y1: 6, x2: 8, y2: 18, stroke: "#ca8a04", strokeWidth: 2 }),
       React.createElement("line", { x1: 52, y1: 6, x2: 52, y2: 18, stroke: "#ca8a04", strokeWidth: 2 })
     ),
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
     const group = new Konva.Group({ x: 0, y: 0 })
     const w = obj.width
     const h = obj.height
@@ -959,8 +1233,8 @@ const shelf_rack: MapElementDefinition = {
         y: 0,
         width: w,
         height: h,
-        fill: "rgba(234,179,8,0.15)",
-        stroke: "#ca8a04",
+        fill: readOnly ? "rgba(245,158,11,0.38)" : "rgba(234,179,8,0.15)",
+        stroke: readOnly ? "#fbbf24" : "#ca8a04",
         strokeWidth: 1.5,
       })
     )
@@ -969,14 +1243,14 @@ const shelf_rack: MapElementDefinition = {
     group.add(
       new Konva.Line({
         points: [6, 0, 6, h],
-        stroke: "#a16207",
+        stroke: readOnly ? "#f59e0b" : "#a16207",
         strokeWidth: 2,
       })
     )
     group.add(
       new Konva.Line({
         points: [w - 6, 0, w - 6, h],
-        stroke: "#a16207",
+        stroke: readOnly ? "#f59e0b" : "#a16207",
         strokeWidth: 2,
       })
     )

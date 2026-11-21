@@ -28,35 +28,53 @@ function getMaterial(key: string, creator: () => THREE.Material): THREE.Material
   return mat
 }
 
+function parseThreeColor(input: string | undefined, fallbackHex: string): { color: string; alpha: number | null } {
+  if (!input) return { color: fallbackHex, alpha: null }
+  const m = input.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$/i)
+  if (m) {
+    const r = Number(m[1]).toString(16).padStart(2, "0")
+    const g = Number(m[2]).toString(16).padStart(2, "0")
+    const b = Number(m[3]).toString(16).padStart(2, "0")
+    const alpha = m[4] !== undefined ? Number(m[4]) : 1
+    return { color: `#${r}${g}${b}`, alpha }
+  }
+  return { color: input, alpha: null }
+}
+
 /**
  * Cria a representação geométrica tridimensional real de um objeto do catálogo
  */
-export function buildSpatial3DObject(spatial: UniversalSpatialObject): THREE.Group {
+export function buildSpatial3DObject(spatial: UniversalSpatialObject, readOnly: boolean = false): THREE.Group {
   const group = new THREE.Group()
   group.name = spatial.id
   group.userData = { objectId: spatial.id, spatial }
 
-  const { width, depth, height } = spatial.dimensions
   const type = spatial.type.toLowerCase()
   const cat = spatial.category
 
+  // Oculta elementos puramente auxiliares de edição no modo visualizador
+  if (readOnly && (type === "coordinates" || type === "dimension_line")) {
+    group.visible = false
+    return group
+  }
+
   // 1. ÁREAS, PISOS E RUAS
   if (cat === "area" || type === "floor" || type === "custom_area") {
-    buildAreaGeometry(group, spatial)
+    buildAreaGeometry(group, spatial, readOnly)
   }
   // 2. PORTA-PALETES / RACKS
   else if (type.includes("rack") || type === "pallet_rack") {
-    buildPalletRackGeometry(group, spatial)
+    buildPalletRackGeometry(group, spatial, readOnly)
   }
   // 3. DRIVE-IN E DRIVES
   else if (type.includes("drive") || type === "drive_in") {
-    buildDriveInGeometry(group, spatial)
+    buildDriveInGeometry(group, spatial, readOnly)
   }
   // 4. ESTRUTURAS ARQUITETÔNICAS (Paredes, Colunas, Portas, Janelas)
   else if (type === "wall") {
-    buildWallGeometry(group, spatial)
+    buildWallGeometry(group, spatial, readOnly)
   } else if (type === "column") {
-    buildColumnGeometry(group, spatial)
+    buildColumnGeometry(group, spatial, readOnly)
   }
   // 5. DOCAS E EXPEDIÇÃO
   else if (type === "dock" || type.includes("dock")) {
@@ -68,7 +86,7 @@ export function buildSpatial3DObject(spatial: UniversalSpatialObject): THREE.Gro
   }
   // 7. COMPARTIMENTO (ESPAÇO ABERTO DE ARMAZENAMENTO NO PISO)
   else if (type === "compartment") {
-    buildCompartmentGeometry(group, spatial)
+    buildCompartmentGeometry(group, spatial, readOnly)
   }
   // 8. EQUIPAMENTOS (Empilhadeira, Carrinhos)
   else if (cat === "equipment" || type === "forklift") {
@@ -76,7 +94,7 @@ export function buildSpatial3DObject(spatial: UniversalSpatialObject): THREE.Gro
   }
   // 9. BLOCOS E ELEMENTOS GENÉRICOS
   else {
-    buildGenericSolidGeometry(group, spatial)
+    buildGenericSolidGeometry(group, spatial, readOnly)
   }
 
   // Posiciona o grupo no espaço universal (Z para cima)
@@ -89,11 +107,22 @@ export function buildSpatial3DObject(spatial: UniversalSpatialObject): THREE.Gro
 // ─────────────────────────────────────────────────────────────
 // 1. ÁREAS, PISOS E RUAS DE TRÁFEGO
 // ─────────────────────────────────────────────────────────────
-function buildAreaGeometry(group: THREE.Group, spatial: UniversalSpatialObject) {
+const VIEWER_CLASSIFICATION_COLORS: Record<string, { color: string; opacity: number }> = {
+  piso_geral: { color: "#475569", opacity: 0.96 },
+  area_avarias: { color: "#d97706", opacity: 0.52 },
+  bloco: { color: "#4f46e5", opacity: 0.45 },
+  picking: { color: "#059669", opacity: 0.5 },
+  quarentena: { color: "#dc2626", opacity: 0.55 },
+  expedicao: { color: "#7c3aed", opacity: 0.48 },
+  circulacao: { color: "#0284c7", opacity: 0.55 },
+}
+
+function buildAreaGeometry(group: THREE.Group, spatial: UniversalSpatialObject, readOnly: boolean) {
   const { width, depth } = spatial.dimensions
+  const classification = spatial.raw.classification || ""
   const isStreet =
-    spatial.raw.classification === "rua" ||
-    spatial.raw.classification === "circulacao" ||
+    classification === "rua" ||
+    classification === "circulacao" ||
     spatial.type === "street"
 
   // Detecção de material de solo / piso de apoio (Grama, Concreto, Asfalto, etc.)
@@ -104,29 +133,85 @@ function buildAreaGeometry(group: THREE.Group, spatial: UniversalSpatialObject) 
       : undefined)
   const surfaceDef = rawMat && FLOOR_SURFACES[rawMat] ? FLOOR_SURFACES[rawMat] : undefined
 
-  const areaColor = surfaceDef
-    ? surfaceDef.threeColor
-    : isStreet
-    ? "#1e293b"
-    : spatial.color || (spatial.type === "floor" ? "#0f172a" : "#334155")
-  const hThickness = surfaceDef ? 0.05 : 0.04
+  const parsedSpatialColor = parseThreeColor(spatial.color, "#334155")
+  const viewerCls = VIEWER_CLASSIFICATION_COLORS[classification]
+
+  let areaColor: string
+  let opacity: number
+
+  if (readOnly) {
+    if (surfaceDef) {
+      areaColor = surfaceDef.threeColor
+      opacity = 0.98
+    } else if (isStreet) {
+      areaColor = classification === "circulacao" ? "#0284c7" : "#334155"
+      opacity = 0.96
+    } else if (viewerCls) {
+      const isDarkDefault =
+        parsedSpatialColor.color === "#0f172a" || parsedSpatialColor.color === "#1e293b"
+      areaColor = !spatial.color || isDarkDefault ? viewerCls.color : parsedSpatialColor.color
+      opacity = viewerCls.opacity
+    } else if (spatial.type === "floor") {
+      areaColor = "#475569"
+      opacity = 0.95
+    } else {
+      areaColor = parsedSpatialColor.color
+      opacity = Math.max(0.55, parsedSpatialColor.alpha ?? 0.65)
+    }
+  } else {
+    areaColor = surfaceDef
+      ? surfaceDef.threeColor
+      : isStreet
+      ? "#1e293b"
+      : spatial.color
+      ? parsedSpatialColor.color
+      : spatial.type === "floor"
+      ? "#0f172a"
+      : "#334155"
+    opacity = isStreet ? 0.95 : surfaceDef ? 0.95 : 0.65
+  }
+
+  const isBaseFloor = spatial.type === "floor" || classification === "piso_geral" || Boolean(surfaceDef)
+  const hThickness = isStreet ? 0.024 : isBaseFloor ? 0.02 : 0.022
+  const zOffset = isStreet ? 0.026 : isBaseFloor ? 0 : 0.012
+  const modeKey = readOnly ? "viewer" : "editor"
 
   // Chão delimitado
-  const floorMat = getMaterial(`floor_${areaColor}_${surfaceDef ? surfaceDef.id : "default"}`, () =>
+  const floorMat = getMaterial(`floor_${modeKey}_${areaColor}_${opacity}_${surfaceDef ? surfaceDef.id : "default"}`, () =>
     new THREE.MeshStandardMaterial({
       color: new THREE.Color(areaColor),
       roughness: surfaceDef ? surfaceDef.roughness : 0.85,
       metalness: surfaceDef ? surfaceDef.metalness : 0.1,
-      transparent: true,
-      opacity: isStreet ? 0.95 : surfaceDef ? 0.95 : 0.65,
+      transparent: opacity < 0.99,
+      opacity,
     })
   )
 
-  const floorGeo = new THREE.BoxGeometry(width, depth, hThickness)
+  let floorGeo: THREE.BufferGeometry
+  let meshCenterZ: number
+  if (spatial.pointsM && spatial.pointsM.length >= 3) {
+    const shape = new THREE.Shape()
+    shape.moveTo(spatial.pointsM[0].x, spatial.pointsM[0].y)
+    for (let i = 1; i < spatial.pointsM.length; i++) {
+      shape.lineTo(spatial.pointsM[i].x, spatial.pointsM[i].y)
+    }
+    shape.closePath()
+    floorGeo = new THREE.ExtrudeGeometry(shape, {
+      depth: hThickness,
+      bevelEnabled: false,
+    })
+    meshCenterZ = zOffset
+  } else {
+    floorGeo = new THREE.BoxGeometry(width, depth, hThickness)
+    meshCenterZ = zOffset + hThickness / 2
+  }
+
   const floorMesh = new THREE.Mesh(floorGeo, floorMat)
-  floorMesh.position.set(0, 0, hThickness / 2)
+  floorMesh.position.set(0, 0, meshCenterZ)
   floorMesh.receiveShadow = true
   group.add(floorMesh)
+
+  const topZ = zOffset + hThickness
 
   // Se for rua, desenha faixas de tráfego de segurança (amarelo industrial)
   if (isStreet) {
@@ -137,37 +222,63 @@ function buildAreaGeometry(group: THREE.Group, spatial: UniversalSpatialObject) 
       })
     )
 
+    const isVerticalStreet = depth >= width
     const stripeW = 0.08
-    const stripeGeo = new THREE.BoxGeometry(stripeW, depth, hThickness + 0.005)
+    const stripeH = 0.005
 
-    // Faixa esquerda e direita
-    const leftStripe = new THREE.Mesh(stripeGeo, stripeMat)
-    leftStripe.position.set(-width / 2 + stripeW / 2 + 0.05, 0, (hThickness + 0.005) / 2)
-    group.add(leftStripe)
+    if (isVerticalStreet) {
+      const stripeGeo = new THREE.BoxGeometry(stripeW, depth, stripeH)
+      const leftStripe = new THREE.Mesh(stripeGeo, stripeMat)
+      leftStripe.position.set(-width / 2 + stripeW / 2 + 0.05, 0, topZ + stripeH / 2)
+      group.add(leftStripe)
 
-    const rightStripe = new THREE.Mesh(stripeGeo, stripeMat)
-    rightStripe.position.set(width / 2 - stripeW / 2 - 0.05, 0, (hThickness + 0.005) / 2)
-    group.add(rightStripe)
+      const rightStripe = new THREE.Mesh(stripeGeo, stripeMat)
+      rightStripe.position.set(width / 2 - stripeW / 2 - 0.05, 0, topZ + stripeH / 2)
+      group.add(rightStripe)
 
-    // Linha tracejada central se for rua larga
-    if (width >= 2.5) {
-      const dashLength = 0.8
-      const gap = 0.6
-      const totalDash = Math.floor(depth / (dashLength + gap))
-      const dashGeo = new THREE.BoxGeometry(0.06, dashLength, hThickness + 0.006)
+      if (width >= 2.5) {
+        const dashLength = 0.8
+        const gap = 0.6
+        const totalDash = Math.floor(depth / (dashLength + gap))
+        const dashGeo = new THREE.BoxGeometry(0.06, dashLength, stripeH)
 
-      for (let i = 0; i < totalDash; i++) {
-        const yPos = -depth / 2 + (i + 0.5) * (dashLength + gap)
-        const dashMesh = new THREE.Mesh(dashGeo, stripeMat)
-        dashMesh.position.set(0, yPos, (hThickness + 0.006) / 2)
-        group.add(dashMesh)
+        for (let i = 0; i < totalDash; i++) {
+          const yPos = -depth / 2 + (i + 0.5) * (dashLength + gap)
+          const dashMesh = new THREE.Mesh(dashGeo, stripeMat)
+          dashMesh.position.set(0, yPos, topZ + stripeH / 2 + 0.001)
+          group.add(dashMesh)
+        }
+      }
+    } else {
+      const stripeGeo = new THREE.BoxGeometry(width, stripeW, stripeH)
+      const topStripe = new THREE.Mesh(stripeGeo, stripeMat)
+      topStripe.position.set(0, depth / 2 - stripeW / 2 - 0.05, topZ + stripeH / 2)
+      group.add(topStripe)
+
+      const bottomStripe = new THREE.Mesh(stripeGeo, stripeMat)
+      bottomStripe.position.set(0, -depth / 2 + stripeW / 2 + 0.05, topZ + stripeH / 2)
+      group.add(bottomStripe)
+
+      if (depth >= 2.5) {
+        const dashLength = 0.8
+        const gap = 0.6
+        const totalDash = Math.floor(width / (dashLength + gap))
+        const dashGeo = new THREE.BoxGeometry(dashLength, 0.06, stripeH)
+
+        for (let i = 0; i < totalDash; i++) {
+          const xPos = -width / 2 + (i + 0.5) * (dashLength + gap)
+          const dashMesh = new THREE.Mesh(dashGeo, stripeMat)
+          dashMesh.position.set(xPos, 0, topZ + stripeH / 2 + 0.001)
+          group.add(dashMesh)
+        }
       }
     }
   } else {
     // Moldura de contorno suave para blocos e setores
-    const borderMat = getMaterial(`border_${spatial.strokeColor}`, () =>
+    const parsedStroke = parseThreeColor(spatial.strokeColor, "#6366f1")
+    const borderMat = getMaterial(`border_${parsedStroke.color}`, () =>
       new THREE.LineBasicMaterial({
-        color: new THREE.Color(spatial.strokeColor || "#6366f1"),
+        color: new THREE.Color(parsedStroke.color),
         linewidth: 2,
       })
     )
@@ -181,15 +292,16 @@ function buildAreaGeometry(group: THREE.Group, spatial: UniversalSpatialObject) 
 // ─────────────────────────────────────────────────────────────
 // 2. PORTA-PALETES (RACKS CONVENCIONAIS)
 // ─────────────────────────────────────────────────────────────
-function buildPalletRackGeometry(group: THREE.Group, spatial: UniversalSpatialObject) {
+function buildPalletRackGeometry(group: THREE.Group, spatial: UniversalSpatialObject, readOnly: boolean) {
   const { width, depth, height } = spatial.dimensions
   const levels = spatial.internalStructure?.levelsCount || 4
+  const modeKey = readOnly ? "viewer" : "editor"
 
-  const columnProfileMat = getMaterial("rack_column_blue", () =>
-    new THREE.MeshStandardMaterial({ color: new THREE.Color("#1e40af"), roughness: 0.5, metalness: 0.6 })
+  const columnProfileMat = getMaterial(`rack_column_blue_${modeKey}`, () =>
+    new THREE.MeshStandardMaterial({ color: new THREE.Color(readOnly ? "#2563eb" : "#1e40af"), roughness: 0.45, metalness: 0.55 })
   )
-  const beamMat = getMaterial("rack_beam_orange", () =>
-    new THREE.MeshStandardMaterial({ color: new THREE.Color("#ea580c"), roughness: 0.4, metalness: 0.5 })
+  const beamMat = getMaterial(`rack_beam_orange_${modeKey}`, () =>
+    new THREE.MeshStandardMaterial({ color: new THREE.Color(readOnly ? "#f97316" : "#ea580c"), roughness: 0.35, metalness: 0.45 })
   )
 
   const colWidth = 0.08
@@ -245,27 +357,35 @@ function buildPalletRackGeometry(group: THREE.Group, spatial: UniversalSpatialOb
 // ─────────────────────────────────────────────────────────────
 // 3. DRIVE-IN (ESTRUTURA COMPLETA MULTI-VÃOS COM NÍVEIS, PROFUNDIDADES E PALETES DE TESTE)
 // ─────────────────────────────────────────────────────────────
-function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObject) {
+function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObject, readOnly: boolean) {
   const { width, depth, height } = spatial.dimensions
   const props = spatial.props || {}
   const channelsCount = Array.isArray(props.channels) && props.channels.length > 0 ? props.channels.length : 0
   const propLanes = Number(props.lanes) || Number(spatial.internalStructure?.lanesCount) || 0
   const widthBasedLanes = Math.max(1, Math.round(width / 1.35))
-  // Se canais ou propLanes > 1, ou largura > 2.0m, SEMPRE usa o número real de vãos consistente
-  const lanes = Math.max(1, propLanes, channelsCount, width > 2.0 ? widthBasedLanes : 1)
+  const lanes =
+    propLanes > 0 || channelsCount > 0
+      ? Math.max(1, propLanes, channelsCount)
+      : Math.max(1, width > 2.0 ? widthBasedLanes : 1)
 
   const levels = spatial.internalStructure?.levelsCount || Number(props.levels) || 4
   const depths = spatial.internalStructure?.depthsCount || Number(props.depth) || 4
   const laneWidth = width / lanes
+  const modeKey = readOnly ? "viewer" : "editor"
 
-  const driveColumnMat = getMaterial("drive_col_indigo", () =>
-    new THREE.MeshStandardMaterial({ color: new THREE.Color("#3730a3"), roughness: 0.4, metalness: 0.7 })
+  const isDriveThrough = spatial.type.toLowerCase() === "drive_through"
+
+  const driveColumnMat = getMaterial(`drive_col_indigo_${modeKey}`, () =>
+    new THREE.MeshStandardMaterial({ color: new THREE.Color(readOnly ? "#3b82f6" : "#3730a3"), roughness: 0.35, metalness: 0.65 })
   )
-  const driveRailMat = getMaterial("drive_rail_amber", () =>
-    new THREE.MeshStandardMaterial({ color: new THREE.Color("#d97706"), roughness: 0.3, metalness: 0.8 })
+  const driveRailMat = getMaterial(`drive_rail_${modeKey}`, () =>
+    new THREE.MeshStandardMaterial({ color: new THREE.Color(readOnly ? "#94a3b8" : "#d97706"), roughness: 0.3, metalness: 0.75 })
   )
-  const frameBraceMat = getMaterial("drive_brace_silver", () =>
-    new THREE.MeshStandardMaterial({ color: new THREE.Color("#64748b"), roughness: 0.5, metalness: 0.7 })
+  const frameBraceMat = getMaterial(`drive_brace_silver_${modeKey}`, () =>
+    new THREE.MeshStandardMaterial({ color: new THREE.Color(readOnly ? "#cbd5e1" : "#94a3b8"), roughness: 0.4, metalness: 0.75 })
+  )
+  const rearBeamMat = getMaterial(`drive_rear_orange_${modeKey}`, () =>
+    new THREE.MeshStandardMaterial({ color: new THREE.Color(readOnly ? "#f97316" : "#ea580c"), roughness: 0.35, metalness: 0.55 })
   )
 
   const colDim = 0.08
@@ -283,6 +403,12 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
       colMesh.castShadow = true
       group.add(colMesh)
     }
+
+    // Travessa longitudinal superior conectando as colunas da entrada ao fundo
+    const longTopGeo = new THREE.BoxGeometry(0.05, depth, 0.05)
+    const longTopMesh = new THREE.Mesh(longTopGeo, rearBeamMat)
+    longTopMesh.position.set(colX, 0, height)
+    group.add(longTopMesh)
   }
 
   // 2. Trilhos Longitudinais de Apoio dos Paletes em Cada Vão
@@ -294,8 +420,9 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
   const levelSpacing = height / Math.max(1, levels)
 
   for (let l = 0; l < lanes; l++) {
+    const laneCenterX = -width / 2 + (l + 0.5) * laneWidth
     const vXLeft = -width / 2 + l * laneWidth + 0.07
-    const vXRight = -width / 2 + (l + 1) * laneWidth - 0.07
+    const vXRight = -width / 2 + (l + 0.5) * laneWidth + laneWidth / 2 - 0.07
 
     // Trilhos aéreos para os níveis superiores (a partir do nível 2)
     for (let lvl = 2; lvl <= levels; lvl++) {
@@ -324,27 +451,84 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
       }
     }
 
-    // Travamento superior no topo de cada vão
+    // Travamento superior frontal (entrada, y = -depth/2) e traseiro (fundo, y = +depth/2)
     const topBeamGeo = new THREE.BoxGeometry(laneWidth, 0.06, 0.06)
-    const topFront = new THREE.Mesh(topBeamGeo, frameBraceMat)
-    topFront.position.set(-width / 2 + (l + 0.5) * laneWidth, depth / 2, height)
-    group.add(topFront)
+    const topBackWall = new THREE.Mesh(topBeamGeo, rearBeamMat)
+    topBackWall.position.set(laneCenterX, depth / 2, height)
+    group.add(topBackWall)
 
-    const topBack = new THREE.Mesh(topBeamGeo, frameBraceMat)
-    topBack.position.set(-width / 2 + (l + 0.5) * laneWidth, -depth / 2, height)
-    group.add(topBack)
+    const topEntryPortal = new THREE.Mesh(topBeamGeo, rearBeamMat)
+    topEntryPortal.position.set(laneCenterX, -depth / 2, height)
+    group.add(topEntryPortal)
+
+    // ── RIGIDIFICAÇÃO POR TRAVAMENTO POSTERIOR (Parte de trás do canal: y = +depth/2) ──
+    // Apenas para Drive-In (acesso único), mantendo a entrada (-depth/2) totalmente livre
+    if (!isDriveThrough) {
+      const rearY = depth / 2
+      const rearHorizontalGeo = new THREE.BoxGeometry(laneWidth, 0.05, 0.05)
+
+      // Travessas horizontais posteriores em cada nível (e base)
+      const rearTieHeights: number[] = [0.22]
+      for (let lvl = 1; lvl < levels; lvl++) {
+        rearTieHeights.push(levelSpacing * lvl)
+      }
+      rearTieHeights.push(height)
+
+      rearTieHeights.forEach((tz, idx) => {
+        // O topo (height) já tem a viga superior; desenha travessas intermediárias e base
+        if (idx < rearTieHeights.length - 1) {
+          const tieBeam = new THREE.Mesh(rearHorizontalGeo, rearBeamMat)
+          tieBeam.position.set(laneCenterX, rearY, tz)
+          tieBeam.castShadow = true
+          group.add(tieBeam)
+        }
+      })
+
+      // Contraventamentos verticais em X (diagonais cruzadas na face posterior de cada módulo de altura)
+      const braceSpanX = Math.max(0.25, laneWidth - colDim * 0.8)
+      for (let seg = 0; seg < rearTieHeights.length - 1; seg++) {
+        const z0 = rearTieHeights[seg]
+        const z1 = rearTieHeights[seg + 1]
+        const dz = z1 - z0
+        if (dz <= 0.1) continue
+
+        const diagLen = Math.hypot(braceSpanX, dz)
+        const angle = Math.atan2(dz, braceSpanX)
+        const diagGeo = new THREE.BoxGeometry(diagLen, 0.028, 0.028)
+        const zMid = (z0 + z1) / 2
+
+        const diagA = new THREE.Mesh(diagGeo, frameBraceMat)
+        diagA.position.set(laneCenterX, rearY, zMid)
+        diagA.rotation.y = angle
+        diagA.castShadow = true
+        group.add(diagA)
+
+        const diagB = new THREE.Mesh(diagGeo, frameBraceMat)
+        diagB.position.set(laneCenterX, rearY, zMid)
+        diagB.rotation.y = -angle
+        diagB.castShadow = true
+        group.add(diagB)
+      }
+    }
   }
 
   // 3. RENDERIZAÇÃO REAL DOS PALETES EM TESTE DE PREENCHIMENTO (OCUPAÇÃO)
-  const rawChannels = Array.isArray(spatial.props?.channels) ? (spatial.props.channels as any[]) : []
+  type DriveChannelData = {
+    id?: string
+    laneIndex?: number
+    occupiedPositions?: Array<{ level: number; depth: number }>
+  }
+  const rawChannels: DriveChannelData[] = Array.isArray(spatial.props?.channels)
+    ? (spatial.props.channels as DriveChannelData[])
+    : []
   const slotStepY = depth / Math.max(1, depths)
 
   // Materiais para os paletes dentro do drive
-  const testPalletWoodMat = getMaterial("drive_pallet_wood", () =>
-    new THREE.MeshStandardMaterial({ color: new THREE.Color("#b45309"), roughness: 0.8, metalness: 0.1 })
+  const testPalletWoodMat = getMaterial(`drive_pallet_wood_${modeKey}`, () =>
+    new THREE.MeshStandardMaterial({ color: new THREE.Color(readOnly ? "#d97706" : "#b45309"), roughness: 0.75, metalness: 0.1 })
   )
-  const testPalletBoxMat = getMaterial("drive_pallet_box", () =>
-    new THREE.MeshStandardMaterial({ color: new THREE.Color("#eab308"), roughness: 0.65, metalness: 0.05 })
+  const testPalletBoxMat = getMaterial(`drive_pallet_box_${modeKey}`, () =>
+    new THREE.MeshStandardMaterial({ color: new THREE.Color(readOnly ? "#fbbf24" : "#eab308"), roughness: 0.55, metalness: 0.05 })
   )
 
   const pWidth = Math.max(0.6, laneWidth * 0.72)
@@ -407,10 +591,11 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
 // ─────────────────────────────────────────────────────────────
 // 4. PAREDES E COLUNAS ARQUITETÔNICAS
 // ─────────────────────────────────────────────────────────────
-function buildWallGeometry(group: THREE.Group, spatial: UniversalSpatialObject) {
+function buildWallGeometry(group: THREE.Group, spatial: UniversalSpatialObject, readOnly: boolean) {
   const { width, depth, height } = spatial.dimensions
-  const wallMat = getMaterial("arch_wall_concrete", () =>
-    new THREE.MeshStandardMaterial({ color: new THREE.Color("#475569"), roughness: 0.9, metalness: 0.05 })
+  const modeKey = readOnly ? "viewer" : "editor"
+  const wallMat = getMaterial(`arch_wall_concrete_${modeKey}`, () =>
+    new THREE.MeshStandardMaterial({ color: new THREE.Color(readOnly ? "#64748b" : "#475569"), roughness: 0.85, metalness: 0.05 })
   )
 
   const wallGeo = new THREE.BoxGeometry(width, depth, height)
@@ -421,12 +606,13 @@ function buildWallGeometry(group: THREE.Group, spatial: UniversalSpatialObject) 
   group.add(wallMesh)
 }
 
-function buildColumnGeometry(group: THREE.Group, spatial: UniversalSpatialObject) {
+function buildColumnGeometry(group: THREE.Group, spatial: UniversalSpatialObject, readOnly: boolean) {
   const { width, depth, height } = spatial.dimensions
   const radius = Math.max(0.15, Math.min(width, depth) / 2)
+  const modeKey = readOnly ? "viewer" : "editor"
 
-  const colMat = getMaterial("arch_col_steel", () =>
-    new THREE.MeshStandardMaterial({ color: new THREE.Color("#334155"), roughness: 0.5, metalness: 0.7 })
+  const colMat = getMaterial(`arch_col_steel_${modeKey}`, () =>
+    new THREE.MeshStandardMaterial({ color: new THREE.Color(readOnly ? "#475569" : "#334155"), roughness: 0.45, metalness: 0.65 })
   )
 
   const colGeo = new THREE.CylinderGeometry(radius, radius, height, 16)
@@ -551,15 +737,17 @@ function buildForkliftGeometry(group: THREE.Group, spatial: UniversalSpatialObje
 // ─────────────────────────────────────────────────────────────
 // 8. SÓLIDO PARAMÉTRICO GENÉRICO
 // ─────────────────────────────────────────────────────────────
-function buildGenericSolidGeometry(group: THREE.Group, spatial: UniversalSpatialObject) {
+function buildGenericSolidGeometry(group: THREE.Group, spatial: UniversalSpatialObject, readOnly: boolean) {
   const { width, depth, height } = spatial.dimensions
-  const solidColor = spatial.color || "#64748b"
+  const parsedColor = parseThreeColor(spatial.color, readOnly ? "#64748b" : "#475569")
+  const parsedStroke = parseThreeColor(spatial.strokeColor, "#94a3b8")
+  const modeKey = readOnly ? "viewer" : "editor"
 
-  const solidMat = getMaterial(`solid_${solidColor}`, () =>
+  const solidMat = getMaterial(`solid_${modeKey}_${parsedColor.color}`, () =>
     new THREE.MeshStandardMaterial({
-      color: new THREE.Color(solidColor),
-      roughness: 0.6,
-      metalness: 0.3,
+      color: new THREE.Color(parsedColor.color),
+      roughness: 0.55,
+      metalness: 0.25,
     })
   )
 
@@ -570,30 +758,33 @@ function buildGenericSolidGeometry(group: THREE.Group, spatial: UniversalSpatial
   mesh.receiveShadow = true
   group.add(mesh)
 
-  // Linhas de borda elegantes
-  const edges = new THREE.EdgesGeometry(geo)
-  const lineMat = getMaterial(`edge_${spatial.strokeColor}`, () =>
-    new THREE.LineBasicMaterial({ color: new THREE.Color(spatial.strokeColor || "#94a3b8") })
-  )
-  const lines = new THREE.LineSegments(edges, lineMat)
-  lines.position.copy(mesh.position)
-  group.add(lines)
+  if (!readOnly) {
+    // Linhas de borda técnicas no modo editor
+    const edges = new THREE.EdgesGeometry(geo)
+    const lineMat = getMaterial(`edge_${parsedStroke.color}`, () =>
+      new THREE.LineBasicMaterial({ color: new THREE.Color(parsedStroke.color) })
+    )
+    const lines = new THREE.LineSegments(edges, lineMat)
+    lines.position.copy(mesh.position)
+    group.add(lines)
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
 // 9. COMPARTIMENTO (ESPAÇO ABERTO DEMARCADO NO CHÃO)
 // ─────────────────────────────────────────────────────────────
-function buildCompartmentGeometry(group: THREE.Group, spatial: UniversalSpatialObject) {
+function buildCompartmentGeometry(group: THREE.Group, spatial: UniversalSpatialObject, readOnly: boolean) {
   const { width, depth } = spatial.dimensions
   const padH = 0.08
+  const modeKey = readOnly ? "viewer" : "editor"
 
-  const padMat = getMaterial("compartment_open_pad", () =>
+  const padMat = getMaterial(`compartment_open_pad_${modeKey}`, () =>
     new THREE.MeshStandardMaterial({
-      color: new THREE.Color("#ca8a04"),
-      roughness: 0.75,
+      color: new THREE.Color(readOnly ? "#f59e0b" : "#ca8a04"),
+      roughness: 0.65,
       metalness: 0.15,
       transparent: true,
-      opacity: 0.25,
+      opacity: readOnly ? 0.55 : 0.25,
     })
   )
 
@@ -603,8 +794,8 @@ function buildCompartmentGeometry(group: THREE.Group, spatial: UniversalSpatialO
   mesh.receiveShadow = true
   group.add(mesh)
 
-  const borderMat = getMaterial("compartment_open_border", () =>
-    new THREE.LineBasicMaterial({ color: new THREE.Color("#eab308") })
+  const borderMat = getMaterial(`compartment_open_border_${modeKey}`, () =>
+    new THREE.LineBasicMaterial({ color: new THREE.Color(readOnly ? "#fbbf24" : "#eab308") })
   )
   const edges = new THREE.EdgesGeometry(geo)
   const lines = new THREE.LineSegments(edges, borderMat)

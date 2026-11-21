@@ -1354,10 +1354,10 @@ export default function UniversalMapEditor({
           <button
             onClick={() => setIsLeftCollapsed(false)}
             className="absolute left-2 top-3 z-30 bg-slate-900 hover:bg-slate-800 text-slate-300 p-1.5 rounded-lg border border-slate-700 shadow-xl text-xs flex items-center gap-1 transition-all"
-            title="Expandir Biblioteca (Ctrl+B)"
+            title={readOnly ? "Expandir Navegação" : "Expandir Biblioteca (Ctrl+B)"}
           >
             <span>▶</span>
-            <span className="text-[10px] font-bold">Biblioteca</span>
+            <span className="text-[10px] font-bold">{readOnly ? "Navegação" : "Biblioteca"}</span>
           </button>
         )}
 
@@ -1482,6 +1482,7 @@ export default function UniversalMapEditor({
             selectedId={selectedId}
             snapEnabled={snapEnabled}
             gridSize={gridSize}
+            readOnly={readOnly}
             onSelect={handleSelect}
             onUpdateObject={handleUpdateObjectById}
             onModeChange={setSpatialMode}

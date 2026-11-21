@@ -7,7 +7,7 @@
 import React from "react"
 import Konva from "konva"
 import type { MapElementDefinition, SvgPreviewProps, MapObject } from "../types"
-import { MAP_COLORS } from "../types"
+import { MAP_COLORS, MAP_VIEWER_COLORS } from "../types"
 
 // ════════════════════════════════════════════════════════════
 // GRUPO C: EQUIPAMENTOS OPERACIONAIS
@@ -277,7 +277,8 @@ const cart: MapElementDefinition = {
       React.createElement("circle", { cx: 12, cy: 50, r: 3, fill: "#0f172a" }),
       React.createElement("circle", { cx: 38, cy: 50, r: 3, fill: "#0f172a" })
     ),
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
     const group = new Konva.Group({ x: 0, y: 0 })
     const w = obj.width
     const h = obj.height
@@ -286,7 +287,7 @@ const cart: MapElementDefinition = {
     group.add(
       new Konva.Line({
         points: [w * 0.15, 4, w * 0.85, 4],
-        stroke: "#94a3b8",
+        stroke: readOnly ? "#cbd5e1" : "#94a3b8",
         strokeWidth: 3,
         lineCap: "round",
       })
@@ -299,8 +300,8 @@ const cart: MapElementDefinition = {
         y: 8,
         width: w - 8,
         height: h - 10,
-        fill: "rgba(59,130,246,0.15)",
-        stroke: "#3b82f6",
+        fill: readOnly ? "rgba(59,130,246,0.45)" : "rgba(59,130,246,0.15)",
+        stroke: readOnly ? "#60a5fa" : "#3b82f6",
         strokeWidth: 1.5,
         cornerRadius: 3,
       })
@@ -341,7 +342,8 @@ const conveyor: MapElementDefinition = {
       ),
       React.createElement("polygon", { points: "17,20 12,28 22,28", fill: "#38bdf8" })
     ),
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
     const group = new Konva.Group({ x: 0, y: 0 })
     const w = obj.width
     const h = obj.height
@@ -352,8 +354,8 @@ const conveyor: MapElementDefinition = {
         y: 0,
         width: w,
         height: h,
-        fill: "#1e293b",
-        stroke: "#94a3b8",
+        fill: readOnly ? "#334155" : "#1e293b",
+        stroke: readOnly ? "#38bdf8" : "#94a3b8",
         strokeWidth: 2,
       })
     )
@@ -364,7 +366,7 @@ const conveyor: MapElementDefinition = {
       group.add(
         new Konva.Line({
           points: [0, y, w, y],
-          stroke: "#475569",
+          stroke: readOnly ? "#64748b" : "#475569",
           strokeWidth: 1,
         })
       )
@@ -410,7 +412,8 @@ const machine: MapElementDefinition = {
       React.createElement("circle", { cx: 25, cy: 25, r: 12, fill: "none", stroke: "#f59e0b", strokeWidth: 2 }),
       React.createElement("circle", { cx: 25, cy: 25, r: 4, fill: "#f59e0b" })
     ),
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
     const group = new Konva.Group({ x: 0, y: 0 })
     const w = obj.width
     const h = obj.height
@@ -421,8 +424,8 @@ const machine: MapElementDefinition = {
         y: 0,
         width: w,
         height: h,
-        fill: "#1e293b",
-        stroke: "#94a3b8",
+        fill: readOnly ? "#334155" : "#1e293b",
+        stroke: readOnly ? "#cbd5e1" : "#94a3b8",
         strokeWidth: 2,
         cornerRadius: 4,
       })
@@ -461,7 +464,7 @@ const machine: MapElementDefinition = {
         fontSize: 10,
         fontFamily: "sans-serif",
         fontStyle: "bold",
-        fill: "#cbd5e1",
+        fill: readOnly ? "#f8fafc" : "#cbd5e1",
       })
     )
 
@@ -499,24 +502,25 @@ const pallet: MapElementDefinition = {
         React.createElement("line", { key: y, x1: 1, y1: y, x2: 19, y2: y, stroke: "#ca8a04", strokeWidth: 0.8, strokeDasharray: "2 1" })
       )
     ),
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
     const group = new Konva.Group({ x: 0, y: 0 })
-    // Se o palete ainda estiver com dimensões herdadas antigas desproporcionais (ex: 60x80 px),
-    // normaliza visualmente para o padrão PBR (20x24 px a 20 PPM) perfeitamente coincidente com os slots do Drive-In
     const isLegacyScale = Boolean((obj.width && obj.width >= 40) || (obj.height && obj.height >= 50))
     const w = isLegacyScale ? 20 : (obj.width || 20)
     const h = isLegacyScale ? 24 : (obj.height || 24)
     const isLoaded = Boolean(obj.props.loaded)
 
-    // Base do Palete de Madeira (autêntico em tom madeira alinhado ao Drive-In)
+    // Base do Palete de Madeira
     group.add(
       new Konva.Rect({
         x: 0,
         y: 0,
         width: w,
         height: h,
-        fill: isLoaded ? "rgba(217, 119, 6, 0.45)" : "rgba(217, 119, 6, 0.22)",
-        stroke: "#ca8a04",
+        fill: readOnly
+          ? (isLoaded ? "#d97706" : "#b45309")
+          : (isLoaded ? "rgba(217, 119, 6, 0.45)" : "rgba(217, 119, 6, 0.22)"),
+        stroke: readOnly ? "#fbbf24" : "#ca8a04",
         strokeWidth: 1.2,
         cornerRadius: 1,
       })
@@ -528,9 +532,9 @@ const pallet: MapElementDefinition = {
       group.add(
         new Konva.Line({
           points: [1, (i * h) / slats, w - 1, (i * h) / slats],
-          stroke: "rgba(202, 138, 4, 0.7)",
+          stroke: readOnly ? "rgba(251, 191, 36, 0.65)" : "rgba(202, 138, 4, 0.7)",
           strokeWidth: 0.8,
-          dash: [3, 2],
+          dash: readOnly ? undefined : [3, 2],
         })
       )
     }
@@ -538,7 +542,7 @@ const pallet: MapElementDefinition = {
     // Blocos de apoio nos 4 cantos
     const blockW = Math.max(2, Math.round(w * 0.18))
     const blockH = Math.max(2, Math.round(h * 0.15))
-    const blockColor = "#b45309"
+    const blockColor = readOnly ? "#92400e" : "#b45309"
 
     group.add(
       new Konva.Rect({ x: 1, y: 1, width: blockW, height: blockH, fill: blockColor }),
@@ -547,18 +551,16 @@ const pallet: MapElementDefinition = {
       new Konva.Rect({ x: w - 1 - blockW, y: h - 1 - blockH, width: blockW, height: blockH, fill: blockColor })
     )
 
-    // Travessa central se o palete tiver tamanho suficiente
     if (h > 12) {
       group.add(
         new Konva.Line({
           points: [0, h / 2, w, h / 2],
-          stroke: "rgba(180, 83, 9, 0.5)",
+          stroke: readOnly ? "rgba(146, 64, 14, 0.75)" : "rgba(180, 83, 9, 0.5)",
           strokeWidth: 1,
         })
       )
     }
 
-    // Se estiver com carga empilhada (caixas sobre o pallet)
     if (isLoaded) {
       const margin = Math.max(1.5, Math.round(w * 0.08))
       group.add(
@@ -567,10 +569,10 @@ const pallet: MapElementDefinition = {
           y: margin,
           width: w - margin * 2,
           height: h - margin * 2,
-          fill: "rgba(245, 158, 11, 0.4)",
-          stroke: "#d97706",
+          fill: readOnly ? "#f59e0b" : "rgba(245, 158, 11, 0.4)",
+          stroke: readOnly ? "#fef08a" : "#d97706",
           strokeWidth: 1,
-          dash: [2, 1],
+          dash: readOnly ? undefined : [2, 1],
         })
       )
     }
@@ -599,7 +601,9 @@ const box: MapElementDefinition = {
       React.createElement("line", { x1: 6, y1: 20, x2: 34, y2: 20, stroke: "#10b981", strokeWidth: 1 }),
       React.createElement("line", { x1: 20, y1: 6, x2: 20, y2: 34, stroke: "#10b981", strokeWidth: 1 })
     ),
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
+    const colors = readOnly ? MAP_VIEWER_COLORS : MAP_COLORS
     const group = new Konva.Group({ x: 0, y: 0 })
     const w = obj.width
     const h = obj.height
@@ -610,16 +614,16 @@ const box: MapElementDefinition = {
         y: 0,
         width: w,
         height: h,
-        fill: MAP_COLORS.box.fill,
-        stroke: MAP_COLORS.box.stroke,
+        fill: colors.box.fill,
+        stroke: colors.box.stroke,
         strokeWidth: 1.5,
       })
     )
 
     // Abas de fechamento (cruz central com fita adesiva)
     group.add(
-      new Konva.Line({ points: [w / 2, 0, w / 2, h], stroke: "#059669", strokeWidth: 1 }),
-      new Konva.Line({ points: [0, h / 2, w, h / 2], stroke: "#059669", strokeWidth: 1 })
+      new Konva.Line({ points: [w / 2, 0, w / 2, h], stroke: readOnly ? "#6ee7b7" : "#059669", strokeWidth: 1 }),
+      new Konva.Line({ points: [0, h / 2, w, h / 2], stroke: readOnly ? "#6ee7b7" : "#059669", strokeWidth: 1 })
     )
 
     return group
@@ -714,7 +718,8 @@ const big_bag: MapElementDefinition = {
       React.createElement("circle", { cx: 12, cy: 38, r: 2.5, fill: "#f59e0b" }),
       React.createElement("circle", { cx: 38, cy: 38, r: 2.5, fill: "#f59e0b" })
     ),
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
     const group = new Konva.Group({ x: 0, y: 0 })
     const w = obj.width
     const h = obj.height
@@ -725,8 +730,8 @@ const big_bag: MapElementDefinition = {
         y: 4,
         width: w - 8,
         height: h - 8,
-        fill: "rgba(245,158,11,0.15)",
-        stroke: "#f59e0b",
+        fill: readOnly ? "rgba(245,158,11,0.48)" : "rgba(245,158,11,0.15)",
+        stroke: readOnly ? "#fbbf24" : "#f59e0b",
         strokeWidth: 2,
         cornerRadius: 8,
       })
@@ -764,7 +769,8 @@ const load_unit: MapElementDefinition = {
       React.createElement("rect", { x: 5, y: 5, width: 30, height: 30, fill: "rgba(139,92,246,0.15)", stroke: "#8b5cf6", strokeWidth: 1.5, strokeDasharray: "3 2" }),
       React.createElement("text", { x: 20, y: 24, fill: "#c4b5fd", fontSize: 9, fontWeight: "bold", textAnchor: "middle" }, "UC")
     ),
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
     const group = new Konva.Group({ x: 0, y: 0 })
     const w = obj.width
     const h = obj.height
@@ -775,10 +781,10 @@ const load_unit: MapElementDefinition = {
         y: 0,
         width: w,
         height: h,
-        fill: "rgba(139,92,246,0.15)",
-        stroke: "#8b5cf6",
+        fill: readOnly ? "rgba(139,92,246,0.45)" : "rgba(139,92,246,0.15)",
+        stroke: readOnly ? "#a78bfa" : "#8b5cf6",
         strokeWidth: 2,
-        dash: [4, 3],
+        dash: readOnly ? undefined : [4, 3],
         cornerRadius: 3,
       })
     )
@@ -794,7 +800,7 @@ const load_unit: MapElementDefinition = {
         fontSize: 11,
         fontFamily: "sans-serif",
         fontStyle: "bold",
-        fill: "#c4b5fd",
+        fill: readOnly ? "#ede9fe" : "#c4b5fd",
       })
     )
 
@@ -820,7 +826,8 @@ const volume: MapElementDefinition = {
       { width, height, viewBox: "0 0 40 40", xmlns: "http://www.w3.org/2000/svg" },
       React.createElement("polygon", { points: "20,5 35,15 35,32 20,38 5,32 5,15", fill: "rgba(16,185,129,0.15)", stroke: "#10b981", strokeWidth: 1.5 })
     ),
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
     const group = new Konva.Group({ x: 0, y: 0 })
     const w = obj.width
     const h = obj.height
@@ -831,18 +838,22 @@ const volume: MapElementDefinition = {
         y: 0,
         width: w,
         height: h,
-        fill: "rgba(16,185,129,0.12)",
-        stroke: "#10b981",
+        fill: readOnly ? "rgba(16,185,129,0.48)" : "rgba(16,185,129,0.12)",
+        stroke: readOnly ? "#34d399" : "#10b981",
         strokeWidth: 1.5,
         cornerRadius: 2,
-      }),
-      new Konva.Line({
-        points: [0, 0, w, h],
-        stroke: "#059669",
-        strokeWidth: 0.8,
-        dash: [2, 3],
       })
     )
+    if (!readOnly) {
+      group.add(
+        new Konva.Line({
+          points: [0, 0, w, h],
+          stroke: "#059669",
+          strokeWidth: 0.8,
+          dash: [2, 3],
+        })
+      )
+    }
 
     return group
   },
@@ -867,7 +878,8 @@ const product: MapElementDefinition = {
       React.createElement("circle", { cx: 17.5, cy: 17.5, r: 12, fill: "rgba(56,189,248,0.2)", stroke: "#38bdf8", strokeWidth: 1.5 }),
       React.createElement("circle", { cx: 17.5, cy: 17.5, r: 4, fill: "#38bdf8" })
     ),
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
     const group = new Konva.Group({ x: 0, y: 0 })
     const r = Math.min(obj.width, obj.height) / 2
 
@@ -876,7 +888,7 @@ const product: MapElementDefinition = {
         x: obj.width / 2,
         y: obj.height / 2,
         radius: r,
-        fill: "rgba(56,189,248,0.2)",
+        fill: readOnly ? "rgba(56,189,248,0.48)" : "rgba(56,189,248,0.2)",
         stroke: "#38bdf8",
         strokeWidth: 1.5,
       }),

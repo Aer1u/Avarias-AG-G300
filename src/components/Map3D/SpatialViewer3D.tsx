@@ -13,7 +13,7 @@
 
 "use client"
 
-import React, { useEffect, useRef, useCallback } from "react"
+import React, { useEffect, useRef, useCallback, useState } from "react"
 import * as THREE from "three"
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js"
 import type { MapObject } from "../MapLibrary/types"
@@ -27,6 +27,7 @@ interface SpatialViewer3DProps {
   selectedId: string | null
   snapEnabled?: boolean
   gridSize?: number
+  readOnly?: boolean
   onSelect: (id: string | null) => void
   onUpdateObject?: (id: string, partial: Partial<MapObject>) => void
   onModeChange?: (mode: SpatialViewMode) => void
@@ -38,6 +39,7 @@ export function SpatialViewer3D({
   selectedId,
   snapEnabled = true,
   gridSize = 20,
+  readOnly = false,
   onSelect,
   onUpdateObject,
   onModeChange,
@@ -50,6 +52,17 @@ export function SpatialViewer3D({
     modeRef.current = mode
   }, [mode])
 
+  const readOnlyRef = useRef<boolean>(readOnly)
+  useEffect(() => {
+    readOnlyRef.current = readOnly
+  }, [readOnly])
+
+  const [shadowsEnabled, setShadowsEnabled] = useState(true)
+  const shadowsEnabledRef = useRef<boolean>(shadowsEnabled)
+  useEffect(() => {
+    shadowsEnabledRef.current = shadowsEnabled
+  }, [shadowsEnabled])
+
   // Refs Three.js
   const sceneRef = useRef<THREE.Scene | null>(null)
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
@@ -58,6 +71,10 @@ export function SpatialViewer3D({
   const controlsRef = useRef<OrbitControls | null>(null)
   const selectionBoxRef = useRef<THREE.Box3Helper | null>(null)
   const objectsGroupRef = useRef<THREE.Group | null>(null)
+  const gridHelperRef = useRef<THREE.GridHelper | null>(null)
+  const ambientLightRef = useRef<THREE.AmbientLight | null>(null)
+  const hemiLightRef = useRef<THREE.HemisphereLight | null>(null)
+  const sunLightRef = useRef<THREE.DirectionalLight | null>(null)
   const animFrameIdRef = useRef<number | null>(null)
 
   // ── 1. INICIALIZAÇÃO DA CENA THREE.JS ─────────────────────────
@@ -69,9 +86,10 @@ export function SpatialViewer3D({
     const height = container.clientHeight || 600
 
     // Cena
+    const initialBg = readOnlyRef.current ? "#0b1120" : "#070a13"
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color("#070a13")
-    scene.fog = new THREE.FogExp2("#070a13", 0.002)
+    scene.background = new THREE.Color(initialBg)
+    scene.fog = new THREE.FogExp2(initialBg, 0.002)
     sceneRef.current = scene
 
     // Convenção cartesiana universal: Z é o eixo vertical (altura)
@@ -85,41 +103,55 @@ export function SpatialViewer3D({
     })
     renderer.setSize(width, height)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    renderer.shadowMap.enabled = true
+    renderer.shadowMap.enabled = shadowsEnabledRef.current
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.2
+    renderer.toneMappingExposure = 1.32
     container.appendChild(renderer.domElement)
     rendererRef.current = renderer
 
-    // Iluminação
-    const ambientLight = new THREE.AmbientLight("#f8fafc", 0.75)
+    // Iluminação de estúdio/galpão (3 pontos + Hemisphere Z-up)
+    const ambientLight = new THREE.AmbientLight("#f8fafc", readOnlyRef.current ? 0.9 : 0.75)
     scene.add(ambientLight)
+    ambientLightRef.current = ambientLight
 
-    const sunLight = new THREE.DirectionalLight("#ffffff", 1.8)
-    sunLight.position.set(50, -60, 80)
-    sunLight.castShadow = true
+    const hemiLight = new THREE.HemisphereLight("#f1f5f9", "#334155", readOnlyRef.current ? 1.15 : 0.95)
+    hemiLight.position.set(0, 0, 1) // Z-up: céu em +Z, rebote do piso em -Z
+    scene.add(hemiLight)
+    hemiLightRef.current = hemiLight
+
+    const sunLight = new THREE.DirectionalLight("#fffaf0", 1.95)
+    sunLight.position.set(60, -80, 110)
+    sunLight.castShadow = shadowsEnabledRef.current
     sunLight.shadow.mapSize.width = 2048
     sunLight.shadow.mapSize.height = 2048
     sunLight.shadow.camera.near = 10
-    sunLight.shadow.camera.far = 300
-    const d = 80
+    sunLight.shadow.camera.far = 350
+    const d = 120
     sunLight.shadow.camera.left = -d
     sunLight.shadow.camera.right = d
     sunLight.shadow.camera.top = d
     sunLight.shadow.camera.bottom = -d
-    sunLight.shadow.bias = -0.0005
+    sunLight.shadow.bias = -0.0004
+    sunLight.shadow.normalBias = 0.02
     scene.add(sunLight)
+    sunLightRef.current = sunLight
 
-    const fillLight = new THREE.DirectionalLight("#93c5fd", 0.7)
-    fillLight.position.set(-40, 50, 50)
+    const fillLight = new THREE.DirectionalLight("#bae6fd", 1.05)
+    fillLight.position.set(-65, 55, 75)
     scene.add(fillLight)
 
-    // Grid métrico no solo (Z = 0)
+    const rimLight = new THREE.DirectionalLight("#fed7aa", 0.65)
+    rimLight.position.set(0, 85, 55)
+    scene.add(rimLight)
+
+    // Grid métrico no solo (Z = 0) — ocultado no modo visualizador
     const gridHelper = new THREE.GridHelper(400, 400, 0x3b82f6, 0x1e293b)
     gridHelper.rotation.x = Math.PI / 2
     gridHelper.position.z = -0.01
+    gridHelper.visible = !readOnlyRef.current
     scene.add(gridHelper)
+    gridHelperRef.current = gridHelper
 
     // Grupo de objetos do mapa
     const objectsGroup = new THREE.Group()
@@ -139,8 +171,8 @@ export function SpatialViewer3D({
     // Câmera Perspectiva (3D Livre) — vista isométrica padrão alinhada com 2D
     const perspCam = new THREE.PerspectiveCamera(50, aspect, 0.5, 1200)
     perspCam.up.set(0, 0, 1)
-    // Câmera posicionada atrás e acima: X = centro, Y negativo (atrás), Z positivo (acima)
-    perspCam.position.set(20, -50, 45)
+    // Câmera posicionada ao Sul (Y mais negativo) e acima (+Z), olhando para o mapa (Y negativo)
+    perspCam.position.set(20, -65, 45)
     perspCamRef.current = perspCam
 
     // Câmera Ortográfica (Isométrico técnico)
@@ -155,8 +187,8 @@ export function SpatialViewer3D({
     )
     orthoCam.up.set(0, 0, 1)
     const isoDist = 70
-    // Mesmo sistema: câmera atrás e acima do centro
-    orthoCam.position.set(20, -isoDist * 0.5, isoDist * 0.85)
+    // Mesmo sistema: câmera ao Sul e acima do centro
+    orthoCam.position.set(20, -20 - isoDist * 0.5, isoDist * 0.85)
     orthoCamRef.current = orthoCam
 
     // Controles OrbitControls configurados para Z-up
@@ -170,8 +202,8 @@ export function SpatialViewer3D({
     controls.maxPolarAngle = Math.PI / 2 - 0.01 // Não passa por baixo do solo
     controls.minDistance = 2
     controls.maxDistance = 500
-    // Target centralizado nos objetos (Y positivo = frente do mapa, igual ao 2D)
-    controls.target.set(20, 20, 0)
+    // Target centralizado nos objetos (Y negativo = quadrante inferior do 2D)
+    controls.target.set(20, -20, 0)
     controls.update()
     controlsRef.current = controls
 
@@ -279,6 +311,48 @@ export function SpatialViewer3D({
     controls.update()
   }, [mode])
 
+  // ── 2b. REATIVIDADE DO MODO VISUALIZADOR (GRID + LUZ + FUNDO) ──
+  useEffect(() => {
+    if (gridHelperRef.current) {
+      gridHelperRef.current.visible = !readOnly
+    }
+    if (ambientLightRef.current) {
+      ambientLightRef.current.intensity = readOnly ? 0.9 : 0.75
+    }
+    if (hemiLightRef.current) {
+      hemiLightRef.current.intensity = readOnly ? 1.15 : 0.95
+    }
+    if (sceneRef.current) {
+      const bg = readOnly ? "#0b1120" : "#070a13"
+      sceneRef.current.background = new THREE.Color(bg)
+      sceneRef.current.fog = new THREE.FogExp2(bg, 0.002)
+    }
+  }, [readOnly])
+
+  // ── 2c. ALTERNÂNCIA DE SOMBRAS EM TEMPO REAL ───────────────────
+  useEffect(() => {
+    const renderer = rendererRef.current
+    const sunLight = sunLightRef.current
+    const scene = sceneRef.current
+    if (!renderer || !sunLight || !scene) return
+
+    renderer.shadowMap.enabled = shadowsEnabled
+    renderer.shadowMap.needsUpdate = true
+    sunLight.castShadow = shadowsEnabled
+
+    scene.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        if (Array.isArray(obj.material)) {
+          obj.material.forEach((m) => {
+            m.needsUpdate = true
+          })
+        } else if (obj.material) {
+          obj.material.needsUpdate = true
+        }
+      }
+    })
+  }, [shadowsEnabled])
+
   // ── 3. RENDERIZAÇÃO DOS OBJETOS NA CENA ───────────────────────
   useEffect(() => {
     const group = objectsGroupRef.current
@@ -293,11 +367,12 @@ export function SpatialViewer3D({
     // Constrói cada geometria espacial
     objects.forEach((obj) => {
       if (obj.visible === false) return
+      if (readOnly && (obj.type === "coordinates" || obj.type === "dimension_line")) return
       const spatial = mapObjectToSpatial(obj, DEFAULT_PIXELS_PER_METER)
-      const mesh3D = buildSpatial3DObject(spatial)
+      const mesh3D = buildSpatial3DObject(spatial, readOnly)
       group.add(mesh3D)
     })
-  }, [objects])
+  }, [objects, readOnly])
 
   // ── 4. REALCE DO OBJETO SELECIONADO ──────────────────────────
   useEffect(() => {
@@ -491,8 +566,8 @@ export function SpatialViewer3D({
               const cam = currentMode === "isometric" ? orthoCamRef.current : perspCamRef.current
               if (!controls || !cam) return
               const t = controls.target
-              cam.up.set(0, 1, 0)
-              cam.position.set(t.x, t.y, t.z + 90)
+              cam.up.set(0, 0, 1)
+              cam.position.set(t.x, t.y - 0.01, t.z + 90)
               cam.lookAt(t)
               controls.update()
             }}
@@ -519,6 +594,20 @@ export function SpatialViewer3D({
             title="Vista Frontal"
           >
             Frente
+          </button>
+
+          {/* Alternar Sombras */}
+          <button
+            onClick={() => setShadowsEnabled((prev) => !prev)}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all border ${
+              shadowsEnabled
+                ? "bg-amber-950/70 hover:bg-amber-900/80 text-amber-200 border-amber-700/60"
+                : "bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white border-slate-700/60"
+            }`}
+            title={shadowsEnabled ? "Desativar sombras em tempo real" : "Ativar sombras em tempo real"}
+          >
+            <span className={`h-2 w-2 rounded-full ${shadowsEnabled ? "bg-amber-400" : "bg-slate-500"}`} />
+            <span>{shadowsEnabled ? "Sombras On" : "Sombras Off"}</span>
           </button>
 
           {/* Restaurar Orientação Isométrica Padrão */}

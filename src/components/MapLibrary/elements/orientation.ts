@@ -7,7 +7,7 @@
 import React from "react"
 import Konva from "konva"
 import type { MapElementDefinition, SvgPreviewProps, MapObject } from "../types"
-import { MAP_COLORS } from "../types"
+import { MAP_VIEWER_COLORS } from "../types"
 
 // ════════════════════════════════════════════════════════════
 // GRUPO E: ELEMENTOS DE ORIENTAÇÃO
@@ -497,16 +497,20 @@ const geo_rect: MapElementDefinition = {
       { width, height, viewBox: "0 0 50 35", xmlns: "http://www.w3.org/2000/svg" },
       React.createElement("rect", { x: 4, y: 4, width: 42, height: 27, fill: "rgba(100,116,139,0.2)", stroke: "#64748b", strokeWidth: 1.5, rx: 2 })
     ),
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
     const group = new Konva.Group({ x: 0, y: 0 })
+    const rawFill = obj.props.fill as string
     group.add(
       new Konva.Rect({
         x: 0,
         y: 0,
         width: obj.width,
         height: obj.height,
-        fill: (obj.props.fill as string) || "rgba(100,116,139,0.15)",
-        stroke: (obj.props.stroke as string) || "#64748b",
+        fill: readOnly && (!rawFill || rawFill === "rgba(100,116,139,0.15)")
+          ? MAP_VIEWER_COLORS.geometric.fill
+          : rawFill || "rgba(100,116,139,0.15)",
+        stroke: (obj.props.stroke as string) || (readOnly ? MAP_VIEWER_COLORS.geometric.stroke : "#64748b"),
         strokeWidth: 1.5,
         cornerRadius: Number(obj.props.radius) || 0,
       })
@@ -534,16 +538,20 @@ const geo_circle: MapElementDefinition = {
       { width, height, viewBox: "0 0 40 40", xmlns: "http://www.w3.org/2000/svg" },
       React.createElement("circle", { cx: 20, cy: 20, r: 16, fill: "rgba(100,116,139,0.2)", stroke: "#64748b", strokeWidth: 1.5 })
     ),
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
     const group = new Konva.Group({ x: 0, y: 0 })
+    const rawFill = obj.props.fill as string
     group.add(
       new Konva.Ellipse({
         x: obj.width / 2,
         y: obj.height / 2,
         radiusX: obj.width / 2,
         radiusY: obj.height / 2,
-        fill: (obj.props.fill as string) || "rgba(100,116,139,0.15)",
-        stroke: (obj.props.stroke as string) || "#64748b",
+        fill: readOnly && (!rawFill || rawFill === "rgba(100,116,139,0.15)")
+          ? MAP_VIEWER_COLORS.geometric.fill
+          : rawFill || "rgba(100,116,139,0.15)",
+        stroke: (obj.props.stroke as string) || (readOnly ? MAP_VIEWER_COLORS.geometric.stroke : "#64748b"),
         strokeWidth: 1.5,
       })
     )
@@ -603,12 +611,14 @@ const geo_polygon: MapElementDefinition = {
       { width, height, viewBox: "0 0 40 40", xmlns: "http://www.w3.org/2000/svg" },
       React.createElement("polygon", { points: "20,4 35,12 35,28 20,36 5,28 5,12", fill: "rgba(100,116,139,0.2)", stroke: "#64748b", strokeWidth: 1.5 })
     ),
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
     const group = new Konva.Group({ x: 0, y: 0 })
     const sides = Math.max(3, Number(obj.props.sides) || 6)
     const cx = obj.width / 2
     const cy = obj.height / 2
     const r = Math.min(cx, cy) - 2
+    const rawFill = obj.props.fill as string
 
     const points: number[] = []
     for (let i = 0; i < sides; i++) {
@@ -620,8 +630,10 @@ const geo_polygon: MapElementDefinition = {
       new Konva.Line({
         points,
         closed: true,
-        fill: (obj.props.fill as string) || "rgba(100,116,139,0.15)",
-        stroke: (obj.props.stroke as string) || "#64748b",
+        fill: readOnly && (!rawFill || rawFill === "rgba(100,116,139,0.15)")
+          ? MAP_VIEWER_COLORS.geometric.fill
+          : rawFill || "rgba(100,116,139,0.15)",
+        stroke: (obj.props.stroke as string) || (readOnly ? MAP_VIEWER_COLORS.geometric.stroke : "#64748b"),
         strokeWidth: 1.5,
       })
     )
@@ -686,10 +698,12 @@ const free_area: MapElementDefinition = {
       { width, height, viewBox: "0 0 50 35", xmlns: "http://www.w3.org/2000/svg" },
       React.createElement("rect", { x: 4, y: 4, width: 42, height: 27, fill: "rgba(99,102,241,0.08)", stroke: "#6366f1", strokeWidth: 1.5, strokeDasharray: "4 3", rx: 2 })
     ),
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
     const group = new Konva.Group({ x: 0, y: 0 })
     const w = obj.width
     const h = obj.height
+    const rawFill = obj.props.fill as string
 
     group.add(
       new Konva.Rect({
@@ -697,10 +711,12 @@ const free_area: MapElementDefinition = {
         y: 0,
         width: w,
         height: h,
-        fill: (obj.props.fill as string) || "rgba(99,102,241,0.06)",
-        stroke: (obj.props.stroke as string) || "#6366f1",
+        fill: readOnly && (!rawFill || rawFill === "rgba(99,102,241,0.06)")
+          ? "rgba(99, 102, 241, 0.28)"
+          : rawFill || "rgba(99,102,241,0.06)",
+        stroke: (obj.props.stroke as string) || (readOnly ? "#818cf8" : "#6366f1"),
         strokeWidth: 1.5,
-        dash: [6, 4],
+        dash: readOnly ? undefined : [6, 4],
         cornerRadius: 4,
       })
     )
@@ -715,7 +731,7 @@ const free_area: MapElementDefinition = {
           fontSize: 11,
           fontFamily: "sans-serif",
           fontStyle: "bold",
-          fill: (obj.props.stroke as string) || "#818cf8",
+          fill: (obj.props.stroke as string) || "#a5b4fc",
         })
       )
     }

@@ -47,7 +47,10 @@ export function mapObjectToSpatial(
   const channelsCount = Array.isArray(props.channels) && props.channels.length > 0 ? props.channels.length : 0
   const propLanes = typeof props.lanes === "number" ? props.lanes : 0
   const widthBasedLanes = Math.max(1, Math.round(widthM / 1.35))
-  const lanesCount = Math.max(1, propLanes, channelsCount, widthM > 2.0 ? widthBasedLanes : 1)
+  const lanesCount =
+    propLanes > 0 || channelsCount > 0
+      ? Math.max(1, propLanes, channelsCount)
+      : Math.max(1, widthM > 2.0 ? widthBasedLanes : 1)
   
   // Altura padrão por categoria/tipo caso não definida
   let heightM = phys.height
@@ -63,20 +66,24 @@ export function mapObjectToSpatial(
   const elevationM = phys.elevationZ || 0
 
   // Âncora universal no centro da base (Z=elevationM)
-  // No 2D: X cresce para a direita (tela), Y cresce para baixo (tela).
-  // No 3D (Z vertical, câmera olha de Y- para Y+):
-  //   • X 3D = X 2D (direita = direita)
-  //   • Y 3D = Y 2D (mesmo sentido; câmera posicionada em Y negativo olha para Y positivo)
-  // Mantemos o mesmo sinal para que esquerda/direita e topo/fundo sejam idênticos entre 2D e 3D.
-  const centerX = topLeftXM + widthM / 2
-  const centerY = topLeftYM + depthM / 2
-  const baseZ = elevationM
-
-  // Rotação em torno do eixo vertical Z
-  // No 2D, rotação positiva = horário (CW). No 3D com Z-up, rotação positiva = anti-horário (CCW) vista de cima.
-  // Negamos para manter correspondência visual: 90° no 2D = 90° CW no 3D vista de cima.
+  // No 2D (Konva):
+  //   • X cresce para a direita, Y cresce para baixo (top-left).
+  //   • A rotação positiva (rotDeg) gira no sentido HORÁRIO em torno da âncora top-left (obj.x, obj.y).
+  // No 3D (Three.js com Z para cima: camera.up = (0,0,1)):
+  //   • +X = direita (Leste), +Y = topo do mapa 2D (Norte), -Y = base do mapa 2D (Sul), +Z = altura.
+  //   • Portanto, X_3d = X_2d e Y_3d = -Y_2d, com rotação Z = -rotRad2D.
   const rotDeg = obj.rotation || 0
-  const rotRad = -(rotDeg * Math.PI) / 180
+  const rotRad2D = (rotDeg * Math.PI) / 180
+  const cosR = Math.cos(rotRad2D)
+  const sinR = Math.sin(rotRad2D)
+
+  const centerX2D = topLeftXM + (widthM / 2) * cosR - (depthM / 2) * sinR
+  const centerY2D = topLeftYM + (widthM / 2) * sinR + (depthM / 2) * cosR
+
+  const centerX = centerX2D
+  const centerY = -centerY2D
+  const baseZ = elevationM
+  const rotRad = -rotRad2D
 
   // Converte pontos de polígono (se houver) para metros relativos ao centro da base
   let pointsM: { x: number; y: number }[] | undefined
@@ -87,7 +94,7 @@ export function mapObjectToSpatial(
       const py = obj.points[i + 1]
       pointsM.push({
         x: px / ppm - widthM / 2,
-        y: py / ppm - depthM / 2,
+        y: -(py / ppm - depthM / 2),
       })
     }
   }
@@ -130,9 +137,16 @@ export function spatialToMapObjectPartial(
   const ppm = Math.max(1, pixelsPerMeter)
   const { width, depth, height } = spatial.dimensions
 
-  // Converte centro da base 3D de volta para Top-Left do 2D (mesmo sistema de coordenadas sem negação)
-  const topLeftXM = spatial.position.x - width / 2
-  const topLeftYM = spatial.position.y - depth / 2
+  const rotDeg = spatial.rotationZDeg || 0
+  const rotRad2D = (rotDeg * Math.PI) / 180
+  const cosR = Math.cos(rotRad2D)
+  const sinR = Math.sin(rotRad2D)
+
+  // Converte centro da base 3D de volta para Top-Left do 2D desfazendo a rotação e a inversão de Y
+  const centerX2D = spatial.position.x
+  const centerY2D = -spatial.position.y
+  const topLeftXM = centerX2D - ((width / 2) * cosR - (depth / 2) * sinR)
+  const topLeftYM = centerY2D - ((width / 2) * sinR + (depth / 2) * cosR)
 
   const xPx = Math.round(topLeftXM * ppm)
   const yPx = Math.round(topLeftYM * ppm)
@@ -146,7 +160,7 @@ export function spatialToMapObjectPartial(
     y: yPx,
     width: widthPx,
     height: heightPx,
-    rotation: Math.round((-spatial.rotationZDeg) % 360),
+    rotation: Math.round(((rotDeg % 360) + 360) % 360),
     physicalDimensions: {
       ...curDims,
       width,

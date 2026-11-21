@@ -7,7 +7,7 @@
 import React from "react"
 import Konva from "konva"
 import type { MapElementDefinition, SvgPreviewProps, MapObject } from "../types"
-import { MAP_COLORS } from "../types"
+import { MAP_COLORS, MAP_VIEWER_COLORS } from "../types"
 
 // ── 1. wall — Parede ─────────────────────────────────────────
 const wall: MapElementDefinition = {
@@ -35,7 +35,8 @@ const wall: MapElementDefinition = {
         strokeWidth: 2,
       })
     ),
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const colors = options?.readOnly ? MAP_VIEWER_COLORS : MAP_COLORS
     const group = new Konva.Group({ x: 0, y: 0 })
     group.add(
       new Konva.Rect({
@@ -43,8 +44,8 @@ const wall: MapElementDefinition = {
         y: 0,
         width: obj.width,
         height: obj.height,
-        fill: MAP_COLORS.wall.fill,
-        stroke: MAP_COLORS.wall.stroke,
+        fill: obj.color || colors.wall.fill,
+        stroke: obj.strokeColor || colors.wall.stroke,
         strokeWidth: 2,
       })
     )
@@ -102,7 +103,9 @@ const partition: MapElementDefinition = {
       React.createElement("g", { clipPath: "url(#partition-clip)" }, ...lines)
     )
   },
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
+    const colors = readOnly ? MAP_VIEWER_COLORS : MAP_COLORS
     const group = new Konva.Group({ x: 0, y: 0 })
     group.add(
       new Konva.Rect({
@@ -110,22 +113,24 @@ const partition: MapElementDefinition = {
         y: 0,
         width: obj.width,
         height: obj.height,
-        fill: "#334155",
-        stroke: MAP_COLORS.wall.stroke,
+        fill: readOnly ? "#475569" : "#334155",
+        stroke: colors.wall.stroke,
         strokeWidth: 1.5,
       })
     )
-    // Hachura diagonal
-    const spacing = 8
-    for (let i = -obj.height; i < obj.width + obj.height; i += spacing) {
-      group.add(
-        new Konva.Line({
-          points: [i, 0, i + obj.height, obj.height],
-          stroke: MAP_COLORS.wall.stroke,
-          strokeWidth: 0.8,
-          opacity: 0.7,
-        })
-      )
+    if (!readOnly) {
+      // Hachura diagonal (detalhe técnico de planta baixa no editor)
+      const spacing = 8
+      for (let i = -obj.height; i < obj.width + obj.height; i += spacing) {
+        group.add(
+          new Konva.Line({
+            points: [i, 0, i + obj.height, obj.height],
+            stroke: colors.wall.stroke,
+            strokeWidth: 0.8,
+            opacity: 0.7,
+          })
+        )
+      }
     }
     return group
   },
@@ -195,7 +200,9 @@ const door: MapElementDefinition = {
       })
     )
   },
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
+    const colors = readOnly ? MAP_VIEWER_COLORS : MAP_COLORS
     const group = new Konva.Group({ x: 0, y: 0 })
     const swing = (obj.props.swing as string) ?? "left"
     const wallThick = 4
@@ -206,7 +213,7 @@ const door: MapElementDefinition = {
     group.add(
       new Konva.Line({
         points: [0, 0, doorW, 0],
-        stroke: MAP_COLORS.wall.fill,
+        stroke: colors.wall.fill,
         strokeWidth: wallThick,
       })
     )
@@ -219,26 +226,28 @@ const door: MapElementDefinition = {
           swing === "left" ? doorW : 0,
           obj.height,
         ],
-        stroke: MAP_COLORS.door.stroke,
-        strokeWidth: 1,
+        stroke: colors.door.stroke,
+        strokeWidth: readOnly ? 2 : 1,
       })
     )
-    // Arco (90°): Konva.Arc usa ângulos em graus
-    group.add(
-      new Konva.Arc({
-        x: pivotX,
-        y: wallThick / 2,
-        innerRadius: 0,
-        outerRadius: doorW,
-        angle: 90,
-        rotation: swing === "left" ? 0 : 90,
-        fill: "transparent",
-        stroke: MAP_COLORS.door.stroke,
-        strokeWidth: 1,
-        dash: [3, 2],
-        opacity: 0.8,
-      })
-    )
+    if (!readOnly) {
+      // Arco tracejado de abertura (guia técnica de edição)
+      group.add(
+        new Konva.Arc({
+          x: pivotX,
+          y: wallThick / 2,
+          innerRadius: 0,
+          outerRadius: doorW,
+          angle: 90,
+          rotation: swing === "left" ? 0 : 90,
+          fill: "transparent",
+          stroke: colors.door.stroke,
+          strokeWidth: 1,
+          dash: [3, 2],
+          opacity: 0.8,
+        })
+      )
+    }
     return group
   },
 }
@@ -287,7 +296,8 @@ const window_: MapElementDefinition = {
       ...paneLines
     )
   },
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const colors = options?.readOnly ? MAP_VIEWER_COLORS : MAP_COLORS
     const group = new Konva.Group({ x: 0, y: 0 })
     const panes = (obj.props.panes as number) ?? 3
     group.add(
@@ -295,8 +305,8 @@ const window_: MapElementDefinition = {
         x: 0, y: 0,
         width: obj.width,
         height: obj.height,
-        fill: MAP_COLORS.window.fill,
-        stroke: MAP_COLORS.window.stroke,
+        fill: colors.window.fill,
+        stroke: colors.window.stroke,
         strokeWidth: 1.5,
       })
     )
@@ -305,7 +315,7 @@ const window_: MapElementDefinition = {
       group.add(
         new Konva.Line({
           points: [2, y, obj.width - 2, y],
-          stroke: MAP_COLORS.window.stroke,
+          stroke: colors.window.stroke,
           strokeWidth: 0.8,
           opacity: 0.9,
         })
@@ -355,7 +365,9 @@ const column: MapElementDefinition = {
       React.createElement("line", { x1: width - 2, y1: 2, x2: 2, y2: height - 2, stroke: MAP_COLORS.column.stroke, strokeWidth: 1 })
     )
   },
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
+    const colors = readOnly ? MAP_VIEWER_COLORS : MAP_COLORS
     const group = new Konva.Group({ x: 0, y: 0 })
     const shape = (obj.props.shape as string) ?? "square"
     const size = obj.width
@@ -365,26 +377,28 @@ const column: MapElementDefinition = {
       group.add(
         new Konva.Circle({
           x: r, y: r, radius: r,
-          fill: MAP_COLORS.column.fill,
-          stroke: MAP_COLORS.column.stroke,
+          fill: colors.column.fill,
+          stroke: colors.column.stroke,
           strokeWidth: 1.5,
         })
       )
-      // X interno
-      group.add(new Konva.Line({ points: [2, 2, size - 2, size - 2], stroke: MAP_COLORS.column.stroke, strokeWidth: 1 }))
-      group.add(new Konva.Line({ points: [size - 2, 2, 2, size - 2], stroke: MAP_COLORS.column.stroke, strokeWidth: 1 }))
+      if (!readOnly) {
+        group.add(new Konva.Line({ points: [2, 2, size - 2, size - 2], stroke: colors.column.stroke, strokeWidth: 1 }))
+        group.add(new Konva.Line({ points: [size - 2, 2, 2, size - 2], stroke: colors.column.stroke, strokeWidth: 1 }))
+      }
     } else {
       group.add(
         new Konva.Rect({
           x: 0, y: 0, width: size, height: size,
-          fill: MAP_COLORS.column.fill,
-          stroke: MAP_COLORS.column.stroke,
+          fill: colors.column.fill,
+          stroke: colors.column.stroke,
           strokeWidth: 1.5,
         })
       )
-      // X interno
-      group.add(new Konva.Line({ points: [2, 2, size - 2, size - 2], stroke: MAP_COLORS.column.stroke, strokeWidth: 1 }))
-      group.add(new Konva.Line({ points: [size - 2, 2, 2, size - 2], stroke: MAP_COLORS.column.stroke, strokeWidth: 1 }))
+      if (!readOnly) {
+        group.add(new Konva.Line({ points: [2, 2, size - 2, size - 2], stroke: colors.column.stroke, strokeWidth: 1 }))
+        group.add(new Konva.Line({ points: [size - 2, 2, 2, size - 2], stroke: colors.column.stroke, strokeWidth: 1 }))
+      }
     }
     return group
   },
@@ -444,7 +458,8 @@ const stairs: MapElementDefinition = {
       })
     )
   },
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
     const group = new Konva.Group({ x: 0, y: 0 })
     const steps = (obj.props.steps as number) ?? 8
     const stepH = obj.height / steps
@@ -452,8 +467,8 @@ const stairs: MapElementDefinition = {
     group.add(
       new Konva.Rect({
         x: 0, y: 0, width: obj.width, height: obj.height,
-        fill: "#1e293b",
-        stroke: "#64748b",
+        fill: readOnly ? "#475569" : "#1e293b",
+        stroke: readOnly ? "#cbd5e1" : "#64748b",
         strokeWidth: 1.5,
       })
     )
@@ -462,7 +477,7 @@ const stairs: MapElementDefinition = {
       group.add(
         new Konva.Line({
           points: [0, y, obj.width, y],
-          stroke: "#94a3b8",
+          stroke: readOnly ? "#e2e8f0" : "#94a3b8",
           strokeWidth: 1,
         })
       )
@@ -477,11 +492,11 @@ const stairs: MapElementDefinition = {
           obj.width / 2 + 6, arrowY + 10,
           obj.width / 2, arrowY,
         ],
-        fill: "#94a3b8",
-        stroke: "#94a3b8",
+        fill: readOnly ? "#38bdf8" : "#94a3b8",
+        stroke: readOnly ? "#38bdf8" : "#94a3b8",
         strokeWidth: 1,
         closed: true,
-        opacity: 0.8,
+        opacity: readOnly ? 0.95 : 0.8,
       })
     )
     return group
@@ -542,13 +557,14 @@ const ramp: MapElementDefinition = {
       })
     )
   },
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
     const group = new Konva.Group({ x: 0, y: 0 })
     group.add(
       new Konva.Rect({
         x: 0, y: 0, width: obj.width, height: obj.height,
-        fill: "#1e293b",
-        stroke: "#64748b",
+        fill: readOnly ? "#475569" : "#1e293b",
+        stroke: readOnly ? "#cbd5e1" : "#64748b",
         strokeWidth: 1.5,
       })
     )
@@ -557,14 +573,15 @@ const ramp: MapElementDefinition = {
     const ay = dir === "up" ? 6 : obj.height - 6
     const bx = dir === "up" ? 6 : obj.width - 6
     const by = dir === "up" ? obj.height - 6 : 6
+    const accent = readOnly ? "#38bdf8" : "#94a3b8"
 
-    group.add(new Konva.Line({ points: [bx, by, ax, ay], stroke: "#94a3b8", strokeWidth: 1.5 }))
+    group.add(new Konva.Line({ points: [bx, by, ax, ay], stroke: accent, strokeWidth: 1.5 }))
     // Ponta da seta
     group.add(
       new Konva.Line({
         points: [ax, ay, ax - 10 * (dir === "up" ? 0 : -1), ay, ax, ay + 10],
-        stroke: "#94a3b8",
-        fill: "#94a3b8",
+        stroke: accent,
+        fill: accent,
         strokeWidth: 1,
         closed: true,
       })
@@ -575,7 +592,7 @@ const ramp: MapElementDefinition = {
         points: dir === "up"
           ? [0, obj.height, obj.width * 0.3, obj.height]
           : [obj.width * 0.7, 0, obj.width, 0],
-        stroke: "#64748b",
+        stroke: readOnly ? "#cbd5e1" : "#64748b",
         strokeWidth: 2,
       })
     )
@@ -626,22 +643,25 @@ const gate: MapElementDefinition = {
         : React.createElement("line", { x1: poleW, y1: height / 2, x2: width - poleW, y2: height / 2, stroke: "#94a3b8", strokeWidth: 2 })
     )
   },
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
+    const colors = readOnly ? MAP_VIEWER_COLORS : MAP_COLORS
     const group = new Konva.Group({ x: 0, y: 0 })
     const poleW = obj.width * 0.12
     const gateType = (obj.props.type as string) ?? "single"
     const midX = obj.width / 2
+    const leafStroke = readOnly ? "#f59e0b" : "#94a3b8"
 
     // Batentes
-    group.add(new Konva.Rect({ x: 0, y: 0, width: poleW, height: obj.height, fill: MAP_COLORS.wall.fill, stroke: MAP_COLORS.wall.stroke, strokeWidth: 1.5 }))
-    group.add(new Konva.Rect({ x: obj.width - poleW, y: 0, width: poleW, height: obj.height, fill: MAP_COLORS.wall.fill, stroke: MAP_COLORS.wall.stroke, strokeWidth: 1.5 }))
+    group.add(new Konva.Rect({ x: 0, y: 0, width: poleW, height: obj.height, fill: colors.wall.fill, stroke: colors.wall.stroke, strokeWidth: 1.5 }))
+    group.add(new Konva.Rect({ x: obj.width - poleW, y: 0, width: poleW, height: obj.height, fill: colors.wall.fill, stroke: colors.wall.stroke, strokeWidth: 1.5 }))
 
     // Folhas
     if (gateType === "double") {
-      group.add(new Konva.Line({ points: [poleW, obj.height / 2, midX - 2, obj.height / 2], stroke: "#94a3b8", strokeWidth: 2 }))
-      group.add(new Konva.Line({ points: [midX + 2, obj.height / 2, obj.width - poleW, obj.height / 2], stroke: "#94a3b8", strokeWidth: 2 }))
+      group.add(new Konva.Line({ points: [poleW, obj.height / 2, midX - 2, obj.height / 2], stroke: leafStroke, strokeWidth: 2 }))
+      group.add(new Konva.Line({ points: [midX + 2, obj.height / 2, obj.width - poleW, obj.height / 2], stroke: leafStroke, strokeWidth: 2 }))
     } else {
-      group.add(new Konva.Line({ points: [poleW, obj.height / 2, obj.width - poleW, obj.height / 2], stroke: "#94a3b8", strokeWidth: 2 }))
+      group.add(new Konva.Line({ points: [poleW, obj.height / 2, obj.width - poleW, obj.height / 2], stroke: leafStroke, strokeWidth: 2 }))
     }
     return group
   },
@@ -681,25 +701,28 @@ const elevator: MapElementDefinition = {
       })
     )
   },
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
     const group = new Konva.Group({ x: 0, y: 0 })
     const pad = 4
     const cx = obj.width / 2
     const cy = obj.height / 2
+    const borderCol = readOnly ? "#cbd5e1" : "#64748b"
+    const accentCol = readOnly ? "#38bdf8" : "#94a3b8"
 
     // Borda externa
-    group.add(new Konva.Rect({ x: 0, y: 0, width: obj.width, height: obj.height, fill: "#1e293b", stroke: "#64748b", strokeWidth: 2 }))
+    group.add(new Konva.Rect({ x: 0, y: 0, width: obj.width, height: obj.height, fill: readOnly ? "#334155" : "#1e293b", stroke: borderCol, strokeWidth: 2 }))
     // Borda interna
-    group.add(new Konva.Rect({ x: pad, y: pad, width: obj.width - pad * 2, height: obj.height - pad * 2, fill: "transparent", stroke: "#64748b", strokeWidth: 1 }))
+    group.add(new Konva.Rect({ x: pad, y: pad, width: obj.width - pad * 2, height: obj.height - pad * 2, fill: "transparent", stroke: borderCol, strokeWidth: 1 }))
     // Cruz
-    group.add(new Konva.Line({ points: [pad, cy, obj.width - pad, cy], stroke: "#94a3b8", strokeWidth: 1 }))
-    group.add(new Konva.Line({ points: [cx, pad, cx, obj.height - pad], stroke: "#94a3b8", strokeWidth: 1 }))
+    group.add(new Konva.Line({ points: [pad, cy, obj.width - pad, cy], stroke: accentCol, strokeWidth: 1 }))
+    group.add(new Konva.Line({ points: [cx, pad, cx, obj.height - pad], stroke: accentCol, strokeWidth: 1 }))
     // Seta vertical
     group.add(
       new Konva.Line({
         points: [cx, pad + 4, cx - 5, pad + 12, cx + 5, pad + 12, cx, pad + 4],
-        fill: "#94a3b8",
-        stroke: "#94a3b8",
+        fill: accentCol,
+        stroke: accentCol,
         strokeWidth: 1,
         closed: true,
       })
@@ -761,7 +784,9 @@ const delimited_area: MapElementDefinition = {
       )
     )
   },
-  renderKonva: (obj: MapObject) => {
+  renderKonva: (obj: MapObject, options) => {
+    const readOnly = Boolean(options?.readOnly)
+    const colors = readOnly ? MAP_VIEWER_COLORS : MAP_COLORS
     const group = new Konva.Group({ x: 0, y: 0 })
     const borderStyle = (obj.props.borderStyle as string) ?? "dashed"
     const dashMap: Record<string, number[]> = {
@@ -769,15 +794,15 @@ const delimited_area: MapElementDefinition = {
       solid: [],
       dotted: [2, 3],
     }
-    const dash = dashMap[borderStyle] ?? [6, 3]
+    const dash = readOnly ? [] : (dashMap[borderStyle] ?? [6, 3])
 
     group.add(
       new Konva.Rect({
         x: 0, y: 0,
         width: obj.width,
         height: obj.height,
-        fill: MAP_COLORS.area.fill,
-        stroke: MAP_COLORS.area.stroke,
+        fill: obj.color || colors.area.fill,
+        stroke: obj.strokeColor || colors.area.stroke,
         strokeWidth: 1.5,
         dash: dash.length > 0 ? dash : undefined,
       })
@@ -792,7 +817,7 @@ const delimited_area: MapElementDefinition = {
           width: obj.width,
           text: label,
           align: "center",
-          fill: MAP_COLORS.area.stroke,
+          fill: obj.strokeColor || colors.area.stroke,
           fontSize: 12,
           fontFamily: "sans-serif",
           opacity: 0.9,
