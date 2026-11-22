@@ -6,6 +6,7 @@
 "use client"
 
 import React from "react"
+import type { SpatialViewMode } from "../Map3D/types"
 
 interface MapToolbarProps {
   tool: "select" | "pan" | "draw_area" | "draw_floor"
@@ -13,9 +14,9 @@ interface MapToolbarProps {
   gridSize: number
   zoom: number
   objectsCount: number
-  spatialMode?: "2d" | "isometric" | "3d"
+  spatialMode?: SpatialViewMode
   readOnly?: boolean
-  onSpatialModeChange?: (mode: "2d" | "isometric" | "3d") => void
+  onSpatialModeChange?: (mode: SpatialViewMode) => void
   onToolChange: (tool: "select" | "pan" | "draw_area" | "draw_floor") => void
   onToggleSnap: () => void
   onGridSizeChange: (size: number) => void
@@ -78,8 +79,47 @@ export default function MapToolbar({
       <div className="h-12 bg-slate-900 border-b border-slate-800 px-3 flex items-center justify-between text-slate-100 select-none shrink-0 gap-2">
         {/* Esquerda: Modos de Visualização & Interação (Leitura) */}
         <div className="flex items-center gap-2">
-          {/* Alternador 2D · Isométrico · 3D Livre */}
+          {/* Alternador Bird's-Eye 3D · Full Top · 3D Livre · 2D */}
           <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800 gap-0.5 shadow-inner">
+            <button
+              onClick={() => onSpatialModeChange?.("birdseye")}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all ${
+                spatialMode === "birdseye"
+                  ? "bg-emerald-600 text-white shadow-sm"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+              title="Bird's-Eye 3D (Padrão) — Câmera ortográfica superior com inclinação fixa de 20°"
+            >
+              <span>🦅</span>
+              <span>Bird&apos;s-Eye 3D</span>
+            </button>
+
+            <button
+              onClick={() => onSpatialModeChange?.("fulltop")}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all ${
+                spatialMode === "fulltop"
+                  ? "bg-sky-600 text-white shadow-sm"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+              title="Full Top — Câmera ortográfica estritamente vertical a 90°"
+            >
+              <span>🗺️</span>
+              <span>Full Top</span>
+            </button>
+
+            <button
+              onClick={() => onSpatialModeChange?.("3d")}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all ${
+                spatialMode === "3d"
+                  ? "bg-purple-600 text-white shadow-sm"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+              title="3D Livre — Câmera Perspectiva com movimentação orbital 360°"
+            >
+              <span>🌐</span>
+              <span>3D Livre</span>
+            </button>
+
             <button
               onClick={() => onSpatialModeChange?.("2d")}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all ${
@@ -87,36 +127,10 @@ export default function MapToolbar({
                   ? "bg-blue-600 text-white shadow-sm"
                   : "text-slate-400 hover:text-slate-200"
               }`}
-              title="Visualização 2D — Planta Superior"
+              title="Visualização 2D — Planta Konva"
             >
               <span>📐</span>
               <span>2D</span>
-            </button>
-
-            <button
-              onClick={() => onSpatialModeChange?.("isometric")}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all ${
-                spatialMode === "isometric"
-                  ? "bg-purple-600 text-white shadow-sm"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
-              title="Visualização Isométrica Técnica"
-            >
-              <span>🧊</span>
-              <span>Isométrico</span>
-            </button>
-
-            <button
-              onClick={() => onSpatialModeChange?.("3d")}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all ${
-                spatialMode === "3d"
-                  ? "bg-emerald-600 text-white shadow-sm"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
-              title="Visualização 3D Livre com Navegação Orbital 360°"
-            >
-              <span>🌐</span>
-              <span>3D Livre</span>
             </button>
           </div>
 
@@ -224,7 +238,7 @@ export default function MapToolbar({
     <div className="h-12 bg-slate-900 border-b border-slate-800 px-3 flex items-center justify-between text-slate-100 select-none shrink-0 gap-2">
       {/* Esquerda: Modos de Visualização & Interação */}
       <div className="flex items-center gap-2">
-        {/* Alternador Compacto de Visualização: 2D · Isométrico · 3D Livre */}
+        {/* Alternador Compacto de Visualização: 2D · Bird's-Eye 3D · Full Top · 3D Livre */}
         <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800 gap-0.5 shadow-inner">
           <button
             onClick={() => onSpatialModeChange?.("2d")}
@@ -233,33 +247,46 @@ export default function MapToolbar({
                 ? "bg-blue-600 text-white shadow-sm"
                 : "text-slate-400 hover:text-slate-200"
             }`}
-            title="Visualização 2D — Planta Superior"
+            title="Editor 2D — Planta Konva"
           >
             <span>📐</span>
             <span>2D</span>
           </button>
 
           <button
-            onClick={() => onSpatialModeChange?.("isometric")}
+            onClick={() => onSpatialModeChange?.("birdseye")}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all ${
-              spatialMode === "isometric"
-                ? "bg-purple-600 text-white shadow-sm"
+              spatialMode === "birdseye"
+                ? "bg-emerald-600 text-white shadow-sm"
                 : "text-slate-400 hover:text-slate-200"
             }`}
-            title="Visualização Isométrica Técnica — Câmera Ortográfica Axonométrica"
+            title="Bird's-Eye 3D (Padrão) — Câmera ortográfica superior com inclinação fixa de 20°"
           >
-            <span>🧊</span>
-            <span>Isométrico</span>
+            <span>🦅</span>
+            <span>Bird&apos;s-Eye 3D</span>
+          </button>
+
+          <button
+            onClick={() => onSpatialModeChange?.("fulltop")}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all ${
+              spatialMode === "fulltop"
+                ? "bg-sky-600 text-white shadow-sm"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+            title="Full Top — Câmera ortográfica estritamente vertical a 90°"
+          >
+            <span>🗺️</span>
+            <span>Full Top</span>
           </button>
 
           <button
             onClick={() => onSpatialModeChange?.("3d")}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all ${
               spatialMode === "3d"
-                ? "bg-emerald-600 text-white shadow-sm"
+                ? "bg-purple-600 text-white shadow-sm"
                 : "text-slate-400 hover:text-slate-200"
             }`}
-            title="Visualização 3D Livre — Câmera Perspectiva com Navegação Orbital 360°"
+            title="3D Livre — Câmera Perspectiva com movimentação orbital 360°"
           >
             <span>🌐</span>
             <span>3D Livre</span>

@@ -1,12 +1,12 @@
 // =============================================================================
 // NEXUS ERP — MOTOR UNIVERSAL DE VISUALIZAÇÃO ESPACIAL
-// 2D · ISOMÉTRICO · 3D LIVRE
+// 2D · BIRD'S-EYE 3D · FULL TOP · 3D LIVRE
 // types.ts — Tipos espaciais universais, contratos de geometria e câmeras
 // =============================================================================
 
 import type { MapObject, MapCategory, PhysicalDimensions } from "../MapLibrary/types"
 
-export type SpatialViewMode = "2d" | "isometric" | "3d"
+export type SpatialViewMode = "2d" | "birdseye" | "fulltop" | "3d"
 
 export interface Vector3M {
   x: number // Metros (largura)

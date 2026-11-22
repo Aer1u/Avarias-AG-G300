@@ -27,7 +27,7 @@ import type {
 import { DEFAULT_G300_RULE } from "../MapLibrary/addressing"
 import MapLibraryPanel from "../MapLibrary/MapLibraryPanel"
 import MapCanvasContainer, { type MapCanvasHandle } from "../MapCanvas/MapCanvasContainer"
-import { SpatialViewer3D } from "../Map3D/SpatialViewer3D"
+import { SpatialViewer3D, type SpatialViewer3DHandle } from "../Map3D/SpatialViewer3D"
 import type { SpatialViewMode } from "../Map3D/types"
 import MapPropertiesPanel from "../MapProperties/MapPropertiesPanel"
 import MapToolbar from "../MapToolbar/MapToolbar"
@@ -361,7 +361,7 @@ export default function UniversalMapEditor({
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null)
-  const [spatialMode, setSpatialMode] = useState<SpatialViewMode>("2d")
+  const [spatialMode, setSpatialMode] = useState<SpatialViewMode>(readOnly ? "birdseye" : "2d")
   const [tool, setTool] = useState<"select" | "pan" | "draw_area" | "draw_floor">("select")
   const [snapEnabled, setSnapEnabled] = useState(true)
   const [gridSize, setGridSize] = useState(20)
@@ -592,8 +592,9 @@ export default function UniversalMapEditor({
   const { can, activeUser, primaryRole, isPlatformOwner, isPlatformAdmin } = useAuthz("MAP-LAB-01")
   const canViewIAM = isPlatformOwner || isPlatformAdmin || can('workspace.manage_roles')
 
-  // Ref para o canvas (navegação programática)
+  // Ref para os renderizadores 2D Konva e 3D Three.js (navegação programática)
   const canvasRef = useRef<MapCanvasHandle>(null)
+  const viewer3DRef = useRef<SpatialViewer3DHandle>(null)
 
   const selectedObject = objects.find((o) => o.id === selectedId) || null
 
@@ -794,15 +795,22 @@ export default function UniversalMapEditor({
   }, [])
 
   // ── Busca Universal: Localizar e Navegar ─────────────────────
-  const handleSelectAndLocate = useCallback((obj: MapObject, channelId?: string | null) => {
-    setSelectedId(obj.id)
-    setSelectedChannelId(channelId ?? null)
-    setIsSearchOpen(false)
-    // Aguarda frame para o canvas ter o nó renderizado
-    requestAnimationFrame(() => {
-      canvasRef.current?.navigateTo(obj)
-    })
-  }, [])
+  const handleSelectAndLocate = useCallback(
+    (obj: MapObject, channelId?: string | null) => {
+      setSelectedId(obj.id)
+      setSelectedChannelId(channelId ?? null)
+      setIsSearchOpen(false)
+      // Aguarda frame para o renderizador ativo ter o nó atualizado
+      requestAnimationFrame(() => {
+        if (spatialMode === "2d") {
+          canvasRef.current?.navigateTo(obj)
+        } else {
+          viewer3DRef.current?.navigateToObject(obj)
+        }
+      })
+    },
+    [spatialMode]
+  )
 
   const handleLocateById = useCallback((objId: string) => {
     const found = objects.find((o) => o.id === objId)
@@ -1246,10 +1254,22 @@ export default function UniversalMapEditor({
         onToolChange={setTool}
         onToggleSnap={() => setSnapEnabled((v) => !v)}
         onGridSizeChange={setGridSize}
-        onZoomIn={() => setZoom((z) => Math.min(z + 15, 400))}
-        onZoomOut={() => setZoom((z) => Math.max(z - 15, 20))}
-        onZoomReset={() => setZoom(100)}
-        onFitToScreen={() => canvasRef.current?.fitToScreen()}
+        onZoomIn={() => {
+          if (spatialMode === "2d") setZoom((z) => Math.min(z + 15, 400))
+          else viewer3DRef.current?.zoomIn()
+        }}
+        onZoomOut={() => {
+          if (spatialMode === "2d") setZoom((z) => Math.max(z - 15, 20))
+          else viewer3DRef.current?.zoomOut()
+        }}
+        onZoomReset={() => {
+          if (spatialMode === "2d") setZoom(100)
+          else viewer3DRef.current?.resetZoom()
+        }}
+        onFitToScreen={() => {
+          if (spatialMode === "2d") canvasRef.current?.fitToScreen()
+          else viewer3DRef.current?.fitToScreen()
+        }}
         onClear={() => { resetHistory([]); setSelectedId(null) }}
         onLoadTemplate={handleLoadTemplate}
         onOpenMassGenerator={() => setIsMassGenOpen(true)}
@@ -1276,7 +1296,7 @@ export default function UniversalMapEditor({
               <span>Modo Visualizador</span>
             </span>
             <span className="text-slate-400">
-              Navegação livre e inspeção (2D, 3D e Isométrico) · Alterações bloqueadas
+              Navegação e inspeção espacial (Bird&apos;s-Eye 3D, Full Top, 3D Livre e 2D) · Alterações bloqueadas
             </span>
             <span className="text-slate-600">· {objects.length} objetos</span>
             <div className="ml-auto flex items-center gap-2">
@@ -1391,7 +1411,12 @@ export default function UniversalMapEditor({
                 onToggleVisibility={handleToggleVisibility}
                 onToggleAllVisibility={handleToggleAllVisibility}
                 onOpenDriveInGrid={(obj, chanId) =>
-                  setDriveInModalState({ isOpen: true, object: obj, initialChannelId: chanId })
+                  setDriveInModalState({
+                    isOpen: true,
+                    object: obj,
+                    initialChannelId:
+                      chanId || (obj.id === selectedId ? selectedChannelId || undefined : undefined),
+                  })
                 }
               />
             </div>
@@ -1457,53 +1482,95 @@ export default function UniversalMapEditor({
           </div>
         )}
 
-        {/* Renderizador Espacial Universal: 2D Konva ou 3D Three.js (Isométrico / 3D Livre) */}
-        {spatialMode === "2d" ? (
-          <MapCanvasContainer
-            ref={canvasRef}
-            objects={objects}
-            selectedId={selectedId}
-            selectedChannelId={selectedChannelId}
-            snapEnabled={snapEnabled}
-            gridSize={gridSize}
-            zoom={zoom}
-            tool={tool}
-            readOnly={readOnly}
-            onToolChange={setTool}
-            onSelect={handleSelect}
-            onUpdateObject={handleUpdateObjectById}
-            onZoomChange={setZoom}
-            onAddObject={handleAddObject}
-          />
-        ) : (
-          <SpatialViewer3D
-            mode={spatialMode}
-            objects={objects}
-            selectedId={selectedId}
-            selectedChannelId={selectedChannelId}
-            snapEnabled={snapEnabled}
-            gridSize={gridSize}
-            readOnly={readOnly}
-            onSelect={handleSelect}
-            onUpdateObject={handleUpdateObjectById}
-            onModeChange={setSpatialMode}
-          />
-        )}
+        {/* Renderizador Espacial Universal: 2D Konva ou 3D Three.js (Bird's-Eye 3D / Full Top / 3D Livre) */}
+        <div className="flex-1 relative flex overflow-hidden min-w-0">
+          {spatialMode === "2d" ? (
+            <MapCanvasContainer
+              ref={canvasRef}
+              objects={objects}
+              selectedId={selectedId}
+              selectedChannelId={selectedChannelId}
+              snapEnabled={snapEnabled}
+              gridSize={gridSize}
+              zoom={zoom}
+              tool={tool}
+              readOnly={readOnly}
+              onToolChange={setTool}
+              onSelect={handleSelect}
+              onUpdateObject={handleUpdateObjectById}
+              onZoomChange={setZoom}
+              onAddObject={handleAddObject}
+            />
+          ) : (
+            <SpatialViewer3D
+              ref={viewer3DRef}
+              mode={spatialMode}
+              objects={objects}
+              selectedId={selectedId}
+              selectedChannelId={selectedChannelId}
+              readOnly={readOnly}
+              onSelect={handleSelect}
+              onModeChange={setSpatialMode}
+            />
+          )}
 
-        {/* Pill Flutuante de Acesso Rápido (Modo Visualizador) */}
-        {readOnly && selectedObject && (selectedObject.type === "drive_in" || selectedObject.category === "storage") && (() => {
-          if (selectedObject.type === "compartment") {
-            const compLabel = String(selectedObject.props?.label || selectedObject.label || selectedObject.id)
+          {/* Pill Flutuante de Acesso Rápido na Parte Superior (Modo Visualizador) */}
+          {readOnly && selectedObject && (selectedObject.type === "drive_in" || selectedObject.category === "storage") && (() => {
+            if (selectedObject.type === "compartment") {
+              const compLabel = String(selectedObject.props?.label || selectedObject.label || selectedObject.id)
+              return (
+                <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 max-w-[calc(100%-2rem)] bg-slate-900/95 border border-amber-500/80 shadow-2xl rounded-2xl px-4 py-2 flex items-center gap-3 backdrop-blur-md animate-in fade-in slide-in-from-top-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-base shrink-0">📦</span>
+                    <div className="min-w-0">
+                      <span className="text-xs font-bold text-white block truncate">
+                        {compLabel}
+                      </span>
+                      <span className="text-[10px] text-amber-300/90 font-mono block truncate">
+                        Armazenamento Aberto · Sem nível / profundidade
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() =>
+                      setDriveInModalState({
+                        isOpen: true,
+                        object: selectedObject,
+                      })
+                    }
+                    className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer shrink-0"
+                  >
+                    <span>Abrir Relação</span>
+                    <span>→</span>
+                  </button>
+                  <button
+                    onClick={() => handleSelect(null, null)}
+                    className="px-2 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold transition-colors cursor-pointer shrink-0"
+                    title="Deselecionar"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )
+            }
+
+            const channels = ensureDriveChannels(selectedObject)
+            const currentChannel = selectedChannelId
+              ? channels.find((c) => c.id === selectedChannelId || c.code === selectedChannelId) || channels[0]
+              : channels[0]
+            const chanTitle = currentChannel?.name || currentChannel?.code || selectedObject.label || selectedObject.id
+            const chanCap = currentChannel?.capacity || Number(selectedObject.props?.capacity) || 16
+
             return (
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 bg-slate-900/95 border border-amber-500/80 shadow-2xl rounded-2xl px-4 py-2.5 flex items-center gap-3 backdrop-blur-md animate-in fade-in slide-in-from-bottom-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-base">📦</span>
-                  <div>
-                    <span className="text-xs font-bold text-white block">
-                      {compLabel}
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 max-w-[calc(100%-2rem)] bg-slate-900/95 border border-blue-500/80 shadow-2xl rounded-2xl px-4 py-2 flex items-center gap-3 backdrop-blur-md animate-in fade-in slide-in-from-top-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-base shrink-0">📥</span>
+                  <div className="min-w-0">
+                    <span className="text-xs font-bold text-white block truncate">
+                      {chanTitle}
                     </span>
-                    <span className="text-[10px] text-amber-300/90 font-mono">
-                      Armazenamento Aberto · Sem nível / profundidade
+                    <span className="text-[10px] text-slate-400 font-mono block truncate">
+                      {chanCap} Paletes · {selectedObject.label || selectedObject.id}
                     </span>
                   </div>
                 </div>
@@ -1512,60 +1579,25 @@ export default function UniversalMapEditor({
                     setDriveInModalState({
                       isOpen: true,
                       object: selectedObject,
+                      initialChannelId: currentChannel?.code || currentChannel?.id,
                     })
                   }
-                  className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+                  className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer shrink-0"
                 >
-                  <span>Abrir Relação</span>
+                  <span>Abrir Grid do Canal (G300)</span>
                   <span>→</span>
+                </button>
+                <button
+                  onClick={() => handleSelect(null, null)}
+                  className="px-2 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold transition-colors cursor-pointer shrink-0"
+                  title="Deselecionar canal"
+                >
+                  ✕
                 </button>
               </div>
             )
-          }
-
-          const channels = ensureDriveChannels(selectedObject)
-          const currentChannel = selectedChannelId
-            ? channels.find((c) => c.id === selectedChannelId || c.code === selectedChannelId) || channels[0]
-            : channels[0]
-          const chanTitle = currentChannel?.name || currentChannel?.code || selectedObject.label || selectedObject.id
-          const chanCap = currentChannel?.capacity || Number(selectedObject.props?.capacity) || 16
-
-          return (
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 bg-slate-900/95 border border-blue-500/80 shadow-2xl rounded-2xl px-4 py-2.5 flex items-center gap-3 backdrop-blur-md animate-in fade-in slide-in-from-bottom-2">
-              <div className="flex items-center gap-2">
-                <span className="text-base">📥</span>
-                <div>
-                  <span className="text-xs font-bold text-white block">
-                    {chanTitle}
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-mono">
-                    {chanCap} Paletes · {selectedObject.label || selectedObject.id}
-                  </span>
-                </div>
-              </div>
-              <button
-                onClick={() =>
-                  setDriveInModalState({
-                    isOpen: true,
-                    object: selectedObject,
-                    initialChannelId: currentChannel?.code || currentChannel?.id,
-                  })
-                }
-                className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
-              >
-                <span>Abrir Grid do Canal (G300)</span>
-                <span>→</span>
-              </button>
-              <button
-                onClick={() => handleSelect(null, null)}
-                className="px-2 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold transition-colors cursor-pointer"
-                title="Deselecionar canal"
-              >
-                ✕
-              </button>
-            </div>
-          )
-        })()}
+          })()}
+        </div>
 
         {/* Splitter arrastável da Direita (Apenas no Modo Editor) */}
         {!readOnly && !isRightCollapsed && (

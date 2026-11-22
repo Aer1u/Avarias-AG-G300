@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useRef, useMemo } from "react"
+import React, { useState, useRef, useMemo, useEffect } from "react"
 import {
   ArrowLeft,
   Lock,
@@ -47,6 +47,8 @@ interface MapeamentoDriveInGridProps {
     target: { lvl: number; d: number }
   ) => void
   isLoggedIn?: boolean
+  fitToViewport?: boolean
+  sidePreview?: React.ReactNode
 }
 
 export function MapeamentoDriveInGrid({
@@ -68,6 +70,8 @@ export function MapeamentoDriveInGrid({
   onDeleteItem,
   onSwapItems,
   isLoggedIn = false,
+  fitToViewport = false,
+  sidePreview,
 }: MapeamentoDriveInGridProps) {
   const effectiveStartLevel = startLevel ?? (levelsConfig ? 1 : 0)
   const [selectedCoords, setSelectedCoords] = useState<{ lvl: number; d: number } | null>(null)
@@ -94,6 +98,28 @@ export function MapeamentoDriveInGrid({
   // Drag and drop tracking
   const justDragged = useRef(false)
   const [draggingCoords, setDraggingCoords] = useState<{ lvl: number; d: number } | null>(null)
+
+  // Medição dinâmica do container central útil (considerando painel lateral direito e cabeçalho)
+  const gridViewportRef = useRef<HTMLDivElement>(null)
+  const [viewportSize, setViewportSize] = useState<{ w: number; h: number } | null>(null)
+
+  useEffect(() => {
+    if (!fitToViewport) return
+    const el = gridViewportRef.current
+    if (!el) return
+    const ro = new ResizeObserver(entries => {
+      const rect = entries[0]?.contentRect
+      if (rect && rect.width > 0 && rect.height > 0) {
+        setViewportSize(prev =>
+          prev && Math.abs(prev.w - rect.width) < 2 && Math.abs(prev.h - rect.height) < 2
+            ? prev
+            : { w: rect.width, h: rect.height }
+        )
+      }
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [fitToViewport])
 
   const totalLevels = Math.max(1, levelCount)
   const maxAllowedLevel = effectiveStartLevel + totalLevels - 1
@@ -278,6 +304,50 @@ export function MapeamentoDriveInGrid({
     }
   }
 
+  const isDenseGrid = fitToViewport && (levels.length >= 6 || depths.length >= 7)
+
+  // Dimensionamento dinâmico proporcional das células baseado no espaço útil real do container central
+  const gridMetrics = useMemo(() => {
+    if (!fitToViewport || !viewportSize) return null
+    const cols = Math.max(1, depths.length)
+    const rows = Math.max(1, levels.length)
+    const LABEL_COL_W = 42
+    const FRONT_COL_W = 42
+    const VERT_CHROME = 76
+    const gap = Math.max(
+      6,
+      Math.min(12, Math.round(Math.min(viewportSize.w, viewportSize.h) * 0.016))
+    )
+
+    const usableW = Math.max(160, viewportSize.w - LABEL_COL_W - FRONT_COL_W - 18)
+    const usableH = Math.max(140, viewportSize.h - VERT_CHROME)
+
+    const rawCellW = (usableW - (cols - 1) * gap) / cols
+    const rawCellH = (usableH - (rows - 1) * gap) / rows
+
+    const MIN_CELL = 44
+    const MAX_CELL_W = 220
+    const MAX_CELL_H = 175
+
+    let cellW = Math.min(rawCellW, rawCellH * 1.45, MAX_CELL_W)
+    let cellH = Math.min(rawCellH, cellW * 1.25, MAX_CELL_H)
+    cellW = Math.max(Math.min(rawCellW, MIN_CELL), Math.floor(cellW))
+    cellH = Math.max(Math.min(rawCellH, MIN_CELL), Math.floor(cellH))
+
+    const gridInnerWidth = LABEL_COL_W + cols * cellW + (cols - 1) * gap + FRONT_COL_W + gap
+    return {
+      labelColW: LABEL_COL_W,
+      frontColW: FRONT_COL_W,
+      gap,
+      cellW,
+      cellH,
+      gridInnerWidth,
+    }
+  }, [fitToViewport, viewportSize, depths.length, levels.length])
+
+  const cellMinDim = gridMetrics ? Math.min(gridMetrics.cellW, gridMetrics.cellH) : 84
+  const isLargeCell = fitToViewport && cellMinDim >= 98
+
   if (isBlocked) {
     return (
       <div className="flex flex-col items-center justify-center py-20 bg-slate-50/50 dark:bg-slate-800/10 rounded-[2.5rem] border border-dashed border-slate-200 dark:border-slate-700">
@@ -294,8 +364,350 @@ export function MapeamentoDriveInGrid({
     )
   }
 
+  const renderGridCell = (lvl: number, d: number) => {
+    const cellItems = grid[lvl]?.[d] || []
+    const isEmpty = cellItems.length === 0
+    const isSelected = selectedCoords?.lvl === lvl && selectedCoords?.d === d
+    const isGridSelected = selectedGaps.has(`${lvl}-${d}`)
+    const firstItem = cellItems[0]
+    const isMixed = new Set(cellItems.map(p => p.sku)).size > 1
+    const sku = !isEmpty
+      ? isMixed
+        ? `${new Set(cellItems.map(p => p.sku)).size} SKUs`
+        : firstItem.sku
+      : ""
+    const qty = !isEmpty ? cellItems.reduce((sum, p) => sum + p.quantidade, 0) : 0
+    const hasTilted = cellItems.some(p => Number(p.customValues?.qtd_tombada) > 0)
+    const hasWet = cellItems.some(p => Number(p.customValues?.qtd_molhado) > 0)
+
+    return (
+      <div
+        key={`cell-${lvl}-${d}`}
+        data-grid-slot="true"
+        data-lvl={lvl}
+        data-d={d}
+        onClick={() => {
+          if (justDragged.current) return
+          if (isEditModeActive) {
+            if (selectedGaps.size > 0 || isEmpty) {
+              toggleGapSelection(lvl, d)
+            } else {
+              setSelectedCoords(isSelected ? null : { lvl, d })
+            }
+          } else if (!isEmpty) {
+            setSelectedCoords(isSelected ? null : { lvl, d })
+          } else {
+            setSelectedCoords(null)
+          }
+        }}
+        className={cn(
+          fitToViewport
+            ? "w-full h-full min-w-0 min-h-0 rounded-lg md:rounded-xl border relative group flex items-center justify-center p-0.5 sm:p-1 text-center transition-all duration-200 cursor-pointer overflow-hidden"
+            : "w-16 h-16 sm:w-28 sm:h-28 md:w-28 md:h-28 rounded-lg md:rounded-xl border relative group flex items-center justify-center p-0.5 sm:p-2 text-center transition-all duration-200 cursor-pointer shrink-0",
+          isEmpty
+            ? "bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800"
+            : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700",
+          !isEditModeActive && !draggingCoords && (fitToViewport ? "hover:brightness-110" : "hover:scale-[1.04]"),
+          isSelected && "border-[3px] border-blue-600 dark:border-blue-500 z-20",
+          !fitToViewport && isSelected && "scale-[1.02]",
+          isGridSelected &&
+            "border-orange-500 ring-2 sm:ring-4 ring-orange-500/10 bg-orange-50/5 dark:bg-orange-950/10 z-20",
+          draggingCoords?.lvl === lvl && draggingCoords?.d === d && "z-[60]"
+        )}
+      >
+        {isEditModeActive && (
+          <div
+            className={cn(
+              "absolute z-30 cursor-pointer rounded-lg hover:bg-orange-500/20 transition-colors",
+              fitToViewport ? "top-0.5 right-0.5 p-0.5" : "top-1.5 right-1.5 p-1"
+            )}
+            onClick={e => {
+              e.stopPropagation()
+              toggleGapSelection(lvl, d)
+            }}
+            title="Selecionar para ação em lote"
+          >
+            {isGridSelected ? (
+              <div className="bg-orange-500 text-white rounded-md p-0.5 shadow-sm">
+                <Check size={fitToViewport ? 10 : 12} strokeWidth={4} />
+              </div>
+            ) : (
+              <div className="bg-white/50 dark:bg-slate-800/50 text-slate-300 dark:text-slate-600 rounded-md p-0.5 opacity-40 group-hover:opacity-100 transition-opacity">
+                <Square size={fitToViewport ? 10 : 12} />
+              </div>
+            )}
+          </div>
+        )}
+
+        {!isEmpty ? (
+          <motion.div
+            key={cellItems.map(p => p.id).join("-")}
+            drag={isEditModeActive}
+            dragMomentum={false}
+            dragElastic={0}
+            onClick={e => {
+              if (justDragged.current) {
+                e.stopPropagation()
+                return
+              }
+              if (isEditModeActive && selectedGaps.size > 0) {
+                e.stopPropagation()
+                toggleGapSelection(lvl, d)
+              }
+            }}
+            onDragStart={() => {
+              justDragged.current = false
+              document.body.classList.add("grid-is-dragging")
+              setDraggingCoords({ lvl, d })
+            }}
+            onDrag={e => {
+              if (!document.body.classList.contains("grid-is-dragging")) return
+              const ev = e as unknown as {
+                clientX?: number
+                clientY?: number
+                touches?: Array<{ clientX?: number; clientY?: number }>
+                changedTouches?: Array<{ clientX?: number; clientY?: number }>
+              }
+              const clientX =
+                ev.clientX ?? ev.touches?.[0]?.clientX ?? ev.changedTouches?.[0]?.clientX
+              const clientY =
+                ev.clientY ?? ev.touches?.[0]?.clientY ?? ev.changedTouches?.[0]?.clientY
+              if (clientX && clientY) {
+                const elements = document.elementsFromPoint(clientX, clientY)
+                const cell = elements.find(
+                  el => el?.getAttribute?.("data-grid-slot") === "true"
+                )
+
+                document
+                  .querySelectorAll(".drop-target-active")
+                  .forEach(node => {
+                    node.classList.remove("drop-target-active")
+                  })
+
+                if (cell) {
+                  const targetLvl = Number(cell.getAttribute("data-lvl"))
+                  const targetD = Number(cell.getAttribute("data-d"))
+                  if (targetLvl !== lvl || targetD !== d) {
+                    cell.classList.add("drop-target-active")
+                  }
+                }
+              }
+            }}
+            onDragEnd={e => {
+              justDragged.current = true
+              setTimeout(() => {
+                justDragged.current = false
+              }, 300)
+
+              document.body.classList.remove("grid-is-dragging")
+              setDraggingCoords(null)
+
+              document
+                .querySelectorAll(".drop-target-active")
+                .forEach(node => {
+                  node.classList.remove("drop-target-active")
+                })
+
+              const ev = e as unknown as {
+                clientX?: number
+                clientY?: number
+                touches?: Array<{ clientX?: number; clientY?: number }>
+                changedTouches?: Array<{ clientX?: number; clientY?: number }>
+              }
+              const clientX =
+                ev.clientX ?? ev.touches?.[0]?.clientX ?? ev.changedTouches?.[0]?.clientX
+              const clientY =
+                ev.clientY ?? ev.touches?.[0]?.clientY ?? ev.changedTouches?.[0]?.clientY
+
+              if (clientX && clientY && onSwapItems) {
+                const elements = document.elementsFromPoint(clientX, clientY)
+                const cell = elements.find(
+                  el => el?.getAttribute?.("data-grid-slot") === "true"
+                )
+                if (cell) {
+                  const targetLvl = Number(cell.getAttribute("data-lvl"))
+                  const targetD = Number(cell.getAttribute("data-d"))
+                  if (
+                    !isNaN(targetLvl) &&
+                    !isNaN(targetD) &&
+                    (targetLvl !== lvl || targetD !== d)
+                  ) {
+                    onSwapItems({ lvl, d }, { lvl: targetLvl, d: targetD })
+                  }
+                }
+              }
+            }}
+            whileDrag={{
+              scale: 1.1,
+              zIndex: 100,
+              rotate: 2,
+              boxShadow: "0 20px 40px rgba(0,0,0,0.25)",
+              opacity: 0.9,
+            }}
+            className={cn(
+              fitToViewport
+                ? "w-full h-full min-w-0 min-h-0 rounded-md sm:rounded-lg flex flex-col items-center justify-between overflow-hidden relative shadow-md transition-colors p-0.5"
+                : "w-[94%] h-[94%] rounded-xl flex flex-col items-center justify-between overflow-hidden relative shadow-md transition-colors p-0.5",
+              isEditModeActive
+                ? "cursor-grab active:cursor-grabbing"
+                : "cursor-pointer",
+              "bg-[#1e293b] dark:bg-slate-800",
+              hasWet
+                ? "shadow-[inset_0_0_20px_rgba(37,99,235,0.25)] border-[1.5px] border-blue-500/40"
+                : hasTilted
+                ? "shadow-[inset_0_0_20px_rgba(220,38,38,0.25)] border-[1.5px] border-red-500/40"
+                : isMixed
+                ? "shadow-[inset_0_0_20px_rgba(217,119,6,0.25)] border-[1.5px] border-amber-500/40"
+                : "shadow-[inset_0_1px_2px_rgba(255,255,255,0.1)] border-[1.5px] border-slate-700 hover:brightness-110"
+            )}
+          >
+            <div className="absolute top-0.5 right-0.5 sm:top-1 sm:right-1 flex gap-0.5 z-20">
+              {hasWet && (
+                <div className="h-3 w-3 rounded-full bg-blue-500 flex items-center justify-center shadow-lg">
+                  <Droplet size={7} className="text-white fill-white" />
+                </div>
+              )}
+              {hasTilted && (
+                <div className="h-3 w-3 rounded-full bg-red-500 flex items-center justify-center shadow-lg">
+                  <AlertCircle size={7} className="text-white fill-white" />
+                </div>
+              )}
+              {isMixed && !hasWet && !hasTilted && (
+                <div className="px-1 h-3 rounded-full bg-amber-500 flex items-center justify-center shadow-lg">
+                  <span className="text-[6px] sm:text-[7px] font-bold text-white uppercase">
+                    Mix
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex-1 min-h-0 flex flex-col items-center justify-center w-full overflow-hidden">
+              <div className="relative group-hover:-translate-y-0.5 transition-transform duration-300 flex flex-col items-center">
+                <span
+                  className={cn(
+                    "drop-shadow-md inline-block relative z-10 leading-none",
+                    fitToViewport
+                      ? isDenseGrid
+                        ? "text-xs sm:text-sm"
+                        : isLargeCell
+                        ? "text-2xl sm:text-3xl"
+                        : "text-lg sm:text-xl"
+                      : "text-sm sm:text-2xl md:text-[32px]"
+                  )}
+                >
+                  📦
+                </span>
+                {(!fitToViewport || !isDenseGrid) && (
+                  <div
+                    className={cn(
+                      "bg-[#8B5A2B] rounded-sm mx-auto flex justify-around items-end pt-[1px] relative z-0 -mt-[1px] shadow-sm",
+                      fitToViewport
+                        ? isLargeCell
+                          ? "w-7 sm:w-9 h-[3px] sm:h-[4px]"
+                          : "w-5 sm:w-6 h-[2px] sm:h-[3px]"
+                        : "w-5 sm:w-9 h-[3px] sm:h-[4px]"
+                    )}
+                  >
+                    <div className="w-[3px] sm:w-[4px] h-[2px] bg-[#4A2E12] rounded-t-[1px]" />
+                    <div className="w-[3px] sm:w-[4px] h-[2px] bg-[#4A2E12] rounded-t-[1px]" />
+                    <div className="w-[3px] sm:w-[4px] h-[2px] bg-[#4A2E12] rounded-t-[1px]" />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div
+              className={cn(
+                "bg-[#0B1120] rounded sm:rounded-md flex flex-col items-center justify-center border border-white/5 shadow-inner px-1 shrink-0",
+                fitToViewport
+                  ? isLargeCell
+                    ? "w-[92%] py-1 mb-1 sm:rounded-lg"
+                    : "w-[96%] py-[2px] mb-0.5"
+                  : "w-[96%] sm:w-[88%] py-0.5 sm:py-1.5 mb-0.5 sm:mb-1.5 sm:rounded-lg"
+              )}
+            >
+              <span
+                className={cn(
+                  "leading-tight font-bold text-white truncate max-w-full font-mono",
+                  fitToViewport
+                    ? isLargeCell
+                      ? "text-[10px] sm:text-xs tracking-wide"
+                      : "text-[8px] sm:text-[10px]"
+                    : "text-[8px] sm:text-[12px] tracking-tight sm:tracking-widest"
+                )}
+              >
+                {sku}
+              </span>
+              <span
+                className={cn(
+                  "leading-tight text-slate-400 font-medium whitespace-nowrap",
+                  fitToViewport
+                    ? isLargeCell
+                      ? "text-[9px] sm:text-[10px]"
+                      : "text-[7px] sm:text-[9px]"
+                    : "text-[7px] sm:text-[10px]"
+                )}
+              >
+                {qty.toLocaleString("pt-BR")} un
+              </span>
+            </div>
+          </motion.div>
+        ) : (
+          <div className="flex flex-col items-center justify-center w-full h-full gap-1 transition-opacity">
+            {isEditModeActive ? (
+              <button
+                onClick={e => {
+                  e.stopPropagation()
+                  onAddItem(lvl, d)
+                }}
+                title={`Adicionar Palete no Nível ${getLevelLabel(lvl)}, Profundidade ${getDepthLabel(d)}`}
+                className={cn(
+                  "add-pallete-btn flex items-center justify-center bg-blue-600 hover:bg-blue-500 rounded-full text-white shadow-lg hover:scale-110 active:scale-95 transition-all cursor-pointer opacity-100 ring-blue-500/20 z-20",
+                  fitToViewport
+                    ? isLargeCell
+                      ? "h-10 w-10 ring-4"
+                      : "h-7 w-7 ring-2"
+                    : "h-10 w-10 ring-4"
+                )}
+              >
+                <span
+                  className={cn(
+                    "font-light leading-none",
+                    fitToViewport ? (isLargeCell ? "text-2xl mb-0.5" : "text-base") : "text-2xl mb-1"
+                  )}
+                >
+                  +
+                </span>
+              </button>
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center select-none pointer-events-none">
+                <span
+                  className={cn(
+                    "font-medium text-slate-400 dark:text-slate-500 uppercase tracking-widest text-center px-0.5",
+                    fitToViewport
+                      ? isLargeCell
+                        ? "text-[9px] sm:text-[10px]"
+                        : "text-[7px] sm:text-[8px]"
+                      : "text-[8px] sm:text-[9px]"
+                  )}
+                >
+                  VAZIO
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
-    <div className="w-full flex flex-col gap-4 relative">
+    <div
+      className={cn(
+        "w-full flex flex-col relative",
+        fitToViewport ? "h-full min-h-0 overflow-hidden gap-2" : "gap-4"
+      )}
+    >
       <style>{`
         .drop-target-active {
           transform: scale(1.06) !important;
@@ -307,310 +719,164 @@ export function MapeamentoDriveInGrid({
         }
       `}</style>
 
-      <div className="w-full flex flex-col lg:flex-row gap-2 md:gap-8 pb-1 md:pb-4 relative">
+      <div
+        className={cn(
+          "w-full flex relative",
+          fitToViewport
+            ? "flex-1 min-h-0 flex-col md:flex-row gap-3 md:gap-4 overflow-hidden"
+            : "flex-col lg:flex-row gap-2 md:gap-8 pb-1 md:pb-4"
+        )}
+      >
         {/* ── GRID SECTION ──────────────────────────────────────────────── */}
-        <div className="flex-1 overflow-x-auto custom-scrollbar pt-2">
-          <div className="flex flex-col items-center min-w-full p-4">
-            <div className="relative inline-block">
+        {fitToViewport ? (
+          <div
+            ref={gridViewportRef}
+            className="flex-1 min-w-0 min-h-0 flex items-center justify-center overflow-hidden p-1.5"
+          >
+            <div
+              className="flex flex-col overflow-hidden"
+              style={
+                gridMetrics
+                  ? { width: `${gridMetrics.gridInnerWidth}px` }
+                  : { width: "100%", height: "100%" }
+              }
+            >
               {/* Axis Label Header Row */}
-              <div className="flex mb-4">
-                <div className="w-8 md:w-14 shrink-0 pr-1 md:pr-4 text-right">
+              <div
+                className="flex items-center mb-1 shrink-0"
+                style={{ gap: `${gridMetrics?.gap ?? 8}px` }}
+              >
+                <div
+                  className="shrink-0 pr-1.5 text-right"
+                  style={{ width: `${gridMetrics?.labelColW ?? 42}px` }}
+                >
                   <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
-                    {levelsConfig?.displayName || (effectiveStartLevel === 0 && levelCount <= 1 ? "SOLO" : "NÍVEL")}
+                    {levelsConfig?.displayName ||
+                      (effectiveStartLevel === 0 && levelCount <= 1 ? "SOLO" : "NÍVEL")}
                   </span>
                 </div>
               </div>
 
-              {/* Main Grid Area */}
-              <div className="flex items-start">
-                <div className="space-y-1.5 md:space-y-4 mb-4 md:mb-8 pr-2 md:pr-4">
+              {/* Matrix + FRENTE indicator com células dimensionadas dinamicamente */}
+              <div
+                className="flex-1 min-h-0 flex items-stretch overflow-hidden"
+                style={{ gap: `${gridMetrics?.gap ?? 8}px` }}
+              >
+                <div
+                  className="grid items-stretch"
+                  style={
+                    gridMetrics
+                      ? {
+                          gap: `${gridMetrics.gap}px`,
+                          gridTemplateColumns: `${gridMetrics.labelColW}px repeat(${depths.length}, ${gridMetrics.cellW}px)`,
+                          gridTemplateRows: `repeat(${levels.length}, ${gridMetrics.cellH}px)`,
+                        }
+                      : {
+                          flex: 1,
+                          gap: "8px",
+                          gridTemplateColumns: `2.5rem repeat(${depths.length}, minmax(0, 1fr))`,
+                          gridTemplateRows: `repeat(${levels.length}, minmax(0, 1fr))`,
+                        }
+                  }
+                >
                   {levels.map(lvl => (
-                    <div key={`row-${lvl}`} className="flex items-center">
-                      {/* Level Label */}
-                      <div className="w-8 md:w-14 shrink-0 pr-1 md:pr-4 text-right">
-                        <span className="text-[13px] font-semibold text-slate-900 dark:text-white uppercase tracking-tighter">
+                    <React.Fragment key={`row-${lvl}`}>
+                      <div className="flex items-center justify-end pr-1.5 min-h-0">
+                        <span className="text-xs font-semibold text-slate-900 dark:text-white uppercase tracking-tighter truncate">
                           {getLevelLabel(lvl)}
                         </span>
                       </div>
+                      {depths.map(d => renderGridCell(lvl, d))}
+                    </React.Fragment>
+                  ))}
+                </div>
 
-                      {/* Cells */}
-                      <div className="flex gap-1.5 md:gap-4">
-                        {depths.map(d => {
-                          const cellItems = grid[lvl]?.[d] || []
-                          const isEmpty = cellItems.length === 0
-                          const isSelected =
-                            selectedCoords?.lvl === lvl && selectedCoords?.d === d
-                          const isGridSelected = selectedGaps.has(`${lvl}-${d}`)
-                          const firstItem = cellItems[0]
-                          // isMixed: true only when there are DIFFERENT SKUs in the slot (not same-pallet multi-row)
-                          const isMixed = new Set(cellItems.map(p => p.sku)).size > 1
-                          const sku = !isEmpty
-                            ? isMixed
-                              ? `${new Set(cellItems.map(p => p.sku)).size} SKUs`
-                              : firstItem.sku
-                            : ""
-                          const qty = !isEmpty
-                            ? cellItems.reduce((sum, p) => sum + p.quantidade, 0)
-                            : 0
-                          // hasTilted / hasWet: check across all items in the slot
-                          const hasTilted = cellItems.some(p => Number(p.customValues?.qtd_tombada) > 0)
-                          const hasWet = cellItems.some(p => Number(p.customValues?.qtd_molhado) > 0)
+                {/* Front indicator */}
+                <div
+                  className="shrink-0 flex flex-col items-center justify-center opacity-50 hover:opacity-100 transition-opacity"
+                  style={{ width: `${gridMetrics?.frontColW ?? 42}px` }}
+                >
+                  <ArrowLeft size={15} className="text-slate-900 dark:text-white" />
+                  <span className="text-[8px] font-semibold uppercase tracking-[0.22em] text-slate-900 dark:text-white mt-0.5">
+                    FRENTE
+                  </span>
+                </div>
+              </div>
 
-                          return (
-                            <div
-                              key={`cell-${lvl}-${d}`}
-                              data-grid-slot="true"
-                              data-lvl={lvl}
-                              data-d={d}
-                              onClick={() => {
-                                if (justDragged.current) return
-                                if (isEditModeActive) {
-                                  // Se já estiver em modo seleção em lote (grades > 0) ou se a célula estiver vazia:
-                                  // alterna a seleção para ação em lote
-                                  if (selectedGaps.size > 0 || isEmpty) {
-                                    toggleGapSelection(lvl, d)
-                                  } else {
-                                    // Célula ocupada: seleciona para inspeção e edição no sidebar
-                                    setSelectedCoords(isSelected ? null : { lvl, d })
-                                  }
-                                } else if (!isEmpty) {
-                                  setSelectedCoords(isSelected ? null : { lvl, d })
-                                } else {
-                                  setSelectedCoords(null)
-                                }
-                              }}
-                              className={cn(
-                                "w-16 h-16 sm:w-28 sm:h-28 md:w-28 md:h-28 rounded-lg md:rounded-xl border relative group flex items-center justify-center p-0.5 sm:p-2 text-center transition-all duration-200 cursor-pointer shrink-0",
-                                isEmpty
-                                  ? "bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800"
-                                  : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700",
-                                !isEditModeActive && !draggingCoords && "hover:scale-[1.04]",
-                                isSelected &&
-                                  "border-[3px] border-blue-600 dark:border-blue-500 z-20 scale-[1.02]",
-                                isGridSelected &&
-                                  "border-orange-500 ring-4 ring-orange-500/10 bg-orange-50/5 dark:bg-orange-950/10 z-20",
-                                draggingCoords?.lvl === lvl &&
-                                  draggingCoords?.d === d &&
-                                  "z-[60]"
-                              )}
-                            >
-                              {/* Multi-Selection Indicator — idêntico ao G300 */}
-                              {isEditModeActive && (
-                                <div
-                                  className="absolute top-1.5 right-1.5 z-30 p-1 cursor-pointer rounded-lg hover:bg-orange-500/20 transition-colors"
-                                  onClick={e => {
-                                    e.stopPropagation()
-                                    toggleGapSelection(lvl, d)
-                                  }}
-                                  title="Selecionar para ação em lote"
-                                >
-                                  {isGridSelected ? (
-                                    <div className="bg-orange-500 text-white rounded-md p-0.5 shadow-sm">
-                                      <Check size={12} strokeWidth={4} />
-                                    </div>
-                                  ) : (
-                                    <div className="bg-white/50 dark:bg-slate-800/50 text-slate-300 dark:text-slate-600 rounded-md p-0.5 opacity-40 group-hover:opacity-100 transition-opacity">
-                                      <Square size={12} />
-                                    </div>
-                                  )}
-                                </div>
-                              )}
+              {/* Footer Depth Indicators alinhados 1-para-1 com as colunas da grade */}
+              <div
+                className="shrink-0 flex items-center mt-1.5"
+                style={{ gap: `${gridMetrics?.gap ?? 8}px` }}
+              >
+                <div
+                  className="grid"
+                  style={
+                    gridMetrics
+                      ? {
+                          gap: `${gridMetrics.gap}px`,
+                          gridTemplateColumns: `${gridMetrics.labelColW}px repeat(${depths.length}, ${gridMetrics.cellW}px)`,
+                        }
+                      : {
+                          flex: 1,
+                          gap: "8px",
+                          gridTemplateColumns: `2.5rem repeat(${depths.length}, minmax(0, 1fr))`,
+                        }
+                  }
+                >
+                  <div />
+                  {depths.map(d => (
+                    <div key={`head-${d}`} className="text-center min-w-0">
+                      <span className="text-[11px] font-semibold text-slate-900 dark:text-white uppercase tracking-tighter truncate block">
+                        {getDepthLabel(d)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div
+                  className="shrink-0"
+                  style={{ width: `${gridMetrics?.frontColW ?? 42}px` }}
+                />
+              </div>
 
-                              {!isEmpty ? (
-                                /* Palete 3D com Suporte a Drag and Drop no Modo Edição — G300 Style */
-                                <motion.div
-                                  key={cellItems.map(p => p.id).join("-")}
-                                  drag={isEditModeActive}
-                                  dragMomentum={false}
-                                  dragElastic={0}
-                                  onClick={e => {
-                                    if (justDragged.current) {
-                                      e.stopPropagation()
-                                      return
-                                    }
-                                    if (isEditModeActive && selectedGaps.size > 0) {
-                                      e.stopPropagation()
-                                      toggleGapSelection(lvl, d)
-                                    }
-                                  }}
-                                  onDragStart={() => {
-                                    justDragged.current = false
-                                    document.body.classList.add("grid-is-dragging")
-                                    setDraggingCoords({ lvl, d })
-                                  }}
-                                  onDrag={(e, info) => {
-                                    if (!document.body.classList.contains("grid-is-dragging")) return
-                                    const clientX =
-                                      "clientX" in e
-                                        ? (e as any).clientX
-                                        : (e as any).touches?.[0]?.clientX ||
-                                          (e as any).changedTouches?.[0]?.clientX
-                                    const clientY =
-                                      "clientY" in e
-                                        ? (e as any).clientY
-                                        : (e as any).touches?.[0]?.clientY ||
-                                          (e as any).changedTouches?.[0]?.clientY
-                                    if (clientX && clientY) {
-                                      const elements = document.elementsFromPoint(clientX, clientY)
-                                      const cell = elements.find(
-                                        el => el?.getAttribute?.("data-grid-slot") === "true"
-                                      )
+              {/* Footer Axis Label */}
+              <div className="shrink-0 flex justify-center pt-1.5 mt-1 border-t border-slate-100 dark:border-slate-800/50">
+                <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                  {depthConfig?.displayName ||
+                    (effectiveStartLevel === 0 && levelCount <= 1
+                      ? "VAGAS / POSIÇÕES NO CHÃO"
+                      : "PROFUNDIDADE")}
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-x-auto custom-scrollbar pt-2">
+            <div className="flex flex-col items-center min-w-full p-4">
+              <div className="relative inline-block">
+                {/* Axis Label Header Row */}
+                <div className="flex mb-4">
+                  <div className="w-8 md:w-14 shrink-0 pr-1 md:pr-4 text-right">
+                    <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                      {levelsConfig?.displayName || (effectiveStartLevel === 0 && levelCount <= 1 ? "SOLO" : "NÍVEL")}
+                    </span>
+                  </div>
+                </div>
 
-                                      document
-                                        .querySelectorAll(".drop-target-active")
-                                        .forEach(node => {
-                                          node.classList.remove("drop-target-active")
-                                        })
+                {/* Main Grid Area */}
+                <div className="flex items-start">
+                  <div className="space-y-1.5 md:space-y-4 mb-4 md:mb-8 pr-2 md:pr-4">
+                    {levels.map(lvl => (
+                      <div key={`row-${lvl}`} className="flex items-center">
+                        {/* Level Label */}
+                        <div className="w-8 md:w-14 shrink-0 pr-1 md:pr-4 text-right">
+                          <span className="text-[13px] font-semibold text-slate-900 dark:text-white uppercase tracking-tighter">
+                            {getLevelLabel(lvl)}
+                          </span>
+                        </div>
 
-                                      if (cell) {
-                                        const targetLvl = Number(cell.getAttribute("data-lvl"))
-                                        const targetD = Number(cell.getAttribute("data-d"))
-                                        if (targetLvl !== lvl || targetD !== d) {
-                                          cell.classList.add("drop-target-active")
-                                        }
-                                      }
-                                    }
-                                  }}
-                                  onDragEnd={(e, info) => {
-                                    justDragged.current = true
-                                    setTimeout(() => {
-                                      justDragged.current = false
-                                    }, 300)
-
-                                    document.body.classList.remove("grid-is-dragging")
-                                    setDraggingCoords(null)
-
-                                    document
-                                      .querySelectorAll(".drop-target-active")
-                                      .forEach(node => {
-                                        node.classList.remove("drop-target-active")
-                                      })
-
-                                    const clientX =
-                                      "clientX" in e
-                                        ? (e as any).clientX
-                                        : (e as any).touches?.[0]?.clientX ||
-                                          (e as any).changedTouches?.[0]?.clientX
-                                    const clientY =
-                                      "clientY" in e
-                                        ? (e as any).clientY
-                                        : (e as any).touches?.[0]?.clientY ||
-                                          (e as any).changedTouches?.[0]?.clientY
-
-                                    if (clientX && clientY && onSwapItems) {
-                                      const elements = document.elementsFromPoint(clientX, clientY)
-                                      const cell = elements.find(
-                                        el => el?.getAttribute?.("data-grid-slot") === "true"
-                                      )
-                                      if (cell) {
-                                        const targetLvl = Number(cell.getAttribute("data-lvl"))
-                                        const targetD = Number(cell.getAttribute("data-d"))
-                                        if (
-                                          !isNaN(targetLvl) &&
-                                          !isNaN(targetD) &&
-                                          (targetLvl !== lvl || targetD !== d)
-                                        ) {
-                                          onSwapItems(
-                                            { lvl, d },
-                                            { lvl: targetLvl, d: targetD }
-                                          )
-                                        }
-                                      }
-                                    }
-                                  }}
-                                  whileDrag={{
-                                    scale: 1.1,
-                                    zIndex: 100,
-                                    rotate: 2,
-                                    boxShadow: "0 20px 40px rgba(0,0,0,0.25)",
-                                    opacity: 0.9,
-                                  }}
-                                  className={cn(
-                                    "w-[94%] h-[94%] rounded-xl flex flex-col items-center justify-between overflow-hidden relative shadow-md transition-colors p-0.5",
-                                    isEditModeActive
-                                      ? "cursor-grab active:cursor-grabbing"
-                                      : "cursor-pointer",
-                                    "bg-[#1e293b] dark:bg-slate-800",
-                                    hasWet
-                                      ? "shadow-[inset_0_0_20px_rgba(37,99,235,0.25)] border-[1.5px] border-blue-500/40"
-                                      : hasTilted
-                                      ? "shadow-[inset_0_0_20px_rgba(220,38,38,0.25)] border-[1.5px] border-red-500/40"
-                                      : isMixed
-                                      ? "shadow-[inset_0_0_20px_rgba(217,119,6,0.25)] border-[1.5px] border-amber-500/40"
-                                      : "shadow-[inset_0_1px_2px_rgba(255,255,255,0.1)] border-[1.5px] border-slate-700 hover:brightness-110"
-                                  )}
-                                >
-                                  {/* Absolute Status Badges */}
-                                  <div className="absolute top-0.5 right-0.5 sm:top-1.5 sm:right-1.5 flex gap-0.5 sm:gap-1 z-20">
-                                    {hasWet && (
-                                      <div className="h-3.5 w-3.5 rounded-full bg-blue-500 flex items-center justify-center shadow-lg">
-                                        <Droplet size={8} className="text-white fill-white" />
-                                      </div>
-                                    )}
-                                    {hasTilted && (
-                                      <div className="h-3.5 w-3.5 rounded-full bg-red-500 flex items-center justify-center shadow-lg">
-                                        <AlertCircle size={8} className="text-white fill-white" />
-                                      </div>
-                                    )}
-                                    {isMixed && !hasWet && !hasTilted && (
-                                      <div className="px-1 h-3 rounded-full bg-amber-500 flex items-center justify-center shadow-lg">
-                                        <span className="text-[7px] font-bold text-white uppercase">
-                                          Mix
-                                        </span>
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  {/* The 3D Box & Pallet Graphic */}
-                                  <div className="flex-1 flex flex-col items-center justify-center w-full mt-0.5 sm:mt-2">
-                                    <div className="relative group-hover:-translate-y-0.5 transition-transform duration-300 flex flex-col items-center">
-                                      <span className="text-sm sm:text-2xl md:text-[32px] drop-shadow-md inline-block relative z-10 leading-none">
-                                        📦
-                                      </span>
-                                      <div className="w-6 sm:w-11 h-[3px] sm:h-[5px] bg-[#8B5A2B] rounded-sm mx-auto flex justify-around items-end pt-[1px] sm:pt-[2px] relative z-0 -mt-[1px] sm:-mt-[2px] shadow-sm">
-                                        <div className="w-[3px] sm:w-[5px] h-[2px] sm:h-[3px] bg-[#4A2E12] rounded-t-[1px]"></div>
-                                        <div className="w-[3px] sm:w-[5px] h-[2px] sm:h-[3px] bg-[#4A2E12] rounded-t-[1px]"></div>
-                                        <div className="w-[3px] sm:w-[5px] h-[2px] sm:h-[3px] bg-[#4A2E12] rounded-t-[1px]"></div>
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  {/* The Dark Information Pill */}
-                                  <div className="w-[96%] sm:w-[88%] bg-[#0B1120] rounded sm:rounded-lg py-0.5 sm:py-1.5 flex flex-col items-center justify-center mb-0.5 sm:mb-1.5 border border-white/5 shadow-inner px-0.5">
-                                    <span className="text-[8px] sm:text-[12px] leading-tight font-bold text-white tracking-tight sm:tracking-widest truncate max-w-full font-mono">
-                                      {sku}
-                                    </span>
-                                    <span className="text-[7px] sm:text-[10px] leading-tight text-slate-400 font-medium whitespace-nowrap">
-                                      {qty.toLocaleString("pt-BR")} un
-                                    </span>
-                                  </div>
-                                </motion.div>
-                              ) : (
-                                /* Célula Vazia: exibe botão + circular azul quando Mapear/Editar está ativo (G300) */
-                                <div className="flex flex-col items-center justify-center w-full h-full gap-1 transition-opacity">
-                                    {isEditModeActive ? (
-                                      <button
-                                        onClick={e => {
-                                          e.stopPropagation()
-                                          onAddItem(lvl, d)
-                                        }}
-                                        title={`Adicionar Palete no Nível ${getLevelLabel(lvl)}, Profundidade ${getDepthLabel(d)}`}
-                                        className="add-pallete-btn h-10 w-10 flex items-center justify-center bg-blue-600 hover:bg-blue-500 rounded-full text-white shadow-lg hover:scale-110 active:scale-95 transition-all cursor-pointer opacity-100 ring-4 ring-blue-500/20 z-20"
-                                      >
-                                        <span className="text-2xl font-light mb-1 leading-none">+</span>
-                                      </button>
-                                    ) : (
-                                      <div className="w-full h-full flex flex-col items-center justify-center select-none pointer-events-none">
-                                        <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500 uppercase tracking-widest text-center px-1">
-                                          VAZIO
-                                        </span>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            )
-                          })}
+                        {/* Cells */}
+                        <div className="flex gap-1.5 md:gap-4">
+                          {depths.map(d => renderGridCell(lvl, d))}
                         </div>
                       </div>
                     ))}
@@ -646,21 +912,37 @@ export function MapeamentoDriveInGrid({
                     </span>
                   </div>
                 </div>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* ── SELECTION DETAIL SIDEBAR — IDÊNTICO AO G300 ─────────────────── */}
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
-          className="w-full lg:w-72 shrink-0 transition-all duration-500"
+          className={cn(
+            "shrink-0 transition-all duration-500",
+            fitToViewport
+              ? "w-full md:w-64 lg:w-[272px] min-h-0 flex flex-col overflow-hidden"
+              : "w-full lg:w-72"
+          )}
         >
           {selectedCoords && selectedItem ? (
-            <div className="space-y-4">
+            <div className={cn(fitToViewport ? "space-y-2.5 overflow-hidden" : "space-y-4")}>
               {/* Selected Cell Header */}
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
-                <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700/50 pb-3 mb-3">
+              <div
+                className={cn(
+                  "rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50",
+                  fitToViewport ? "p-3" : "p-4"
+                )}
+              >
+                <div
+                  className={cn(
+                    "flex items-center justify-between border-b border-slate-200 dark:border-slate-700/50",
+                    fitToViewport ? "pb-2 mb-2" : "pb-3 mb-3"
+                  )}
+                >
                   <div>
                     <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider block mb-0.5">
                       Célula Selecionada
@@ -717,11 +999,11 @@ export function MapeamentoDriveInGrid({
                 {/* Actions no sidebar — Edit e Delete por Item (apenas quando logado) */}
                 {isLoggedIn && (
                   <>
-                    <div className="flex flex-col gap-2 mt-4">
+                    <div className={cn("flex flex-col gap-2", fitToViewport ? "mt-2.5" : "mt-4")}>
                       {selectedCellItems.length > 1 && onEditSlot && (
                         <button
                           onClick={() => onEditSlot(selectedCellItems)}
-                          className="w-full py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer shadow-sm active:scale-95 text-white bg-purple-600 hover:bg-purple-500"
+                          className="w-full py-1.5 px-3 rounded-xl flex items-center justify-center gap-1.5 text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer shadow-sm active:scale-95 text-white bg-purple-600 hover:bg-purple-500"
                         >
                           <Edit2 size={13} /> Editar Palete MIX ({selectedCellItems.length} SKUs)
                         </button>
@@ -735,7 +1017,7 @@ export function MapeamentoDriveInGrid({
                               handleOpenEditItemModal(selectedItem)
                             }
                           }}
-                          className="flex-1 py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer shadow-sm active:scale-95 text-white bg-blue-600 hover:bg-blue-500"
+                          className="flex-1 py-1.5 px-3 rounded-xl flex items-center justify-center gap-1.5 text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer shadow-sm active:scale-95 text-white bg-blue-600 hover:bg-blue-500"
                         >
                           <Edit2 size={13} /> {selectedCellItems.length > 1 ? "Editar Palete" : "Editar Item"}
                         </button>
@@ -744,7 +1026,7 @@ export function MapeamentoDriveInGrid({
                             onDeleteItem(selectedItem.id)
                             setSelectedCoords(null)
                           }}
-                          className="py-2 px-3 rounded-xl bg-rose-100 dark:bg-rose-900/30 hover:bg-rose-200 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all"
+                          className="py-1.5 px-3 rounded-xl bg-rose-100 dark:bg-rose-900/30 hover:bg-rose-200 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all"
                         >
                           <Trash2 size={13} /> Remover
                         </button>
@@ -754,7 +1036,7 @@ export function MapeamentoDriveInGrid({
                     {/* Botão de adicionar outro item ao mesmo slot */}
                     <button
                       onClick={() => onAddItem(selectedCoords.lvl, selectedCoords.d)}
-                      className="w-full mt-2 py-2 px-3 rounded-xl border border-dashed border-blue-500/50 text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-950/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      className="w-full mt-2 py-1.5 px-3 rounded-xl border border-dashed border-blue-500/50 text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-950/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                     >
                       <Plus size={14} /> Mapear outro item neste slot
                     </button>
@@ -764,23 +1046,26 @@ export function MapeamentoDriveInGrid({
 
               {/* Tabela de múltiplos itens no slot */}
               {selectedCellItems.length > 1 && (
-                <div className="space-y-2">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                <div className="space-y-1.5 overflow-hidden">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                     Outros itens neste slot ({selectedCellItems.length})
                   </span>
-                  {selectedCellItems.slice(1).map(it => (
+                  {(fitToViewport ? selectedCellItems.slice(1, 4) : selectedCellItems.slice(1)).map(it => (
                     <div
                       key={it.id}
-                      className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700/50 flex items-center justify-between"
+                      className={cn(
+                        "rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700/50 flex items-center justify-between",
+                        fitToViewport ? "p-2" : "p-3"
+                      )}
                     >
-                      <div>
-                        <p className="text-xs font-bold text-slate-900 dark:text-white font-mono">
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-900 dark:text-white font-mono truncate">
                           {it.sku}
                         </p>
                         <p className="text-[10px] text-slate-400">{it.quantidade} un</p>
                       </div>
                       {isLoggedIn && (
-                        <div className="flex gap-1">
+                        <div className="flex gap-1 shrink-0">
                           <button
                             onClick={() => handleOpenEditItemModal(it)}
                             className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg cursor-pointer"
@@ -799,64 +1084,136 @@ export function MapeamentoDriveInGrid({
                       )}
                     </div>
                   ))}
+                  {fitToViewport && selectedCellItems.length > 4 && (
+                    <p className="text-[10px] text-slate-400 text-center">
+                      +{selectedCellItems.length - 4} itens adicionais neste palete
+                    </p>
+                  )}
                 </div>
               )}
             </div>
           ) : (
-            <div className="h-full flex flex-col gap-4">
+            <div
+              className={cn(
+                "flex flex-col overflow-hidden",
+                fitToViewport ? "flex-1 min-h-0 gap-2" : "h-full gap-4"
+              )}
+            >
               {/* Position Summary Dashboard */}
-              <div className="p-5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700/50 space-y-4">
-                <div className="flex items-center gap-3">
+              <div
+                className={cn(
+                  "rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700/50 shrink-0",
+                  fitToViewport ? "p-2.5 space-y-2" : "p-5 space-y-4"
+                )}
+              >
+                <div className="flex items-center gap-2.5">
                   <div
-                    className="h-10 w-10 rounded-xl flex items-center justify-center border shrink-0"
+                    className={cn(
+                      "rounded-xl flex items-center justify-center border shrink-0",
+                      fitToViewport ? "h-7 w-7" : "h-10 w-10"
+                    )}
                     style={{
                       background: theme.bgSoft,
                       borderColor: theme.border,
                       color: theme.primary,
                     }}
                   >
-                    <Box size={18} />
+                    <Box size={fitToViewport ? 14 : 18} />
                   </div>
-                  <div>
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                  <div className="min-w-0">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block truncate">
                       {config.nome}
                     </span>
-                    <h4 className="text-sm font-bold text-slate-900 dark:text-white font-mono">
+                    <h4
+                      className={cn(
+                        "font-bold text-slate-900 dark:text-white font-mono truncate",
+                        fitToViewport ? "text-xs" : "text-sm"
+                      )}
+                    >
                       {positionId}
                     </h4>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/50">
-                    <span className="text-[8px] font-semibold text-slate-400 uppercase tracking-wider">
+                <div className={cn("grid grid-cols-2", fitToViewport ? "gap-1.5" : "gap-3")}>
+                  <div
+                    className={cn(
+                      "rounded-xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/50",
+                      fitToViewport ? "px-2.5 py-1.5" : "p-2.5"
+                    )}
+                  >
+                    <span className="text-[8px] font-semibold text-slate-400 uppercase tracking-wider block truncate">
                       Paletes Ocupados
                     </span>
-                    <p className="text-lg font-bold text-slate-900 dark:text-white">{totalPallets}</p>
+                    <p
+                      className={cn(
+                        "font-bold text-slate-900 dark:text-white leading-tight mt-0.5",
+                        fitToViewport ? "text-sm" : "text-lg"
+                      )}
+                    >
+                      {totalPallets}
+                    </p>
                   </div>
-                  <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/50">
-                    <span className="text-[8px] font-semibold text-slate-400 uppercase tracking-wider">
+                  <div
+                    className={cn(
+                      "rounded-xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/50",
+                      fitToViewport ? "px-2.5 py-1.5" : "p-2.5"
+                    )}
+                  >
+                    <span className="text-[8px] font-semibold text-slate-400 uppercase tracking-wider block truncate">
                       SKUs Únicos
                     </span>
-                    <p className="text-lg font-bold text-slate-900 dark:text-white">{uniqueSkus}</p>
+                    <p
+                      className={cn(
+                        "font-bold text-slate-900 dark:text-white leading-tight mt-0.5",
+                        fitToViewport ? "text-sm" : "text-lg"
+                      )}
+                    >
+                      {uniqueSkus}
+                    </p>
                   </div>
-                  <div className="col-span-2 p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/50">
-                    <span className="text-[8px] font-semibold text-slate-400 uppercase tracking-wider">
+                  <div
+                    className={cn(
+                      "rounded-xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/50",
+                      fitToViewport ? "px-2.5 py-1.5" : "col-span-2 p-2.5"
+                    )}
+                  >
+                    <span className="text-[8px] font-semibold text-slate-400 uppercase tracking-wider block truncate">
                       Total Peças
                     </span>
-                    <p className="text-base font-bold text-slate-900 dark:text-white font-mono">
+                    <p
+                      className={cn(
+                        "font-bold text-slate-900 dark:text-white font-mono leading-tight mt-0.5",
+                        fitToViewport ? "text-xs" : "text-sm"
+                      )}
+                    >
                       {totalQty.toLocaleString("pt-BR")} un
                     </p>
                   </div>
-                  <div className="col-span-2 p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/50">
-                    <span className="text-[8px] font-semibold text-slate-400 uppercase tracking-wider">
+                  <div
+                    className={cn(
+                      "rounded-xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/50",
+                      fitToViewport ? "px-2.5 py-1.5" : "col-span-2 p-2.5"
+                    )}
+                  >
+                    <span className="text-[8px] font-semibold text-slate-400 uppercase tracking-wider block truncate">
                       Ocupação
                     </span>
-                    <div className="flex items-center justify-between mt-1">
-                      <p className="text-lg font-bold text-slate-900 dark:text-white">
-                        {totalPallets} / {capacity} PTs
+                    <div className="flex items-center justify-between gap-1.5 mt-0.5">
+                      <p
+                        className={cn(
+                          "font-bold text-slate-900 dark:text-white leading-tight whitespace-nowrap",
+                          fitToViewport ? "text-xs" : "text-lg"
+                        )}
+                      >
+                        {totalPallets}/{capacity} PTs
                       </p>
-                      <div className="h-2 w-24 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                      <div
+                        className={cn(
+                          "h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden",
+                          fitToViewport ? "w-10" : "h-2 w-20"
+                        )}
+                      >
                         <div
                           className="h-full rounded-full transition-all"
                           style={{
@@ -873,10 +1230,22 @@ export function MapeamentoDriveInGrid({
                 </div>
               </div>
 
-              <div className="text-center py-4 text-xs text-slate-400 font-medium">
+              {/* Frame 3D do Drive-In em rotação suave abaixo dos indicadores */}
+              {sidePreview && (
+                <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                  {sidePreview}
+                </div>
+              )}
+
+              <div
+                className={cn(
+                  "text-center text-slate-400 font-medium shrink-0",
+                  fitToViewport ? "py-0.5 text-[10px] leading-tight" : "py-4 text-xs"
+                )}
+              >
                 {isEditModeActive
-                  ? "Clique nas células para selecioná-las e esvaziar em lote. Use o botão + para adicionar paletes."
-                  : "Clique em qualquer célula para inspecionar, ou ative o botão Editar para modificar"}
+                  ? "Clique nas células para selecionar/editar."
+                  : "Clique em uma célula para inspecionar."}
               </div>
             </div>
           )}

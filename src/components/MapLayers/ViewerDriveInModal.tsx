@@ -17,9 +17,11 @@ import {
   DEFAULT_G300_DEPTH_CONFIG,
   generateDimensionItems,
 } from "../MapLibrary/dimensionManager"
+import { ensureDriveChannels } from "../MapLibrary/spatialContainment"
 import { MapeamentoDriveInGrid } from "@/components/mapeamentos/MapeamentoDriveInGrid"
 import { MapeamentoItemModal } from "@/components/mapeamentos/MapeamentoItemModal"
 import CompartmentRelationView from "./CompartmentRelationView"
+import DriveIn3DPreviewFrame from "./DriveIn3DPreviewFrame"
 import { useSystemStore } from "../Systems/useSystemStore"
 import {
   getLocalItems,
@@ -75,7 +77,6 @@ export default function ViewerDriveInModal({
   levelsConfig: mapLevelsConfig = DEFAULT_G300_LEVELS_CONFIG,
   depthConfig: mapDepthConfig = DEFAULT_G300_DEPTH_CONFIG,
 }: ViewerDriveInModalProps) {
-  const [selectedChannelId, setSelectedChannelId] = useState<string>("")
   const [isEditMode, setIsEditMode] = useState(false)
   const [itemsVersion, setItemsVersion] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -130,7 +131,6 @@ export default function ViewerDriveInModal({
     setEditingItem(null)
     setEditingSlotItems(null)
     setBatchCoords(null)
-    setSelectedChannelId("")
     onClose()
   }, [onClose])
 
@@ -164,37 +164,26 @@ export default function ViewerDriveInModal({
     }
   }, [isOpen, object, linkedSystem, objectMapeamentoKey, workspaceId])
 
-  // Extrai canais cadastrados no drive (nunca para compartimento)
+  // Extrai canais cadastrados ou derivados dos vãos do drive (nunca para compartimento)
   const channels: ChannelInfo[] = useMemo(() => {
-    if (isCompartment) return []
-    if (!object?.props?.channels || !Array.isArray(object.props.channels)) {
-      return []
-    }
-    return object.props.channels as ChannelInfo[]
+    if (!object || isCompartment) return []
+    return ensureDriveChannels(object)
   }, [object, isCompartment])
 
-  // Canal efetivamente selecionado (derivado de forma segura sem setState em useEffect)
-  const effectiveSelectedChannelId = useMemo(() => {
-    if (selectedChannelId && channels.some((c) => (c.code || c.id) === selectedChannelId)) {
-      return selectedChannelId
-    }
-    if (initialChannelId) {
-      return initialChannelId
-    }
-    if (channels.length > 0) {
-      return String(channels[0].code || channels[0].id)
-    }
-    return String(object?.props?.code || object?.label || object?.id || "")
-  }, [selectedChannelId, channels, initialChannelId, object])
-
-  // Canal atualmente selecionado
+  // Canal único aberto no modal (somente o canal selecionado)
   const currentChannel = useMemo(() => {
-    return (
-      channels.find(
-        (c) => c.code === effectiveSelectedChannelId || c.id === effectiveSelectedChannelId
-      ) || null
-    )
-  }, [channels, effectiveSelectedChannelId])
+    if (channels.length === 0) return null
+    if (initialChannelId) {
+      const found = channels.find(
+        (c) =>
+          c.id === initialChannelId ||
+          c.code === initialChannelId ||
+          c.name === initialChannelId
+      )
+      if (found) return found
+    }
+    return channels[0]
+  }, [channels, initialChannelId])
 
   // Nome fiel à nomenclatura do objeto
   const objectDisplayName = useMemo<string>(() => {
@@ -205,20 +194,21 @@ export default function ViewerDriveInModal({
   // Código efetivo da posição / canal para persistência e filtro
   const effectivePositionCode = useMemo<string>(() => {
     if (currentChannel) {
-      return String(currentChannel.code || currentChannel.name || effectiveSelectedChannelId)
+      return String(currentChannel.code || currentChannel.name || currentChannel.id)
     }
     return String(object?.props?.code || object?.label || object?.id || "")
-  }, [currentChannel, effectiveSelectedChannelId, object])
+  }, [currentChannel, object])
 
   const positionDisplayName = useMemo<string>(() => {
-    if (channels.length > 1 && currentChannel) {
-      return `${objectDisplayName} · ${currentChannel.name || effectivePositionCode}`
+    if (currentChannel) {
+      const chanName = currentChannel.name || effectivePositionCode
+      return objectDisplayName ? `${objectDisplayName} · ${chanName}` : chanName
     }
     return objectDisplayName || effectivePositionCode
-  }, [channels.length, currentChannel, objectDisplayName, effectivePositionCode])
+  }, [currentChannel, objectDisplayName, effectivePositionCode])
 
-  const levelCount = Math.max(1, Number(object?.props?.levels || currentChannel?.levels) || 4)
-  const depthCount = Math.max(1, Number(object?.props?.depth || currentChannel?.depth) || 4)
+  const levelCount = Math.max(1, Number(currentChannel?.levels || object?.props?.levels) || 4)
+  const depthCount = Math.max(1, Number(currentChannel?.depth || object?.props?.depth) || 4)
   const capacity = levelCount * depthCount
 
   // Nomenclatura específica DESTE objeto (ou fallback do mapa)
@@ -324,18 +314,27 @@ export default function ViewerDriveInModal({
     return getLocalItems().filter((it) => it.mapeamentoId === objectMapeamentoKey)
   }, [objectMapeamentoKey, itemsVersion])
 
-  // Itens do canal ativo (para Drive-Ins com múltiplos canais)
+  // Itens do canal ativo (somente o canal selecionado)
   const visibleDriveItems: MapeamentoItem[] = useMemo(() => {
     if (channels.length <= 1) return allObjectItems
-    const channelCodes = new Set(channels.map((c) => String(c.code || c.name || c.id)))
-    const isFirstChannel =
-      Boolean(channels[0]) &&
-      (channels[0].code || channels[0].id) === effectiveSelectedChannelId
-    return allObjectItems.filter((it) => {
-      if (it.posicao === effectivePositionCode) return true
-      return isFirstChannel && !channelCodes.has(it.posicao)
+    const allChannelKeys = new Set<string>()
+    channels.forEach((c) => {
+      if (c.code) allChannelKeys.add(c.code)
+      if (c.name) allChannelKeys.add(c.name)
+      if (c.id) allChannelKeys.add(c.id)
     })
-  }, [allObjectItems, channels, effectiveSelectedChannelId, effectivePositionCode])
+    const currentKeys = new Set(
+      [currentChannel?.code, currentChannel?.name, currentChannel?.id, effectivePositionCode].filter(
+        Boolean
+      ) as string[]
+    )
+    const isFirstChannel =
+      Boolean(channels[0]) && Boolean(currentChannel) && channels[0].id === currentChannel?.id
+    return allObjectItems.filter((it) => {
+      if (currentKeys.has(it.posicao)) return true
+      return isFirstChannel && !allChannelKeys.has(it.posicao)
+    })
+  }, [allObjectItems, channels, currentChannel, effectivePositionCode])
 
   const occupiedCount = useMemo(() => {
     const slots = new Set<string>()
@@ -458,14 +457,20 @@ export default function ViewerDriveInModal({
     const belongsToChannel = (it: MapeamentoItem) => {
       if (it.mapeamentoId !== objectMapeamentoKey) return false
       if (channels.length <= 1) return true
-      const channelCodes = new Set(channels.map((c) => String(c.code || c.name || c.id)))
-      const isFirstChannel =
-        Boolean(channels[0]) &&
-        (channels[0].code || channels[0].id) === effectiveSelectedChannelId
-      return (
-        it.posicao === effectivePositionCode ||
-        (isFirstChannel && !channelCodes.has(it.posicao))
+      const allChannelKeys = new Set<string>()
+      channels.forEach((c) => {
+        if (c.code) allChannelKeys.add(c.code)
+        if (c.name) allChannelKeys.add(c.name)
+        if (c.id) allChannelKeys.add(c.id)
+      })
+      const currentKeys = new Set(
+        [currentChannel?.code, currentChannel?.name, currentChannel?.id, effectivePositionCode].filter(
+          Boolean
+        ) as string[]
       )
+      const isFirstChannel =
+        Boolean(channels[0]) && Boolean(currentChannel) && channels[0].id === currentChannel?.id
+      return currentKeys.has(it.posicao) || (isFirstChannel && !allChannelKeys.has(it.posicao))
     }
 
     const srcItems = all.filter(
@@ -500,7 +505,7 @@ export default function ViewerDriveInModal({
   return (
     <>
       <AnimatePresence>
-        <div key="viewer-drivein-overlay" className="fixed inset-0 z-[200] flex items-center justify-center p-2 sm:p-4 md:p-6 transition-colors">
+        <div key="viewer-drivein-overlay" className="fixed inset-0 z-[200] flex items-center justify-center p-2 sm:p-3 transition-colors">
           {/* Backdrop com blur escuro */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -510,37 +515,40 @@ export default function ViewerDriveInModal({
             className="absolute inset-0 bg-slate-950/80 backdrop-blur-md"
           />
 
-          {/* Modal Principal */}
+          {/* Modal Principal (sem rolagem interna para o Grid do Canal) */}
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
-            className="relative w-full max-w-7xl max-h-[96vh] md:max-h-[92vh] rounded-3xl md:rounded-[3rem] bg-slate-900 p-4 sm:p-6 md:p-8 shadow-2xl border border-slate-800 flex flex-col overflow-y-auto md:overflow-hidden custom-scrollbar text-white"
+            className="relative w-full max-w-7xl h-[calc(100vh-1rem)] sm:h-[calc(100vh-1.5rem)] max-h-[880px] rounded-2xl md:rounded-3xl bg-slate-900 p-3 sm:p-5 md:p-6 shadow-2xl border border-slate-800 flex flex-col overflow-hidden text-white"
           >
             {/* ── HEADER ────────────────────────────────────────────────────── */}
-            <div className="flex flex-row items-center justify-between gap-2 mb-3 md:mb-4 shrink-0">
-              <div className="flex items-center gap-3 md:gap-4">
+            <div className="flex flex-row items-center justify-between gap-2 mb-2.5 sm:mb-3 shrink-0">
+              <div className="flex items-center gap-2.5 md:gap-3.5 min-w-0">
                 <div
-                  className={`h-10 w-10 md:h-14 md:w-14 rounded-2xl md:rounded-3xl flex items-center justify-center text-white shadow-xl transition-all shrink-0 ${
+                  className={`h-9 w-9 md:h-11 md:w-11 rounded-xl md:rounded-2xl flex items-center justify-center text-white shadow-xl transition-all shrink-0 ${
                     isCompartment
                       ? "bg-amber-600 shadow-amber-900/30"
                       : "bg-blue-600 shadow-blue-900/30"
                   }`}
                 >
                   {isCompartment ? (
-                    <Package size={18} className="md:w-6 md:h-6" />
+                    <Package size={18} className="md:w-5 md:h-5" />
                   ) : (
-                    <MapPin size={18} className="md:w-6 md:h-6" />
+                    <MapPin size={18} className="md:w-5 md:h-5" />
                   )}
                 </div>
-                <div className="text-left">
+                <div className="text-left min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-base md:text-3xl font-light text-white transition-colors leading-tight font-mono">
+                    <h3 className="text-base md:text-2xl font-light text-white transition-colors leading-tight font-mono truncate">
                       {objectDisplayName || effectivePositionCode}
                     </h3>
-                    {!isCompartment && currentChannel && channels.length > 1 && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                    {!isCompartment && currentChannel && (
+                      <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-600/20 text-blue-300 border border-blue-500/40 font-semibold">
                         {currentChannel.name || currentChannel.code}
+                        {currentChannel.code && currentChannel.name !== currentChannel.code
+                          ? ` · ${currentChannel.code}`
+                          : ""}
                       </span>
                     )}
                     {!isCompartment && Boolean(object?.props?.code) && String(object?.props?.code) !== objectDisplayName && (
@@ -584,7 +592,7 @@ export default function ViewerDriveInModal({
               </div>
 
               {/* Direita: Ações */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => window.print()}
@@ -665,36 +673,14 @@ export default function ViewerDriveInModal({
               </div>
             )}
 
-            {/* ── BARRA DE SELEÇÃO DE CANAIS (se houver múltiplos) ───────────── */}
-            {channels.length > 0 && (
-              <div className="flex items-center gap-1.5 pb-3 border-b border-slate-800 overflow-x-auto custom-scrollbar shrink-0">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 pr-2 shrink-0">
-                  Canais do Drive:
-                </span>
-                {channels.map((chan) => {
-                  const isSelected = (chan.code || chan.id) === effectiveSelectedChannelId
-                  return (
-                    <button
-                      key={chan.id}
-                      type="button"
-                      onClick={() => setSelectedChannelId(chan.code || chan.id)}
-                      className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border shrink-0 ${
-                        isSelected
-                          ? "bg-blue-600 text-white border-blue-500 shadow-md shadow-blue-600/20"
-                          : "bg-slate-800/70 text-slate-300 border-slate-700/80 hover:bg-slate-800 hover:text-white"
-                      }`}
-                    >
-                      <span className="text-sm">📥</span>
-                      <span className="font-mono">{chan.code}</span>
-                      {chan.name && <span className="opacity-70 text-[10px]">({chan.name})</span>}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-
-            {/* ── CORPO: RELAÇÃO DO COMPARTIMENTO OU GRID DO DRIVE-IN ──────── */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 -mr-1 pt-2">
+            {/* ── CORPO: RELAÇÃO DO COMPARTIMENTO OU GRID DO CANAL SELECIONADO ──────── */}
+            <div
+              className={
+                isCompartment
+                  ? "flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-1 -mr-1 pt-2"
+                  : "flex-1 min-h-0 overflow-hidden flex flex-col pt-1"
+              }
+            >
               {isCompartment ? (
                 <CompartmentRelationView
                   mapeamentoId={objectMapeamentoKey}
@@ -707,9 +693,9 @@ export default function ViewerDriveInModal({
                   stockControlMode={linkedParticipant?.stockControlMode}
                 />
               ) : loading ? (
-                <div className="flex flex-col items-center justify-center py-20 text-slate-400 text-xs gap-3">
+                <div className="flex-1 flex flex-col items-center justify-center text-slate-400 text-xs gap-3">
                   <span className="animate-spin text-2xl">⏳</span>
-                  <span>Sincronizando saldos do Drive-In...</span>
+                  <span>Sincronizando saldos do canal...</span>
                 </div>
               ) : (
                 <MapeamentoDriveInGrid
@@ -720,7 +706,7 @@ export default function ViewerDriveInModal({
                   startLevel={1}
                   levelsConfig={resolvedLevelsConfig}
                   depthConfig={resolvedDepthConfig}
-                  isBlocked={false}
+                  isBlocked={currentChannel?.status === "bloqueado"}
                   observation={(object.props?.observation as string) || ""}
                   config={driveConfig}
                   isEditModeActive={isAdmin && isEditMode}
@@ -731,6 +717,14 @@ export default function ViewerDriveInModal({
                   onDeleteItem={handleDeleteItem}
                   onSwapItems={handleSwapItems}
                   isLoggedIn={isAdmin}
+                  fitToViewport={true}
+                  sidePreview={
+                    <DriveIn3DPreviewFrame
+                      object={object}
+                      channelId={currentChannel?.id || currentChannel?.code}
+                      channelLabel={currentChannel?.name || currentChannel?.code}
+                    />
+                  }
                 />
               )}
             </div>
