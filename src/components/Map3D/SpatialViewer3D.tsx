@@ -25,10 +25,11 @@ interface SpatialViewer3DProps {
   mode: "isometric" | "3d"
   objects: MapObject[]
   selectedId: string | null
+  selectedChannelId?: string | null
   snapEnabled?: boolean
   gridSize?: number
   readOnly?: boolean
-  onSelect: (id: string | null) => void
+  onSelect: (id: string | null, channelId?: string | null) => void
   onUpdateObject?: (id: string, partial: Partial<MapObject>) => void
   onModeChange?: (mode: SpatialViewMode) => void
 }
@@ -37,6 +38,7 @@ export function SpatialViewer3D({
   mode,
   objects,
   selectedId,
+  selectedChannelId = null,
   snapEnabled = true,
   gridSize = 20,
   readOnly = false,
@@ -57,11 +59,35 @@ export function SpatialViewer3D({
     readOnlyRef.current = readOnly
   }, [readOnly])
 
+  const selectedIdRef = useRef<string | null>(selectedId)
+  useEffect(() => {
+    selectedIdRef.current = selectedId
+  }, [selectedId])
+
+  const selectedChannelIdRef = useRef<string | null>(selectedChannelId ?? null)
+  useEffect(() => {
+    selectedChannelIdRef.current = selectedChannelId ?? null
+  }, [selectedChannelId])
+
+  const onSelectRef = useRef(onSelect)
+  useEffect(() => {
+    onSelectRef.current = onSelect
+  }, [onSelect])
+
   const [shadowsEnabled, setShadowsEnabled] = useState(true)
   const shadowsEnabledRef = useRef<boolean>(shadowsEnabled)
   useEffect(() => {
     shadowsEnabledRef.current = shadowsEnabled
   }, [shadowsEnabled])
+
+  const [sideViewIsolated, setSideViewIsolated] = useState(false)
+  const isSideViewActive = sideViewIsolated && Boolean(selectedId)
+  const wasSideViewIsolatedRef = useRef(false)
+  const savedCameraBeforeSideRef = useRef<{
+    pos: THREE.Vector3
+    target: THREE.Vector3
+    orthoFrustum?: { left: number; right: number; top: number; bottom: number }
+  } | null>(null)
 
   // Refs Three.js
   const sceneRef = useRef<THREE.Scene | null>(null)
@@ -70,6 +96,7 @@ export function SpatialViewer3D({
   const perspCamRef = useRef<THREE.PerspectiveCamera | null>(null)
   const controlsRef = useRef<OrbitControls | null>(null)
   const selectionBoxRef = useRef<THREE.Box3Helper | null>(null)
+  const channelHighlightRef = useRef<THREE.Mesh | null>(null)
   const objectsGroupRef = useRef<THREE.Group | null>(null)
   const gridHelperRef = useRef<THREE.GridHelper | null>(null)
   const ambientLightRef = useRef<THREE.AmbientLight | null>(null)
@@ -212,6 +239,21 @@ export function SpatialViewer3D({
     boxHelper.visible = false
     scene.add(boxHelper)
     selectionBoxRef.current = boxHelper
+
+    // Realce de piso para canal individual selecionado
+    const channelHighlightGeo = new THREE.PlaneGeometry(1, 1)
+    const channelHighlightMat = new THREE.MeshBasicMaterial({
+      color: new THREE.Color("#38bdf8"),
+      transparent: true,
+      opacity: 0.28,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    })
+    const channelFloorHighlight = new THREE.Mesh(channelHighlightGeo, channelHighlightMat)
+    channelFloorHighlight.visible = false
+    channelFloorHighlight.renderOrder = 10
+    scene.add(channelFloorHighlight)
+    channelHighlightRef.current = channelFloorHighlight
 
     // Loop de animação sempre lendo modeRef.current (sem closure estática)
     const animate = () => {
@@ -374,29 +416,225 @@ export function SpatialViewer3D({
     })
   }, [objects, readOnly])
 
-  // ── 4. REALCE DO OBJETO SELECIONADO ──────────────────────────
+  // ── 4. REALCE DO OBJETO / CANAL INDIVIDUAL SELECIONADO ─────────
   useEffect(() => {
     const box = selectionBoxRef.current
+    const channelFloor = channelHighlightRef.current
     const group = objectsGroupRef.current
     if (!box || !group) return
 
     if (!selectedId) {
       box.visible = false
+      if (channelFloor) channelFloor.visible = false
       return
     }
 
     const selectedMesh = group.getObjectByName(selectedId)
     if (selectedMesh) {
-      const b3 = new THREE.Box3().setFromObject(selectedMesh)
-      b3.expandByScalar(0.08)
-      box.box.copy(b3)
-      box.visible = true
+      selectedMesh.updateWorldMatrix(true, true)
+
+      let targetLaneObj: THREE.Object3D | null = null
+      if (selectedChannelId) {
+        selectedMesh.traverse((child) => {
+          if (
+            !targetLaneObj &&
+            child.userData &&
+            (child.userData.channelId === selectedChannelId ||
+              child.userData.channelCode === selectedChannelId)
+          ) {
+            targetLaneObj = child
+          }
+        })
+      }
+
+      const highlightTarget = targetLaneObj || selectedMesh
+      if (isSideViewActive) {
+        box.visible = false
+      } else {
+        const b3 = new THREE.Box3().setFromObject(highlightTarget)
+        b3.expandByScalar(targetLaneObj ? 0.05 : 0.08)
+        box.box.copy(b3)
+        box.visible = true
+      }
+
+      if (channelFloor) {
+        const laneData = (targetLaneObj as THREE.Object3D | null)?.userData
+        if (targetLaneObj && laneData && typeof laneData.laneWidth === "number") {
+          const localCenter = new THREE.Vector3(Number(laneData.laneCenterX) || 0, 0, 0.045)
+          localCenter.applyMatrix4(selectedMesh.matrixWorld)
+          channelFloor.position.copy(localCenter)
+          channelFloor.rotation.set(0, 0, selectedMesh.rotation.z)
+          channelFloor.scale.set(Number(laneData.laneWidth), Number(laneData.depth) || 4, 1)
+          channelFloor.visible = true
+        } else {
+          channelFloor.visible = false
+        }
+      }
     } else {
       box.visible = false
+      if (channelFloor) channelFloor.visible = false
     }
-  }, [selectedId, objects])
+  }, [selectedId, selectedChannelId, objects, isSideViewActive])
 
-  // ── 5. SELEÇÃO VIA RAYCASTER (CLIQUE) ────────────────────────
+  // ── 4b. MODO VISTA LATERAL ISOLADA (oculta demais objetos) ────
+  useEffect(() => {
+    const group = objectsGroupRef.current
+    const controls = controlsRef.current
+    if (!group || !controls) return
+
+    const activeMode = modeRef.current
+    const activeCam = activeMode === "isometric" ? orthoCamRef.current : perspCamRef.current
+
+    if (isSideViewActive && selectedId) {
+      const selectedMesh = group.getObjectByName(selectedId)
+      if (!selectedMesh) return
+
+      // Salva posição e frustum da câmera antes de isolar
+      if (!wasSideViewIsolatedRef.current && activeCam) {
+        savedCameraBeforeSideRef.current = {
+          pos: activeCam.position.clone(),
+          target: controls.target.clone(),
+          orthoFrustum: orthoCamRef.current
+            ? {
+                left: orthoCamRef.current.left,
+                right: orthoCamRef.current.right,
+                top: orthoCamRef.current.top,
+                bottom: orthoCamRef.current.bottom,
+              }
+            : undefined,
+        }
+        wasSideViewIsolatedRef.current = true
+      }
+
+      if (gridHelperRef.current) {
+        gridHelperRef.current.visible = false
+      }
+
+      // Oculta todos os outros objetos da cena
+      group.children.forEach((child) => {
+        child.visible = child.name === selectedId
+      })
+
+      // Se um canal individual estiver selecionado, isola apenas esse canal e seus montantes laterais
+      let targetLaneObj: THREE.Object3D | null = null
+      if (selectedChannelId) {
+        selectedMesh.traverse((c) => {
+          if (
+            !targetLaneObj &&
+            c.userData &&
+            (c.userData.channelId === selectedChannelId || c.userData.channelCode === selectedChannelId)
+          ) {
+            targetLaneObj = c
+          }
+        })
+      }
+
+      if (targetLaneObj) {
+        const laneData = (targetLaneObj as THREE.Object3D).userData
+        const activeChanId = laneData.channelId
+        const activeLaneIdx = Number(laneData.laneIndex)
+
+        selectedMesh.children.forEach((child) => {
+          if (child.userData?.channelId) {
+            child.visible = child.userData.channelId === activeChanId
+          } else if (typeof child.userData?.columnLineIndex === "number") {
+            const colIdx = child.userData.columnLineIndex
+            child.visible = colIdx === activeLaneIdx || colIdx === activeLaneIdx + 1
+          } else {
+            child.visible = true
+          }
+        })
+      } else {
+        selectedMesh.traverse((c) => {
+          c.visible = true
+        })
+      }
+
+      selectedMesh.updateWorldMatrix(true, true)
+
+      // Calcula bounding box apenas da parte visível do selecionado
+      const isoBox = new THREE.Box3()
+      selectedMesh.traverse((c) => {
+        if (c instanceof THREE.Mesh && c.visible) {
+          // Ignora hitbox transparente da contagem de box se possível, ou inclui tudo do canal
+          if (c.material instanceof THREE.MeshBasicMaterial && c.material.opacity === 0) return
+          isoBox.expandByObject(c)
+        }
+      })
+      if (isoBox.isEmpty()) {
+        isoBox.setFromObject(targetLaneObj || selectedMesh)
+      }
+
+      const center = new THREE.Vector3()
+      const size = new THREE.Vector3()
+      isoBox.getCenter(center)
+      isoBox.getSize(size)
+
+      // Eixo lateral (+X local do objeto rotacionado) — mostra entrada à esquerda e fundo à direita
+      const rotZ = selectedMesh.rotation.z
+      const sideDir = new THREE.Vector3(Math.cos(rotZ), Math.sin(rotZ), 0)
+      const maxSpan = Math.max(size.x, size.y, size.z, 2.5)
+      const dist = maxSpan * 1.65
+
+      controls.target.copy(center)
+
+      if (activeMode === "isometric" && orthoCamRef.current) {
+        const ortho = orthoCamRef.current
+        const container = mountRef.current
+        const aspect = container && container.clientHeight > 0 ? container.clientWidth / container.clientHeight : 1.5
+        const fs = Math.max(size.y, size.z, size.x, 3) * 1.35
+        ortho.left = (-fs * aspect) / 2
+        ortho.right = (fs * aspect) / 2
+        ortho.top = fs / 2
+        ortho.bottom = -fs / 2
+        ortho.up.set(0, 0, 1)
+        ortho.position.copy(center).addScaledVector(sideDir, dist).add(new THREE.Vector3(0, 0, dist * 0.06))
+        ortho.lookAt(center)
+        ortho.updateProjectionMatrix()
+      } else if (perspCamRef.current) {
+        const persp = perspCamRef.current
+        persp.up.set(0, 0, 1)
+        persp.position.copy(center).addScaledVector(sideDir, dist).add(new THREE.Vector3(0, 0, dist * 0.06))
+        persp.lookAt(center)
+      }
+
+      controls.update()
+    } else {
+      // Restaura visibilidade de todos os objetos e canais
+      group.children.forEach((child) => {
+        child.visible = true
+        child.traverse((c) => {
+          c.visible = true
+        })
+      })
+
+      if (gridHelperRef.current) {
+        gridHelperRef.current.visible = !readOnly
+      }
+
+      if (wasSideViewIsolatedRef.current) {
+        wasSideViewIsolatedRef.current = false
+        const saved = savedCameraBeforeSideRef.current
+        savedCameraBeforeSideRef.current = null
+        if (saved && activeCam) {
+          if (activeMode === "isometric" && orthoCamRef.current && saved.orthoFrustum) {
+            orthoCamRef.current.left = saved.orthoFrustum.left
+            orthoCamRef.current.right = saved.orthoFrustum.right
+            orthoCamRef.current.top = saved.orthoFrustum.top
+            orthoCamRef.current.bottom = saved.orthoFrustum.bottom
+            orthoCamRef.current.updateProjectionMatrix()
+          }
+          activeCam.up.set(0, 0, 1)
+          activeCam.position.copy(saved.pos)
+          controls.target.copy(saved.target)
+          activeCam.lookAt(saved.target)
+          controls.update()
+        }
+      }
+    }
+  }, [isSideViewActive, selectedId, selectedChannelId, objects, readOnly, mode])
+
+  // ── 5. SELEÇÃO E DESELEÇÃO VIA RAYCASTER (CLIQUE E ESC) ───────
   useEffect(() => {
     const container = mountRef.current
     const renderer = rendererRef.current
@@ -406,6 +644,32 @@ export function SpatialViewer3D({
 
     const onPointerDown = (e: MouseEvent) => {
       clickStartPos = { x: e.clientX, y: e.clientY }
+    }
+
+    const extractHitInfo = (hitObj: THREE.Object3D, group: THREE.Group) => {
+      let curr: THREE.Object3D | null = hitObj
+      let foundId: string | null = null
+      let foundChannelId: string | null = null
+      let foundChannelCode: string | null = null
+      let foundIsArea = false
+
+      while (curr && curr !== group) {
+        if (curr.userData) {
+          if (!foundChannelId && curr.userData.channelId) {
+            foundChannelId = String(curr.userData.channelId)
+            foundChannelCode = curr.userData.channelCode ? String(curr.userData.channelCode) : null
+          }
+          if (!foundId && curr.userData.objectId) {
+            foundId = String(curr.userData.objectId)
+            const sp = curr.userData.spatial
+            if (sp && (sp.category === "area" || sp.type === "floor")) {
+              foundIsArea = true
+            }
+          }
+        }
+        curr = curr.parent
+      }
+      return { foundId, foundChannelId, foundChannelCode, foundIsArea }
     }
 
     const onPointerUp = (e: MouseEvent) => {
@@ -427,35 +691,89 @@ export function SpatialViewer3D({
       const group = objectsGroupRef.current
       if (!group) return
 
-      const intersects = raycaster.intersectObjects(group.children, true)
+      const isVisibleInHierarchy = (obj: THREE.Object3D, root: THREE.Group) => {
+        let cur: THREE.Object3D | null = obj
+        while (cur && cur !== root) {
+          if (!cur.visible) return false
+          cur = cur.parent
+        }
+        return true
+      }
+
+      const rawIntersects = raycaster.intersectObjects(group.children, true)
+      const intersects = rawIntersects.filter((hit) => isVisibleInHierarchy(hit.object, group))
 
       if (intersects.length > 0) {
-        let curr: THREE.Object3D | null = intersects[0].object
-        let foundId: string | null = null
+        let primary = extractHitInfo(intersects[0].object, group)
 
-        while (curr && curr !== group) {
-          if (curr.userData && curr.userData.objectId) {
-            foundId = curr.userData.objectId
-            break
+        // Se o primeiro acerto foi uma coluna compartilhada na divisa do Drive-In,
+        // verifica o próximo acerto do mesmo objeto para capturar o canal clicado
+        if (primary.foundId && !primary.foundChannelId && intersects.length > 1) {
+          for (let i = 1; i < intersects.length; i++) {
+            const candidate = extractHitInfo(intersects[i].object, group)
+            if (candidate.foundId === primary.foundId && candidate.foundChannelId) {
+              primary = candidate
+              break
+            }
           }
-          curr = curr.parent
         }
 
-        onSelect(foundId)
+        const { foundId, foundChannelId, foundChannelCode, foundIsArea } = primary
+
+        if (!foundId) {
+          setSideViewIsolated(false)
+          onSelectRef.current(null, null)
+          return
+        }
+
+        // No modo visualizador, clicar no piso/área vazia quando algo está selecionado deseleciona
+        if (readOnlyRef.current && foundIsArea && selectedIdRef.current) {
+          setSideViewIsolated(false)
+          onSelectRef.current(null, null)
+          return
+        }
+
+        // Toggle: clicar novamente no mesmo canal ou objeto selecionado deseleciona
+        const curId = selectedIdRef.current
+        const curChan = selectedChannelIdRef.current
+        const isSameObject = foundId === curId
+        const isSameChannel = foundChannelId
+          ? curChan === foundChannelId || (foundChannelCode !== null && curChan === foundChannelCode)
+          : !curChan
+
+        if (isSameObject && isSameChannel) {
+          setSideViewIsolated(false)
+          onSelectRef.current(null, null)
+          return
+        }
+
+        onSelectRef.current(foundId, foundChannelId ?? null)
       } else {
-        onSelect(null)
+        setSideViewIsolated(false)
+        onSelectRef.current(null, null)
+      }
+    }
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setSideViewIsolated(false)
+        if (selectedIdRef.current) {
+          onSelectRef.current(null, null)
+        }
       }
     }
 
     const dom = renderer.domElement
     dom.addEventListener("mousedown", onPointerDown)
     dom.addEventListener("mouseup", onPointerUp)
+    window.addEventListener("keydown", onKeyDown)
 
     return () => {
       dom.removeEventListener("mousedown", onPointerDown)
       dom.removeEventListener("mouseup", onPointerUp)
+      window.removeEventListener("keydown", onKeyDown)
     }
-  }, [onSelect])
+  }, [])
 
   // ── 6. ENQUADRAMENTO AUTOMÁTICO (fitToScreen) ────────────────
   const fitToScreen = useCallback(() => {
@@ -548,6 +866,39 @@ export function SpatialViewer3D({
 
         {/* Barra de Ações Rápidas de Câmera */}
         <div className="flex items-center gap-1.5 bg-slate-900/90 p-1.5 rounded-2xl border border-slate-800 shadow-2xl backdrop-blur-md">
+          {selectedId && (
+            <>
+              <button
+                onClick={() => setSideViewIsolated((prev) => !prev)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                  isSideViewActive
+                    ? "bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400 shadow-lg shadow-emerald-950/50"
+                    : "bg-indigo-950/80 hover:bg-indigo-900 text-indigo-200 hover:text-white border-indigo-700/60"
+                }`}
+                title={
+                  isSideViewActive
+                    ? "Sair da vista lateral isolada e mostrar todos os objetos"
+                    : "Ocultar demais objetos e visualizar o selecionado de lado"
+                }
+              >
+                <span>📐</span>
+                <span>{isSideViewActive ? "Sair do Lado" : "Ver de Lado"}</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setSideViewIsolated(false)
+                  onSelectRef.current(null, null)
+                }}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-sky-950/80 hover:bg-sky-900 text-sky-300 hover:text-white text-xs font-bold transition-all border border-sky-700/60"
+                title="Deselecionar item ou canal atual (Esc)"
+              >
+                <span>✕</span>
+                <span>Deselecionar</span>
+              </button>
+            </>
+          )}
+
           {/* Enquadrar Tudo */}
           <button
             onClick={fitToScreen}

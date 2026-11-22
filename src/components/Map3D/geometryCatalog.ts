@@ -15,6 +15,7 @@
 import * as THREE from "three"
 import type { UniversalSpatialObject } from "./types"
 import { FLOOR_SURFACES, type FloorMaterialType } from "../MapLibrary/floorSurfaces"
+import { ensureDriveChannels } from "../MapLibrary/spatialContainment"
 
 // Cache compartilhado de materiais para máxima performance
 const materialsCache = new Map<string, THREE.Material>()
@@ -375,6 +376,8 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
 
   const isDriveThrough = spatial.type.toLowerCase() === "drive_through"
 
+  const channels = ensureDriveChannels(spatial.raw)
+
   const driveColumnMat = getMaterial(`drive_col_indigo_${modeKey}`, () =>
     new THREE.MeshStandardMaterial({ color: new THREE.Color(readOnly ? "#3b82f6" : "#3730a3"), roughness: 0.35, metalness: 0.65 })
   )
@@ -386,6 +389,31 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
   )
   const rearBeamMat = getMaterial(`drive_rear_orange_${modeKey}`, () =>
     new THREE.MeshStandardMaterial({ color: new THREE.Color(readOnly ? "#f97316" : "#ea580c"), roughness: 0.35, metalness: 0.55 })
+  )
+  const entryArrowMat = getMaterial(`drive_entry_arrow_${modeKey}`, () =>
+    new THREE.MeshStandardMaterial({
+      color: new THREE.Color("#38bdf8"),
+      emissive: new THREE.Color("#0284c7"),
+      emissiveIntensity: 0.45,
+      roughness: 0.35,
+      metalness: 0.2,
+    })
+  )
+  const entryArrowBlockedMat = getMaterial(`drive_entry_arrow_blocked_${modeKey}`, () =>
+    new THREE.MeshStandardMaterial({
+      color: new THREE.Color("#f87171"),
+      emissive: new THREE.Color("#dc2626"),
+      emissiveIntensity: 0.45,
+      roughness: 0.35,
+      metalness: 0.2,
+    })
+  )
+  const laneHitboxMat = getMaterial("drive_lane_hitbox", () =>
+    new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+    })
   )
 
   const colDim = 0.08
@@ -401,6 +429,7 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
       const colMesh = new THREE.Mesh(colGeo, driveColumnMat)
       colMesh.position.set(colX, yPos, height / 2)
       colMesh.castShadow = true
+      colMesh.userData = { columnLineIndex: i }
       group.add(colMesh)
     }
 
@@ -408,46 +437,115 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
     const longTopGeo = new THREE.BoxGeometry(0.05, depth, 0.05)
     const longTopMesh = new THREE.Mesh(longTopGeo, rearBeamMat)
     longTopMesh.position.set(colX, 0, height)
+    longTopMesh.userData = { columnLineIndex: i }
     group.add(longTopMesh)
   }
 
-  // 2. Trilhos Longitudinais de Apoio dos Paletes em Cada Vão
-  // No Drive-In real, o Nível 1 (chão) repousa sobre o piso de concreto.
-  // Os pares de trilhos aéreos sustentam os níveis elevados (N2, N3, N4...)
+  // 2. Trilhos Longitudinais, Seta de Entrada, Travamento Posterior e Volume Selecionável por Canal
   const railThick = 0.06
   const railGeo = new THREE.BoxGeometry(railThick, depth, railThick)
   const bracketGeo = new THREE.BoxGeometry(0.12, 0.06, 0.04)
   const levelSpacing = height / Math.max(1, levels)
+  const slotStepY = depth / Math.max(1, depths)
+
+  // Materiais para os paletes dentro do drive
+  const testPalletWoodMat = getMaterial(`drive_pallet_wood_${modeKey}`, () =>
+    new THREE.MeshStandardMaterial({ color: new THREE.Color(readOnly ? "#d97706" : "#b45309"), roughness: 0.75, metalness: 0.1 })
+  )
+  const testPalletBoxMat = getMaterial(`drive_pallet_box_${modeKey}`, () =>
+    new THREE.MeshStandardMaterial({ color: new THREE.Color(readOnly ? "#fbbf24" : "#eab308"), roughness: 0.55, metalness: 0.05 })
+  )
+
+  const pWidth = Math.max(0.6, laneWidth * 0.72)
+  const pDepth = Math.max(0.7, slotStepY * 0.82)
+  const baseH = 0.12
+  const loadH = Math.min(1.4, levelSpacing * 0.75)
+  const pDeckGeo = new THREE.BoxGeometry(pWidth, pDepth, baseH)
+  const pLoadGeo = new THREE.BoxGeometry(pWidth * 0.94, pDepth * 0.94, loadH)
+
+  // Geometria da Seta de Entrada no piso (apontando para +Y = interior do túnel)
+  const arrowLen = Math.min(0.85, Math.max(0.45, depth * 0.16))
+  const shaftW = Math.min(0.14, laneWidth * 0.12)
+  const headW = Math.min(0.42, laneWidth * 0.36)
+  const headLen = arrowLen * 0.45
+  const shaftLen = arrowLen - headLen
+
+  const arrowShape = new THREE.Shape()
+  arrowShape.moveTo(-shaftW / 2, 0)
+  arrowShape.lineTo(shaftW / 2, 0)
+  arrowShape.lineTo(shaftW / 2, shaftLen)
+  arrowShape.lineTo(headW / 2, shaftLen)
+  arrowShape.lineTo(0, arrowLen)
+  arrowShape.lineTo(-headW / 2, shaftLen)
+  arrowShape.lineTo(-shaftW / 2, shaftLen)
+  arrowShape.closePath()
+  const arrowGeo = new THREE.ExtrudeGeometry(arrowShape, {
+    depth: 0.018,
+    bevelEnabled: false,
+  })
+
+  const laneHitboxGeo = new THREE.BoxGeometry(Math.max(0.4, laneWidth * 0.96), depth, height)
 
   for (let l = 0; l < lanes; l++) {
+    const chan = channels[l] || channels.find((c) => c.laneIndex === l + 1)
+    const chanId = chan ? (chan.id || chan.code) : `${spatial.id}_chan_${l + 1}`
+    const chanCode = chan?.code || chanId
+    const chanName = chan?.name || chanCode
+    const isChanBlocked = chan?.status === "bloqueado"
+
     const laneCenterX = -width / 2 + (l + 0.5) * laneWidth
     const vXLeft = -width / 2 + l * laneWidth + 0.07
     const vXRight = -width / 2 + (l + 0.5) * laneWidth + laneWidth / 2 - 0.07
+
+    const laneGroup = new THREE.Group()
+    laneGroup.name = chanId
+    laneGroup.userData = {
+      objectId: spatial.id,
+      channelId: chanId,
+      channelCode: chanCode,
+      channelName: chanName,
+      laneIndex: l,
+      laneCenterX,
+      laneWidth,
+      depth,
+      height,
+      isBlocked: isChanBlocked,
+    }
+
+    // Volume invisível de seleção individual do canal via Raycaster
+    const hitbox = new THREE.Mesh(laneHitboxGeo, laneHitboxMat)
+    hitbox.position.set(laneCenterX, 0, height / 2)
+    hitbox.castShadow = false
+    hitbox.receiveShadow = false
+    laneGroup.add(hitbox)
+
+    // Seta 3D na entrada do canal (y = -depth / 2 apontando para dentro +Y)
+    const arrowMesh = new THREE.Mesh(arrowGeo, isChanBlocked ? entryArrowBlockedMat : entryArrowMat)
+    arrowMesh.position.set(laneCenterX, -depth / 2 - 0.12, 0.032)
+    laneGroup.add(arrowMesh)
 
     // Trilhos aéreos para os níveis superiores (a partir do nível 2)
     for (let lvl = 2; lvl <= levels; lvl++) {
       const lz = levelSpacing * (lvl - 1)
 
-      // Trilho esquerdo e direito deste vão
       const railL = new THREE.Mesh(railGeo, driveRailMat)
       railL.position.set(vXLeft, 0, lz)
-      group.add(railL)
+      laneGroup.add(railL)
 
       const railR = new THREE.Mesh(railGeo, driveRailMat)
       railR.position.set(vXRight, 0, lz)
-      group.add(railR)
+      laneGroup.add(railR)
 
-      // Braços de suporte (consolos) conectando trilho às colunas ao longo das profundidades
       for (let d = 0; d <= depths; d++) {
         const yPos = -depth / 2 + (depth / Math.max(1, depths)) * d
 
         const bL = new THREE.Mesh(bracketGeo, driveRailMat)
         bL.position.set(vXLeft - 0.03, yPos, lz - 0.02)
-        group.add(bL)
+        laneGroup.add(bL)
 
         const bR = new THREE.Mesh(bracketGeo, driveRailMat)
         bR.position.set(vXRight + 0.03, yPos, lz - 0.02)
-        group.add(bR)
+        laneGroup.add(bR)
       }
     }
 
@@ -455,19 +553,17 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
     const topBeamGeo = new THREE.BoxGeometry(laneWidth, 0.06, 0.06)
     const topBackWall = new THREE.Mesh(topBeamGeo, rearBeamMat)
     topBackWall.position.set(laneCenterX, depth / 2, height)
-    group.add(topBackWall)
+    laneGroup.add(topBackWall)
 
     const topEntryPortal = new THREE.Mesh(topBeamGeo, rearBeamMat)
     topEntryPortal.position.set(laneCenterX, -depth / 2, height)
-    group.add(topEntryPortal)
+    laneGroup.add(topEntryPortal)
 
     // ── RIGIDIFICAÇÃO POR TRAVAMENTO POSTERIOR (Parte de trás do canal: y = +depth/2) ──
-    // Apenas para Drive-In (acesso único), mantendo a entrada (-depth/2) totalmente livre
     if (!isDriveThrough) {
       const rearY = depth / 2
       const rearHorizontalGeo = new THREE.BoxGeometry(laneWidth, 0.05, 0.05)
 
-      // Travessas horizontais posteriores em cada nível (e base)
       const rearTieHeights: number[] = [0.22]
       for (let lvl = 1; lvl < levels; lvl++) {
         rearTieHeights.push(levelSpacing * lvl)
@@ -475,16 +571,14 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
       rearTieHeights.push(height)
 
       rearTieHeights.forEach((tz, idx) => {
-        // O topo (height) já tem a viga superior; desenha travessas intermediárias e base
         if (idx < rearTieHeights.length - 1) {
           const tieBeam = new THREE.Mesh(rearHorizontalGeo, rearBeamMat)
           tieBeam.position.set(laneCenterX, rearY, tz)
           tieBeam.castShadow = true
-          group.add(tieBeam)
+          laneGroup.add(tieBeam)
         }
       })
 
-      // Contraventamentos verticais em X (diagonais cruzadas na face posterior de cada módulo de altura)
       const braceSpanX = Math.max(0.25, laneWidth - colDim * 0.8)
       for (let seg = 0; seg < rearTieHeights.length - 1; seg++) {
         const z0 = rearTieHeights[seg]
@@ -501,91 +595,44 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
         diagA.position.set(laneCenterX, rearY, zMid)
         diagA.rotation.y = angle
         diagA.castShadow = true
-        group.add(diagA)
+        laneGroup.add(diagA)
 
         const diagB = new THREE.Mesh(diagGeo, frameBraceMat)
         diagB.position.set(laneCenterX, rearY, zMid)
         diagB.rotation.y = -angle
         diagB.castShadow = true
-        group.add(diagB)
+        laneGroup.add(diagB)
       }
     }
-  }
 
-  // 3. RENDERIZAÇÃO REAL DOS PALETES EM TESTE DE PREENCHIMENTO (OCUPAÇÃO)
-  type DriveChannelData = {
-    id?: string
-    laneIndex?: number
-    occupiedPositions?: Array<{ level: number; depth: number }>
-  }
-  const rawChannels: DriveChannelData[] = Array.isArray(spatial.props?.channels)
-    ? (spatial.props.channels as DriveChannelData[])
-    : []
-  const slotStepY = depth / Math.max(1, depths)
-
-  // Materiais para os paletes dentro do drive
-  const testPalletWoodMat = getMaterial(`drive_pallet_wood_${modeKey}`, () =>
-    new THREE.MeshStandardMaterial({ color: new THREE.Color(readOnly ? "#d97706" : "#b45309"), roughness: 0.75, metalness: 0.1 })
-  )
-  const testPalletBoxMat = getMaterial(`drive_pallet_box_${modeKey}`, () =>
-    new THREE.MeshStandardMaterial({ color: new THREE.Color(readOnly ? "#fbbf24" : "#eab308"), roughness: 0.55, metalness: 0.05 })
-  )
-
-  const pWidth = Math.max(0.6, laneWidth * 0.72)
-  const pDepth = Math.max(0.7, slotStepY * 0.82)
-  const baseH = 0.12
-  const loadH = Math.min(1.4, levelSpacing * 0.75)
-
-  const pDeckGeo = new THREE.BoxGeometry(pWidth, pDepth, baseH)
-  const pLoadGeo = new THREE.BoxGeometry(pWidth * 0.94, pDepth * 0.94, loadH)
-
-  // Varre os canais e extrai posições ocupadas
-  const channelsToRender = rawChannels.length > 0
-    ? rawChannels
-    : Array.from({ length: lanes }, (_, idx) => ({
-        id: `chan_auto_${idx + 1}`,
-        laneIndex: idx + 1,
-        occupiedPositions: [],
-      }))
-
-  channelsToRender.forEach((chan, idx) => {
-    const laneIdx = (typeof chan.laneIndex === "number" ? chan.laneIndex : idx + 1) - 1
-    if (laneIdx < 0 || laneIdx >= lanes) return
-
-    const occupiedList: Array<{ level: number; depth: number }> = Array.isArray(chan.occupiedPositions)
+    // 3. RENDERIZAÇÃO DOS PALETES EM TESTE DE PREENCHIMENTO NESTE CANAL
+    const occupiedList: Array<{ level: number; depth: number }> = Array.isArray(chan?.occupiedPositions)
       ? chan.occupiedPositions
       : []
 
     occupiedList.forEach((pos) => {
       const lvl = Math.max(1, Math.min(levels, Number(pos.level) || 1))
       const dep = Math.max(1, Math.min(depths, Number(pos.depth) || 1))
-
-      const posX = -width / 2 + (laneIdx + 0.5) * laneWidth
-      // No 2D, profundidade 1 fica no topo (+depth/2) e depth N fica na entrada (-depth/2)
       const posY = depth / 2 - (dep - 0.5) * slotStepY
-
-      // Nível 1 repousa diretamente no chão do galpão (Z = 0.02 para assentar perfeitamente sobre o piso/grid).
-      // Níveis 2..N repousam sobre os trilhos aéreos correspondentes (lz + railThick / 2):
       const railLz = levelSpacing * (lvl - 1)
       const posZ = lvl === 1 ? 0.02 : railLz + railThick / 2
 
       const palletMeshGroup = new THREE.Group()
-
-      // Estrado de madeira
       const deck = new THREE.Mesh(pDeckGeo, testPalletWoodMat)
       deck.position.set(0, 0, baseH / 2)
       palletMeshGroup.add(deck)
 
-      // Carga em caixas industriais
       const load = new THREE.Mesh(pLoadGeo, testPalletBoxMat)
       load.position.set(0, 0, baseH + loadH / 2)
       load.castShadow = true
       palletMeshGroup.add(load)
 
-      palletMeshGroup.position.set(posX, posY, posZ)
-      group.add(palletMeshGroup)
+      palletMeshGroup.position.set(laneCenterX, posY, posZ)
+      laneGroup.add(palletMeshGroup)
     })
-  })
+
+    group.add(laneGroup)
+  }
 }
 
 // ─────────────────────────────────────────────────────────────

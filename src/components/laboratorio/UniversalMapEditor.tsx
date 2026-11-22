@@ -1480,6 +1480,7 @@ export default function UniversalMapEditor({
             mode={spatialMode}
             objects={objects}
             selectedId={selectedId}
+            selectedChannelId={selectedChannelId}
             snapEnabled={snapEnabled}
             gridSize={gridSize}
             readOnly={readOnly}
@@ -1554,6 +1555,13 @@ export default function UniversalMapEditor({
               >
                 <span>Abrir Grid do Canal (G300)</span>
                 <span>→</span>
+              </button>
+              <button
+                onClick={() => handleSelect(null, null)}
+                className="px-2 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold transition-colors cursor-pointer"
+                title="Deselecionar canal"
+              >
+                ✕
               </button>
             </div>
           )
