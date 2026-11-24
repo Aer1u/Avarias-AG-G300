@@ -52,6 +52,7 @@ import {
   hydratePositionKeyFromSupabase,
   persistPositionItemsToSupabase,
 } from "@/lib/workspaceItemsSync"
+import { ITEMS_UPDATED_EVENT } from "@/lib/driveOccupancy"
 
 const fmtNum = (val: number, locale = "pt-BR") =>
   val !== 0 && Math.abs(val) < 1
@@ -79,6 +80,7 @@ interface CompartmentRelationViewProps {
   system?: BusinessSystem | null
   objectId?: string
   allObjects?: MapObject[]
+  workspaceId?: string
   stockControlMode?: "livre" | "vinculado_saldo"
 }
 
@@ -90,6 +92,7 @@ export default function CompartmentRelationView({
   system = null,
   objectId,
   allObjects = [],
+  workspaceId,
   stockControlMode,
 }: CompartmentRelationViewProps) {
   const [itemsVersion, setItemsVersion] = useState(0)
@@ -131,12 +134,13 @@ export default function CompartmentRelationView({
   const originObjectId = useMemo(() => getOriginObjectId(system), [system])
   const isSystemOrigin = Boolean(system && objectId && originObjectId === objectId)
   const isNonOriginSystemParticipant = Boolean(
-    system && objectId && originObjectId && originObjectId !== objectId
+    system && objectId && (!originObjectId || originObjectId !== objectId)
   )
   const enforceStockLimit = Boolean(
     system &&
+      !isSystemOrigin &&
       (stockControlMode === "vinculado_saldo" ||
-        (!stockControlMode && system.defaultControlMode === "vinculado_saldo"))
+        (!stockControlMode && system.defaultControlMode !== "livre"))
   )
 
   // Sincroniza saldo da Origem (Chão) ou hidrata compartimento livre ao abrir
@@ -149,7 +153,7 @@ export default function CompartmentRelationView({
         if (system) {
           await fetchAndSyncSystemBalances(system)
         } else {
-          await hydratePositionKeyFromSupabase(mapeamentoId)
+          await hydratePositionKeyFromSupabase(mapeamentoId, workspaceId)
         }
       })
       .then(() => {
@@ -161,7 +165,13 @@ export default function CompartmentRelationView({
     return () => {
       active = false
     }
-  }, [system, mapeamentoId])
+  }, [system, mapeamentoId, workspaceId])
+
+  useEffect(() => {
+    const onItemsUpdated = () => setItemsVersion((v) => v + 1)
+    window.addEventListener(ITEMS_UPDATED_EVENT, onItemsUpdated)
+    return () => window.removeEventListener(ITEMS_UPDATED_EVENT, onItemsUpdated)
+  }, [])
 
   // Carrega itens do compartimento a partir do storage
   const items: MapeamentoItem[] = useMemo(() => {
@@ -202,7 +212,7 @@ export default function CompartmentRelationView({
   }, [system, objectId, allObjects])
 
   const commitItemsForChannel = useCallback(
-    (nextChannelItems: MapeamentoItem[]) => {
+    (nextChannelItems: MapeamentoItem[]): boolean => {
       setBalanceError("")
       if (system && objectId && isNonOriginSystemParticipant) {
         const res = applyNonOriginPositionChange(
@@ -214,23 +224,26 @@ export default function CompartmentRelationView({
         )
         if (!res.ok) {
           setBalanceError(res.errorMessage)
-          return
+          return false
         }
         setItemsVersion((v) => v + 1)
         onItemsChanged?.(nextChannelItems)
-        return
+        return true
       }
 
       const others = getLocalItems().filter((it) => it.mapeamentoId !== mapeamentoId)
       saveLocalItems([...others, ...nextChannelItems])
-      persistPositionItemsToSupabase(mapeamentoId, nextChannelItems, system?.workspaceId).catch(
-        () => {}
-      )
+      persistPositionItemsToSupabase(
+        mapeamentoId,
+        nextChannelItems,
+        workspaceId || system?.workspaceId
+      ).catch(() => {})
       if (system) {
         syncSupabaseUniversalBalances(system).catch(() => {})
       }
       setItemsVersion((v) => v + 1)
       onItemsChanged?.(nextChannelItems)
+      return true
     },
     [
       mapeamentoId,
@@ -240,6 +253,7 @@ export default function CompartmentRelationView({
       isNonOriginSystemParticipant,
       items,
       enforceStockLimit,
+      workspaceId,
     ]
   )
 
@@ -330,7 +344,7 @@ export default function CompartmentRelationView({
   }, [items])
 
   // ── Handlers de Edição ──────────────────────────────────────
-  const handleSaveModalItems = (saved: MapeamentoItem[] | MapeamentoItem) => {
+  const handleSaveModalItems = (saved: MapeamentoItem[] | MapeamentoItem): boolean => {
     const arr = Array.isArray(saved) ? saved : [saved]
     const formatted = arr.map((it) => ({
       ...it,
@@ -341,9 +355,12 @@ export default function CompartmentRelationView({
     }))
     const replacedIds = new Set(formatted.map((it) => it.id))
     const remaining = items.filter((it) => !replacedIds.has(it.id))
-    commitItemsForChannel([...remaining, ...formatted])
-    setIsItemModalOpen(false)
-    setEditingItem(null)
+    const ok = commitItemsForChannel([...remaining, ...formatted])
+    if (ok) {
+      setIsItemModalOpen(false)
+      setEditingItem(null)
+    }
+    return ok
   }
 
   const handleUpdateClassificacao = (item: MapeamentoItem, nextVal: ClassificacaoPalete) => {

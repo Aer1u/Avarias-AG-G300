@@ -44,6 +44,7 @@ import SystemManagerModal from "../Systems/SystemManagerModal"
 import SystemDataPanel from "../Systems/SystemDataPanel"
 import { AdminCenterModal } from "../IAM/AdminCenter/AdminCenterModal"
 import { useAuthz } from "../IAM/useAuthz"
+import { LocalErrorBoundary } from "../LocalErrorBoundary"
 import type { DimensionConfig } from "../MapLibrary/dimensionsTypes"
 import type { PhysicalDimensions } from "../MapLibrary/types"
 import {
@@ -739,13 +740,22 @@ export default function UniversalMapEditor({
       return
     }
     const newId = crypto.randomUUID()
+    const clonedProps = { ...selectedObject.props }
+    if (Array.isArray(clonedProps.channels)) {
+      clonedProps.channels = (clonedProps.channels as Array<Record<string, unknown>>).map((c, idx) => ({
+        ...c,
+        id: `chan_${newId}_${c.laneIndex ?? idx + 1}`,
+        driveId: newId,
+        occupiedPositions: [],
+      }))
+    }
     const cloned: MapObject = {
       ...selectedObject,
       id: newId,
       x: selectedObject.x + 30,
       y: selectedObject.y + 30,
       label: `${selectedObject.label || selectedObject.type} (Cópia)`,
-      props: { ...selectedObject.props },
+      props: clonedProps,
       points: selectedObject.points ? [...selectedObject.points] : undefined,
     }
     setObjects((prev) => [...prev, cloned])
@@ -1485,33 +1495,40 @@ export default function UniversalMapEditor({
         {/* Renderizador Espacial Universal: 2D Konva ou 3D Three.js (Bird's-Eye 3D / Full Top / 3D Livre) */}
         <div className="flex-1 relative flex overflow-hidden min-w-0">
           {spatialMode === "2d" ? (
-            <MapCanvasContainer
-              ref={canvasRef}
-              objects={objects}
-              selectedId={selectedId}
-              selectedChannelId={selectedChannelId}
-              snapEnabled={snapEnabled}
-              gridSize={gridSize}
-              zoom={zoom}
-              tool={tool}
-              readOnly={readOnly}
-              onToolChange={setTool}
-              onSelect={handleSelect}
-              onUpdateObject={handleUpdateObjectById}
-              onZoomChange={setZoom}
-              onAddObject={handleAddObject}
-            />
+            <LocalErrorBoundary fallbackTitle="Falha ao renderizar Canvas 2D">
+              <MapCanvasContainer
+                ref={canvasRef}
+                objects={objects}
+                selectedId={selectedId}
+                selectedChannelId={selectedChannelId}
+                snapEnabled={snapEnabled}
+                gridSize={gridSize}
+                zoom={zoom}
+                tool={tool}
+                readOnly={readOnly}
+                onToolChange={setTool}
+                onSelect={handleSelect}
+                onUpdateObject={handleUpdateObjectById}
+                onZoomChange={setZoom}
+                onAddObject={handleAddObject}
+              />
+            </LocalErrorBoundary>
           ) : (
-            <SpatialViewer3D
-              ref={viewer3DRef}
-              mode={spatialMode}
-              objects={objects}
-              selectedId={selectedId}
-              selectedChannelId={selectedChannelId}
-              readOnly={readOnly}
-              onSelect={handleSelect}
-              onModeChange={setSpatialMode}
-            />
+            <LocalErrorBoundary
+              fallbackTitle="Falha ao renderizar Visualizador 3D"
+              fallbackDescription="Alterne para o modo 2D na barra superior ou clique em tentar novamente."
+            >
+              <SpatialViewer3D
+                ref={viewer3DRef}
+                mode={spatialMode}
+                objects={objects}
+                selectedId={selectedId}
+                selectedChannelId={selectedChannelId}
+                readOnly={readOnly}
+                onSelect={handleSelect}
+                onModeChange={setSpatialMode}
+              />
+            </LocalErrorBoundary>
           )}
 
           {/* Pill Flutuante de Acesso Rápido na Parte Superior (Modo Visualizador) */}
@@ -1743,17 +1760,27 @@ export default function UniversalMapEditor({
       )}
 
       {/* Modal Drive-In Grid Oficial / Relação de Compartimento (Modo Visualizador) */}
-      <ViewerDriveInModal
-        isOpen={driveInModalState.isOpen}
-        onClose={() => setDriveInModalState({ isOpen: false, object: null })}
-        object={driveInModalState.object}
-        initialChannelId={driveInModalState.initialChannelId || driveInModalState.channelId}
-        isAdmin={workspaceIsAdmin}
-        workspaceId={workspaceId}
-        allObjects={objects}
-        levelsConfig={levelsConfig}
-        depthConfig={depthConfig}
-      />
+      <LocalErrorBoundary
+        fallbackTitle="Falha ao abrir modal de posição"
+        onReset={() => setDriveInModalState({ isOpen: false, object: null })}
+      >
+        <ViewerDriveInModal
+          isOpen={driveInModalState.isOpen}
+          onClose={() => setDriveInModalState({ isOpen: false, object: null })}
+          object={
+            driveInModalState.object
+              ? objects.find((o) => o.id === driveInModalState.object?.id) ||
+                driveInModalState.object
+              : null
+          }
+          initialChannelId={driveInModalState.initialChannelId || driveInModalState.channelId}
+          isAdmin={workspaceIsAdmin}
+          workspaceId={workspaceId}
+          allObjects={objects}
+          levelsConfig={levelsConfig}
+          depthConfig={depthConfig}
+        />
+      </LocalErrorBoundary>
 
       {/* Modal da Central de Identidade, Papéis e Permissões (NEXUS IAM) */}
       <AdminCenterModal

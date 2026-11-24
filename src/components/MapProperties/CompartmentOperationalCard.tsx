@@ -88,7 +88,7 @@ export default function CompartmentOperationalCard({
     }
   }
 
-  const { systems, linkStorageToSystem } = useSystemStore(workspaceId)
+  const { systems, linkStorageToSystem, unlinkStorageFromSystem } = useSystemStore(workspaceId)
   const stockControlMode = String(props.stockControlMode || "livre") as "livre" | "vinculado_saldo"
   const stockSystemRef = String(props.stockSystemRef || "")
 
@@ -326,7 +326,15 @@ export default function CompartmentOperationalCard({
         <div className="space-y-1.5">
           <button
             type="button"
-            onClick={() => onUpdateProp("stockControlMode", "livre")}
+            onClick={() => {
+              onUpdateProp("stockControlMode", "livre")
+              onUpdateProp("stockSystemRef", "")
+              systems.forEach((s) => {
+                if (s.participants?.some((p) => p.storageObjectId === selectedObject.id)) {
+                  unlinkStorageFromSystem(s.id, selectedObject.id)
+                }
+              })
+            }}
             className={`w-full flex items-start gap-2.5 p-2 rounded-lg border text-left transition-colors ${
               stockControlMode === "livre"
                 ? "bg-slate-800/80 border-slate-600 ring-1 ring-slate-500/60"
@@ -387,6 +395,14 @@ export default function CompartmentOperationalCard({
               onChange={(e) => {
                 const chosenCode = e.target.value
                 onUpdateProp("stockSystemRef", chosenCode)
+                if (!chosenCode) {
+                  systems.forEach((s) => {
+                    if (s.participants?.some((p) => p.storageObjectId === selectedObject.id)) {
+                      unlinkStorageFromSystem(s.id, selectedObject.id)
+                    }
+                  })
+                  return
+                }
                 const foundSys = systems.find((s) => s.code === chosenCode || s.id === chosenCode)
                 if (foundSys) {
                   linkStorageToSystem(foundSys.id, {

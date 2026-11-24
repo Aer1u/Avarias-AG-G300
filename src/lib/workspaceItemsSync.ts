@@ -26,57 +26,10 @@ function isWorkspacePositionKey(key: string): boolean {
   return key.startsWith("sys_") || key.startsWith("comp_") || key.startsWith("ws_")
 }
 
-function parseKeyParts(mapeamentoId: string): {
-  kind: "sys" | "comp" | "ws" | "unknown"
-  systemId?: string
-  workspaceId?: string
-  objectId: string
-} {
-  if (mapeamentoId.startsWith("sys_")) {
-    const rest = mapeamentoId.slice(4)
-    // systemId é UUID (36 chars) ou prefixo até o último _
-    if (rest.length > 37 && rest[36] === "_" && UUID_REGEX.test(rest.slice(0, 36))) {
-      return {
-        kind: "sys",
-        systemId: rest.slice(0, 36),
-        objectId: rest.slice(37),
-      }
-    }
-    const sep = rest.indexOf("_")
-    if (sep > 0) {
-      return {
-        kind: "sys",
-        systemId: rest.slice(0, sep),
-        objectId: rest.slice(sep + 1),
-      }
-    }
-    return { kind: "sys", objectId: rest }
-  }
+import { parsePositionKeyParts } from "./driveOccupancy"
 
-  if (mapeamentoId.startsWith("comp_") || mapeamentoId.startsWith("ws_")) {
-    const kind = mapeamentoId.startsWith("comp_") ? "comp" : "ws"
-    const rest = mapeamentoId.slice(kind === "comp" ? 5 : 3)
-    // workspaceId pode conter "_" (ex: ws_demo_g300_<objectId>, ws_<ts>_<rand>_<objectId>)
-    // objectId costuma ser UUID (36 chars) no final
-    if (rest.length > 37 && rest[rest.length - 37] === "_" && UUID_REGEX.test(rest.slice(-36))) {
-      return {
-        kind,
-        workspaceId: rest.slice(0, rest.length - 37),
-        objectId: rest.slice(-36),
-      }
-    }
-    const lastSep = rest.lastIndexOf("_")
-    if (lastSep > 0) {
-      return {
-        kind,
-        workspaceId: rest.slice(0, lastSep),
-        objectId: rest.slice(lastSep + 1),
-      }
-    }
-    return { kind, objectId: rest }
-  }
-
-  return { kind: "unknown", objectId: mapeamentoId }
+function parseKeyParts(mapeamentoId: string, workspaceHint?: string | null) {
+  return parsePositionKeyParts(mapeamentoId, workspaceHint)
 }
 
 function getLocalTimestamps(): Record<string, string> {
@@ -110,7 +63,7 @@ async function resolveWorkspaceUuidForKey(
     return toWorkspaceUuid(workspaceHint)
   }
 
-  const parsed = parseKeyParts(mapeamentoId)
+  const parsed = parseKeyParts(mapeamentoId, workspaceHint)
   if (parsed.workspaceId) {
     return toWorkspaceUuid(parsed.workspaceId)
   }
@@ -226,7 +179,7 @@ export function persistPositionItemsToSupabase(
         const anchorId = await ensureItemsAnchorSystemId(wsUuid)
         if (!anchorId) return
 
-        const parsed = parseKeyParts(mapeamentoId)
+        const parsed = parseKeyParts(mapeamentoId, workspaceHint)
         const storageObjectId = parsed.objectId || mapeamentoId
 
         const { data: existingRows, error: findErr } = await supabase
@@ -259,14 +212,40 @@ export function persistPositionItemsToSupabase(
 
         if (existingRows && existingRows.length > 0) {
           const primaryId = existingRows[0].id
-          await supabase.from("universal_records").update(payload).eq("id", primaryId)
+          const { error: updErr } = await supabase
+            .from("universal_records")
+            .update(payload)
+            .eq("id", primaryId)
+          if (updErr) {
+            console.error("Erro ao atualizar snapshot de posição no Supabase:", updErr.message)
+          }
           // Remove eventuais duplicatas antigas
           if (existingRows.length > 1) {
             const dupIds = existingRows.slice(1).map((r) => r.id)
-            await supabase.from("universal_records").delete().in("id", dupIds)
+            const { error: delErr } = await supabase
+              .from("universal_records")
+              .delete()
+              .in("id", dupIds)
+            if (delErr) {
+              console.warn("Aviso ao remover duplicatas de posição:", delErr.message)
+            }
           }
         } else {
-          await supabase.from("universal_records").insert(payload)
+          const { error: insErr } = await supabase.from("universal_records").insert(payload)
+          if (insErr) {
+            console.error("Erro ao inserir snapshot de posição no Supabase:", insErr.message)
+            // Em caso de âncora expirada (FK), invalida cache e tenta uma vez
+            anchorIdCache.delete(wsUuid)
+            const freshAnchorId = await ensureItemsAnchorSystemId(wsUuid)
+            if (freshAnchorId && freshAnchorId !== anchorId) {
+              const { error: retryErr } = await supabase
+                .from("universal_records")
+                .insert({ ...payload, system_id: freshAnchorId })
+              if (retryErr) {
+                console.error("Falha na retentativa de inserção de posição:", retryErr.message)
+              }
+            }
+          }
         }
       } catch (err) {
         console.warn("Aviso ao salvar itens da posição no Supabase:", err)

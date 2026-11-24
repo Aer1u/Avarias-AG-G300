@@ -16,6 +16,8 @@ import * as THREE from "three"
 import type { UniversalSpatialObject } from "./types"
 import { FLOOR_SURFACES, type FloorMaterialType } from "../MapLibrary/floorSurfaces"
 import { ensureDriveChannels } from "../MapLibrary/spatialContainment"
+import { getLocalItems } from "@/lib/mapeamentosStorage"
+import { getChannelOccupiedSlots, isItemBelongingToObject } from "@/lib/driveOccupancy"
 
 // Cache compartilhado de materiais para máxima performance
 const materialsCache = new Map<string, THREE.Material>()
@@ -456,12 +458,13 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
     new THREE.MeshStandardMaterial({ color: new THREE.Color(readOnly ? "#fbbf24" : "#eab308"), roughness: 0.55, metalness: 0.05 })
   )
 
-  const pWidth = Math.max(0.6, laneWidth * 0.72)
-  const pDepth = Math.max(0.7, slotStepY * 0.82)
+  const pWidth = Math.min(laneWidth * 0.82, Math.max(0.45, laneWidth * 0.72))
+  const pDepth = Math.min(slotStepY * 0.88, Math.max(0.55, slotStepY * 0.82))
   const baseH = 0.12
   const loadH = Math.min(1.4, levelSpacing * 0.75)
   const pDeckGeo = new THREE.BoxGeometry(pWidth, pDepth, baseH)
   const pLoadGeo = new THREE.BoxGeometry(pWidth * 0.94, pDepth * 0.94, loadH)
+  const allLocalItems = getLocalItems()
 
   // Geometria da Seta de Entrada no piso (apontando para +Y = interior do túnel)
   const arrowLen = Math.min(0.85, Math.max(0.45, depth * 0.16))
@@ -605,10 +608,13 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
       }
     }
 
-    // 3. RENDERIZAÇÃO DOS PALETES EM TESTE DE PREENCHIMENTO NESTE CANAL
-    const occupiedList: Array<{ level: number; depth: number }> = Array.isArray(chan?.occupiedPositions)
-      ? chan.occupiedPositions
-      : []
+    // 3. RENDERIZAÇÃO DOS PALETES REAIS + OCUPAÇÃO DO CANAL
+    const occupiedList = getChannelOccupiedSlots(
+      spatial.raw,
+      chan,
+      channels,
+      allLocalItems
+    )
 
     occupiedList.forEach((pos) => {
       const lvl = Math.max(1, Math.min(levels, Number(pos.level) || 1))
@@ -848,4 +854,56 @@ function buildCompartmentGeometry(group: THREE.Group, spatial: UniversalSpatialO
   const lines = new THREE.LineSegments(edges, borderMat)
   lines.position.copy(mesh.position)
   group.add(lines)
+
+  // Renderiza paletes reais armazenados no espaço aberto do compartimento
+  const compItems = getLocalItems().filter(
+    (it) => isItemBelongingToObject(it, spatial.id) && (Number(it.quantidade) || 0) > 0
+  )
+  if (compItems.length > 0) {
+    const palletKeys = new Set<string>()
+    let simplePallets = 0
+    compItems.forEach((it) => {
+      const pid = String(it.idPalete || "").trim().toUpperCase()
+      if (!pid || pid === "NAN" || pid === "-" || pid === "S/ID" || pid === "N/A") {
+        simplePallets++
+      } else {
+        palletKeys.add(pid)
+      }
+    })
+    const totalPallets = Math.max(1, palletKeys.size + simplePallets)
+    const cols = Math.max(1, Math.floor(width / 1.15))
+    const rows = Math.max(1, Math.floor(depth / 1.3))
+    const maxDraw = Math.min(totalPallets, cols * rows, 24)
+    const cellW = width / cols
+    const cellD = depth / rows
+    const pw = Math.min(0.92, cellW * 0.72)
+    const pd = Math.min(1.08, cellD * 0.72)
+    const phBase = 0.12
+    const phLoad = 0.95
+
+    const woodMat = getMaterial("pallet_wood", () =>
+      new THREE.MeshStandardMaterial({ color: new THREE.Color("#b45309"), roughness: 0.85, metalness: 0.05 })
+    )
+    const boxMat = getMaterial("pallet_load_kraft", () =>
+      new THREE.MeshStandardMaterial({ color: new THREE.Color("#d97706"), roughness: 0.75, metalness: 0.05 })
+    )
+    const deckGeo = new THREE.BoxGeometry(pw, pd, phBase)
+    const loadGeo = new THREE.BoxGeometry(pw * 0.92, pd * 0.92, phLoad)
+
+    for (let idx = 0; idx < maxDraw; idx++) {
+      const c = idx % cols
+      const r = Math.floor(idx / cols)
+      const px = -width / 2 + (c + 0.5) * cellW
+      const py = -depth / 2 + (r + 0.5) * cellD
+
+      const deck = new THREE.Mesh(deckGeo, woodMat)
+      deck.position.set(px, py, padH + phBase / 2)
+      group.add(deck)
+
+      const load = new THREE.Mesh(loadGeo, boxMat)
+      load.position.set(px, py, padH + phBase + phLoad / 2)
+      load.castShadow = true
+      group.add(load)
+    }
+  }
 }

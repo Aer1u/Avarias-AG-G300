@@ -40,16 +40,43 @@ export default function WorkspaceEditorPage() {
 
   useEffect(() => {
     if (!workspaceId) return
+    let active = true
 
-    const ws = workspacesService.getWorkspaceById(workspaceId)
-    if (!ws) {
-      setNotFound(true)
-      setLoading(false)
-      return
+    Promise.resolve()
+      .then(async () => {
+        if (!active) return
+        const localWs = workspacesService.getWorkspaceById(workspaceId)
+        if (localWs) {
+          setWorkspace(localWs)
+          setNotFound(false)
+          setLoading(false)
+        } else {
+          setLoading(true)
+          setNotFound(false)
+        }
+
+        const remoteWs = await workspacesService.fetchWorkspaceById(workspaceId)
+        if (!active) return
+        if (remoteWs) {
+          setWorkspace(remoteWs)
+          setNotFound(false)
+        } else if (!localWs) {
+          setNotFound(true)
+        }
+      })
+      .catch(() => {
+        if (!active) return
+        if (!workspacesService.getWorkspaceById(workspaceId)) {
+          setNotFound(true)
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+
+    return () => {
+      active = false
     }
-
-    setWorkspace(ws)
-    setLoading(false)
   }, [workspaceId])
 
   // ── Estados de carregamento / não autenticado ──────────────────

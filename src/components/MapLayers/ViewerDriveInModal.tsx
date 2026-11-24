@@ -41,6 +41,11 @@ import {
   hydratePositionKeyFromSupabase,
   persistPositionItemsToSupabase,
 } from "@/lib/workspaceItemsSync"
+import {
+  filterItemsForDriveChannel,
+  ITEMS_UPDATED_EVENT,
+} from "@/lib/driveOccupancy"
+import { LocalErrorBoundary } from "../LocalErrorBoundary"
 
 interface ChannelInfo {
   id: string
@@ -52,6 +57,8 @@ interface ChannelInfo {
   capacity?: number
   occupancy?: number
   status?: string
+  stockControlMode?: "livre" | "vinculado_saldo"
+  stockSystemRef?: string
 }
 
 interface ViewerDriveInModalProps {
@@ -95,22 +102,97 @@ export default function ViewerDriveInModal({
   const { systems } = useSystemStore(workspaceId)
   const isCompartment = object?.type === "compartment"
 
-  // Sistema e Participante vinculados a este objeto no Workspace
-  const { linkedSystem, linkedParticipant } = useMemo(() => {
-    if (!object) return { linkedSystem: undefined, linkedParticipant: undefined }
-    const stockSysRef = String(object.props?.stockSystemRef || "")
-    const sys =
-      systems.find(
+  // Extrai canais cadastrados ou derivados dos vãos do drive (nunca para compartimento)
+  const channels: ChannelInfo[] = useMemo(() => {
+    if (!object || isCompartment) return []
+    return ensureDriveChannels(object)
+  }, [object, isCompartment])
+
+  // Canal único aberto no modal (somente o canal selecionado)
+  const currentChannel = useMemo(() => {
+    if (channels.length === 0) return null
+    if (initialChannelId) {
+      const byIdOrCode = channels.find(
+        (c) => c.id === initialChannelId || c.code === initialChannelId
+      )
+      if (byIdOrCode) return byIdOrCode
+      const byName = channels.find((c) => c.name === initialChannelId)
+      if (byName) return byName
+    }
+    return channels[0]
+  }, [channels, initialChannelId])
+
+  const findSystemByRef = useCallback(
+    (ref: string) => {
+      const norm = ref.trim().toUpperCase()
+      if (!norm) return undefined
+      return systems.find(
         (s) =>
-          s.originStorageId === object.id ||
-          s.participants?.some((p) => p.storageObjectId === object.id)
-      ) ||
-      (stockSysRef
-        ? systems.find((s) => s.code === stockSysRef || s.id === stockSysRef)
-        : undefined)
+          s.id.toUpperCase() === norm ||
+          s.code.trim().toUpperCase() === norm ||
+          s.name.trim().toUpperCase() === norm
+      )
+    },
+    [systems]
+  )
+
+  // Sistema e Participante vinculados a este canal (ou objeto) no Workspace
+  const { linkedSystem, linkedParticipant, channelForceFree } = useMemo(() => {
+    if (!object) {
+      return { linkedSystem: undefined, linkedParticipant: undefined, channelForceFree: false }
+    }
+
+    const originSys = systems.find((s) => s.originStorageId === object.id)
+    const participantSys = systems.find((s) =>
+      s.participants?.some((p) => p.storageObjectId === object.id)
+    )
+    const objMode = object.props?.stockControlMode as "livre" | "vinculado_saldo" | undefined
+    const objSysRef = String(object.props?.stockSystemRef || "").trim()
+
+    if (!isCompartment && currentChannel) {
+      const chanMode = currentChannel.stockControlMode
+      const chanSysRef = String(currentChannel.stockSystemRef || "").trim()
+
+      // 1) Canal explicitamente configurado como "livre" SEMPRE sobrepõe o Drive-In geral
+      if (chanMode === "livre") {
+        return { linkedSystem: undefined, linkedParticipant: undefined, channelForceFree: true }
+      }
+
+      // 2) Canal explicitamente configurado como "vinculado_saldo" SEMPRE sobrepõe o Drive-In geral
+      if (chanMode === "vinculado_saldo") {
+        if (chanSysRef) {
+          const sys = findSystemByRef(chanSysRef)
+          if (sys) {
+            const part = sys.participants?.find((p) => p.storageObjectId === object.id)
+            return { linkedSystem: sys, linkedParticipant: part, channelForceFree: false }
+          }
+        }
+        // Canal individual vinculado_saldo sem sistema selecionado: não herda o sistema geral do Drive-In
+        return { linkedSystem: undefined, linkedParticipant: undefined, channelForceFree: true }
+      }
+
+      // 3) Canal herdado (chanMode === undefined): se tiver referência legada própria, respeita-a
+      if (chanSysRef) {
+        const sys = findSystemByRef(chanSysRef)
+        if (sys) {
+          const part = sys.participants?.find((p) => p.storageObjectId === object.id)
+          return { linkedSystem: sys, linkedParticipant: part, channelForceFree: false }
+        }
+      }
+    }
+
+    // Fallback para configuração geral do Drive-In / Objeto (e não é Origem/Chão)
+    if (objMode === "livre" && !originSys) {
+      return { linkedSystem: undefined, linkedParticipant: undefined, channelForceFree: true }
+    }
+
+    const sys =
+      originSys ||
+      (objSysRef ? findSystemByRef(objSysRef) : undefined) ||
+      participantSys
     const part = sys?.participants?.find((p) => p.storageObjectId === object.id)
-    return { linkedSystem: sys, linkedParticipant: part }
-  }, [object, systems])
+    return { linkedSystem: sys, linkedParticipant: part, channelForceFree: false }
+  }, [object, systems, isCompartment, currentChannel, findSystemByRef])
 
   // Chave de armazenamento isolada do G300
   const objectMapeamentoKey = useMemo(() => {
@@ -164,26 +246,13 @@ export default function ViewerDriveInModal({
     }
   }, [isOpen, object, linkedSystem, objectMapeamentoKey, workspaceId])
 
-  // Extrai canais cadastrados ou derivados dos vãos do drive (nunca para compartimento)
-  const channels: ChannelInfo[] = useMemo(() => {
-    if (!object || isCompartment) return []
-    return ensureDriveChannels(object)
-  }, [object, isCompartment])
-
-  // Canal único aberto no modal (somente o canal selecionado)
-  const currentChannel = useMemo(() => {
-    if (channels.length === 0) return null
-    if (initialChannelId) {
-      const found = channels.find(
-        (c) =>
-          c.id === initialChannelId ||
-          c.code === initialChannelId ||
-          c.name === initialChannelId
-      )
-      if (found) return found
-    }
-    return channels[0]
-  }, [channels, initialChannelId])
+  // Mantém a visualização sincronizada quando itens são hidratados ou editados externamente
+  useEffect(() => {
+    if (!isOpen) return
+    const onItemsUpdated = () => setItemsVersion((v) => v + 1)
+    window.addEventListener(ITEMS_UPDATED_EVENT, onItemsUpdated)
+    return () => window.removeEventListener(ITEMS_UPDATED_EVENT, onItemsUpdated)
+  }, [isOpen])
 
   // Nome fiel à nomenclatura do objeto
   const objectDisplayName = useMemo<string>(() => {
@@ -206,6 +275,11 @@ export default function ViewerDriveInModal({
     }
     return objectDisplayName || effectivePositionCode
   }, [currentChannel, objectDisplayName, effectivePositionCode])
+
+  const posicoesDisponiveisList = useMemo<string[]>(
+    () => (positionDisplayName ? [positionDisplayName] : []),
+    [positionDisplayName]
+  )
 
   const levelCount = Math.max(1, Number(currentChannel?.levels || object?.props?.levels) || 4)
   const depthCount = Math.max(1, Number(currentChannel?.depth || object?.props?.depth) || 4)
@@ -287,13 +361,39 @@ export default function ViewerDriveInModal({
 
   const isOriginObject = Boolean(object && originObjectId && originObjectId === object.id)
 
-  const enforceStockLimit = Boolean(
-    linkedSystem &&
-      !isOriginObject &&
-      (linkedParticipant?.stockControlMode === "vinculado_saldo" ||
-        (!linkedParticipant?.stockControlMode &&
-          linkedSystem.defaultControlMode === "vinculado_saldo"))
-  )
+  const enforceStockLimit = useMemo(() => {
+    if (!linkedSystem || isOriginObject || channelForceFree) return false
+    if (!isCompartment && currentChannel?.stockControlMode === "livre") {
+      return false
+    }
+    if (!isCompartment && currentChannel?.stockControlMode === "vinculado_saldo") {
+      return true
+    }
+    if (object?.props?.stockControlMode === "vinculado_saldo") {
+      return true
+    }
+    if (object?.props?.stockControlMode === "livre") {
+      return false
+    }
+    if (linkedParticipant?.stockControlMode === "livre") {
+      return false
+    }
+    if (linkedParticipant?.stockControlMode === "vinculado_saldo") {
+      return true
+    }
+    return (
+      linkedSystem.defaultControlMode !== "livre" ||
+      Boolean(currentChannel?.stockSystemRef || object?.props?.stockSystemRef)
+    )
+  }, [
+    linkedSystem,
+    isOriginObject,
+    channelForceFree,
+    isCompartment,
+    currentChannel,
+    object,
+    linkedParticipant,
+  ])
 
   const balanceSnapshot = useMemo(() => {
     void itemsVersion
@@ -314,32 +414,21 @@ export default function ViewerDriveInModal({
     return getLocalItems().filter((it) => it.mapeamentoId === objectMapeamentoKey)
   }, [objectMapeamentoKey, itemsVersion])
 
-  // Itens do canal ativo (somente o canal selecionado)
+  // Itens do canal ativo (somente o canal selecionado, sem colisão quando nomes se repetem)
   const visibleDriveItems: MapeamentoItem[] = useMemo(() => {
-    if (channels.length <= 1) return allObjectItems
-    const allChannelKeys = new Set<string>()
-    channels.forEach((c) => {
-      if (c.code) allChannelKeys.add(c.code)
-      if (c.name) allChannelKeys.add(c.name)
-      if (c.id) allChannelKeys.add(c.id)
-    })
-    const currentKeys = new Set(
-      [currentChannel?.code, currentChannel?.name, currentChannel?.id, effectivePositionCode].filter(
-        Boolean
-      ) as string[]
+    return filterItemsForDriveChannel(
+      allObjectItems,
+      currentChannel as Parameters<typeof filterItemsForDriveChannel>[1],
+      channels as Parameters<typeof filterItemsForDriveChannel>[2],
+      objectDisplayName
     )
-    const isFirstChannel =
-      Boolean(channels[0]) && Boolean(currentChannel) && channels[0].id === currentChannel?.id
-    return allObjectItems.filter((it) => {
-      if (currentKeys.has(it.posicao)) return true
-      return isFirstChannel && !allChannelKeys.has(it.posicao)
-    })
-  }, [allObjectItems, channels, currentChannel, effectivePositionCode])
+  }, [allObjectItems, channels, currentChannel, objectDisplayName])
 
   const occupiedCount = useMemo(() => {
     const slots = new Set<string>()
     visibleDriveItems.forEach((it) => {
-      slots.add(`${it.nivel}_${it.profundidade}`)
+      if ((Number(it.quantidade) || 0) <= 0) return
+      slots.add(`${Number(it.nivel) || 1}_${Number(it.profundidade) || 1}`)
     })
     return slots.size
   }, [visibleDriveItems])
@@ -395,7 +484,7 @@ export default function ViewerDriveInModal({
     setIsItemModalOpen(true)
   }
 
-  const handleEditItem = (updated: MapeamentoItem) => {
+  const handleEditItem = (updated: MapeamentoItem): boolean => {
     const currentObjectItems = getLocalItems().filter(
       (it) => it.mapeamentoId === objectMapeamentoKey
     )
@@ -403,7 +492,7 @@ export default function ViewerDriveInModal({
       updated.quantidade > 0
         ? currentObjectItems.map((it) => (it.id === updated.id ? updated : it))
         : currentObjectItems.filter((it) => it.id !== updated.id)
-    commitObjectItems(nextObjectItems)
+    return commitObjectItems(nextObjectItems)
   }
 
   const handleEditSlot = (slotItems: MapeamentoItem[]) => {
@@ -416,7 +505,7 @@ export default function ViewerDriveInModal({
     setIsItemModalOpen(true)
   }
 
-  const handleSaveModalItems = (saved: MapeamentoItem[] | MapeamentoItem) => {
+  const handleSaveModalItems = (saved: MapeamentoItem[] | MapeamentoItem): boolean => {
     const savedArr = Array.isArray(saved) ? saved : [saved]
     const formatted = savedArr.map((it) => ({
       ...it,
@@ -439,6 +528,7 @@ export default function ViewerDriveInModal({
       setEditingSlotItems(null)
       setBatchCoords(null)
     }
+    return ok
   }
 
   const handleDeleteItem = (itemId: string) => {
@@ -454,25 +544,19 @@ export default function ViewerDriveInModal({
     target: { lvl: number; d: number }
   ) => {
     const all = getLocalItems()
-    const belongsToChannel = (it: MapeamentoItem) => {
-      if (it.mapeamentoId !== objectMapeamentoKey) return false
-      if (channels.length <= 1) return true
-      const allChannelKeys = new Set<string>()
-      channels.forEach((c) => {
-        if (c.code) allChannelKeys.add(c.code)
-        if (c.name) allChannelKeys.add(c.name)
-        if (c.id) allChannelKeys.add(c.id)
-      })
-      const currentKeys = new Set(
-        [currentChannel?.code, currentChannel?.name, currentChannel?.id, effectivePositionCode].filter(
-          Boolean
-        ) as string[]
-      )
-      const isFirstChannel =
-        Boolean(channels[0]) && Boolean(currentChannel) && channels[0].id === currentChannel?.id
-      return currentKeys.has(it.posicao) || (isFirstChannel && !allChannelKeys.has(it.posicao))
-    }
+    const objItems = all.filter((it) => it.mapeamentoId === objectMapeamentoKey)
+    const channelIds = new Set(
+      filterItemsForDriveChannel(
+        objItems,
+        currentChannel as Parameters<typeof filterItemsForDriveChannel>[1],
+        channels as Parameters<typeof filterItemsForDriveChannel>[2],
+        objectDisplayName
+      ).map((it) => it.id)
+    )
+    const belongsToChannel = (it: MapeamentoItem) =>
+      it.mapeamentoId === objectMapeamentoKey && channelIds.has(it.id)
 
+    const now = new Date().toISOString()
     const srcItems = all.filter(
       (it) => belongsToChannel(it) && it.nivel === source.lvl && it.profundidade === source.d
     )
@@ -485,8 +569,18 @@ export default function ViewerDriveInModal({
         !(belongsToChannel(it) && it.nivel === target.lvl && it.profundidade === target.d)
     )
     const nextAll = [
-      ...srcItems.map((it) => ({ ...it, nivel: target.lvl, profundidade: target.d })),
-      ...tgtItems.map((it) => ({ ...it, nivel: source.lvl, profundidade: source.d })),
+      ...srcItems.map((it) => ({
+        ...it,
+        nivel: target.lvl,
+        profundidade: target.d,
+        atualizadoEm: now,
+      })),
+      ...tgtItems.map((it) => ({
+        ...it,
+        nivel: source.lvl,
+        profundidade: source.d,
+        atualizadoEm: now,
+      })),
       ...others,
     ]
     saveLocalItems(nextAll)
@@ -681,52 +775,60 @@ export default function ViewerDriveInModal({
                   : "flex-1 min-h-0 overflow-hidden flex flex-col pt-1"
               }
             >
-              {isCompartment ? (
-                <CompartmentRelationView
-                  mapeamentoId={objectMapeamentoKey}
-                  positionLabel={String(object.props?.label || object.label || effectivePositionCode)}
-                  canEdit={isAdmin && isEditMode}
-                  onItemsChanged={() => setItemsVersion((v) => v + 1)}
-                  system={linkedSystem}
-                  objectId={object.id}
-                  allObjects={allObjects}
-                  stockControlMode={linkedParticipant?.stockControlMode}
-                />
-              ) : loading ? (
-                <div className="flex-1 flex flex-col items-center justify-center text-slate-400 text-xs gap-3">
-                  <span className="animate-spin text-2xl">⏳</span>
-                  <span>Sincronizando saldos do canal...</span>
-                </div>
-              ) : (
-                <MapeamentoDriveInGrid
-                  positionId={positionDisplayName}
-                  items={visibleDriveItems}
-                  capacity={capacity}
-                  levelCount={levelCount}
-                  startLevel={1}
-                  levelsConfig={resolvedLevelsConfig}
-                  depthConfig={resolvedDepthConfig}
-                  isBlocked={currentChannel?.status === "bloqueado"}
-                  observation={(object.props?.observation as string) || ""}
-                  config={driveConfig}
-                  isEditModeActive={isAdmin && isEditMode}
-                  setIsEditModeActive={setIsEditMode}
-                  onAddItem={handleAddItem}
-                  onEditItem={handleEditItem}
-                  onEditSlot={handleEditSlot}
-                  onDeleteItem={handleDeleteItem}
-                  onSwapItems={handleSwapItems}
-                  isLoggedIn={isAdmin}
-                  fitToViewport={true}
-                  sidePreview={
-                    <DriveIn3DPreviewFrame
-                      object={object}
-                      channelId={currentChannel?.id || currentChannel?.code}
-                      channelLabel={currentChannel?.name || currentChannel?.code}
-                    />
-                  }
-                />
-              )}
+              <LocalErrorBoundary fallbackTitle="Erro ao carregar conteúdo da posição">
+                {isCompartment ? (
+                  <CompartmentRelationView
+                    mapeamentoId={objectMapeamentoKey}
+                    positionLabel={String(object.props?.label || object.label || effectivePositionCode)}
+                    canEdit={isAdmin && isEditMode}
+                    onItemsChanged={() => setItemsVersion((v) => v + 1)}
+                    system={linkedSystem}
+                    objectId={object.id}
+                    allObjects={allObjects}
+                    workspaceId={workspaceId}
+                    stockControlMode={
+                      (object.props?.stockControlMode as "livre" | "vinculado_saldo" | undefined) ??
+                      linkedParticipant?.stockControlMode
+                    }
+                  />
+                ) : loading ? (
+                  <div className="flex-1 flex flex-col items-center justify-center text-slate-400 text-xs gap-3">
+                    <span className="animate-spin text-2xl">⏳</span>
+                    <span>Sincronizando saldos do canal...</span>
+                  </div>
+                ) : (
+                  <MapeamentoDriveInGrid
+                    positionId={positionDisplayName}
+                    items={visibleDriveItems}
+                    capacity={capacity}
+                    levelCount={levelCount}
+                    startLevel={1}
+                    levelsConfig={resolvedLevelsConfig}
+                    depthConfig={resolvedDepthConfig}
+                    isBlocked={currentChannel?.status === "bloqueado"}
+                    observation={(object.props?.observation as string) || ""}
+                    config={driveConfig}
+                    isEditModeActive={isAdmin && isEditMode}
+                    setIsEditModeActive={setIsEditMode}
+                    onAddItem={handleAddItem}
+                    onEditItem={handleEditItem}
+                    onEditSlot={handleEditSlot}
+                    onDeleteItem={handleDeleteItem}
+                    onSwapItems={handleSwapItems}
+                    isLoggedIn={isAdmin}
+                    fitToViewport={true}
+                    sidePreview={
+                      <LocalErrorBoundary compact fallbackTitle="Prévia 3D indisponível">
+                        <DriveIn3DPreviewFrame
+                          object={object}
+                          channelId={currentChannel?.id || currentChannel?.code}
+                          channelLabel={currentChannel?.name || currentChannel?.code}
+                        />
+                      </LocalErrorBoundary>
+                    }
+                  />
+                )}
+              </LocalErrorBoundary>
             </div>
           </motion.div>
         </div>
@@ -745,7 +847,7 @@ export default function ViewerDriveInModal({
           onSave={handleSaveModalItems}
           config={driveConfig}
           posicao={positionDisplayName}
-          posicoesDisponiveis={[positionDisplayName]}
+          posicoesDisponiveis={posicoesDisponiveisList}
           nivelInicial={itemCoords.lvl}
           profundidadeInicial={itemCoords.prof}
           levelLabel={resolvedLevelsConfig.items[itemCoords.lvl - 1]?.identifier}

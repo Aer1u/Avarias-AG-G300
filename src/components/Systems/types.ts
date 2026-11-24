@@ -7,6 +7,8 @@
 
 export type StockControlMode = "livre" | "vinculado_saldo"
 
+export type SystemStyle = "completo" | "aberto"
+
 export type StorageRole =
   | "origem"         // ex: Objeto CHÃO que recebe o saldo inicial
   | "armazenamento"   // ex: Drive-In, Porta-Paletes
@@ -41,6 +43,7 @@ export interface BusinessSystem {
   description: string
   color: string                // cor de identificação (#hex)
   icon: string                 // emoji ou identificador de ícone
+  systemStyle?: SystemStyle    // "completo" (Registros+Mapeamento+Confronto) | "aberto" (só Mapeamento+Confronto)
   originStorageId?: string     // MapObject.id do objeto de origem (ex: ID do CHÃO)
   originStorageLabel?: string  // Nome legível da origem (ex: "CHÃO G300")
   status: "ativo" | "inativo" | "configuracao"

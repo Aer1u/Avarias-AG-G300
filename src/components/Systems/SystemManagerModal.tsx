@@ -10,11 +10,12 @@ import React, { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, Plus, Shield, Layers, Check, Trash2, Edit3, ArrowRight, AlertCircle, Building2, GitCompare, Package, MapPin } from "lucide-react"
 import { useSystemStore } from "./useSystemStore"
-import { BusinessSystem, StockControlMode } from "./types"
+import { BusinessSystem, StockControlMode, SystemStyle } from "./types"
 import type { MapObject } from "../MapLibrary/types"
 import SystemRecordsModal from "./SystemRecordsModal"
 import SystemMappingModal from "./SystemMappingModal"
 import SystemConfrontoModal from "./SystemConfrontoModal"
+import { isOpenSystem, getSystemMappedStats } from "@/lib/systemVisuals"
 
 interface SystemManagerModalProps {
   isOpen: boolean
@@ -34,7 +35,7 @@ export default function SystemManagerModal({
   const [isEditing, setIsEditing] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
 
-  // Estados dos 3 Sub-Modais Integrados (Registro · Mapeamento · Confronto)
+  // Estados dos Sub-Modais Integrados (Registro · Mapeamento · Confronto)
   const [isRecordsOpen, setIsRecordsOpen] = useState(false)
   const [isMappingOpen, setIsMappingOpen] = useState(false)
   const [isConfrontoOpen, setIsConfrontoOpen] = useState(false)
@@ -45,6 +46,7 @@ export default function SystemManagerModal({
   if (!isOpen) return null
 
   const selectedSystem = systems.find((s) => s.id === selectedSystemId) || systems[0]
+  const isSelectedOpen = isOpenSystem(selectedSystem)
 
   const handleStartCreate = () => {
     setFormData({
@@ -53,6 +55,7 @@ export default function SystemManagerModal({
       description: "",
       icon: "📦",
       color: "#3b82f6",
+      systemStyle: "completo",
       status: "ativo",
       defaultControlMode: "vinculado_saldo",
       originStorageLabel: "",
@@ -67,7 +70,7 @@ export default function SystemManagerModal({
   }
 
   const handleStartEdit = (sys: BusinessSystem) => {
-    setFormData({ ...sys })
+    setFormData({ ...sys, systemStyle: sys.systemStyle === "aberto" ? "aberto" : "completo" })
     setIsEditing(true)
     setIsCreating(false)
   }
@@ -76,10 +79,13 @@ export default function SystemManagerModal({
     e.preventDefault()
     if (!formData.name || !formData.code) return
 
-    const originObj = formData.originStorageId
+    const style: SystemStyle = formData.systemStyle === "aberto" ? "aberto" : "completo"
+    const isFormOpen = style === "aberto"
+
+    const originObj = !isFormOpen && formData.originStorageId
       ? allObjects.find((o) => o.id === formData.originStorageId)
       : undefined
-    const originParticipant = originObj
+    const originParticipant = !isFormOpen && originObj
       ? {
           storageObjectId: originObj.id,
           storageObjectLabel:
@@ -103,10 +109,11 @@ export default function SystemManagerModal({
         description: formData.description || "",
         color: formData.color || "#3b82f6",
         icon: formData.icon || "📦",
+        systemStyle: style,
         status: formData.status || "ativo",
-        defaultControlMode: formData.defaultControlMode || "vinculado_saldo",
-        originStorageId: formData.originStorageId || "",
-        originStorageLabel: formData.originStorageLabel || originObj?.label || "",
+        defaultControlMode: isFormOpen ? "livre" : (formData.defaultControlMode || "vinculado_saldo"),
+        originStorageId: isFormOpen ? "" : (formData.originStorageId || ""),
+        originStorageLabel: isFormOpen ? "" : (formData.originStorageLabel || originObj?.label || ""),
         responsible: formData.responsible || "",
         workspaceId: workspaceId || "workspace_default",
         participants: originParticipant ? [originParticipant] : [],
@@ -121,10 +128,11 @@ export default function SystemManagerModal({
         description: formData.description,
         color: formData.color,
         icon: formData.icon,
+        systemStyle: style,
         status: formData.status,
-        defaultControlMode: formData.defaultControlMode,
-        originStorageId: formData.originStorageId,
-        originStorageLabel: formData.originStorageLabel || originObj?.label || "",
+        defaultControlMode: isFormOpen ? "livre" : formData.defaultControlMode,
+        originStorageId: isFormOpen ? "" : formData.originStorageId,
+        originStorageLabel: isFormOpen ? "" : (formData.originStorageLabel || originObj?.label || ""),
         responsible: formData.responsible,
       })
       if (originParticipant) {
@@ -194,6 +202,7 @@ export default function SystemManagerModal({
             <div className="space-y-1.5">
               {systems.map((sys) => {
                 const isSelected = sys.id === selectedSystem?.id && !isCreating
+                const openSys = isOpenSystem(sys)
                 return (
                   <button
                     key={sys.id}
@@ -210,15 +219,21 @@ export default function SystemManagerModal({
                     }`}
                   >
                     <span
-                      className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0 shadow-sm"
-                      style={{ backgroundColor: `${sys.color}25`, border: `1px solid ${sys.color}60` }}
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0 shadow-sm relative"
+                      style={{ backgroundColor: `${sys.color}25`, border: `1.5px solid ${sys.color}` }}
                     >
                       {sys.icon}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-white truncate">{sys.name}</span>
-                        <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-400">
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span className="text-xs font-bold text-white truncate flex items-center gap-1.5">
+                          <span
+                            className="w-2 h-2 rounded-full shrink-0"
+                            style={{ backgroundColor: sys.color }}
+                          />
+                          <span className="truncate">{sys.name}</span>
+                        </span>
+                        <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 shrink-0">
                           {sys.code}
                         </span>
                       </div>
@@ -228,9 +243,13 @@ export default function SystemManagerModal({
                           <Layers size={10} /> {sys.participants?.length || 0} objetos
                         </span>
                         <span>•</span>
-                        <span className={sys.defaultControlMode === "vinculado_saldo" ? "text-blue-400" : "text-amber-400"}>
-                          {sys.defaultControlMode === "vinculado_saldo" ? "Saldo Obrig." : "Livre"}
-                        </span>
+                        {openSys ? (
+                          <span className="text-emerald-400 font-semibold">Sistema Aberto</span>
+                        ) : (
+                          <span className={sys.defaultControlMode === "vinculado_saldo" ? "text-blue-400" : "text-amber-400"}>
+                            {sys.defaultControlMode === "vinculado_saldo" ? "Saldo Obrig." : "Livre"}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </button>
@@ -295,78 +314,161 @@ export default function SystemManagerModal({
                   />
                 </div>
 
-                {/* Objeto de Origem (CHÃO) */}
-                <div className="p-3 bg-amber-950/20 border border-amber-800/40 rounded-xl space-y-2">
-                  <label className="text-[11px] font-bold text-amber-400 flex items-center gap-1.5">
-                    <span>📍</span>
-                    <span>Objeto de Armazenamento de Origem dos Saldos (ex: CHÃO)</span>
+                {/* Estilo do Sistema */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block">
+                    Estilo do Sistema *
                   </label>
-                  <p className="text-[10px] text-slate-400 leading-tight">
-                    É o objeto onde as entradas e avarias físicas são registradas antes de circularem para os Drives.
-                  </p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <select
-                        value={formData.originStorageId || ""}
-                        onChange={(e) => {
-                          const chosen = floorObjects.find((o) => o.id === e.target.value)
-                          setFormData({
-                            ...formData,
-                            originStorageId: e.target.value,
-                            originStorageLabel: chosen?.label || chosen?.id || "",
-                          })
-                        }}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
-                      >
-                        <option value="">— Selecionar Objeto do Mapa —</option>
-                        {floorObjects.map((f) => (
-                          <option key={f.id} value={f.id}>
-                            {f.type === "compartment" ? "📦" : "🏢"} {f.label || f.id} ({f.type === "compartment" ? "Compartimento" : f.classification || f.type})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <input
-                        type="text"
-                        placeholder="Ou digite o nome (ex: CHÃO G300)..."
-                        value={formData.originStorageLabel || ""}
-                        onChange={(e) => setFormData({ ...formData, originStorageLabel: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
-                      />
-                    </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFormData({
+                          ...formData,
+                          systemStyle: "completo",
+                          defaultControlMode: formData.defaultControlMode || "vinculado_saldo",
+                        })
+                      }
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        (formData.systemStyle || "completo") === "completo"
+                          ? "bg-blue-950/50 border-blue-500 ring-1 ring-blue-500/40"
+                          : "bg-slate-950/60 border-slate-800 hover:border-slate-700"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-white">📋 Sistema Completo (Saldo)</span>
+                        {(formData.systemStyle || "completo") === "completo" && (
+                          <Check size={14} className="text-blue-400" />
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1 leading-snug">
+                        Inclui <strong>Registros</strong> (CHÃO/entradas), <strong>Mapeamento</strong> e <strong>Confronto</strong>.
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFormData({
+                          ...formData,
+                          systemStyle: "aberto",
+                          defaultControlMode: "livre",
+                          originStorageId: "",
+                          originStorageLabel: "",
+                        })
+                      }
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        formData.systemStyle === "aberto"
+                          ? "bg-emerald-950/50 border-emerald-500 ring-1 ring-emerald-500/40"
+                          : "bg-slate-950/60 border-slate-800 hover:border-slate-700"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-white">🗺️ Sistema Aberto (Sem Registros)</span>
+                        {formData.systemStyle === "aberto" && (
+                          <Check size={14} className="text-emerald-400" />
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1 leading-snug">
+                        Sem módulo de Registros nem saldo prévio no chão. Apenas <strong>Mapeamento</strong> e <strong>Confronto</strong>.
+                      </p>
+                    </button>
                   </div>
                 </div>
 
-                {/* Modo Padrão */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] text-slate-400 block mb-1">Modo de Preenchimento Padrão</label>
-                    <select
-                      value={formData.defaultControlMode || "vinculado_saldo"}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          defaultControlMode: e.target.value as StockControlMode,
-                        })
-                      }
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
-                    >
-                      <option value="vinculado_saldo">Vinculado ao Saldo (Saldo Obrigatório)</option>
-                      <option value="livre">Livre (sem verificação de saldo)</option>
-                    </select>
+                {/* Objeto de Origem (CHÃO) — apenas para Sistema Completo */}
+                {formData.systemStyle !== "aberto" ? (
+                  <>
+                    <div className="p-3 bg-amber-950/20 border border-amber-800/40 rounded-xl space-y-2">
+                      <label className="text-[11px] font-bold text-amber-400 flex items-center gap-1.5">
+                        <span>📍</span>
+                        <span>Objeto de Armazenamento de Origem dos Saldos (ex: CHÃO)</span>
+                      </label>
+                      <p className="text-[10px] text-slate-400 leading-tight">
+                        É o objeto onde as entradas e avarias físicas são registradas antes de circularem para os Drives.
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <select
+                            value={formData.originStorageId || ""}
+                            onChange={(e) => {
+                              const chosen = floorObjects.find((o) => o.id === e.target.value)
+                              setFormData({
+                                ...formData,
+                                originStorageId: e.target.value,
+                                originStorageLabel: chosen?.label || chosen?.id || "",
+                              })
+                            }}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
+                          >
+                            <option value="">— Selecionar Objeto do Mapa —</option>
+                            {floorObjects.map((f) => (
+                              <option key={f.id} value={f.id}>
+                                {f.type === "compartment" ? "📦" : "🏢"} {f.label || f.id} ({f.type === "compartment" ? "Compartimento" : f.classification || f.type})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <input
+                            type="text"
+                            placeholder="Ou digite o nome (ex: CHÃO G300)..."
+                            value={formData.originStorageLabel || ""}
+                            onChange={(e) => setFormData({ ...formData, originStorageLabel: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Modo Padrão */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Modo de Preenchimento Padrão</label>
+                        <select
+                          value={formData.defaultControlMode || "vinculado_saldo"}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              defaultControlMode: e.target.value as StockControlMode,
+                            })
+                          }
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
+                        >
+                          <option value="vinculado_saldo">Vinculado ao Saldo (Saldo Obrigatório)</option>
+                          <option value="livre">Livre (sem verificação de saldo)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Responsável Técnico / Setor</label>
+                        <input
+                          type="text"
+                          placeholder="Ex: Supervisão de Avarias"
+                          value={formData.responsible || ""}
+                          onChange={(e) => setFormData({ ...formData, responsible: e.target.value })}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                        />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
+                    <div className="p-3 bg-emerald-950/20 border border-emerald-800/40 rounded-xl text-[11px] text-emerald-200/90 leading-snug">
+                      <strong className="text-emerald-300 block mb-0.5">Modo Aberto Selecionado</strong>
+                      Qualquer Drive-In, canal ou área vinculado recebe itens livremente nas posições e alimenta o Confronto direto pelo que estiver mapeado.
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">Responsável Técnico / Setor</label>
+                      <input
+                        type="text"
+                        placeholder="Ex: Equipe de Inventário / Conferência"
+                        value={formData.responsible || ""}
+                        onChange={(e) => setFormData({ ...formData, responsible: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-[10px] text-slate-400 block mb-1">Responsável Técnico / Setor</label>
-                    <input
-                      type="text"
-                      placeholder="Ex: Supervisão de Avarias"
-                      value={formData.responsible || ""}
-                      onChange={(e) => setFormData({ ...formData, responsible: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                    />
-                  </div>
-                </div>
+                )}
 
                 {/* Ícone e Cor */}
                 <div className="grid grid-cols-3 gap-3">
@@ -436,10 +538,19 @@ export default function SystemManagerModal({
                       {selectedSystem.icon}
                     </span>
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="text-base font-bold text-white">{selectedSystem.name}</h3>
                         <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-amber-300 font-bold border border-slate-700">
                           {selectedSystem.code}
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                            isSelectedOpen
+                              ? "bg-emerald-950/70 border-emerald-700/60 text-emerald-300"
+                              : "bg-blue-950/70 border-blue-700/60 text-blue-300"
+                          }`}
+                        >
+                          {isSelectedOpen ? "Sistema Aberto" : "Sistema Completo"}
                         </span>
                       </div>
                       <p className="text-xs text-slate-400 mt-0.5">{selectedSystem.description}</p>
@@ -469,7 +580,7 @@ export default function SystemManagerModal({
                   </div>
                 </div>
 
-                {/* ── TRÍADE OPERACIONAL DO SISTEMA: REGISTRO · MAPEAMENTO · CONFRONTO ── */}
+                {/* ── MÓDULOS OPERACIONAIS DO SISTEMA ── */}
                 <div className="p-3.5 bg-gradient-to-r from-blue-950/40 via-purple-950/30 to-amber-950/40 border border-slate-800 rounded-2xl space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
@@ -477,34 +588,36 @@ export default function SystemManagerModal({
                       <span>Módulos Operacionais deste Sistema</span>
                     </span>
                     <span className="text-[10px] text-slate-400">
-                      Configuração completa com persistência JSON
+                      {isSelectedOpen ? "Modo Aberto: Mapeamento direto + Confronto" : "Configuração completa com persistência JSON"}
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
-                    {/* 1. Modal de Registro */}
-                    <button
-                      type="button"
-                      onClick={() => setIsRecordsOpen(true)}
-                      className="p-3 rounded-xl bg-slate-900/90 hover:bg-blue-950/50 border border-slate-700/80 hover:border-blue-500/80 text-left transition-all group shadow-sm flex flex-col justify-between"
-                    >
-                      <div>
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <span className="p-1.5 rounded-lg bg-blue-950 text-blue-400 border border-blue-800/60 text-xs">
-                            📋
-                          </span>
-                          <strong className="text-xs text-white group-hover:text-blue-300 transition-colors">
-                            1. Registros
-                          </strong>
+                  <div className={`grid grid-cols-1 ${isSelectedOpen ? "sm:grid-cols-2" : "sm:grid-cols-3"} gap-2 pt-1`}>
+                    {/* 1. Modal de Registro (oculto no Sistema Aberto) */}
+                    {!isSelectedOpen && (
+                      <button
+                        type="button"
+                        onClick={() => setIsRecordsOpen(true)}
+                        className="p-3 rounded-xl bg-slate-900/90 hover:bg-blue-950/50 border border-slate-700/80 hover:border-blue-500/80 text-left transition-all group shadow-sm flex flex-col justify-between"
+                      >
+                        <div>
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <span className="p-1.5 rounded-lg bg-blue-950 text-blue-400 border border-blue-800/60 text-xs">
+                              📋
+                            </span>
+                            <strong className="text-xs text-white group-hover:text-blue-300 transition-colors">
+                              1. Registros
+                            </strong>
+                          </div>
+                          <p className="text-[10px] text-slate-400 leading-tight">
+                            Lançamento e controle de saldos físicos, lotes e quantidades.
+                          </p>
                         </div>
-                        <p className="text-[10px] text-slate-400 leading-tight">
-                          Lançamento e controle de saldos físicos, lotes e quantidades.
-                        </p>
-                      </div>
-                      <span className="text-[10px] text-blue-400 font-bold mt-2 flex items-center gap-1">
-                        Abrir Registros →
-                      </span>
-                    </button>
+                        <span className="text-[10px] text-blue-400 font-bold mt-2 flex items-center gap-1">
+                          Abrir Registros →
+                        </span>
+                      </button>
+                    )}
 
                     {/* 2. Modal de Mapeamento */}
                     <button
@@ -518,7 +631,7 @@ export default function SystemManagerModal({
                             🗺️
                           </span>
                           <strong className="text-xs text-white group-hover:text-purple-300 transition-colors">
-                            2. Mapeamento
+                            {isSelectedOpen ? "1. Mapeamento" : "2. Mapeamento"}
                           </strong>
                         </div>
                         <p className="text-[10px] text-slate-400 leading-tight">
@@ -542,11 +655,13 @@ export default function SystemManagerModal({
                             ⚖️
                           </span>
                           <strong className="text-xs text-white group-hover:text-amber-300 transition-colors">
-                            3. Confronto
+                            {isSelectedOpen ? "2. Confronto" : "3. Confronto"}
                           </strong>
                         </div>
                         <p className="text-[10px] text-slate-400 leading-tight">
-                          Nomear relação (ex: A501), importar e conciliar em JSON.
+                          {isSelectedOpen
+                            ? "Confrontar o que está mapeado nas posições com relação importada."
+                            : "Nomear relação (ex: A501), importar e conciliar em JSON."}
                         </p>
                       </div>
                       <span className="text-[10px] text-amber-400 font-bold mt-2 flex items-center gap-1">
@@ -557,37 +672,76 @@ export default function SystemManagerModal({
                 </div>
 
                 {/* Cartões Informativos de Parâmetros */}
-                <div className="grid grid-cols-2 gap-3 text-xs">
-                  {/* Origem */}
-                  <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl space-y-1">
-                    <span className="text-[10px] uppercase font-bold text-amber-400 tracking-wider flex items-center gap-1">
-                      <span>📍</span>
-                      <span>Armazenamento de Origem (Entradas)</span>
-                    </span>
-                    <p className="text-sm font-semibold text-white">
-                      {selectedSystem.originStorageLabel || "Não configurado"}
-                    </p>
-                    <span className="text-[10px] text-slate-500">
-                      Onde as entradas deste sistema são geradas inicialmente.
-                    </span>
-                  </div>
+                {isSelectedOpen ? (
+                  (() => {
+                    const stats = getSystemMappedStats(selectedSystem)
+                    return (
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl space-y-1">
+                          <span className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider flex items-center gap-1">
+                            <span>🗺️</span>
+                            <span>Estilo & Identificação Visual</span>
+                          </span>
+                          <p className="text-sm font-semibold text-white flex items-center gap-2">
+                            <span
+                              className="w-3.5 h-3.5 rounded-full border border-white/30 inline-block"
+                              style={{ backgroundColor: selectedSystem.color }}
+                            />
+                            <span>Sistema Aberto (Sem Registros)</span>
+                          </p>
+                          <span className="text-[10px] text-slate-500">
+                            Drives e canais vinculados recebem a cor acima para identificação imediata no mapa 2D e 3D.
+                          </span>
+                        </div>
 
-                  {/* Política de Preenchimento */}
-                  <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl space-y-1">
-                    <span className="text-[10px] uppercase font-bold text-blue-400 tracking-wider flex items-center gap-1">
-                      <span>🔐</span>
-                      <span>Modo Padrão de Preenchimento</span>
-                    </span>
-                    <p className="text-sm font-semibold text-white">
-                      {selectedSystem.defaultControlMode === "vinculado_saldo"
-                        ? "Vinculado ao Saldo (Obrigatório)"
-                        : "Livre (Preenchimento Direto)"}
-                    </p>
-                    <span className="text-[10px] text-slate-500">
-                      Dita se posições exigem saldo prévio no módulo operacional.
-                    </span>
+                        <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl space-y-1">
+                          <span className="text-[10px] uppercase font-bold text-amber-400 tracking-wider flex items-center gap-1">
+                            <span>📦</span>
+                            <span>Saldo Mapeado para Confronto</span>
+                          </span>
+                          <p className="text-sm font-semibold text-white font-mono">
+                            {stats.totalUnits.toLocaleString("pt-BR")} un. · {stats.totalSkus} SKU(s)
+                          </p>
+                          <span className="text-[10px] text-slate-500">
+                            {stats.occupiedSlotsCount} posição(ões) ocupada(s) em {stats.mappedObjectsCount} estrutura(s).
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })()
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    {/* Origem */}
+                    <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl space-y-1">
+                      <span className="text-[10px] uppercase font-bold text-amber-400 tracking-wider flex items-center gap-1">
+                        <span>📍</span>
+                        <span>Armazenamento de Origem (Entradas)</span>
+                      </span>
+                      <p className="text-sm font-semibold text-white">
+                        {selectedSystem.originStorageLabel || "Não configurado"}
+                      </p>
+                      <span className="text-[10px] text-slate-500">
+                        Onde as entradas deste sistema são geradas inicialmente.
+                      </span>
+                    </div>
+
+                    {/* Política de Preenchimento */}
+                    <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl space-y-1">
+                      <span className="text-[10px] uppercase font-bold text-blue-400 tracking-wider flex items-center gap-1">
+                        <span>🔐</span>
+                        <span>Modo Padrão de Preenchimento</span>
+                      </span>
+                      <p className="text-sm font-semibold text-white">
+                        {selectedSystem.defaultControlMode === "vinculado_saldo"
+                          ? "Vinculado ao Saldo (Obrigatório)"
+                          : "Livre (Preenchimento Direto)"}
+                      </p>
+                      <span className="text-[10px] text-slate-500">
+                        Dita se posições exigem saldo prévio no módulo operacional.
+                      </span>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Participantes: Objetos de Armazenamento do Mapa */}
                 <div className="space-y-2.5">
@@ -663,16 +817,18 @@ export default function SystemManagerModal({
         </div>
       </div>
 
-      {/* ── SUB-MODAIS INTEGRADOS DO SISTEMA DE SALDO ── */}
+      {/* ── SUB-MODAIS INTEGRADOS DO SISTEMA ── */}
       {selectedSystem && (
         <>
-          {/* 1. Modal de Registros de Saldo */}
-          <SystemRecordsModal
-            isOpen={isRecordsOpen}
-            onClose={() => setIsRecordsOpen(false)}
-            system={selectedSystem}
-            allObjects={allObjects}
-          />
+          {/* 1. Modal de Registros de Saldo (apenas sistema completo) */}
+          {!isSelectedOpen && (
+            <SystemRecordsModal
+              isOpen={isRecordsOpen}
+              onClose={() => setIsRecordsOpen(false)}
+              system={selectedSystem}
+              allObjects={allObjects}
+            />
+          )}
 
           {/* 2. Modal de Mapeamento de Posições Físicas */}
           <SystemMappingModal

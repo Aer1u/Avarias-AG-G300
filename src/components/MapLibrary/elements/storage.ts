@@ -9,6 +9,9 @@ import Konva from "konva"
 import type { MapElementDefinition, SvgPreviewProps, MapObject } from "../types"
 import { MAP_COLORS, MAP_VIEWER_COLORS } from "../types"
 import { STANDARD_PALLET_MODELS } from "../palletModels"
+import { ensureDriveChannels } from "../spatialContainment"
+import { getLocalItems } from "@/lib/mapeamentosStorage"
+import { getChannelOccupiedSlots } from "@/lib/driveOccupancy"
 
 // Escala padrão do canvas: 20px = 1 metro
 const DEFAULT_PPM = 20
@@ -150,14 +153,8 @@ const drive_in: MapElementDefinition = {
     const slotH  = (h - Math.round(entryClearance * ppm)) / depth   // px por slot de profundidade
     const laneW  = w / lanes                                          // px por vão
 
-    type DriveChannelData = {
-      name?: string
-      status?: string
-      occupiedPositions?: Array<{ level: number; depth: number }>
-    }
-    const rawChannels: DriveChannelData[] = Array.isArray(obj.props?.channels)
-      ? (obj.props.channels as DriveChannelData[])
-      : []
+    const rawChannels = ensureDriveChannels(obj)
+    const allLocalItems = getLocalItems()
     const isAllBlocked = rawChannels.length > 0 && rawChannels.every((c) => c?.status === "bloqueado")
 
     // ── MODO VISUALIZADOR (LEITURA): Estrutura Industrial Azul & Laranja Limpa ─────
@@ -337,6 +334,37 @@ const drive_in: MapElementDefinition = {
         }
       }
 
+      // Indicador visual sutil de paletes reais alocados no visualizador 2D
+      for (let d = 0; d < depth; d++) {
+        const slotY = d * slotH
+        for (let l = 0; l < lanes; l++) {
+          const chan = rawChannels[l]
+          if (!chan) continue
+          const occupiedList = getChannelOccupiedSlots(obj, chan, rawChannels, allLocalItems)
+          const hasAtDepth = occupiedList.some((p) => p.depth === d + 1)
+          if (!hasAtDepth) continue
+
+          const slotX = l * laneW
+          const marginX = Math.max(2, laneW * 0.18)
+          const marginY = Math.max(2, slotH * 0.12)
+          const pw = Math.max(4, laneW - marginX * 2)
+          const ph = Math.max(4, slotH - marginY * 2)
+          group.add(
+            new Konva.Rect({
+              x: slotX + marginX,
+              y: slotY + marginY,
+              width: pw,
+              height: ph,
+              fill: "rgba(245, 158, 11, 0.45)",
+              stroke: "#fbbf24",
+              strokeWidth: 1,
+              cornerRadius: 1.5,
+              listening: false,
+            })
+          )
+        }
+      }
+
       return group
     }
 
@@ -366,8 +394,8 @@ const drive_in: MapElementDefinition = {
       for (let l = 0; l < lanes; l++) {
         const slotX = l * laneW
         const chan = rawChannels[l]
-        const occupiedList: Array<{ level: number; depth: number }> = Array.isArray(chan?.occupiedPositions)
-          ? chan.occupiedPositions
+        const occupiedList = chan
+          ? getChannelOccupiedSlots(obj, chan, rawChannels, allLocalItems)
           : []
         // Verifica se há palete alocado nesta profundidade (d + 1)
         const occupiedAtSlot = occupiedList.filter((p) => p.depth === d + 1)

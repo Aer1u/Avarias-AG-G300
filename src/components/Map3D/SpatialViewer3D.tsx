@@ -25,6 +25,7 @@ import type { MapObject } from "../MapLibrary/types"
 import type { SpatialViewMode } from "./types"
 import { mapObjectToSpatial, DEFAULT_PIXELS_PER_METER } from "./spatialAdapter"
 import { buildSpatial3DObject } from "./geometryCatalog"
+import { ITEMS_UPDATED_EVENT } from "@/lib/driveOccupancy"
 
 const CAMERA_DIST = 180
 const BIRDSEYE_TILT_RAD = THREE.MathUtils.degToRad(20) // Inclinação fixa dentro de 15°–25°
@@ -159,6 +160,14 @@ export const SpatialViewer3D = forwardRef<SpatialViewer3DHandle, SpatialViewer3D
     }, [shadowsEnabled])
 
     const [orientationDeg, setOrientationDeg] = useState<number>(0)
+    const [itemsVersion, setItemsVersion] = useState<number>(0)
+    const [webglError, setWebglError] = useState<string | null>(null)
+
+    useEffect(() => {
+      const onItemsUpdated = () => setItemsVersion((v) => v + 1)
+      window.addEventListener(ITEMS_UPDATED_EVENT, onItemsUpdated)
+      return () => window.removeEventListener(ITEMS_UPDATED_EVENT, onItemsUpdated)
+    }, [])
 
     const [sideViewIsolated, setSideViewIsolated] = useState(false)
     const isSideViewActive = sideViewIsolated && Boolean(selectedId)
@@ -377,19 +386,26 @@ export const SpatialViewer3D = forwardRef<SpatialViewer3DHandle, SpatialViewer3D
 
       THREE.Object3D.DEFAULT_UP.set(0, 0, 1)
 
-      const renderer = new THREE.WebGLRenderer({
-        antialias: true,
-        powerPreference: "high-performance",
-        alpha: false,
-      })
-      renderer.setSize(width, height)
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-      renderer.shadowMap.enabled = shadowsEnabledRef.current
-      renderer.shadowMap.type = THREE.PCFSoftShadowMap
-      renderer.toneMapping = THREE.ACESFilmicToneMapping
-      renderer.toneMappingExposure = 1.32
-      container.appendChild(renderer.domElement)
-      rendererRef.current = renderer
+      let renderer: THREE.WebGLRenderer
+      try {
+        renderer = new THREE.WebGLRenderer({
+          antialias: true,
+          powerPreference: "high-performance",
+          alpha: false,
+        })
+        renderer.setSize(width, height)
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+        renderer.shadowMap.enabled = shadowsEnabledRef.current
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap
+        renderer.toneMapping = THREE.ACESFilmicToneMapping
+        renderer.toneMappingExposure = 1.32
+        container.appendChild(renderer.domElement)
+        rendererRef.current = renderer
+      } catch (err) {
+        console.error("Falha ao inicializar WebGL no SpatialViewer3D:", err)
+        setWebglError("Não foi possível iniciar o renderizador 3D (WebGL indisponível neste navegador).")
+        return
+      }
 
       // Iluminação preservada (estúdio/galpão Z-up)
       const ambientLight = new THREE.AmbientLight("#f8fafc", readOnlyRef.current ? 0.9 : 0.75)
@@ -712,6 +728,17 @@ export const SpatialViewer3D = forwardRef<SpatialViewer3DHandle, SpatialViewer3D
     useEffect(() => {
       const group = objectsGroupRef.current
       if (!group) return
+      void itemsVersion
+
+      const disposedGeos = new Set<THREE.BufferGeometry>()
+      group.traverse((child) => {
+        if (child instanceof THREE.Mesh || child instanceof THREE.LineSegments) {
+          if (child.geometry && !disposedGeos.has(child.geometry)) {
+            disposedGeos.add(child.geometry)
+            child.geometry.dispose()
+          }
+        }
+      })
 
       while (group.children.length > 0) {
         group.remove(group.children[0])
@@ -724,7 +751,7 @@ export const SpatialViewer3D = forwardRef<SpatialViewer3DHandle, SpatialViewer3D
         const mesh3D = buildSpatial3DObject(spatial, readOnly)
         group.add(mesh3D)
       })
-    }, [objects, readOnly])
+    }, [objects, readOnly, itemsVersion])
 
     // Enquadramento automático SOMENTE na primeira carga dos objetos (preserva estado ao alternar modos)
     useEffect(() => {
@@ -795,7 +822,7 @@ export const SpatialViewer3D = forwardRef<SpatialViewer3DHandle, SpatialViewer3D
         box.visible = false
         if (channelFloor) channelFloor.visible = false
       }
-    }, [selectedId, selectedChannelId, objects, isSideViewActive])
+    }, [selectedId, selectedChannelId, objects, isSideViewActive, itemsVersion])
 
     // ── 4b. MODO VISTA LATERAL ISOLADA (oculta demais objetos) ────
     useEffect(() => {
@@ -959,7 +986,7 @@ export const SpatialViewer3D = forwardRef<SpatialViewer3DHandle, SpatialViewer3D
           }
         }
       }
-    }, [isSideViewActive, selectedId, selectedChannelId, objects, readOnly, mode])
+    }, [isSideViewActive, selectedId, selectedChannelId, objects, readOnly, mode, itemsVersion])
 
     // ── 5. CONTROLES DETERMINÍSTICOS (BIRD'S-EYE / FULL TOP) + SELEÇÃO RAYCASTER ──
     useEffect(() => {
@@ -1220,6 +1247,16 @@ export const SpatialViewer3D = forwardRef<SpatialViewer3DHandle, SpatialViewer3D
             mode === "3d" ? "cursor-grab active:cursor-grabbing" : "cursor-default"
           }`}
         />
+
+        {webglError && (
+          <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-slate-950/95 text-slate-300 p-6 text-center gap-2">
+            <span className="text-2xl">🧊</span>
+            <p className="text-sm font-semibold text-amber-300">{webglError}</p>
+            <p className="text-xs text-slate-400">
+              Você pode alternar para o Editor 2D na barra superior para continuar operando normalmente.
+            </p>
+          </div>
+        )}
 
         {/* ── HUD Flutuante de Câmera & Controles ─────────────────── */}
         <div className="absolute bottom-4 right-4 z-20 flex flex-col items-end gap-2 pointer-events-auto">

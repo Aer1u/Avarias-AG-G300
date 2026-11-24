@@ -161,10 +161,13 @@ export function getLocalItems(mapeamentoId?: string): MapeamentoItem[] {
   }
 }
 
+export const ITEMS_UPDATED_EVENT = 'nexus:items-updated'
+
 export function saveLocalItems(items: MapeamentoItem[]): void {
   if (typeof window === 'undefined') return
   try {
     localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items))
+    window.dispatchEvent(new CustomEvent(ITEMS_UPDATED_EVENT))
   } catch (err) {
     console.warn('Erro ao salvar itens no storage:', err)
   }

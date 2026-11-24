@@ -41,7 +41,10 @@ import {
   applyNonOriginPositionChange,
   syncSupabaseUniversalBalances,
 } from "./systemBalanceService"
-import { persistPositionItemsToSupabase } from "@/lib/workspaceItemsSync"
+import { persistPositionItemsToSupabase, hydrateSystemItemsFromSupabase } from "@/lib/workspaceItemsSync"
+import { ensureDriveChannels } from "../MapLibrary/spatialContainment"
+import { filterItemsForDriveChannel } from "@/lib/driveOccupancy"
+import { isOpenSystem, getSystemMappedStats } from "@/lib/systemVisuals"
 import { cn } from "@/lib/utils"
 
 interface SystemMappingModalProps {
@@ -78,14 +81,18 @@ export default function SystemMappingModal({
   levelsConfig: mapLevelsConfig = DEFAULT_G300_LEVELS_CONFIG,
   depthConfig: mapDepthConfig = DEFAULT_G300_DEPTH_CONFIG,
 }: SystemMappingModalProps) {
+  const isOpenSys = isOpenSystem(system)
   const { updateSystem } = useSystemStore(workspaceId)
   const [selectedObjectId, setSelectedObjectId] = useState("")
   const [role, setRole] = useState<StorageRole>("armazenamento")
-  const [stockControlMode, setStockControlMode] = useState<StockControlMode>(system.defaultControlMode)
+  const [stockControlMode, setStockControlMode] = useState<StockControlMode>(
+    isOpenSys ? "livre" : system.defaultControlMode
+  )
 
   // Painel do DriveInGrid ao selecionar uma posição vinculada
   const [inspectingParticipant, setInspectingParticipant] = useState<StorageParticipantConfig | null>(null)
   const [inspectingObject, setInspectingObject] = useState<MapObject | null>(null)
+  const [activeChannelIndex, setActiveChannelIndex] = useState(0)
   const [isEditModeActive, setIsEditModeActive] = useState(false)
   const [itemsVersion, setItemsVersion] = useState(0)
 
@@ -96,11 +103,14 @@ export default function SystemMappingModal({
   const [batchCoords, setBatchCoords] = useState<{ lvl: number; prof: number }[] | null>(null)
   const [balanceError, setBalanceError] = useState<string>("")
 
-  // Sincroniza registros -> saldo da Origem (Chão) ao abrir
+  // Sincroniza registros -> saldo da Origem (Chão) ao abrir (ou hidrata direto para Sistema Aberto)
   useEffect(() => {
     if (!isOpen) return
     let active = true
-    fetchAndSyncSystemBalances(system).then(() => {
+    const syncTask = isOpenSys
+      ? hydrateSystemItemsFromSupabase(system)
+      : fetchAndSyncSystemBalances(system)
+    syncTask.then(() => {
       if (!active) return
       setBalanceError("")
       setItemsVersion((v) => v + 1)
@@ -108,19 +118,27 @@ export default function SystemMappingModal({
     return () => {
       active = false
     }
-  }, [isOpen, system])
+  }, [isOpen, system, isOpenSys])
 
   const balanceSnapshot = useMemo(() => {
     void itemsVersion
     return getSystemBalanceSnapshot(system)
   }, [system, itemsVersion])
 
-  const originObjectId = useMemo(() => getOriginObjectId(system), [system])
+  const mappedStats = useMemo(() => {
+    void itemsVersion
+    return getSystemMappedStats(system)
+  }, [system, itemsVersion])
+
+  const originObjectId = useMemo(
+    () => (isOpenSys ? "" : getOriginObjectId(system)),
+    [system, isOpenSys]
+  )
 
   const availableStocks = useMemo(() => {
     void itemsVersion
-    return getAvailableStocksFromOrigin(system)
-  }, [system, itemsVersion])
+    return isOpenSys ? [] : getAvailableStocksFromOrigin(system)
+  }, [system, itemsVersion, isOpenSys])
 
   if (!isOpen) return null
 
@@ -135,16 +153,17 @@ export default function SystemMappingModal({
     const obj = allObjects.find(o => o.id === selectedObjectId)
     if (!obj) return
 
+    const effectiveRole: StorageRole = isOpenSys && role === "origem" ? "armazenamento" : role
     const newParticipant: StorageParticipantConfig = {
       storageObjectId: obj.id,
       storageObjectLabel: obj.label || obj.id,
       storageType: obj.type || obj.category || "storage",
-      role,
-      stockControlMode,
+      role: effectiveRole,
+      stockControlMode: isOpenSys ? "livre" : stockControlMode,
       permissions: {
         allowInbound: true,
         allowOutbound: true,
-        allowReturnToOrigin: role !== "origem",
+        allowReturnToOrigin: !isOpenSys && effectiveRole !== "origem",
       },
       configuredAt: new Date().toISOString(),
     }
@@ -152,7 +171,7 @@ export default function SystemMappingModal({
     const patch: Partial<BusinessSystem> = {
       participants: [...participants, newParticipant],
     }
-    if (role === "origem" && !system.originStorageId) {
+    if (!isOpenSys && effectiveRole === "origem" && !system.originStorageId) {
       patch.originStorageId = obj.id
       patch.originStorageLabel = obj.label || obj.id
     }
@@ -172,6 +191,7 @@ export default function SystemMappingModal({
   }
 
   const handleToggleControlMode = (storageObjectId: string) => {
+    if (isOpenSys) return
     updateSystem(system.id, {
       participants: participants.map(p => {
         if (p.storageObjectId !== storageObjectId) return p
@@ -189,19 +209,38 @@ export default function SystemMappingModal({
     setBalanceError("")
     setInspectingParticipant(p)
     setInspectingObject(obj || null)
+    setActiveChannelIndex(0)
     setIsEditModeActive(false)
   }
 
   // ── Itens do canal (localStorage com chave = sys_{systemId}_{objectId}) ──
   const activeObjectId = inspectingObject?.id || inspectingParticipant?.storageObjectId || ""
   const channelKey = activeObjectId ? `sys_${system.id}_${activeObjectId}` : ""
-  const channelItems: MapeamentoItem[] = (activeObjectId && itemsVersion >= 0)
+  const driveChannels =
+    inspectingObject && inspectingObject.type !== "compartment"
+      ? ensureDriveChannels(inspectingObject)
+      : []
+  const currentDriveChannel =
+    driveChannels[Math.min(activeChannelIndex, Math.max(0, driveChannels.length - 1))] || null
+
+  const allObjectChannelItems: MapeamentoItem[] = (activeObjectId && itemsVersion >= 0)
     ? getLocalItems().filter(it => it.mapeamentoId === channelKey)
     : []
 
-  const isInspectingOrigin = Boolean(activeObjectId && originObjectId === activeObjectId)
+  const channelItems: MapeamentoItem[] =
+    driveChannels.length > 1 && currentDriveChannel
+      ? filterItemsForDriveChannel(
+          allObjectChannelItems,
+          currentDriveChannel,
+          driveChannels,
+          inspectingObject?.label || inspectingParticipant?.storageObjectLabel
+        )
+      : allObjectChannelItems
+
+  const isInspectingOrigin = Boolean(!isOpenSys && activeObjectId && originObjectId === activeObjectId)
   const enforceDriveStockLimit = Boolean(
-    !isInspectingOrigin &&
+    !isOpenSys &&
+      !isInspectingOrigin &&
       (inspectingParticipant?.stockControlMode === "vinculado_saldo" ||
         (!inspectingParticipant?.stockControlMode && system.defaultControlMode === "vinculado_saldo"))
   )
@@ -218,7 +257,7 @@ export default function SystemMappingModal({
     setIsItemModalOpen(true)
   }
 
-  const handleEditItem = (updated: MapeamentoItem) => {
+  const handleEditItem = (updated: MapeamentoItem): boolean => {
     setBalanceError("")
     const currentChannelItems = getLocalItems().filter((it) => it.mapeamentoId === channelKey)
     const nextChannelItems =
@@ -226,7 +265,7 @@ export default function SystemMappingModal({
         ? currentChannelItems.map((it) => (it.id === updated.id ? updated : it))
         : currentChannelItems.filter((it) => it.id !== updated.id)
 
-    if (activeObjectId && !isInspectingOrigin) {
+    if (!isOpenSys && activeObjectId && !isInspectingOrigin) {
       const res = applyNonOriginPositionChange(
         system,
         activeObjectId,
@@ -236,25 +275,32 @@ export default function SystemMappingModal({
       )
       if (!res.ok) {
         setBalanceError(res.errorMessage)
-        return
+        return false
       }
     } else {
       const others = getLocalItems().filter((it) => it.mapeamentoId !== channelKey)
       saveLocalItems([...others, ...nextChannelItems])
       persistPositionItemsToSupabase(channelKey, nextChannelItems, system.workspaceId).catch(() => {})
-      syncSupabaseUniversalBalances(system).catch(() => {})
+      if (!isOpenSys) {
+        syncSupabaseUniversalBalances(system).catch(() => {})
+      }
     }
     setItemsVersion((v) => v + 1)
+    return true
   }
 
-  const handleSaveModalItems = (saved: MapeamentoItem[] | MapeamentoItem) => {
+  const handleSaveModalItems = (saved: MapeamentoItem[] | MapeamentoItem): boolean => {
     setBalanceError("")
     const savedArr = Array.isArray(saved) ? saved : [saved]
+    const targetPosicao =
+      driveChannels.length > 1 && currentDriveChannel
+        ? currentDriveChannel.code || currentDriveChannel.name
+        : inspectingObject?.label || inspectingParticipant?.storageObjectLabel || activeObjectId || "POS"
 
     const formatted = savedArr.map(it => ({
       ...it,
       mapeamentoId: channelKey,
-      posicao: inspectingObject?.label || inspectingParticipant?.storageObjectLabel || activeObjectId || "POS",
+      posicao: targetPosicao,
     }))
 
     const currentChannelItems = getLocalItems().filter((it) => it.mapeamentoId === channelKey)
@@ -262,7 +308,7 @@ export default function SystemMappingModal({
     const remainingInChannel = currentChannelItems.filter(it => !replacedIds.has(it.id))
     const nextChannelItems = [...remainingInChannel, ...formatted]
 
-    if (activeObjectId && !isInspectingOrigin) {
+    if (!isOpenSys && activeObjectId && !isInspectingOrigin) {
       const res = applyNonOriginPositionChange(
         system,
         activeObjectId,
@@ -272,25 +318,28 @@ export default function SystemMappingModal({
       )
       if (!res.ok) {
         setBalanceError(res.errorMessage)
-        return
+        return false
       }
     } else {
       const others = getLocalItems().filter(it => it.mapeamentoId !== channelKey)
       saveLocalItems([...others, ...nextChannelItems])
       persistPositionItemsToSupabase(channelKey, nextChannelItems, system.workspaceId).catch(() => {})
-      syncSupabaseUniversalBalances(system).catch(() => {})
+      if (!isOpenSys) {
+        syncSupabaseUniversalBalances(system).catch(() => {})
+      }
     }
 
     setIsItemModalOpen(false)
     setEditingItem(null)
     setItemsVersion(v => v + 1)
+    return true
   }
 
   const handleDeleteItem = (itemId: string) => {
     setBalanceError("")
     const currentChannelItems = getLocalItems().filter((it) => it.mapeamentoId === channelKey)
     const nextChannelItems = currentChannelItems.filter(it => it.id !== itemId)
-    if (activeObjectId && !isInspectingOrigin) {
+    if (!isOpenSys && activeObjectId && !isInspectingOrigin) {
       const res = applyNonOriginPositionChange(
         system,
         activeObjectId,
@@ -306,7 +355,9 @@ export default function SystemMappingModal({
       const others = getLocalItems().filter(it => it.mapeamentoId !== channelKey)
       saveLocalItems([...others, ...nextChannelItems])
       persistPositionItemsToSupabase(channelKey, nextChannelItems, system.workspaceId).catch(() => {})
-      syncSupabaseUniversalBalances(system).catch(() => {})
+      if (!isOpenSys) {
+        syncSupabaseUniversalBalances(system).catch(() => {})
+      }
     }
     setItemsVersion(v => v + 1)
   }
@@ -443,11 +494,17 @@ export default function SystemMappingModal({
                 {inspectingParticipant && (
                   <span className={cn(
                     "text-[10px] font-bold px-2 py-0.5 rounded border",
-                    inspectingParticipant.stockControlMode === "vinculado_saldo"
+                    isOpenSys
+                      ? "bg-emerald-950/60 border-emerald-700/50 text-emerald-300"
+                      : inspectingParticipant.stockControlMode === "vinculado_saldo"
                       ? "bg-blue-950/60 border-blue-700/50 text-blue-300"
                       : "bg-slate-800 border-slate-700 text-slate-400"
                   )}>
-                    {inspectingParticipant.stockControlMode === "vinculado_saldo" ? "Saldo Obrigatório" : "Livre"}
+                    {isOpenSys
+                      ? "Sistema Aberto (Livre)"
+                      : inspectingParticipant.stockControlMode === "vinculado_saldo"
+                      ? "Saldo Obrigatório"
+                      : "Livre"}
                   </span>
                 )}
               </div>
@@ -493,7 +550,7 @@ export default function SystemMappingModal({
               )}
 
               {/* Toggle Edição */}
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
                   <Box size={13} className={isInspectingCompartment ? "text-amber-400" : "text-blue-400"} />
                   {isInspectingCompartment
@@ -513,6 +570,32 @@ export default function SystemMappingModal({
                 </button>
               </div>
 
+              {!isInspectingCompartment && driveChannels.length > 1 && (
+                <div className="flex flex-wrap items-center gap-1.5 mb-3 pb-2 border-b border-slate-800">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">
+                    Canais ({driveChannels.length}):
+                  </span>
+                  {driveChannels.map((ch, idx) => {
+                    const active = idx === Math.min(activeChannelIndex, driveChannels.length - 1)
+                    return (
+                      <button
+                        key={ch.id || idx}
+                        type="button"
+                        onClick={() => setActiveChannelIndex(idx)}
+                        className={cn(
+                          "px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors",
+                          active
+                            ? "bg-blue-600 border-blue-500 text-white shadow-sm"
+                            : "bg-slate-800/80 border-slate-700 text-slate-400 hover:text-white"
+                        )}
+                      >
+                        {ch.name || ch.code || `Canal ${idx + 1}`}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+
               {isInspectingCompartment ? (
                 <CompartmentRelationView
                   mapeamentoId={channelKey || `sys_${system.id}_${inspectingParticipant.storageObjectId}`}
@@ -522,11 +605,15 @@ export default function SystemMappingModal({
                   system={system}
                   objectId={inspectingParticipant.storageObjectId}
                   allObjects={allObjects}
-                  stockControlMode={inspectingParticipant.stockControlMode}
+                  stockControlMode={isOpenSys ? "livre" : inspectingParticipant.stockControlMode}
                 />
               ) : (
                 <MapeamentoDriveInGrid
-                  positionId={inspectingDisplayName}
+                  positionId={
+                    driveChannels.length > 1 && currentDriveChannel
+                      ? `${inspectingDisplayName} · ${currentDriveChannel.name || currentDriveChannel.code}`
+                      : inspectingDisplayName
+                  }
                   items={channelItems}
                   capacity={capacity}
                   levelCount={levels}
@@ -558,7 +645,7 @@ export default function SystemMappingModal({
                   Vincular Nova Estrutura do Mapa
                 </span>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div className={`grid grid-cols-1 ${isOpenSys ? "sm:grid-cols-2" : "sm:grid-cols-3"} gap-2.5`}>
                   <div>
                     <label className="text-[10px] text-slate-400 block mb-1">Selecionar Estrutura *</label>
                     <select
@@ -584,7 +671,7 @@ export default function SystemMappingModal({
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
                     >
                       <option value="armazenamento">Armazenamento (Drive-In / Racks)</option>
-                      <option value="origem">Origem dos Saldos (CHÃO)</option>
+                      {!isOpenSys && <option value="origem">Origem dos Saldos (CHÃO)</option>}
                       <option value="quarentena">Quarentena / Retenção</option>
                       <option value="retrabalho">Bancada de Retrabalho</option>
                       <option value="expedicao">Doca / Expedição</option>
@@ -592,17 +679,19 @@ export default function SystemMappingModal({
                     </select>
                   </div>
 
-                  <div>
-                    <label className="text-[10px] text-slate-400 block mb-1">Regra de Saldo</label>
-                    <select
-                      value={stockControlMode}
-                      onChange={e => setStockControlMode(e.target.value as StockControlMode)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
-                    >
-                      <option value="vinculado_saldo">Saldo Obrigatório (Bloqueia sem saldo)</option>
-                      <option value="livre">Livre (Permite preenchimento direto)</option>
-                    </select>
-                  </div>
+                  {!isOpenSys && (
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">Regra de Saldo</label>
+                      <select
+                        value={stockControlMode}
+                        onChange={e => setStockControlMode(e.target.value as StockControlMode)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
+                      >
+                        <option value="vinculado_saldo">Saldo Obrigatório (Bloqueia sem saldo)</option>
+                        <option value="livre">Livre (Permite preenchimento direto)</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex justify-end pt-1">
@@ -616,22 +705,40 @@ export default function SystemMappingModal({
                 </div>
               </form>
 
-              {/* Resumo de Conservação de Saldo */}
+              {/* Resumo de Saldo / Mapeamento */}
               <div className="px-4 py-2.5 border-b border-slate-800 bg-slate-900/70 flex flex-wrap items-center justify-between gap-2 text-[11px] shrink-0">
-                <div className="flex flex-wrap items-center gap-3 font-mono">
-                  <span className="text-slate-300">
-                    Entradas - Saídas = <strong className="text-emerald-400">{balanceSnapshot.totalSystemNet} un.</strong>
-                  </span>
-                  <span className="text-slate-500">|</span>
-                  <span className="text-amber-300">
-                    Na Origem (Chão): <strong>{balanceSnapshot.totalOrigin} un.</strong>
-                  </span>
-                  <span className="text-blue-300">
-                    Em Posições: <strong>{balanceSnapshot.totalAllocated} un.</strong>
-                  </span>
-                </div>
+                {isOpenSys ? (
+                  <div className="flex flex-wrap items-center gap-3 font-mono">
+                    <span className="text-emerald-300 font-bold">
+                      Sistema Aberto
+                    </span>
+                    <span className="text-slate-600">|</span>
+                    <span className="text-slate-200">
+                      Total Mapeado: <strong className="text-emerald-400">{mappedStats.totalUnits.toLocaleString("pt-BR")} un.</strong>
+                    </span>
+                    <span className="text-blue-300">
+                      SKUs: <strong>{mappedStats.totalSkus}</strong>
+                    </span>
+                    <span className="text-amber-300">
+                      Posições Ocupadas: <strong>{mappedStats.occupiedSlotsCount}</strong>
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-3 font-mono">
+                    <span className="text-slate-300">
+                      Entradas - Saídas = <strong className="text-emerald-400">{balanceSnapshot.totalSystemNet} un.</strong>
+                    </span>
+                    <span className="text-slate-500">|</span>
+                    <span className="text-amber-300">
+                      Na Origem (Chão): <strong>{balanceSnapshot.totalOrigin} un.</strong>
+                    </span>
+                    <span className="text-blue-300">
+                      Em Posições: <strong>{balanceSnapshot.totalAllocated} un.</strong>
+                    </span>
+                  </div>
+                )}
                 <span className="text-[10px] text-slate-500">
-                  Clique em uma posição para gerenciar ou alocar saldo
+                  Clique em uma posição para gerenciar ou mapear itens
                 </span>
               </div>
 
@@ -702,20 +809,26 @@ export default function SystemMappingModal({
                                 {posTotal} un.
                               </span>
 
-                              <button
-                                onClick={e => { e.stopPropagation(); handleToggleControlMode(p.storageObjectId) }}
-                                className={cn(
-                                  "px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-colors flex items-center gap-1",
-                                  p.stockControlMode === "vinculado_saldo"
-                                    ? "bg-blue-950/70 border-blue-700/60 text-blue-300 hover:bg-blue-900"
-                                    : "bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700"
-                                )}
-                                title="Clique para alternar o modo de controle"
-                              >
-                                {p.stockControlMode === "vinculado_saldo" ? (
-                                  <><Lock size={9} /> Saldo Obrig.</>
-                                ) : "Livre"}
-                              </button>
+                              {isOpenSys ? (
+                                <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold border bg-emerald-950/60 border-emerald-700/60 text-emerald-300">
+                                  Livre (Aberto)
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={e => { e.stopPropagation(); handleToggleControlMode(p.storageObjectId) }}
+                                  className={cn(
+                                    "px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-colors flex items-center gap-1",
+                                    p.stockControlMode === "vinculado_saldo"
+                                      ? "bg-blue-950/70 border-blue-700/60 text-blue-300 hover:bg-blue-900"
+                                      : "bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700"
+                                  )}
+                                  title="Clique para alternar o modo de controle"
+                                >
+                                  {p.stockControlMode === "vinculado_saldo" ? (
+                                    <><Lock size={9} /> Saldo Obrig.</>
+                                  ) : "Livre"}
+                                </button>
+                              )}
 
                               <button
                                 onClick={e => { e.stopPropagation(); handleUnlink(p.storageObjectId) }}

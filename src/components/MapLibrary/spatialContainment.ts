@@ -149,8 +149,8 @@ export function ensureDriveChannels(drive: MapObject): StorageChannel[] {
         depth,
         capacity: levels * depth,
         palletModelId,
-        stockControlMode: existing.stockControlMode || (props.stockControlMode as any) || "livre",
-        stockSystemRef: existing.stockSystemRef || (props.stockSystemRef as string) || "",
+        stockControlMode: existing.stockControlMode,
+        stockSystemRef: existing.stockSystemRef,
         occupiedPositions: existing.occupiedPositions || [],
       })
     } else {
@@ -166,8 +166,6 @@ export function ensureDriveChannels(drive: MapObject): StorageChannel[] {
         occupancy: 0,
         status: "operacional",
         palletModelId,
-        stockControlMode: (props.stockControlMode as any) || "livre",
-        stockSystemRef: (props.stockSystemRef as string) || "",
         occupiedPositions: [],
       })
     }

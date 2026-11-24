@@ -24,7 +24,7 @@ export interface AvailableStockEntry {
 export interface MapeamentoItemModalProps {
   isOpen: boolean
   onClose: () => void
-  onSave: (items: MapeamentoItem[] | MapeamentoItem) => void | Promise<void>
+  onSave: (items: MapeamentoItem[] | MapeamentoItem) => void | boolean | Promise<void | boolean>
   config: MapeamentoConfig
   posicao: string
   posicoesDisponiveis?: string[]
@@ -79,41 +79,52 @@ export function MapeamentoItemModal({
     ? [itemParaEditar]
     : null
 
+  const editSessionKey = isOpen
+    ? `${posicao}|${nivelInicial}|${profundidadeInicial}|${itemParaEditar?.id || ""}|${(itensParaEditar || []).map((i) => i.id).join(",")}`
+    : ""
+  const lastInitializedKeyRef = useRef<string>("")
+
   useEffect(() => {
-    if (isOpen) {
-      if (itemsToLoad && itemsToLoad.length > 0) {
-        const first = itemsToLoad[0]
-        setCurrentPosicao(first.posicao)
-        setDestinationLevel(first.nivel)
-        setDestinationDepth(first.profundidade)
-        setItems(
-          itemsToLoad.map(it => ({
-            id: it.id,
-            sku: it.sku,
-            descricao: it.descricao || "",
-            qty: it.quantidade,
-            customValues: it.customValues || {},
-          }))
-        )
-      } else {
-        setCurrentPosicao(posicao || posicoesDisponiveis[0] || "")
-        setDestinationLevel(nivelInicial)
-        setDestinationDepth(profundidadeInicial)
-        setItems([
-          {
-            id: Date.now().toString(),
-            sku: "",
-            descricao: "",
-            qty: "",
-            customValues: {},
-          },
-        ])
-      }
-      setActiveSearchIndex(null)
-      setSearchResults([])
-      setValidationError("")
+    if (!isOpen) {
+      lastInitializedKeyRef.current = ""
+      return
     }
-  }, [isOpen, itemParaEditar, itensParaEditar, posicao, posicoesDisponiveis, nivelInicial, profundidadeInicial])
+    if (lastInitializedKeyRef.current === editSessionKey) return
+    lastInitializedKeyRef.current = editSessionKey
+
+    if (itemsToLoad && itemsToLoad.length > 0) {
+      const first = itemsToLoad[0]
+      setCurrentPosicao(first.posicao || posicao || posicoesDisponiveis[0] || "")
+      setDestinationLevel(Number(first.nivel) || 1)
+      setDestinationDepth(Number(first.profundidade) || 1)
+      setItems(
+        itemsToLoad.map(it => ({
+          id: it.id,
+          sku: String(it.sku || ""),
+          descricao: String(it.descricao || ""),
+          qty: Number(it.quantidade) || 1,
+          customValues: it.customValues || {},
+        }))
+      )
+    } else {
+      setCurrentPosicao(posicao || posicoesDisponiveis[0] || "")
+      setDestinationLevel(nivelInicial)
+      setDestinationDepth(profundidadeInicial)
+      setItems([
+        {
+          id: Date.now().toString(),
+          sku: "",
+          descricao: "",
+          qty: "",
+          customValues: {},
+        },
+      ])
+    }
+    setActiveSearchIndex(null)
+    setSearchResults([])
+    setValidationError("")
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, editSessionKey])
 
   // Fechar dropdown ao clicar fora
   useEffect(() => {
@@ -167,8 +178,22 @@ export function MapeamentoItemModal({
   const handleSearchSku = async (index: number, term: string) => {
     const upper = term.toUpperCase()
     setValidationError("")
+    const exactOriginMatch = enforceStockLimit
+      ? availableStocks.find((s) => normCode(s.sku) === normCode(upper))
+      : undefined
     setItems(prev =>
-      prev.map((it, i) => (i === index ? { ...it, sku: upper } : it))
+      prev.map((it, i) =>
+        i === index
+          ? {
+              ...it,
+              sku: upper,
+              descricao:
+                exactOriginMatch && !it.descricao.trim()
+                  ? exactOriginMatch.descricao || it.descricao
+                  : it.descricao,
+            }
+          : it
+      )
     )
 
     if (enforceStockLimit) {
@@ -183,7 +208,7 @@ export function MapeamentoItemModal({
         .slice(0, 12)
         .map((s) => ({
           codigo: s.sku,
-          descricao: s.descricao || "Disponível na Origem",
+          descricao: s.descricao || "Disponível no Chão",
           available: s.available,
         }))
       setSearchResults(stockMatches)
@@ -236,16 +261,21 @@ export function MapeamentoItemModal({
 
   const handleChangeQty = (index: number, val: string) => {
     setValidationError("")
-    const num = val === "" ? "" : Math.max(1, Math.floor(Number(val)))
+    if (val === "") {
+      setItems(prev => prev.map((it, i) => (i === index ? { ...it, qty: "" } : it)))
+      return
+    }
+    const parsed = Math.floor(Number(val))
+    const num = Number.isFinite(parsed) ? Math.max(1, parsed) : ""
     setItems(prev =>
       prev.map((it, i) => (i === index ? { ...it, qty: num } : it))
     )
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setValidationError("")
     const validItems = items.filter(
-      i => i.sku.trim() !== "" && typeof i.qty === "number" && i.qty > 0
+      i => i.sku.trim() !== "" && typeof i.qty === "number" && Number.isFinite(i.qty) && i.qty > 0
     )
     if (validItems.length === 0) {
       setValidationError("Preencha ao menos um código e quantidade válida.")
@@ -263,9 +293,15 @@ export function MapeamentoItemModal({
       })
       for (const [skuKey, reqQty] of requestedBySku.entries()) {
         const avail = getAvailableForSku(skuKey)
+        if (avail <= 0) {
+          setValidationError(
+            `O SKU ${skuKey} não possui saldo disponível no Chão (Origem). Este canal está vinculado a um sistema de saldo e só permite adicionar saldos disponíveis no Chão.`
+          )
+          return
+        }
         if (reqQty > avail) {
           setValidationError(
-            `Saldo insuficiente na Origem (Chão) para ${skuKey}. Disponível: ${avail} un. · Solicitado: ${reqQty} un.`
+            `Saldo insuficiente no Chão (Origem) para ${skuKey}. Disponível no Chão: ${avail} un. · Solicitado: ${reqQty} un.`
           )
           return
         }
@@ -306,8 +342,17 @@ export function MapeamentoItemModal({
       })
     })
 
-    onSave(mapeamentoItemsToSave)
-    onClose()
+    try {
+      const saveResult = await onSave(mapeamentoItemsToSave)
+      if (saveResult === false) {
+        setValidationError("Não foi possível salvar os itens na posição. Verifique o saldo ou a posição selecionada.")
+        return
+      }
+      onClose()
+    } catch (err) {
+      console.error("Erro ao confirmar salvamento do item:", err)
+      setValidationError("Erro inesperado ao salvar o item na posição.")
+    }
   }
 
   const isMix = items.filter(i => i.sku.trim() !== "").length > 1
@@ -383,6 +428,22 @@ export function MapeamentoItemModal({
 
           {/* Corpo com Tabela de Produtos (estilo G300 AddPalletModal) */}
           <div className="p-6 flex-1 overflow-y-auto custom-scrollbar space-y-4">
+            {enforceStockLimit && (
+              <div
+                className={cn(
+                  "px-4 py-2.5 rounded-xl border text-xs font-medium",
+                  availableStocks.length > 0
+                    ? "bg-blue-950/50 border-blue-700/50 text-blue-200"
+                    : "bg-amber-950/50 border-amber-700/50 text-amber-200"
+                )}
+              >
+                {availableStocks.length > 0
+                  ? `Canal vinculado ao sistema de saldo: somente os ${availableStocks.length} SKU(s) com saldo disponível no Chão podem ser adicionados.`
+                  : itemsToLoad && itemsToLoad.length > 0
+                  ? "Canal vinculado ao sistema de saldo: não há saldo adicional livre no Chão no momento (apenas manutenção/devolução dos itens já alocados)."
+                  : "Canal vinculado ao sistema de saldo: não há nenhum saldo disponível no Chão no momento. Registre uma entrada ou devolva itens ao Chão antes de alocar."}
+              </div>
+            )}
             {validationError && (
               <div className="px-4 py-2.5 rounded-xl bg-rose-950/60 border border-rose-700/60 text-xs text-rose-200 font-medium">
                 {validationError}
@@ -439,31 +500,37 @@ export function MapeamentoItemModal({
                             )}
 
                             {/* Dropdown de Sugestões de SKU */}
-                            {isActive && searchResults.length > 0 && (
+                            {isActive && (searchResults.length > 0 || enforceStockLimit) && (
                               <div className="absolute left-0 top-full mt-1.5 z-[999] w-[140%] max-w-md bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden">
-                                <div className="p-1.5 max-h-56 overflow-y-auto custom-scrollbar divide-y divide-slate-800">
-                                  {searchResults.map((res, sIdx) => (
-                                    <div
-                                      key={sIdx}
-                                      onClick={() => handleSelectSku(index, res)}
-                                      className="p-2.5 hover:bg-blue-600/20 hover:border-blue-500/30 rounded-xl cursor-pointer transition-colors flex items-center justify-between gap-2"
-                                    >
-                                      <div className="min-w-0">
-                                        <p className="font-mono font-bold text-xs text-blue-400">
-                                          {res.codigo}
-                                        </p>
-                                        <p className="text-[11px] text-slate-300 truncate mt-0.5">
-                                          {res.descricao}
-                                        </p>
+                                {searchResults.length > 0 ? (
+                                  <div className="p-1.5 max-h-56 overflow-y-auto custom-scrollbar divide-y divide-slate-800">
+                                    {searchResults.map((res, sIdx) => (
+                                      <div
+                                        key={sIdx}
+                                        onClick={() => handleSelectSku(index, res)}
+                                        className="p-2.5 hover:bg-blue-600/20 hover:border-blue-500/30 rounded-xl cursor-pointer transition-colors flex items-center justify-between gap-2"
+                                      >
+                                        <div className="min-w-0">
+                                          <p className="font-mono font-bold text-xs text-blue-400">
+                                            {res.codigo}
+                                          </p>
+                                          <p className="text-[11px] text-slate-300 truncate mt-0.5">
+                                            {res.descricao}
+                                          </p>
+                                        </div>
+                                        {res.available !== undefined && (
+                                          <span className="shrink-0 px-2 py-0.5 rounded-lg bg-emerald-950/80 border border-emerald-700/50 text-[10px] font-mono font-bold text-emerald-300">
+                                            Disp: {res.available}
+                                          </span>
+                                        )}
                                       </div>
-                                      {res.available !== undefined && (
-                                        <span className="shrink-0 px-2 py-0.5 rounded-lg bg-emerald-950/80 border border-emerald-700/50 text-[10px] font-mono font-bold text-emerald-300">
-                                          Disp: {res.available}
-                                        </span>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="p-3 text-[11px] text-amber-300 text-center">
+                                    Nenhum saldo disponível no Chão para este filtro.
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
@@ -507,7 +574,7 @@ export function MapeamentoItemModal({
                           <input
                             type="number"
                             min={1}
-                            max={enforceStockLimit && availForLine !== null ? Math.max(1, availForLine) : undefined}
+                            max={enforceStockLimit && availForLine !== null ? availForLine : undefined}
                             value={item.qty}
                             onChange={e => handleChangeQty(index, e.target.value)}
                             placeholder="Qtd"

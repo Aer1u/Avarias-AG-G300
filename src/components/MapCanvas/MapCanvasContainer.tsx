@@ -20,6 +20,7 @@ import { INITIAL_AREA_CLASSIFICATIONS } from "../MapLibrary/areaClassifier"
 import { pixelsToReal, ensurePhysicalDimensions } from "../MapLibrary/unitConverter"
 import { FLOOR_SURFACES, type FloorMaterialType } from "../MapLibrary/floorSurfaces"
 import { ensureDriveChannels } from "../MapLibrary/spatialContainment"
+import { ITEMS_UPDATED_EVENT } from "@/lib/driveOccupancy"
 
 export interface MapCanvasHandle {
   navigateTo: (obj: MapObject) => void
@@ -125,6 +126,13 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
 
     // Cache de nós Konva
     const nodeMapRef = useRef<Map<string, Konva.Group | Konva.Line>>(new Map())
+
+    const [itemsVersion, setItemsVersion] = useState(0)
+    useEffect(() => {
+      const onItemsUpdated = () => setItemsVersion((v) => v + 1)
+      window.addEventListener(ITEMS_UPDATED_EVENT, onItemsUpdated)
+      return () => window.removeEventListener(ITEMS_UPDATED_EVENT, onItemsUpdated)
+    }, [])
 
     // ── Refs sempre atualizadas para snap e readOnly (evita closures stale nos handlers Konva) ──
     const snapEnabledRef = useRef(snapEnabled)
@@ -1296,8 +1304,9 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
         tr.nodes([])
       }
 
+      void itemsVersion
       layer.batchDraw()
-    }, [objects, selectedId, selectedChannelId, tool, readOnly, onSelect, onUpdateObject, snap, createDragBoundFunc])
+    }, [objects, selectedId, selectedChannelId, tool, readOnly, onSelect, onUpdateObject, snap, createDragBoundFunc, itemsVersion])
 
     return (
       <div

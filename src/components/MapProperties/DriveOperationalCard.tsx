@@ -122,7 +122,7 @@ export default function DriveOperationalCard({
   const maxHeightPerLevelM = Number(props.maxHeightPerLevelM || 1.65)
 
   // Controle de Preenchimento & Vínculo de Saldo
-  const { systems, linkStorageToSystem } = useSystemStore(workspaceId)
+  const { systems, linkStorageToSystem, unlinkStorageFromSystem } = useSystemStore(workspaceId)
   const stockControlMode = String(props.stockControlMode || "livre") as "livre" | "vinculado_saldo"
   const stockSystemRef = String(props.stockSystemRef || "")
 
@@ -230,15 +230,39 @@ export default function DriveOperationalCard({
 
   // Aplica o modo de controle a todos os canais de uma vez
   const handleApplyModeToAllChannels = (mode: "livre" | "vinculado_saldo", systemRef?: string) => {
+    const resolvedRef = mode === "livre" ? "" : (systemRef ?? "")
     const updated = channels.map((c) => ({
       ...c,
       stockControlMode: mode,
-      stockSystemRef: systemRef ?? c.stockSystemRef ?? "",
+      stockSystemRef: mode === "livre" ? "" : (systemRef ?? c.stockSystemRef ?? ""),
     }))
     onUpdateProp("channels", updated)
     onUpdateProp("stockControlMode", mode)
-    if (systemRef !== undefined) {
-      onUpdateProp("stockSystemRef", systemRef)
+    onUpdateProp("stockSystemRef", resolvedRef)
+
+    if (mode === "livre" || !resolvedRef) {
+      systems.forEach((s) => {
+        if (s.participants?.some((p) => p.storageObjectId === selectedObject.id)) {
+          unlinkStorageFromSystem(s.id, selectedObject.id)
+        }
+      })
+    } else {
+      const foundSys = systems.find((s) => s.code === resolvedRef || s.id === resolvedRef)
+      if (foundSys) {
+        linkStorageToSystem(foundSys.id, {
+          storageObjectId: selectedObject.id,
+          storageObjectLabel: String(selectedObject.label || selectedObject.id),
+          storageType: selectedObject.type,
+          role: "armazenamento",
+          stockControlMode: "vinculado_saldo",
+          permissions: {
+            allowInbound: true,
+            allowOutbound: true,
+            allowReturnToOrigin: true,
+          },
+          configuredAt: new Date().toISOString(),
+        })
+      }
     }
   }
 
@@ -592,8 +616,12 @@ export default function DriveOperationalCard({
         <div className="space-y-2">
           {channels.map((chan) => {
             const isExpanded = expandedChannelId === chan.id
-            const chanMode = chan.stockControlMode || stockControlMode
-            const chanSys = chan.stockSystemRef || stockSystemRef
+            const hasChannelOverride =
+              chan.stockControlMode === "livre" || chan.stockControlMode === "vinculado_saldo"
+            const chanMode = chan.stockControlMode ?? stockControlMode
+            const chanSys = hasChannelOverride
+              ? chan.stockSystemRef ?? ""
+              : chan.stockSystemRef ?? stockSystemRef
             const occupiedCount = chan.occupiedPositions?.length || 0
 
             return (
@@ -659,20 +687,52 @@ export default function DriveOperationalCard({
                   <div className="pt-2 border-t border-slate-800/80 space-y-2.5 animate-in fade-in duration-150">
                     {/* ── CONTROLE DE PREENCHIMENTO INDIVIDUAL DESTE CANAL ── */}
                     <div className="bg-slate-900/90 p-2 rounded border border-slate-800 space-y-1.5">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2">
                         <span className="text-[10px] font-bold text-slate-300 flex items-center gap-1">
                           <span>🔐</span>
                           <span>Controle deste Canal:</span>
                         </span>
-                        <span className="text-[9px] text-slate-400 font-mono">
-                          {chanMode === "vinculado_saldo" ? "Exige saldo" : "Preenchimento livre"}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${
+                              hasChannelOverride
+                                ? "bg-amber-950/60 border-amber-700/50 text-amber-300"
+                                : "bg-slate-950 border-slate-800 text-slate-400"
+                            }`}
+                          >
+                            {hasChannelOverride
+                              ? chanMode === "vinculado_saldo"
+                                ? "Individual · Saldo"
+                                : "Individual · Livre"
+                              : "Herdado do Drive"}
+                          </span>
+                          {hasChannelOverride && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleUpdateChannelProp(chan.id, {
+                                  stockControlMode: undefined,
+                                  stockSystemRef: undefined,
+                                })
+                              }
+                              className="text-[9px] text-slate-400 hover:text-white underline cursor-pointer"
+                              title="Remover regra individual e voltar a seguir a regra geral do Drive-In"
+                            >
+                              Seguir geral
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-1.5 pt-0.5">
                         <button
                           type="button"
-                          onClick={() => handleUpdateChannelProp(chan.id, { stockControlMode: "livre" })}
+                          onClick={() =>
+                            handleUpdateChannelProp(chan.id, {
+                              stockControlMode: "livre",
+                              stockSystemRef: "",
+                            })
+                          }
                           className={`px-2 py-1 rounded text-[10px] font-semibold border text-center transition-colors ${
                             chanMode === "livre"
                               ? "bg-slate-700 border-slate-500 text-white shadow-sm"
@@ -683,7 +743,12 @@ export default function DriveOperationalCard({
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleUpdateChannelProp(chan.id, { stockControlMode: "vinculado_saldo" })}
+                          onClick={() =>
+                            handleUpdateChannelProp(chan.id, {
+                              stockControlMode: "vinculado_saldo",
+                              stockSystemRef: chan.stockSystemRef ?? "",
+                            })
+                          }
                           className={`px-2 py-1 rounded text-[10px] font-semibold border text-center transition-colors ${
                             chanMode === "vinculado_saldo"
                               ? "bg-blue-900/80 border-blue-500 text-blue-200 shadow-sm"
@@ -702,7 +767,12 @@ export default function DriveOperationalCard({
                           </label>
                           <select
                             value={chanSys}
-                            onChange={(e) => handleUpdateChannelProp(chan.id, { stockSystemRef: e.target.value })}
+                            onChange={(e) =>
+                              handleUpdateChannelProp(chan.id, {
+                                stockControlMode: "vinculado_saldo",
+                                stockSystemRef: e.target.value,
+                              })
+                            }
                             className="w-full bg-blue-950/70 border border-blue-700/60 rounded px-2 py-1 text-[11px] text-blue-100 font-semibold focus:outline-none focus:border-blue-400"
                           >
                             <option value="">— Selecionar Sistema de Saldo —</option>
@@ -941,7 +1011,7 @@ export default function DriveOperationalCard({
           <span className="text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5"
             style={{ color: stockControlMode === "vinculado_saldo" ? "#60a5fa" : "#94a3b8" }}>
             <span>🔐</span>
-            <span>Controle de Acesso a Preenchimento</span>
+            <span>Controle Geral do Drive-In</span>
           </span>
           {/* Badge de modo atual */}
           <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded font-mono border ${
@@ -956,14 +1026,21 @@ export default function DriveOperationalCard({
         {/* Seleção do modo — radio visual */}
         <div className="space-y-1.5">
           <p className="text-[10px] text-slate-400">
-            Define se as posições deste Drive podem ser preenchidas livremente ou apenas quando
-            houver saldo registrado no sistema operacional:
+            Regra padrão para canais que não tiverem configuração individual definida. Canais com regra própria sempre têm prioridade sobre este padrão geral:
           </p>
 
           {/* Opção: Livre */}
           <button
             type="button"
-            onClick={() => onUpdateProp("stockControlMode", "livre")}
+            onClick={() => {
+              onUpdateProp("stockControlMode", "livre")
+              onUpdateProp("stockSystemRef", "")
+              systems.forEach((s) => {
+                if (s.participants?.some((p) => p.storageObjectId === selectedObject.id)) {
+                  unlinkStorageFromSystem(s.id, selectedObject.id)
+                }
+              })
+            }}
             className={`w-full flex items-start gap-2.5 p-2 rounded-lg border text-left transition-colors ${
               stockControlMode === "livre"
                 ? "bg-slate-800/80 border-slate-600 ring-1 ring-slate-500/60"
@@ -1042,6 +1119,14 @@ export default function DriveOperationalCard({
               onChange={(e) => {
                 const chosenCode = e.target.value
                 onUpdateProp("stockSystemRef", chosenCode)
+                if (!chosenCode) {
+                  systems.forEach((s) => {
+                    if (s.participants?.some((p) => p.storageObjectId === selectedObject.id)) {
+                      unlinkStorageFromSystem(s.id, selectedObject.id)
+                    }
+                  })
+                  return
+                }
                 const foundSys = systems.find((s) => s.code === chosenCode || s.id === chosenCode)
                 if (foundSys) {
                   linkStorageToSystem(foundSys.id, {

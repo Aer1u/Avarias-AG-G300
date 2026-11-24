@@ -10,7 +10,7 @@
 
 "use client"
 
-import React, { useState, useMemo } from "react"
+import React, { useState, useMemo, useEffect } from "react"
 import {
   Layers,
   Search,
@@ -28,8 +28,10 @@ import {
   Sparkles,
 } from "lucide-react"
 import type { MapObject } from "../MapLibrary/types"
-import { resolveSpatialContainment } from "../MapLibrary/spatialContainment"
+import { ensureDriveChannels, resolveSpatialContainment } from "../MapLibrary/spatialContainment"
 import { calculateAreaM2 } from "../MapLibrary/areaClassifier"
+import { getLocalItems } from "@/lib/mapeamentosStorage"
+import { getObjectOccupiedSlotCount, ITEMS_UPDATED_EVENT } from "@/lib/driveOccupancy"
 
 interface ViewerNavigationSidebarProps {
   objects: MapObject[]
@@ -104,6 +106,13 @@ export default function ViewerNavigationSidebar({
   const [activeTab, setActiveTab] = useState<"tree" | "details">("tree")
   const [search, setSearch] = useState("")
   const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set())
+  const [itemsVersion, setItemsVersion] = useState(0)
+
+  useEffect(() => {
+    const onItemsUpdated = () => setItemsVersion((v) => v + 1)
+    window.addEventListener(ITEMS_UPDATED_EVENT, onItemsUpdated)
+    return () => window.removeEventListener(ITEMS_UPDATED_EVENT, onItemsUpdated)
+  }, [])
 
   const tree = useMemo(() => buildTree(objects), [objects])
 
@@ -131,6 +140,7 @@ export default function ViewerNavigationSidebar({
 
   // Métricas do objeto selecionado
   const details = useMemo(() => {
+    void itemsVersion
     if (!selectedObject) return null
     const ppm = Number(selectedObject.props?.pixelsPerMeter) || 20
     const wM = selectedObject.physicalDimensions?.width || selectedObject.width / ppm
@@ -144,13 +154,12 @@ export default function ViewerNavigationSidebar({
     const lanes = isCompartment ? 0 : Math.max(1, Number(selectedObject.props?.lanes) || 1)
     const capacity = isCompartment ? 0 : levels * depth * lanes
 
-    const channels = !isCompartment && Array.isArray(selectedObject.props?.channels)
-      ? selectedObject.props.channels
-      : []
-    let occupiedSlots = 0
-    channels.forEach((c: any) => {
-      if (Array.isArray(c.occupiedPositions)) occupiedSlots += c.occupiedPositions.length
-    })
+    const channels = !isCompartment ? ensureDriveChannels(selectedObject) : []
+    const occupiedSlots = getObjectOccupiedSlotCount(
+      selectedObject,
+      getLocalItems(),
+      channels
+    )
 
     return {
       isCompartment,
@@ -170,7 +179,7 @@ export default function ViewerNavigationSidebar({
       responsible: selectedObject.responsible || null,
       restrictions: selectedObject.restrictions || null,
     }
-  }, [selectedObject])
+  }, [selectedObject, itemsVersion])
 
   // Renderiza nó recursivo da árvore
   const renderNode = (node: TreeNode) => {

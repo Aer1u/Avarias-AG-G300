@@ -15,6 +15,7 @@ import type { DimensionConfig } from "../MapLibrary/dimensionsTypes"
 import SystemRecordsModal from "./SystemRecordsModal"
 import SystemMappingModal from "./SystemMappingModal"
 import SystemConfrontoModal from "./SystemConfrontoModal"
+import { isOpenSystem } from "@/lib/systemVisuals"
 
 interface SystemDataPanelProps {
   isOpen: boolean
@@ -43,6 +44,7 @@ export default function SystemDataPanel({
   if (!isOpen) return null
 
   const selectedSystem = systems.find((s) => s.id === selectedSystemId) || null
+  const isSelectedOpen = isOpenSystem(selectedSystem)
 
   const handleClose = () => {
     setSelectedSystemId(null)
@@ -106,53 +108,63 @@ export default function SystemDataPanel({
                 <p className="text-[10px] text-slate-500 px-1 pb-1">
                   {systems.length} sistema{systems.length !== 1 ? "s" : ""} disponíve{systems.length !== 1 ? "is" : "l"}
                 </p>
-                {systems.map((sys) => (
-                  <button
-                    key={sys.id}
-                    onClick={() => handleSelectSystem(sys)}
-                    className="w-full text-left p-3 rounded-xl border border-slate-800 hover:border-slate-600 bg-slate-900/60 hover:bg-slate-800/60 transition-all flex items-center gap-3 group"
-                  >
-                    <span
-                      className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0"
-                      style={{
-                        backgroundColor: `${sys.color}20`,
-                        border: `1.5px solid ${sys.color}50`,
-                      }}
+                {systems.map((sys) => {
+                  const openSys = isOpenSystem(sys)
+                  return (
+                    <button
+                      key={sys.id}
+                      onClick={() => handleSelectSystem(sys)}
+                      className="w-full text-left p-3 rounded-xl border border-slate-800 hover:border-slate-600 bg-slate-900/60 hover:bg-slate-800/60 transition-all flex items-center gap-3 group"
                     >
-                      {sys.icon}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-xs font-bold text-white truncate">{sys.name}</span>
-                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 shrink-0">
-                          {sys.code}
-                        </span>
+                      <span
+                        className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0"
+                        style={{
+                          backgroundColor: `${sys.color}20`,
+                          border: `1.5px solid ${sys.color}50`,
+                        }}
+                      >
+                        {sys.icon}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: sys.color }} />
+                          <span className="text-xs font-bold text-white truncate">{sys.name}</span>
+                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 shrink-0">
+                            {sys.code}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 truncate">{sys.description}</p>
+                        <div className="flex items-center gap-2 mt-1 text-[9px] text-slate-600">
+                          {openSys ? (
+                            <span className="px-1.5 py-0.5 rounded font-semibold border bg-emerald-950/60 border-emerald-700/60 text-emerald-300">
+                              Sistema Aberto
+                            </span>
+                          ) : (
+                            <span
+                              className={`px-1.5 py-0.5 rounded font-semibold border ${
+                                sys.defaultControlMode === "vinculado_saldo"
+                                  ? "bg-blue-950/60 border-blue-800/60 text-blue-400"
+                                  : "bg-slate-800 border-slate-700 text-slate-500"
+                              }`}
+                            >
+                              {sys.defaultControlMode === "vinculado_saldo" ? "Saldo Obrig." : "Livre"}
+                            </span>
+                          )}
+                          <span
+                            className={`px-1.5 py-0.5 rounded font-semibold border ${
+                              sys.status === "ativo"
+                                ? "bg-emerald-950/60 border-emerald-800/60 text-emerald-400"
+                                : "bg-amber-950/60 border-amber-800/60 text-amber-400"
+                            }`}
+                          >
+                            {sys.status === "ativo" ? "Ativo" : sys.status === "configuracao" ? "Em Config." : "Inativo"}
+                          </span>
+                        </div>
                       </div>
-                      <p className="text-[10px] text-slate-500 truncate">{sys.description}</p>
-                      <div className="flex items-center gap-2 mt-1 text-[9px] text-slate-600">
-                        <span
-                          className={`px-1.5 py-0.5 rounded font-semibold border ${
-                            sys.defaultControlMode === "vinculado_saldo"
-                              ? "bg-blue-950/60 border-blue-800/60 text-blue-400"
-                              : "bg-slate-800 border-slate-700 text-slate-500"
-                          }`}
-                        >
-                          {sys.defaultControlMode === "vinculado_saldo" ? "Saldo Obrig." : "Livre"}
-                        </span>
-                        <span
-                          className={`px-1.5 py-0.5 rounded font-semibold border ${
-                            sys.status === "ativo"
-                              ? "bg-emerald-950/60 border-emerald-800/60 text-emerald-400"
-                              : "bg-amber-950/60 border-amber-800/60 text-amber-400"
-                          }`}
-                        >
-                          {sys.status === "ativo" ? "Ativo" : sys.status === "configuracao" ? "Em Config." : "Inativo"}
-                        </span>
-                      </div>
-                    </div>
-                    <ChevronRight size={15} className="text-slate-600 group-hover:text-slate-300 transition-colors shrink-0" />
-                  </button>
-                ))}
+                      <ChevronRight size={15} className="text-slate-600 group-hover:text-slate-300 transition-colors shrink-0" />
+                    </button>
+                  )
+                })}
 
                 {systems.length === 0 && (
                   <div className="p-8 text-center text-slate-500 space-y-2">
@@ -171,17 +183,29 @@ export default function SystemDataPanel({
                 <div
                   className="flex items-center gap-3 p-3 rounded-xl border"
                   style={{
-                    backgroundColor: `${selectedSystem.color}10`,
-                    borderColor: `${selectedSystem.color}30`,
+                    backgroundColor: `${selectedSystem.color}14`,
+                    borderColor: `${selectedSystem.color}45`,
                   }}
                 >
                   <span className="text-2xl">{selectedSystem.icon}</span>
-                  <div>
-                    <p className="text-xs font-bold text-white">{selectedSystem.name}</p>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="text-xs font-bold text-white truncate">{selectedSystem.name}</p>
+                      {isSelectedOpen && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-700/60 text-emerald-300">
+                          Aberto
+                        </span>
+                      )}
+                    </div>
                     <p className="text-[10px] text-slate-400 font-mono">{selectedSystem.code}</p>
-                    {selectedSystem.originStorageLabel && (
+                    {!isSelectedOpen && selectedSystem.originStorageLabel && (
                       <p className="text-[10px] text-slate-500 mt-0.5">
                         📍 Origem: {selectedSystem.originStorageLabel}
+                      </p>
+                    )}
+                    {isSelectedOpen && (
+                      <p className="text-[10px] text-emerald-300/80 mt-0.5">
+                        Sem registros · Mapeamento direto + Confronto
                       </p>
                     )}
                   </div>
@@ -192,26 +216,28 @@ export default function SystemDataPanel({
                   Módulos Operacionais
                 </p>
 
-                {/* 1. Registros */}
-                <button
-                  onClick={() => setIsRecordsOpen(true)}
-                  className="w-full text-left p-3.5 rounded-xl border border-slate-800 hover:border-blue-500/60 bg-slate-950/60 hover:bg-blue-950/20 transition-all group flex items-start gap-3"
-                >
-                  <div className="p-2 rounded-lg bg-blue-950 border border-blue-800/60 shrink-0 group-hover:bg-blue-900 transition-colors">
-                    <Package size={16} className="text-blue-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold text-white group-hover:text-blue-300 transition-colors">
-                      1. Registros de Saldo
-                    </p>
-                    <p className="text-[10px] text-slate-400 mt-0.5 leading-tight">
-                      Movimentação geral, lançamentos e controle de saldos físicos.
-                    </p>
-                  </div>
-                  <ChevronRight size={15} className="text-blue-500/50 group-hover:text-blue-400 transition-colors shrink-0 mt-0.5" />
-                </button>
+                {/* 1. Registros (apenas para sistemas completos) */}
+                {!isSelectedOpen && (
+                  <button
+                    onClick={() => setIsRecordsOpen(true)}
+                    className="w-full text-left p-3.5 rounded-xl border border-slate-800 hover:border-blue-500/60 bg-slate-950/60 hover:bg-blue-950/20 transition-all group flex items-start gap-3"
+                  >
+                    <div className="p-2 rounded-lg bg-blue-950 border border-blue-800/60 shrink-0 group-hover:bg-blue-900 transition-colors">
+                      <Package size={16} className="text-blue-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-white group-hover:text-blue-300 transition-colors">
+                        1. Registros de Saldo
+                      </p>
+                      <p className="text-[10px] text-slate-400 mt-0.5 leading-tight">
+                        Movimentação geral, lançamentos e controle de saldos físicos.
+                      </p>
+                    </div>
+                    <ChevronRight size={15} className="text-blue-500/50 group-hover:text-blue-400 transition-colors shrink-0 mt-0.5" />
+                  </button>
+                )}
 
-                {/* 2. Mapeamento */}
+                {/* Mapeamento */}
                 <button
                   onClick={() => setIsMappingOpen(true)}
                   className="w-full text-left p-3.5 rounded-xl border border-slate-800 hover:border-purple-500/60 bg-slate-950/60 hover:bg-purple-950/20 transition-all group flex items-start gap-3"
@@ -221,7 +247,7 @@ export default function SystemDataPanel({
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold text-white group-hover:text-purple-300 transition-colors">
-                      2. Mapeamento de Posições
+                      {isSelectedOpen ? "1. Mapeamento de Posições" : "2. Mapeamento de Posições"}
                     </p>
                     <p className="text-[10px] text-slate-400 mt-0.5 leading-tight">
                       Vincular posições físicas, Drives, Ruas e Áreas ao sistema.
@@ -230,7 +256,7 @@ export default function SystemDataPanel({
                   <ChevronRight size={15} className="text-purple-500/50 group-hover:text-purple-400 transition-colors shrink-0 mt-0.5" />
                 </button>
 
-                {/* 3. Confronto */}
+                {/* Confronto */}
                 <button
                   onClick={() => setIsConfrontoOpen(true)}
                   className="w-full text-left p-3.5 rounded-xl border border-slate-800 hover:border-amber-500/60 bg-slate-950/60 hover:bg-amber-950/20 transition-all group flex items-start gap-3"
@@ -240,10 +266,12 @@ export default function SystemDataPanel({
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold text-white group-hover:text-amber-300 transition-colors">
-                      3. Confronto Analítico
+                      {isSelectedOpen ? "2. Confronto Analítico" : "3. Confronto Analítico"}
                     </p>
                     <p className="text-[10px] text-slate-400 mt-0.5 leading-tight">
-                      Importar e conciliar saldos físicos com inventário do sistema.
+                      {isSelectedOpen
+                        ? "Conciliar saldo mapeado nas posições com relação importada."
+                        : "Importar e conciliar saldos físicos com inventário do sistema."}
                     </p>
                   </div>
                   <ChevronRight size={15} className="text-amber-500/50 group-hover:text-amber-400 transition-colors shrink-0 mt-0.5" />

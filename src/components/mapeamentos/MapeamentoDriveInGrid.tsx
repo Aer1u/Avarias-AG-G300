@@ -39,7 +39,7 @@ interface MapeamentoDriveInGridProps {
     profundidade: number,
     batchCoords?: { lvl: number; prof: number }[]
   ) => void
-  onEditItem: (item: MapeamentoItem) => void
+  onEditItem: (item: MapeamentoItem) => void | boolean | Promise<void | boolean>
   onEditSlot?: (items: MapeamentoItem[]) => void
   onDeleteItem: (itemId: string) => void
   onSwapItems?: (
@@ -243,8 +243,8 @@ export function MapeamentoDriveInGrid({
         }
       })
     })
-    const uSkus = new Set(items.map(p => p.sku)).size
-    const tQty = items.reduce((sum, p) => sum + p.quantidade, 0)
+    const uSkus = new Set(items.map(p => p.sku).filter(Boolean)).size
+    const tQty = items.reduce((sum, p) => sum + (Number(p.quantidade) || 0), 0)
     return { totalPallets: occupied, uniqueSkus: uSkus, totalQty: tQty }
   }, [grid, levels, depths, items])
 
@@ -284,7 +284,8 @@ export function MapeamentoDriveInGrid({
           qtd_molhado: editingItem.qtdMolhado,
         },
       }
-      await onEditItem(updated)
+      const res = await onEditItem(updated)
+      if (res === false) return
       setEditingItem(null)
     } catch (err) {
       console.error("Erro ao salvar item:", err)
@@ -376,7 +377,7 @@ export function MapeamentoDriveInGrid({
         ? `${new Set(cellItems.map(p => p.sku)).size} SKUs`
         : firstItem.sku
       : ""
-    const qty = !isEmpty ? cellItems.reduce((sum, p) => sum + p.quantidade, 0) : 0
+    const qty = !isEmpty ? cellItems.reduce((sum, p) => sum + (Number(p.quantidade) || 0), 0) : 0
     const hasTilted = cellItems.some(p => Number(p.customValues?.qtd_tombada) > 0)
     const hasWet = cellItems.some(p => Number(p.customValues?.qtd_molhado) > 0)
 

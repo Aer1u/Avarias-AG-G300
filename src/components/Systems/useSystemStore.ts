@@ -15,6 +15,8 @@ import { toWorkspaceUuid } from "@/lib/workspaceUuid"
 import { deleteSystemItemsFromSupabase } from "@/lib/workspaceItemsSync"
 
 const STORAGE_KEY_PREFIX = "nexus_balance_systems_v1"
+export const OPEN_SYSTEM_ORIGIN_SENTINEL = "__OPEN_SYSTEM__"
+export const SYSTEMS_UPDATED_EVENT = "nexus:systems-updated"
 
 // IDs legados dos modelos de exemplo que existiam na carga inicial do SQL
 const LEGACY_SEEDED_SYSTEM_IDS = new Set([
@@ -56,6 +58,15 @@ interface DbParticipantRow {
   configured_at?: string | null
 }
 
+function broadcastSystemsUpdate(storageKey: string, nextSystems: BusinessSystem[]) {
+  if (typeof window === "undefined") return
+  window.dispatchEvent(
+    new CustomEvent(SYSTEMS_UPDATED_EVENT, {
+      detail: { storageKey, systems: nextSystems },
+    })
+  )
+}
+
 export function useSystemStore(workspaceId?: string) {
   const wsUuid = toWorkspaceUuid(workspaceId)
   const storageKey = workspaceId
@@ -93,38 +104,46 @@ export function useSystemStore(workspaceId?: string) {
               !LEGACY_SEEDED_SYSTEM_IDS.has(row.id) &&
               !String(row.code || "").startsWith("__NEXUS_")
           )
-          .map((row) => ({
-            id: row.id,
-            code: row.code,
-            name: row.name,
-            description: row.description || "",
-            color: row.color || "#3b82f6",
-            icon: row.icon || "📦",
-            status: (row.status as BusinessSystem["status"]) || "ativo",
-            defaultControlMode: (row.default_control_mode as StockControlMode) || "vinculado_saldo",
-            originStorageId: row.origin_storage_id || "",
-            originStorageLabel: row.origin_storage_label || "",
-            responsible: row.responsible || "",
-            workspaceId: row.workspace_id || wsUuid,
-            participants: dbParticipants
-              .filter((p) => p.system_id === row.id)
-              .map((p) => ({
-                storageObjectId: p.storage_object_id,
-                storageObjectLabel: p.storage_object_label,
-                storageType: p.storage_type,
-                role: p.role,
-                stockControlMode: (p.stock_control_mode as StockControlMode) || "vinculado_saldo",
-                permissions: {
-                  allowInbound: p.allow_inbound ?? true,
-                  allowOutbound: p.allow_outbound ?? true,
-                  allowReturnToOrigin: p.allow_return_to_origin ?? true,
-                },
-                configuredAt: p.configured_at || row.created_at,
-              })),
-            allowedMovementTypes: ["entrada", "transferencia", "baixa"],
-            createdAt: row.created_at,
-            updatedAt: row.updated_at,
-          }))
+          .map((row) => {
+            const isOpen = row.origin_storage_id === OPEN_SYSTEM_ORIGIN_SENTINEL
+            return {
+              id: row.id,
+              code: row.code,
+              name: row.name,
+              description: row.description || "",
+              color: row.color || "#3b82f6",
+              icon: row.icon || "📦",
+              systemStyle: isOpen ? "aberto" : "completo",
+              status: (row.status as BusinessSystem["status"]) || "ativo",
+              defaultControlMode: isOpen
+                ? "livre"
+                : (row.default_control_mode as StockControlMode) || "vinculado_saldo",
+              originStorageId: isOpen ? "" : row.origin_storage_id || "",
+              originStorageLabel: isOpen ? "" : row.origin_storage_label || "",
+              responsible: row.responsible || "",
+              workspaceId: row.workspace_id || wsUuid,
+              participants: dbParticipants
+                .filter((p) => p.system_id === row.id)
+                .map((p) => ({
+                  storageObjectId: p.storage_object_id,
+                  storageObjectLabel: p.storage_object_label,
+                  storageType: p.storage_type,
+                  role: p.role,
+                  stockControlMode: isOpen
+                    ? "livre"
+                    : (p.stock_control_mode as StockControlMode) || "vinculado_saldo",
+                  permissions: {
+                    allowInbound: p.allow_inbound ?? true,
+                    allowOutbound: p.allow_outbound ?? true,
+                    allowReturnToOrigin: p.allow_return_to_origin ?? true,
+                  },
+                  configuredAt: p.configured_at || row.created_at,
+                })),
+              allowedMovementTypes: ["entrada", "transferencia", "baixa"],
+              createdAt: row.created_at,
+              updatedAt: row.updated_at,
+            }
+          })
 
         setSystems(mapped)
         try {
@@ -136,6 +155,7 @@ export function useSystemStore(workspaceId?: string) {
         } catch {
           // ignore storage quota errors
         }
+        broadcastSystemsUpdate(storageKey, mapped)
         setIsLoaded(true)
         return
       }
@@ -149,9 +169,12 @@ export function useSystemStore(workspaceId?: string) {
       if (raw) {
         const parsed = JSON.parse(raw)
         if (Array.isArray(parsed)) {
-          const cleaned = parsed.filter(
-            (sys: BusinessSystem) => sys && !LEGACY_SEEDED_SYSTEM_IDS.has(sys.id)
-          )
+          const cleaned = parsed
+            .filter((sys: BusinessSystem) => sys && !LEGACY_SEEDED_SYSTEM_IDS.has(sys.id))
+            .map((sys: BusinessSystem) => ({
+              ...sys,
+              systemStyle: sys.systemStyle === "aberto" ? "aberto" : "completo",
+            })) as BusinessSystem[]
           setSystems(cleaned)
           setIsLoaded(true)
           return
@@ -171,7 +194,25 @@ export function useSystemStore(workspaceId?: string) {
     })
   }, [loadSystems])
 
-  // Salva no cache local
+  // Sincronização em tempo real entre múltiplas instâncias de useSystemStore na mesma página
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const handleSync = (evt: Event) => {
+      const customEvt = evt as CustomEvent<{ storageKey?: string; systems?: BusinessSystem[] }>
+      if (
+        customEvt.detail?.storageKey === storageKey &&
+        Array.isArray(customEvt.detail.systems)
+      ) {
+        setSystems(customEvt.detail.systems)
+      }
+    }
+    window.addEventListener(SYSTEMS_UPDATED_EVENT, handleSync)
+    return () => {
+      window.removeEventListener(SYSTEMS_UPDATED_EVENT, handleSync)
+    }
+  }, [storageKey])
+
+  // Salva no cache local e notifica demais instâncias
   const persistLocally = useCallback(
     (newSystems: BusinessSystem[]) => {
       setSystems(newSystems)
@@ -180,6 +221,7 @@ export function useSystemStore(workspaceId?: string) {
       } catch (e) {
         console.warn("Falha ao salvar sistemas no localStorage:", e)
       }
+      broadcastSystemsUpdate(storageKey, newSystems)
     },
     [storageKey]
   )
@@ -189,9 +231,18 @@ export function useSystemStore(workspaceId?: string) {
     (newSystem: Omit<BusinessSystem, "id" | "createdAt" | "updatedAt">) => {
       const sysId = crypto.randomUUID()
       const now = new Date().toISOString()
+      const isOpen = newSystem.systemStyle === "aberto"
+      const normalizedControlMode: StockControlMode = isOpen
+        ? "livre"
+        : newSystem.defaultControlMode || "vinculado_saldo"
+
       const system: BusinessSystem = {
         ...newSystem,
         id: sysId,
+        systemStyle: isOpen ? "aberto" : "completo",
+        defaultControlMode: normalizedControlMode,
+        originStorageId: isOpen ? "" : newSystem.originStorageId || "",
+        originStorageLabel: isOpen ? "" : newSystem.originStorageLabel || "",
         workspaceId: wsUuid,
         createdAt: now,
         updatedAt: now,
@@ -210,9 +261,11 @@ export function useSystemStore(workspaceId?: string) {
           description: newSystem.description || "",
           color: newSystem.color || "#3b82f6",
           icon: newSystem.icon || "📦",
-          default_control_mode: newSystem.defaultControlMode || "vinculado_saldo",
-          origin_storage_id: newSystem.originStorageId || null,
-          origin_storage_label: newSystem.originStorageLabel || null,
+          default_control_mode: normalizedControlMode,
+          origin_storage_id: isOpen
+            ? OPEN_SYSTEM_ORIGIN_SENTINEL
+            : newSystem.originStorageId || null,
+          origin_storage_label: isOpen ? null : newSystem.originStorageLabel || null,
           status: newSystem.status || "ativo",
           responsible: newSystem.responsible || null,
         })
@@ -221,18 +274,20 @@ export function useSystemStore(workspaceId?: string) {
             console.error("Erro salvando sistema no Supabase:", error)
             return
           }
-          if (Array.isArray(newSystem.participants) && newSystem.participants.length > 0) {
+          if (Array.isArray(system.participants) && system.participants.length > 0) {
             supabase
               .from("system_storage_participants")
               .upsert(
-                newSystem.participants.map((p) => ({
+                system.participants.map((p) => ({
                   workspace_id: wsUuid,
                   system_id: sysId,
                   storage_object_id: p.storageObjectId,
                   storage_object_label: p.storageObjectLabel,
                   storage_type: p.storageType || "compartment",
                   role: p.role || "origem",
-                  stock_control_mode: p.stockControlMode || "vinculado_saldo",
+                  stock_control_mode: isOpen
+                    ? "livre"
+                    : p.stockControlMode || "vinculado_saldo",
                 })),
                 { onConflict: "system_id,storage_object_id" }
               )
@@ -250,9 +305,25 @@ export function useSystemStore(workspaceId?: string) {
   // Atualizar sistema (Supabase + local)
   const updateSystem = useCallback(
     (id: string, partial: Partial<BusinessSystem>) => {
+      const currentSys = systems.find((s) => s.id === id)
+      const nextStyle = partial.systemStyle ?? currentSys?.systemStyle ?? "completo"
+      const isOpen = nextStyle === "aberto"
+
+      const normalizedPartial: Partial<BusinessSystem> = {
+        ...partial,
+        systemStyle: nextStyle,
+        ...(isOpen
+          ? {
+              defaultControlMode: "livre",
+              originStorageId: "",
+              originStorageLabel: "",
+            }
+          : {}),
+      }
+
       const updated = systems.map((sys) =>
         sys.id === id
-          ? { ...sys, ...partial, updatedAt: new Date().toISOString() }
+          ? { ...sys, ...normalizedPartial, updatedAt: new Date().toISOString() }
           : sys
       )
       persistLocally(updated)
@@ -260,23 +331,29 @@ export function useSystemStore(workspaceId?: string) {
       const dbPatch: Record<string, unknown> = {
         updated_at: new Date().toISOString(),
       }
-      if (partial.code !== undefined) dbPatch.code = partial.code
-      if (partial.name !== undefined) dbPatch.name = partial.name
-      if (partial.description !== undefined) dbPatch.description = partial.description
-      if (partial.color !== undefined) dbPatch.color = partial.color
-      if (partial.icon !== undefined) dbPatch.icon = partial.icon
-      if (partial.defaultControlMode !== undefined) {
-        dbPatch.default_control_mode = partial.defaultControlMode
+      if (normalizedPartial.code !== undefined) dbPatch.code = normalizedPartial.code
+      if (normalizedPartial.name !== undefined) dbPatch.name = normalizedPartial.name
+      if (normalizedPartial.description !== undefined) dbPatch.description = normalizedPartial.description
+      if (normalizedPartial.color !== undefined) dbPatch.color = normalizedPartial.color
+      if (normalizedPartial.icon !== undefined) dbPatch.icon = normalizedPartial.icon
+      if (normalizedPartial.defaultControlMode !== undefined) {
+        dbPatch.default_control_mode = normalizedPartial.defaultControlMode
       }
-      if (partial.originStorageId !== undefined) {
-        dbPatch.origin_storage_id = partial.originStorageId || null
+      if (isOpen) {
+        dbPatch.origin_storage_id = OPEN_SYSTEM_ORIGIN_SENTINEL
+        dbPatch.origin_storage_label = null
+        dbPatch.default_control_mode = "livre"
+      } else {
+        if (partial.originStorageId !== undefined || partial.systemStyle === "completo") {
+          dbPatch.origin_storage_id = partial.originStorageId || null
+        }
+        if (partial.originStorageLabel !== undefined || partial.systemStyle === "completo") {
+          dbPatch.origin_storage_label = partial.originStorageLabel || null
+        }
       }
-      if (partial.originStorageLabel !== undefined) {
-        dbPatch.origin_storage_label = partial.originStorageLabel || null
-      }
-      if (partial.status !== undefined) dbPatch.status = partial.status
-      if (partial.responsible !== undefined) {
-        dbPatch.responsible = partial.responsible || null
+      if (normalizedPartial.status !== undefined) dbPatch.status = normalizedPartial.status
+      if (normalizedPartial.responsible !== undefined) {
+        dbPatch.responsible = normalizedPartial.responsible || null
       }
 
       supabase
@@ -309,23 +386,29 @@ export function useSystemStore(workspaceId?: string) {
         }
       })()
     },
-    [systems, persistLocally]
+    [systems, persistLocally, wsUuid]
   )
 
   // Vincular objeto de armazenamento (Drive, Área, etc.) a um sistema
   const linkStorageToSystem = useCallback(
     (systemId: string, participant: StorageParticipantConfig) => {
+      const targetSystem = systems.find((s) => s.id === systemId)
+      const effectiveParticipant: StorageParticipantConfig =
+        targetSystem?.systemStyle === "aberto"
+          ? { ...participant, stockControlMode: "livre" }
+          : participant
+
       const updated = systems.map((sys) => {
         if (sys.id !== systemId) return sys
         const existingIdx = sys.participants.findIndex(
-          (p) => p.storageObjectId === participant.storageObjectId
+          (p) => p.storageObjectId === effectiveParticipant.storageObjectId
         )
         let newParticipants: StorageParticipantConfig[]
         if (existingIdx >= 0) {
           newParticipants = [...sys.participants]
-          newParticipants[existingIdx] = participant
+          newParticipants[existingIdx] = effectiveParticipant
         } else {
-          newParticipants = [...sys.participants, participant]
+          newParticipants = [...sys.participants, effectiveParticipant]
         }
         return { ...sys, participants: newParticipants, updatedAt: new Date().toISOString() }
       })
@@ -338,11 +421,11 @@ export function useSystemStore(workspaceId?: string) {
           {
             workspace_id: wsUuid,
             system_id: systemId,
-            storage_object_id: participant.storageObjectId,
-            storage_object_label: participant.storageObjectLabel,
-            storage_type: participant.storageType || "drive_in",
-            role: participant.role || "armazenamento",
-            stock_control_mode: participant.stockControlMode || "vinculado_saldo",
+            storage_object_id: effectiveParticipant.storageObjectId,
+            storage_object_label: effectiveParticipant.storageObjectLabel,
+            storage_type: effectiveParticipant.storageType || "drive_in",
+            role: effectiveParticipant.role || "armazenamento",
+            stock_control_mode: effectiveParticipant.stockControlMode || "vinculado_saldo",
           },
           { onConflict: "system_id,storage_object_id" }
         )

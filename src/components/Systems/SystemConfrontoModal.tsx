@@ -29,6 +29,9 @@ import {
 } from "lucide-react"
 import { systemDataService } from "./systemDataService"
 import { supabase } from "@/lib/supabase"
+import { isOpenSystem, getMappedStockRecordsForSystem } from "@/lib/systemVisuals"
+import { hydrateSystemItemsFromSupabase } from "@/lib/workspaceItemsSync"
+import { ITEMS_UPDATED_EVENT } from "@/lib/driveOccupancy"
 import type {
   BusinessSystem,
   SystemConfrontoConfig,
@@ -52,6 +55,7 @@ export default function SystemConfrontoModal({
   onClose,
   system,
 }: SystemConfrontoModalProps) {
+  const isOpenSys = isOpenSystem(system)
   const [confrontos, setConfrontos] = useState<SystemConfrontoConfig[]>([])
   const [activeConfrontoId, setActiveConfrontoId] = useState<string | null>(null)
 
@@ -80,6 +84,24 @@ export default function SystemConfrontoModal({
   useEffect(() => {
     if (!isOpen) return
     load()
+
+    if (isOpenSys) {
+      let active = true
+      setSystemRecords(getMappedStockRecordsForSystem(system))
+      hydrateSystemItemsFromSupabase(system).then(() => {
+        if (!active) return
+        setSystemRecords(getMappedStockRecordsForSystem(system))
+      })
+      const onItemsUpdated = () => {
+        if (!active) return
+        setSystemRecords(getMappedStockRecordsForSystem(system))
+      }
+      window.addEventListener(ITEMS_UPDATED_EVENT, onItemsUpdated)
+      return () => {
+        active = false
+        window.removeEventListener(ITEMS_UPDATED_EVENT, onItemsUpdated)
+      }
+    }
 
     const fetchSystemRecords = async () => {
       if (UUID_REGEX.test(system.id)) {
@@ -131,7 +153,7 @@ export default function SystemConfrontoModal({
 
     fetchSystemRecords()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, system.id])
+  }, [isOpen, system.id, isOpenSys])
 
   // Confronto ativo selecionado
   const activeConfronto = useMemo(() => {
@@ -249,19 +271,27 @@ export default function SystemConfrontoModal({
               {system.icon}
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base font-bold text-white tracking-tight">
                   Confronto de Saldo — {system.name}
                 </h2>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-amber-300 font-bold border border-slate-700">
                   {system.code}
                 </span>
-                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-blue-950/70 text-blue-400 border border-blue-800/40">
-                  JSON Estruturado
-                </span>
+                {isOpenSys ? (
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-emerald-950/70 text-emerald-300 border border-emerald-700/50">
+                    Sistema Aberto · Saldo Mapeado (Posições)
+                  </span>
+                ) : (
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-blue-950/70 text-blue-400 border border-blue-800/40">
+                    JSON Estruturado
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-400">
-                Conciliação de saldo físico com relações importadas configuráveis (ex: A501, G501, SAP).
+                {isOpenSys
+                  ? "Conciliação direta dos itens mapeados nas posições vinculadas com a relação importada."
+                  : "Conciliação de saldo físico com relações importadas configuráveis (ex: A501, G501, SAP)."}
               </p>
             </div>
           </div>

@@ -94,8 +94,21 @@ export interface MapPropField {
   unit?: string                       // ex: "m", "kg", "un"
 }
 
+export interface SystemVisualRef {
+  id: string
+  code: string
+  name: string
+  color: string
+  icon: string
+  systemStyle?: "completo" | "aberto"
+  originStorageId?: string
+  participants?: Array<{ storageObjectId: string }>
+}
+
 export interface RenderKonvaOptions {
   readOnly?: boolean
+  systems?: SystemVisualRef[]
+  activeSystemFilterId?: string | null
 }
 
 // ── Definição de um tipo de elemento ─────────────────────────
