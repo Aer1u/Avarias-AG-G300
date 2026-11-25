@@ -14,7 +14,7 @@
 
 import React, { useEffect, useRef, useCallback, useImperativeHandle, forwardRef, useState } from "react"
 import Konva from "konva"
-import type { MapObject } from "../MapLibrary/types"
+import type { MapObject, SystemVisualRef } from "../MapLibrary/types"
 import { ELEMENT_BY_TYPE } from "../MapLibrary/registry"
 import { INITIAL_AREA_CLASSIFICATIONS } from "../MapLibrary/areaClassifier"
 import { pixelsToReal, ensurePhysicalDimensions } from "../MapLibrary/unitConverter"
@@ -41,6 +41,8 @@ interface MapCanvasContainerProps {
   onUpdateObject: (id: string, partial: Partial<MapObject>) => void
   onZoomChange: (newZoom: number) => void
   onAddObject?: (obj: MapObject) => void
+  systems?: SystemVisualRef[]
+  activeSystemFilterId?: string | null
 }
 
 function getAreaFill(classification?: string, readOnly: boolean = false): { fill: string; stroke: string } {
@@ -115,6 +117,8 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
       onUpdateObject,
       onZoomChange,
       onAddObject,
+      systems = [],
+      activeSystemFilterId = null,
     },
     ref
   ) {
@@ -1124,7 +1128,7 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
           const def = ELEMENT_BY_TYPE.get(obj.type)
           if (!def) return
 
-          const group = def.renderKonva(obj, { readOnly })
+          const group = def.renderKonva(obj, { readOnly, systems, activeSystemFilterId })
           group.id(obj.id)
           group.position({ x: obj.x, y: obj.y })
           group.rotation(obj.rotation || 0)
@@ -1306,7 +1310,7 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
 
       void itemsVersion
       layer.batchDraw()
-    }, [objects, selectedId, selectedChannelId, tool, readOnly, onSelect, onUpdateObject, snap, createDragBoundFunc, itemsVersion])
+    }, [objects, selectedId, selectedChannelId, tool, readOnly, onSelect, onUpdateObject, snap, createDragBoundFunc, itemsVersion, systems, activeSystemFilterId])
 
     return (
       <div

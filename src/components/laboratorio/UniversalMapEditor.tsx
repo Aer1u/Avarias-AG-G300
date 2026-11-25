@@ -16,7 +16,7 @@
 
 "use client"
 
-import React, { useState, useCallback, useEffect, useRef } from "react"
+import React, { useState, useCallback, useEffect, useRef, useMemo } from "react"
 import type { MapObject, MapElementDefinition } from "../MapLibrary/types"
 import type {
   BusinessModuleDefinition,
@@ -42,6 +42,8 @@ import DimensionConfigModal from "./DimensionConfigModal"
 import ResourceEngineModal from "../Resources/ResourceEngineModal"
 import SystemManagerModal from "../Systems/SystemManagerModal"
 import SystemDataPanel from "../Systems/SystemDataPanel"
+import { useSystemStore } from "../Systems/useSystemStore"
+import { getLinkedStructuresForSystem, isOpenSystem } from "@/lib/systemVisuals"
 import { AdminCenterModal } from "../IAM/AdminCenter/AdminCenterModal"
 import { useAuthz } from "../IAM/useAuthz"
 import { LocalErrorBoundary } from "../LocalErrorBoundary"
@@ -596,6 +598,17 @@ export default function UniversalMapEditor({
   // Ref para os renderizadores 2D Konva e 3D Three.js (navegação programática)
   const canvasRef = useRef<MapCanvasHandle>(null)
   const viewer3DRef = useRef<SpatialViewer3DHandle>(null)
+
+  // Sistemas de Saldo & Mapeamento Aberto (identificação visual 2D/3D + filtro)
+  const { systems } = useSystemStore(workspaceId)
+  const [activeSystemFilterId, setActiveSystemFilterId] = useState<string | null>(null)
+  const effectiveSystemFilterId = useMemo(
+    () =>
+      activeSystemFilterId && systems.some((s) => s.id === activeSystemFilterId)
+        ? activeSystemFilterId
+        : null,
+    [activeSystemFilterId, systems]
+  )
 
   const selectedObject = objects.find((o) => o.id === selectedId) || null
 
@@ -1416,6 +1429,8 @@ export default function UniversalMapEditor({
                 objects={objects}
                 selectedId={selectedId}
                 selectedChannelId={selectedChannelId}
+                systems={systems}
+                activeSystemFilterId={effectiveSystemFilterId}
                 onSelectAndLocate={handleSelectAndLocate}
                 onSelectChannel={(obj, chanId) => handleSelect(obj.id, chanId)}
                 onToggleVisibility={handleToggleVisibility}
@@ -1501,6 +1516,8 @@ export default function UniversalMapEditor({
                 objects={objects}
                 selectedId={selectedId}
                 selectedChannelId={selectedChannelId}
+                systems={systems}
+                activeSystemFilterId={effectiveSystemFilterId}
                 snapEnabled={snapEnabled}
                 gridSize={gridSize}
                 zoom={zoom}
@@ -1524,11 +1541,86 @@ export default function UniversalMapEditor({
                 objects={objects}
                 selectedId={selectedId}
                 selectedChannelId={selectedChannelId}
+                systems={systems}
+                activeSystemFilterId={effectiveSystemFilterId}
                 readOnly={readOnly}
                 onSelect={handleSelect}
                 onModeChange={setSpatialMode}
               />
             </LocalErrorBoundary>
+          )}
+
+          {/* Legenda Interativa & Filtro de Identificação de Sistemas (2D e 3D) */}
+          {systems.length > 0 && (
+            <div className="absolute bottom-4 left-4 z-20 max-w-[calc(100%-24rem)] pointer-events-auto">
+              <div className="bg-slate-950/90 border border-slate-800 rounded-xl shadow-2xl px-2.5 py-2 backdrop-blur-md flex flex-col gap-1.5">
+                <div className="flex items-center justify-between gap-3 px-0.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Sistemas no Mapa
+                  </span>
+                  {effectiveSystemFilterId && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveSystemFilterId(null)}
+                      className="text-[10px] font-semibold text-sky-400 hover:text-sky-300 cursor-pointer"
+                    >
+                      Mostrar todos
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {systems.map((sys) => {
+                    const isActive = effectiveSystemFilterId === sys.id
+                    const linkedCount = getLinkedStructuresForSystem(sys, objects).length
+                    const isLivre = isOpenSystem(sys)
+                    return (
+                      <button
+                        key={sys.id}
+                        type="button"
+                        onClick={() =>
+                          setActiveSystemFilterId((prev) => (prev === sys.id ? null : sys.id))
+                        }
+                        title={`${sys.name} (${isLivre ? "Sistema Livre — Sem Saldo" : "Com Saldo"}) · Clique para destacar no mapa`}
+                        className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${
+                          isActive
+                            ? "text-white shadow-md scale-[1.02]"
+                            : effectiveSystemFilterId
+                            ? "bg-slate-900/60 border-slate-800 text-slate-500 hover:text-slate-200"
+                            : "bg-slate-900/90 border-slate-800 text-slate-200 hover:border-slate-600"
+                        }`}
+                        style={
+                          isActive
+                            ? {
+                                backgroundColor: `${sys.color}2b`,
+                                borderColor: sys.color,
+                              }
+                            : undefined
+                        }
+                      >
+                        <span
+                          className="w-2.5 h-2.5 rounded-sm shrink-0 border border-white/25"
+                          style={{ backgroundColor: sys.color }}
+                        />
+                        <span>{sys.icon}</span>
+                        <span className="font-mono font-bold">{sys.code}</span>
+                        <span className="text-[10px] text-slate-400 truncate max-w-[110px]">
+                          {sys.name}
+                        </span>
+                        <span
+                          className={`text-[9px] px-1 py-0.2 rounded font-mono border ${
+                            isLivre
+                              ? "bg-emerald-950/60 border-emerald-700/50 text-emerald-300"
+                              : "bg-slate-950/70 border-slate-700 text-slate-400"
+                          }`}
+                        >
+                          {isLivre ? "Livre" : "Saldo"} · {linkedCount}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Pill Flutuante de Acesso Rápido na Parte Superior (Modo Visualizador) */}
@@ -1744,6 +1836,7 @@ export default function UniversalMapEditor({
           onClose={() => setIsSystemManagerOpen(false)}
           allObjects={objects}
           workspaceId={workspaceId}
+          onUpdateObject={handleUpdateObjectById}
         />
       )}
 
@@ -1756,6 +1849,7 @@ export default function UniversalMapEditor({
           workspaceId={workspaceId}
           levelsConfig={levelsConfig}
           depthConfig={depthConfig}
+          onUpdateObject={handleUpdateObjectById}
         />
       )}
 

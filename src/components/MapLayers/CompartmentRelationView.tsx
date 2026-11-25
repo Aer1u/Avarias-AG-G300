@@ -50,9 +50,11 @@ import {
 } from "../Systems/systemBalanceService"
 import {
   hydratePositionKeyFromSupabase,
+  hydrateSystemItemsFromSupabase,
   persistPositionItemsToSupabase,
 } from "@/lib/workspaceItemsSync"
 import { ITEMS_UPDATED_EVENT } from "@/lib/driveOccupancy"
+import { isOpenSystem } from "@/lib/systemVisuals"
 
 const fmtNum = (val: number, locale = "pt-BR") =>
   val !== 0 && Math.abs(val) < 1
@@ -131,13 +133,18 @@ export default function CompartmentRelationView({
   const [deleteTarget, setDeleteTarget] = useState<MapeamentoItem | null>(null)
   const [deleteQty, setDeleteQty] = useState<string>("")
 
-  const originObjectId = useMemo(() => getOriginObjectId(system), [system])
-  const isSystemOrigin = Boolean(system && objectId && originObjectId === objectId)
+  const isOpenSys = isOpenSystem(system)
+  const originObjectId = useMemo(
+    () => (system && !isOpenSys ? getOriginObjectId(system) : null),
+    [system, isOpenSys]
+  )
+  const isSystemOrigin = Boolean(system && !isOpenSys && objectId && originObjectId === objectId)
   const isNonOriginSystemParticipant = Boolean(
-    system && objectId && (!originObjectId || originObjectId !== objectId)
+    system && !isOpenSys && objectId && (!originObjectId || originObjectId !== objectId)
   )
   const enforceStockLimit = Boolean(
     system &&
+      !isOpenSys &&
       !isSystemOrigin &&
       (stockControlMode === "vinculado_saldo" ||
         (!stockControlMode && system.defaultControlMode !== "livre"))
@@ -151,7 +158,11 @@ export default function CompartmentRelationView({
       .then(async () => {
         if (active) setIsSyncing(true)
         if (system) {
-          await fetchAndSyncSystemBalances(system)
+          if (isOpenSys) {
+            await hydrateSystemItemsFromSupabase(system)
+          } else {
+            await fetchAndSyncSystemBalances(system)
+          }
         } else {
           await hydratePositionKeyFromSupabase(mapeamentoId, workspaceId)
         }
@@ -165,7 +176,7 @@ export default function CompartmentRelationView({
     return () => {
       active = false
     }
-  }, [system, mapeamentoId, workspaceId])
+  }, [system, isOpenSys, mapeamentoId, workspaceId])
 
   useEffect(() => {
     const onItemsUpdated = () => setItemsVersion((v) => v + 1)
@@ -182,15 +193,15 @@ export default function CompartmentRelationView({
 
   const balanceSnapshot = useMemo(() => {
     void itemsVersion
-    if (!system) return null
+    if (!system || isOpenSys) return null
     return getSystemBalanceSnapshot(system)
-  }, [system, itemsVersion])
+  }, [system, isOpenSys, itemsVersion])
 
   const availableStocks = useMemo(() => {
     void itemsVersion
-    if (!system || !isNonOriginSystemParticipant) return []
+    if (!system || isOpenSys || !isNonOriginSystemParticipant) return []
     return getAvailableStocksFromOrigin(system)
-  }, [system, isNonOriginSystemParticipant, itemsVersion])
+  }, [system, isOpenSys, isNonOriginSystemParticipant, itemsVersion])
 
   const destinationPositions = useMemo(() => {
     if (!system || !objectId) return []
@@ -214,7 +225,7 @@ export default function CompartmentRelationView({
   const commitItemsForChannel = useCallback(
     (nextChannelItems: MapeamentoItem[]): boolean => {
       setBalanceError("")
-      if (system && objectId && isNonOriginSystemParticipant) {
+      if (system && !isOpenSys && objectId && isNonOriginSystemParticipant) {
         const res = applyNonOriginPositionChange(
           system,
           objectId,
@@ -238,7 +249,7 @@ export default function CompartmentRelationView({
         nextChannelItems,
         workspaceId || system?.workspaceId
       ).catch(() => {})
-      if (system) {
+      if (system && !isOpenSys) {
         syncSupabaseUniversalBalances(system).catch(() => {})
       }
       setItemsVersion((v) => v + 1)
@@ -249,6 +260,7 @@ export default function CompartmentRelationView({
       mapeamentoId,
       onItemsChanged,
       system,
+      isOpenSys,
       objectId,
       isNonOriginSystemParticipant,
       items,
@@ -1096,8 +1108,8 @@ export default function CompartmentRelationView({
 
   return (
     <div className="space-y-4">
-      {/* Banner de Conservação de Saldo do Sistema */}
-      {system && balanceSnapshot && (
+      {/* Banner de Conservação de Saldo (apenas sistema com saldo) ou Banner de Sistema Livre */}
+      {system && !isOpenSys && balanceSnapshot && (
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 rounded-2xl bg-amber-950/25 border border-amber-800/40 text-xs">
           <div className="flex flex-wrap items-center gap-3">
             <span className="font-bold text-amber-300 flex items-center gap-1.5">
@@ -1123,6 +1135,26 @@ export default function CompartmentRelationView({
               Sincronizando saldo...
             </span>
           )}
+        </div>
+      )}
+
+      {system && isOpenSys && (
+        <div
+          className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 rounded-2xl border text-xs"
+          style={{
+            backgroundColor: `${system.color}14`,
+            borderColor: `${system.color}45`,
+          }}
+        >
+          <span className="font-bold text-white flex items-center gap-2">
+            <span>{system.icon}</span>
+            <span>
+              {system.name} ({system.code}) · Sistema Livre (Sem Registro de Saldo)
+            </span>
+          </span>
+          <span className="text-[11px] text-emerald-300 font-semibold">
+            Lançamento livre · Alimenta o Confronto
+          </span>
         </div>
       )}
 

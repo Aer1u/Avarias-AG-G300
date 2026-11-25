@@ -15,13 +15,14 @@ import type { MapObject } from "../MapLibrary/types"
 import SystemRecordsModal from "./SystemRecordsModal"
 import SystemMappingModal from "./SystemMappingModal"
 import SystemConfrontoModal from "./SystemConfrontoModal"
-import { isOpenSystem, getSystemMappedStats } from "@/lib/systemVisuals"
+import { isOpenSystem, getSystemMappedStats, getLinkedStructuresForSystem } from "@/lib/systemVisuals"
 
 interface SystemManagerModalProps {
   isOpen: boolean
   onClose: () => void
   allObjects?: MapObject[]
   workspaceId?: string
+  onUpdateObject?: (id: string, partial: Partial<MapObject>) => void
 }
 
 export default function SystemManagerModal({
@@ -29,6 +30,7 @@ export default function SystemManagerModal({
   onClose,
   allObjects = [],
   workspaceId,
+  onUpdateObject,
 }: SystemManagerModalProps) {
   const { systems, addSystem, updateSystem, deleteSystem, linkStorageToSystem } = useSystemStore(workspaceId)
   const [selectedSystemId, setSelectedSystemId] = useState<string>(systems[0]?.id || "")
@@ -70,7 +72,12 @@ export default function SystemManagerModal({
   }
 
   const handleStartEdit = (sys: BusinessSystem) => {
-    setFormData({ ...sys, systemStyle: sys.systemStyle === "aberto" ? "aberto" : "completo" })
+    const open = isOpenSystem(sys)
+    setFormData({
+      ...sys,
+      systemStyle: open ? "aberto" : "completo",
+      defaultControlMode: open ? "livre" : "vinculado_saldo",
+    })
     setIsEditing(true)
     setIsCreating(false)
   }
@@ -203,6 +210,7 @@ export default function SystemManagerModal({
               {systems.map((sys) => {
                 const isSelected = sys.id === selectedSystem?.id && !isCreating
                 const openSys = isOpenSystem(sys)
+                const linkedCount = getLinkedStructuresForSystem(sys, allObjects).length
                 return (
                   <button
                     key={sys.id}
@@ -240,15 +248,13 @@ export default function SystemManagerModal({
                       <p className="text-[10px] text-slate-400 line-clamp-1 mt-0.5">{sys.description}</p>
                       <div className="flex items-center gap-2 mt-1.5 text-[9px] text-slate-500">
                         <span className="flex items-center gap-1">
-                          <Layers size={10} /> {sys.participants?.length || 0} objetos
+                          <Layers size={10} /> {linkedCount} estruturas
                         </span>
                         <span>•</span>
                         {openSys ? (
-                          <span className="text-emerald-400 font-semibold">Sistema Aberto</span>
+                          <span className="text-emerald-400 font-semibold">Sistema Livre</span>
                         ) : (
-                          <span className={sys.defaultControlMode === "vinculado_saldo" ? "text-blue-400" : "text-amber-400"}>
-                            {sys.defaultControlMode === "vinculado_saldo" ? "Saldo Obrig." : "Livre"}
-                          </span>
+                          <span className="text-blue-400">Saldo Obrig.</span>
                         )}
                       </div>
                     </div>
@@ -326,7 +332,7 @@ export default function SystemManagerModal({
                         setFormData({
                           ...formData,
                           systemStyle: "completo",
-                          defaultControlMode: formData.defaultControlMode || "vinculado_saldo",
+                          defaultControlMode: "vinculado_saldo",
                         })
                       }
                       className={`p-3 rounded-xl border text-left transition-all ${
@@ -336,13 +342,13 @@ export default function SystemManagerModal({
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-white">📋 Sistema Completo (Saldo)</span>
+                        <span className="text-xs font-bold text-white">📋 Sistema com Saldo (Registros)</span>
                         {(formData.systemStyle || "completo") === "completo" && (
                           <Check size={14} className="text-blue-400" />
                         )}
                       </div>
                       <p className="text-[10px] text-slate-400 mt-1 leading-snug">
-                        Inclui <strong>Registros</strong> (CHÃO/entradas), <strong>Mapeamento</strong> e <strong>Confronto</strong>.
+                        Inclui <strong>Registros de Saldo</strong> (CHÃO/entradas), <strong>Mapeamento</strong> e <strong>Confronto</strong>.
                       </p>
                     </button>
 
@@ -364,13 +370,13 @@ export default function SystemManagerModal({
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-white">🗺️ Sistema Aberto (Sem Registros)</span>
+                        <span className="text-xs font-bold text-white">🗺️ Sistema Livre (Sem Saldo)</span>
                         {formData.systemStyle === "aberto" && (
                           <Check size={14} className="text-emerald-400" />
                         )}
                       </div>
                       <p className="text-[10px] text-slate-400 mt-1 leading-snug">
-                        Sem módulo de Registros nem saldo prévio no chão. Apenas <strong>Mapeamento</strong> e <strong>Confronto</strong>.
+                        <strong>Sem registro de saldo</strong> nem origem no chão. Apenas <strong>Mapeamento</strong> e <strong>Confronto</strong>.
                       </p>
                     </button>
                   </div>
@@ -424,20 +430,10 @@ export default function SystemManagerModal({
                     {/* Modo Padrão */}
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="text-[10px] text-slate-400 block mb-1">Modo de Preenchimento Padrão</label>
-                        <select
-                          value={formData.defaultControlMode || "vinculado_saldo"}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              defaultControlMode: e.target.value as StockControlMode,
-                            })
-                          }
-                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
-                        >
-                          <option value="vinculado_saldo">Vinculado ao Saldo (Saldo Obrigatório)</option>
-                          <option value="livre">Livre (sem verificação de saldo)</option>
-                        </select>
+                        <label className="text-[10px] text-slate-400 block mb-1">Controle de Saldo</label>
+                        <div className="w-full bg-blue-950/40 border border-blue-800/60 rounded-lg px-2.5 py-1.5 text-xs text-blue-200 font-semibold">
+                          🔒 Saldo Obrigatório (Com Registros)
+                        </div>
                       </div>
                       <div>
                         <label className="text-[10px] text-slate-400 block mb-1">Responsável Técnico / Setor</label>
@@ -454,8 +450,8 @@ export default function SystemManagerModal({
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
                     <div className="p-3 bg-emerald-950/20 border border-emerald-800/40 rounded-xl text-[11px] text-emerald-200/90 leading-snug">
-                      <strong className="text-emerald-300 block mb-0.5">Modo Aberto Selecionado</strong>
-                      Qualquer Drive-In, canal ou área vinculado recebe itens livremente nas posições e alimenta o Confronto direto pelo que estiver mapeado.
+                      <strong className="text-emerald-300 block mb-0.5">Sistema Livre (Sem Registro de Saldo)</strong>
+                      Não possui módulo de Registros nem saldo prévio. Qualquer Drive-In, canal ou área vinculado recebe itens livremente e alimenta o Confronto.
                     </div>
                     <div>
                       <label className="text-[10px] text-slate-400 block mb-1">Responsável Técnico / Setor</label>
@@ -494,7 +490,7 @@ export default function SystemManagerModal({
                     <label className="text-[10px] text-slate-400 block mb-1">Status</label>
                     <select
                       value={formData.status || "ativo"}
-                      onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                      onChange={(e) => setFormData({ ...formData, status: e.target.value as "ativo" | "configuracao" | "inativo" })}
                       className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200"
                     >
                       <option value="ativo">Ativo</option>
@@ -550,7 +546,7 @@ export default function SystemManagerModal({
                               : "bg-blue-950/70 border-blue-700/60 text-blue-300"
                           }`}
                         >
-                          {isSelectedOpen ? "Sistema Aberto" : "Sistema Completo"}
+                          {isSelectedOpen ? "Sistema Livre (Sem Saldo)" : "Sistema com Saldo"}
                         </span>
                       </div>
                       <p className="text-xs text-slate-400 mt-0.5">{selectedSystem.description}</p>
@@ -588,7 +584,7 @@ export default function SystemManagerModal({
                       <span>Módulos Operacionais deste Sistema</span>
                     </span>
                     <span className="text-[10px] text-slate-400">
-                      {isSelectedOpen ? "Modo Aberto: Mapeamento direto + Confronto" : "Configuração completa com persistência JSON"}
+                      {isSelectedOpen ? "Sistema Livre: sem registro de saldo (Mapeamento + Confronto)" : "Configuração completa com registros de saldo"}
                     </span>
                   </div>
 
@@ -687,7 +683,7 @@ export default function SystemManagerModal({
                               className="w-3.5 h-3.5 rounded-full border border-white/30 inline-block"
                               style={{ backgroundColor: selectedSystem.color }}
                             />
-                            <span>Sistema Aberto (Sem Registros)</span>
+                            <span>Sistema Livre (Sem Registro de Saldo)</span>
                           </p>
                           <span className="text-[10px] text-slate-500">
                             Drives e canais vinculados recebem a cor acima para identificação imediata no mapa 2D e 3D.
@@ -743,64 +739,102 @@ export default function SystemManagerModal({
                   </div>
                 )}
 
-                {/* Participantes: Objetos de Armazenamento do Mapa */}
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-                      <Layers size={14} className="text-blue-400" />
-                      <span>Objetos de Armazenamento Participantes ({selectedSystem.participants?.length || 0})</span>
-                    </span>
-                    <span className="text-[10px] text-slate-500">
-                      Vincule diretamente no painel lateral de cada Drive/Área
-                    </span>
-                  </div>
+                {/* Participantes: Objetos de Armazenamento & Canais Vinculados */}
+                {(() => {
+                  const linkedStructures = getLinkedStructuresForSystem(selectedSystem, allObjects)
+                  return (
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                          <Layers size={14} className="text-blue-400" />
+                          <span>Estruturas & Canais Vinculados ({linkedStructures.length})</span>
+                        </span>
+                        <span className="text-[10px] text-slate-500">
+                          Vincule por Drive/Área ou por Canal individual
+                        </span>
+                      </div>
 
-                  {(!selectedSystem.participants || selectedSystem.participants.length === 0) ? (
-                    <div className="p-6 bg-slate-950/40 border border-slate-800/80 rounded-xl text-center space-y-2">
-                      <Layers size={24} className="mx-auto text-slate-600" />
-                      <p className="text-xs text-slate-400">
-                        Nenhum objeto de armazenamento vinculado diretamente a este sistema ainda.
-                      </p>
-                      <p className="text-[11px] text-slate-500 max-w-md mx-auto">
-                        Selecione um Drive-In ou Área no mapa 2D e, na seção{" "}
-                        <strong className="text-slate-300">🔐 Controle de Acesso a Preenchimento</strong>, vincule-o a este sistema.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {selectedSystem.participants.map((p) => (
-                        <div
-                          key={p.storageObjectId}
-                          className="p-2.5 bg-slate-950/60 border border-slate-800 rounded-lg flex items-center justify-between text-xs"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-base">📦</span>
-                            <div>
-                              <span className="font-bold text-slate-200">{p.storageObjectLabel}</span>
-                              <span className="text-[10px] text-slate-500 font-mono ml-2">
-                                ({p.storageType})
-                              </span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`text-[10px] px-2 py-0.5 rounded font-semibold border ${
-                                p.stockControlMode === "vinculado_saldo"
-                                  ? "bg-blue-950/60 border-blue-800 text-blue-300"
-                                  : "bg-slate-800 border-slate-700 text-slate-400"
-                              }`}
-                            >
-                              {p.stockControlMode === "vinculado_saldo" ? "Saldo Obrigatório" : "Livre"}
-                            </span>
-                            <span className="text-[10px] text-slate-400 font-mono">
-                              Papel: {p.role}
-                            </span>
-                          </div>
+                      {linkedStructures.length === 0 ? (
+                        <div className="p-6 bg-slate-950/40 border border-slate-800/80 rounded-xl text-center space-y-2">
+                          <Layers size={24} className="mx-auto text-slate-600" />
+                          <p className="text-xs text-slate-400">
+                            Nenhuma estrutura ou canal vinculado a este sistema ainda.
+                          </p>
+                          <p className="text-[11px] text-slate-500 max-w-md mx-auto">
+                            Selecione um Drive-In, Canal ou Compartimento no mapa 2D ou abra{" "}
+                            <strong className="text-slate-300">Mapeamento</strong> para vinculá-lo a este sistema.
+                          </p>
                         </div>
-                      ))}
+                      ) : (
+                        <div className="space-y-1.5">
+                          {linkedStructures.map((entry) => (
+                            <div
+                              key={entry.storageObjectId}
+                              className="p-2.5 bg-slate-950/60 border border-slate-800 rounded-lg space-y-2 text-xs"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="text-base shrink-0">
+                                    {entry.isCompartment ? "📦" : entry.isOrigin ? "📍" : "📥"}
+                                  </span>
+                                  <div className="min-w-0">
+                                    <span className="font-bold text-slate-200 truncate">
+                                      {entry.storageObjectLabel}
+                                    </span>
+                                    <span className="text-[10px] text-slate-500 font-mono ml-2">
+                                      ({entry.storageType})
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span
+                                    className={`text-[10px] px-2 py-0.5 rounded font-semibold border ${
+                                      !isSelectedOpen && entry.stockControlMode === "vinculado_saldo"
+                                        ? "bg-blue-950/60 border-blue-800 text-blue-300"
+                                        : "bg-emerald-950/50 border-emerald-800/60 text-emerald-300"
+                                    }`}
+                                  >
+                                    {!isSelectedOpen && entry.stockControlMode === "vinculado_saldo"
+                                      ? "Saldo Obrigatório"
+                                      : "Livre (Sem Saldo)"}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 font-mono">
+                                    {entry.totalUnits} un.
+                                  </span>
+                                </div>
+                              </div>
+
+                              {entry.isDrive && entry.linkedChannels.length > 0 && (
+                                <div className="flex flex-wrap items-center gap-1.5 pl-7">
+                                  <span className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">
+                                    Canais ({entry.linkedChannels.length}/{entry.totalChannelsCount}):
+                                  </span>
+                                  {entry.linkedChannels.map((ch) => (
+                                    <span
+                                      key={ch.id}
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-900 border border-slate-700/80 text-[10px] text-slate-200 font-mono"
+                                    >
+                                      <span
+                                        className="w-1.5 h-1.5 rounded-full"
+                                        style={{ backgroundColor: selectedSystem.color }}
+                                      />
+                                      <span>{ch.name || ch.code}</span>
+                                      {ch.occupiedSlots > 0 && (
+                                        <span className="text-amber-300 font-bold">
+                                          · {ch.occupiedSlots} 📦
+                                        </span>
+                                      )}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  )
+                })()}
 
                 {/* Nota de Escopo */}
                 <div className="p-3 bg-blue-950/20 border border-blue-800/30 rounded-xl flex items-start gap-2 text-[11px] text-blue-300">
@@ -837,6 +871,7 @@ export default function SystemManagerModal({
             system={selectedSystem}
             allObjects={allObjects}
             workspaceId={workspaceId}
+            onUpdateObject={onUpdateObject}
           />
 
           {/* 3. Modal de Confronto Analítico (com tabela JSON configurável) */}

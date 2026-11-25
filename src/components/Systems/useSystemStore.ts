@@ -105,7 +105,9 @@ export function useSystemStore(workspaceId?: string) {
               !String(row.code || "").startsWith("__NEXUS_")
           )
           .map((row) => {
-            const isOpen = row.origin_storage_id === OPEN_SYSTEM_ORIGIN_SENTINEL
+            const isOpen =
+              row.origin_storage_id === OPEN_SYSTEM_ORIGIN_SENTINEL ||
+              row.default_control_mode === "livre"
             return {
               id: row.id,
               code: row.code,
@@ -171,10 +173,14 @@ export function useSystemStore(workspaceId?: string) {
         if (Array.isArray(parsed)) {
           const cleaned = parsed
             .filter((sys: BusinessSystem) => sys && !LEGACY_SEEDED_SYSTEM_IDS.has(sys.id))
-            .map((sys: BusinessSystem) => ({
-              ...sys,
-              systemStyle: sys.systemStyle === "aberto" ? "aberto" : "completo",
-            })) as BusinessSystem[]
+            .map((sys: BusinessSystem) => {
+              const open = sys.systemStyle === "aberto" || sys.defaultControlMode === "livre"
+              return {
+                ...sys,
+                systemStyle: open ? "aberto" : "completo",
+                defaultControlMode: open ? "livre" : "vinculado_saldo",
+              }
+            }) as BusinessSystem[]
           setSystems(cleaned)
           setIsLoaded(true)
           return
@@ -231,7 +237,8 @@ export function useSystemStore(workspaceId?: string) {
     (newSystem: Omit<BusinessSystem, "id" | "createdAt" | "updatedAt">) => {
       const sysId = crypto.randomUUID()
       const now = new Date().toISOString()
-      const isOpen = newSystem.systemStyle === "aberto"
+      const isOpen =
+        newSystem.systemStyle === "aberto" || newSystem.defaultControlMode === "livre"
       const normalizedControlMode: StockControlMode = isOpen
         ? "livre"
         : newSystem.defaultControlMode || "vinculado_saldo"
@@ -306,8 +313,13 @@ export function useSystemStore(workspaceId?: string) {
   const updateSystem = useCallback(
     (id: string, partial: Partial<BusinessSystem>) => {
       const currentSys = systems.find((s) => s.id === id)
-      const nextStyle = partial.systemStyle ?? currentSys?.systemStyle ?? "completo"
-      const isOpen = nextStyle === "aberto"
+      const requestedStyle = partial.systemStyle ?? currentSys?.systemStyle ?? "completo"
+      const isOpen =
+        requestedStyle === "aberto" ||
+        (partial.systemStyle === undefined &&
+          (partial.defaultControlMode === "livre" ||
+            (partial.defaultControlMode === undefined && currentSys?.defaultControlMode === "livre")))
+      const nextStyle = isOpen ? "aberto" : "completo"
 
       const normalizedPartial: Partial<BusinessSystem> = {
         ...partial,

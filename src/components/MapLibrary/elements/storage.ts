@@ -6,15 +6,135 @@
 
 import React from "react"
 import Konva from "konva"
-import type { MapElementDefinition, SvgPreviewProps, MapObject } from "../types"
+import type { MapElementDefinition, SvgPreviewProps, MapObject, RenderKonvaOptions } from "../types"
 import { MAP_COLORS, MAP_VIEWER_COLORS } from "../types"
 import { STANDARD_PALLET_MODELS } from "../palletModels"
 import { ensureDriveChannels } from "../spatialContainment"
 import { getLocalItems } from "@/lib/mapeamentosStorage"
 import { getChannelOccupiedSlots } from "@/lib/driveOccupancy"
+import {
+  resolveSystemForChannel,
+  resolveSystemForObject,
+  hexToRgba,
+  getContrastTextColor,
+  normalizeHexColor,
+} from "@/lib/systemVisuals"
 
 // Escala padrão do canvas: 20px = 1 metro
 const DEFAULT_PPM = 20
+
+function drawSystemBadgeOnRect(
+  group: Konva.Group,
+  x: number,
+  y: number,
+  maxW: number,
+  maxH: number,
+  code: string,
+  colorHex: string,
+  isActiveHighlight: boolean
+) {
+  const sysColor = normalizeHexColor(colorHex)
+  const textColor = getContrastTextColor(sysColor)
+  // Borda superior/inferior de identificação imediata
+  group.add(
+    new Konva.Rect({
+      x,
+      y,
+      width: maxW,
+      height: Math.min(4, Math.max(2.5, maxH * 0.08)),
+      fill: sysColor,
+      listening: false,
+    })
+  )
+  if (maxW >= 18 && maxH >= 18) {
+    const label = code.slice(0, 7)
+    const badgeH = 11
+    const badgeW = Math.min(maxW - 4, Math.max(20, label.length * 5.2 + 8))
+    const bx = x + (maxW - badgeW) / 2
+    const by = y + Math.max(4, Math.min(6, maxH * 0.08))
+    group.add(
+      new Konva.Rect({
+        x: bx,
+        y: by,
+        width: badgeW,
+        height: badgeH,
+        fill: sysColor,
+        stroke: isActiveHighlight ? "#ffffff" : "rgba(15,23,42,0.7)",
+        strokeWidth: isActiveHighlight ? 1.2 : 0.7,
+        cornerRadius: 2,
+        listening: false,
+      })
+    )
+    group.add(
+      new Konva.Text({
+        x: bx,
+        y: by + 2,
+        width: badgeW,
+        align: "center",
+        text: label,
+        fontSize: 7,
+        fontFamily: "monospace",
+        fontStyle: "bold",
+        fill: textColor,
+        listening: false,
+      })
+    )
+  }
+}
+
+function applyObjectSystemOverlay(
+  group: Konva.Group,
+  obj: MapObject,
+  w: number,
+  h: number,
+  options?: RenderKonvaOptions
+) {
+  const systems = options?.systems || []
+  const filterId = options?.activeSystemFilterId
+  const sys = resolveSystemForObject(obj, systems)
+
+  if (sys) {
+    const sysColor = normalizeHexColor(sys.color)
+    const isMatched = !filterId || sys.id === filterId
+    group.add(
+      new Konva.Rect({
+        x: 0,
+        y: 0,
+        width: w,
+        height: h,
+        fill: hexToRgba(sysColor, isMatched ? 0.16 : 0.05),
+        stroke: sysColor,
+        strokeWidth: filterId && isMatched ? 3 : 2.2,
+        cornerRadius: 2,
+        listening: false,
+      })
+    )
+    drawSystemBadgeOnRect(group, 0, 0, w, h, sys.code, sysColor, Boolean(filterId && isMatched))
+    if (filterId && !isMatched) {
+      group.add(
+        new Konva.Rect({
+          x: 0,
+          y: 0,
+          width: w,
+          height: h,
+          fill: "rgba(2, 6, 23, 0.72)",
+          listening: false,
+        })
+      )
+    }
+  } else if (filterId) {
+    group.add(
+      new Konva.Rect({
+        x: 0,
+        y: 0,
+        width: w,
+        height: h,
+        fill: "rgba(2, 6, 23, 0.72)",
+        listening: false,
+      })
+    )
+  }
+}
 
 // ── 1. pallet_rack — Porta-Paletes Convencional ─────────────
 const pallet_rack: MapElementDefinition = {
@@ -91,6 +211,7 @@ const pallet_rack: MapElementDefinition = {
       )
     }
 
+    applyObjectSystemOverlay(group, obj, w, h, options)
     return group
   },
 }
@@ -156,6 +277,8 @@ const drive_in: MapElementDefinition = {
     const rawChannels = ensureDriveChannels(obj)
     const allLocalItems = getLocalItems()
     const isAllBlocked = rawChannels.length > 0 && rawChannels.every((c) => c?.status === "bloqueado")
+    const systemsList = options?.systems || []
+    const activeFilterId = options?.activeSystemFilterId || null
 
     // ── MODO VISUALIZADOR (LEITURA): Estrutura Industrial Azul & Laranja Limpa ─────
     if (readOnly) {
@@ -359,6 +482,54 @@ const drive_in: MapElementDefinition = {
               stroke: "#fbbf24",
               strokeWidth: 1,
               cornerRadius: 1.5,
+              listening: false,
+            })
+          )
+        }
+      }
+
+      // Identificação Visual por Sistema em cada Canal do Drive-In (Modo Visualizador)
+      for (let l = 0; l < lanes; l++) {
+        const cx = l * laneW
+        const chan = rawChannels[l]
+        const chanSys = resolveSystemForChannel(obj, chan, systemsList)
+        const isMatched = !activeFilterId || chanSys?.id === activeFilterId
+
+        if (chanSys) {
+          const sysColor = normalizeHexColor(chanSys.color)
+          group.add(
+            new Konva.Rect({
+              x: cx + 0.5,
+              y: 0.5,
+              width: Math.max(2, laneW - 1),
+              height: Math.max(2, h - 1),
+              fill: hexToRgba(sysColor, isMatched ? 0.16 : 0.05),
+              stroke: sysColor,
+              strokeWidth: activeFilterId && isMatched ? 2.4 : 1.6,
+              cornerRadius: 1.5,
+              listening: false,
+            })
+          )
+          drawSystemBadgeOnRect(
+            group,
+            cx + 0.5,
+            0.5,
+            Math.max(2, laneW - 1),
+            h,
+            chanSys.code,
+            sysColor,
+            Boolean(activeFilterId && isMatched)
+          )
+        }
+
+        if (activeFilterId && !isMatched) {
+          group.add(
+            new Konva.Rect({
+              x: cx,
+              y: 0,
+              width: laneW,
+              height: h,
+              fill: "rgba(2, 6, 23, 0.72)",
               listening: false,
             })
           )
@@ -585,6 +756,53 @@ const drive_in: MapElementDefinition = {
       )
     }
 
+    // Identificação Visual por Sistema em cada Canal do Drive-In (Modo Editor)
+    for (let i = 0; i < lanes; i++) {
+      const cx = i * laneW
+      const chan = rawChannels[i]
+      const chanSys = resolveSystemForChannel(obj, chan, systemsList)
+      const isMatched = !activeFilterId || chanSys?.id === activeFilterId
+
+      if (chanSys) {
+        const sysColor = normalizeHexColor(chanSys.color)
+        group.add(
+          new Konva.Rect({
+            x: cx + 0.5,
+            y: 0.5,
+            width: Math.max(2, laneW - 1),
+            height: Math.max(2, h - 1),
+            fill: hexToRgba(sysColor, isMatched ? 0.14 : 0.04),
+            stroke: sysColor,
+            strokeWidth: activeFilterId && isMatched ? 2.6 : 1.8,
+            listening: false,
+          })
+        )
+        drawSystemBadgeOnRect(
+          group,
+          cx + 0.5,
+          0.5,
+          Math.max(2, laneW - 1),
+          h,
+          chanSys.code,
+          sysColor,
+          Boolean(activeFilterId && isMatched)
+        )
+      }
+
+      if (activeFilterId && !isMatched) {
+        group.add(
+          new Konva.Rect({
+            x: cx,
+            y: 0,
+            width: laneW,
+            height: h,
+            fill: "rgba(2, 6, 23, 0.72)",
+            listening: false,
+          })
+        )
+      }
+    }
+
     return group
   },
 }
@@ -726,6 +944,7 @@ const drive_through: MapElementDefinition = {
       }
     }
 
+    applyObjectSystemOverlay(group, obj, w, h, options)
     return group
   },
 }
@@ -805,6 +1024,7 @@ const push_back: MapElementDefinition = {
       }
     }
 
+    applyObjectSystemOverlay(group, obj, w, h, options)
     return group
   },
 }
@@ -881,6 +1101,7 @@ const flow_rack: MapElementDefinition = {
       }
     }
 
+    applyObjectSystemOverlay(group, obj, w, h, options)
     return group
   },
 }
@@ -960,6 +1181,7 @@ const cantilever: MapElementDefinition = {
       )
     }
 
+    applyObjectSystemOverlay(group, obj, w, h, options)
     return group
   },
 }
@@ -1017,6 +1239,7 @@ const shelf: MapElementDefinition = {
       )
     }
 
+    applyObjectSystemOverlay(group, obj, w, h, options)
     return group
   },
 }
@@ -1097,6 +1320,7 @@ const mezzanine: MapElementDefinition = {
       )
     }
 
+    applyObjectSystemOverlay(group, obj, w, h, options)
     return group
   },
 }
@@ -1155,6 +1379,7 @@ const compartment: MapElementDefinition = {
       })
     )
 
+    applyObjectSystemOverlay(group, obj, w, h, options)
     return group
   },
 }
@@ -1225,6 +1450,7 @@ const storage_module: MapElementDefinition = {
       )
     }
 
+    applyObjectSystemOverlay(group, obj, w, h, options)
     return group
   },
 }
@@ -1283,6 +1509,7 @@ const shelf_rack: MapElementDefinition = {
       })
     )
 
+    applyObjectSystemOverlay(group, obj, w, h, options)
     return group
   },
 }

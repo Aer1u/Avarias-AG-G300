@@ -83,11 +83,14 @@ export default function SystemConfrontoModal({
 
   useEffect(() => {
     if (!isOpen) return
-    load()
+    let active = true
 
     if (isOpenSys) {
-      let active = true
-      setSystemRecords(getMappedStockRecordsForSystem(system))
+      Promise.resolve().then(() => {
+        if (!active) return
+        load()
+        setSystemRecords(getMappedStockRecordsForSystem(system))
+      })
       hydrateSystemItemsFromSupabase(system).then(() => {
         if (!active) return
         setSystemRecords(getMappedStockRecordsForSystem(system))
@@ -104,6 +107,7 @@ export default function SystemConfrontoModal({
     }
 
     const fetchSystemRecords = async () => {
+      load()
       if (UUID_REGEX.test(system.id)) {
         try {
           const { data: dbRows, error } = await supabase
@@ -113,9 +117,13 @@ export default function SystemConfrontoModal({
             .order("created_at", { ascending: false })
             .limit(300)
 
+          if (!active) return
           if (!error && Array.isArray(dbRows)) {
-            const mapped: SystemStockRecord[] = dbRows.map((row: any) => {
-              const meta = row.metadata && typeof row.metadata === "object" ? row.metadata : {}
+            const mapped: SystemStockRecord[] = (dbRows as Array<Record<string, unknown>>).map((row) => {
+              const meta =
+                row.metadata && typeof row.metadata === "object"
+                  ? (row.metadata as Record<string, unknown>)
+                  : {}
               const isEntrada = row.record_type === "entrada"
               const entVal =
                 meta.entrada !== undefined
@@ -132,12 +140,12 @@ export default function SystemConfrontoModal({
               return {
                 id: String(row.id),
                 systemId: system.id,
-                sku: row.resource_id || "",
-                description: meta.description || row.resource_id || "",
+                sku: String(row.resource_id || ""),
+                description: String(meta.description || row.resource_id || ""),
                 quantity: Number(row.quantity) || 0,
                 entrada: entVal !== null && entVal !== undefined ? Number(entVal) : null,
                 saida: saiVal !== null && saiVal !== undefined ? Number(saiVal) : null,
-                registeredAt: row.created_at || new Date().toISOString(),
+                registeredAt: String(row.created_at || new Date().toISOString()),
               }
             })
             setSystemRecords(mapped)
@@ -148,10 +156,14 @@ export default function SystemConfrontoModal({
           // fallback to local cache below
         }
       }
+      if (!active) return
       setSystemRecords(systemDataService.getRecordsBySystem(system.id))
     }
 
     fetchSystemRecords()
+    return () => {
+      active = false
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, system.id, isOpenSys])
 

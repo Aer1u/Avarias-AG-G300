@@ -14,10 +14,21 @@
 
 import * as THREE from "three"
 import type { UniversalSpatialObject } from "./types"
+import type { SystemVisualRef } from "../MapLibrary/types"
 import { FLOOR_SURFACES, type FloorMaterialType } from "../MapLibrary/floorSurfaces"
 import { ensureDriveChannels } from "../MapLibrary/spatialContainment"
 import { getLocalItems } from "@/lib/mapeamentosStorage"
 import { getChannelOccupiedSlots, isItemBelongingToObject } from "@/lib/driveOccupancy"
+import {
+  resolveSystemForChannel,
+  resolveSystemForObject,
+  normalizeHexColor,
+} from "@/lib/systemVisuals"
+
+export interface Spatial3DRenderOptions {
+  systems?: SystemVisualRef[]
+  activeSystemFilterId?: string | null
+}
 
 // Cache compartilhado de materiais para máxima performance
 const materialsCache = new Map<string, THREE.Material>()
@@ -47,7 +58,11 @@ function parseThreeColor(input: string | undefined, fallbackHex: string): { colo
 /**
  * Cria a representação geométrica tridimensional real de um objeto do catálogo
  */
-export function buildSpatial3DObject(spatial: UniversalSpatialObject, readOnly: boolean = false): THREE.Group {
+export function buildSpatial3DObject(
+  spatial: UniversalSpatialObject,
+  readOnly: boolean = false,
+  options?: Spatial3DRenderOptions
+): THREE.Group {
   const group = new THREE.Group()
   group.name = spatial.id
   group.userData = { objectId: spatial.id, spatial }
@@ -67,11 +82,11 @@ export function buildSpatial3DObject(spatial: UniversalSpatialObject, readOnly: 
   }
   // 2. PORTA-PALETES / RACKS
   else if (type.includes("rack") || type === "pallet_rack") {
-    buildPalletRackGeometry(group, spatial, readOnly)
+    buildPalletRackGeometry(group, spatial, readOnly, options)
   }
   // 3. DRIVE-IN E DRIVES
   else if (type.includes("drive") || type === "drive_in") {
-    buildDriveInGeometry(group, spatial, readOnly)
+    buildDriveInGeometry(group, spatial, readOnly, options)
   }
   // 4. ESTRUTURAS ARQUITETÔNICAS (Paredes, Colunas, Portas, Janelas)
   else if (type === "wall") {
@@ -89,7 +104,7 @@ export function buildSpatial3DObject(spatial: UniversalSpatialObject, readOnly: 
   }
   // 7. COMPARTIMENTO (ESPAÇO ABERTO DE ARMAZENAMENTO NO PISO)
   else if (type === "compartment") {
-    buildCompartmentGeometry(group, spatial, readOnly)
+    buildCompartmentGeometry(group, spatial, readOnly, options)
   }
   // 8. EQUIPAMENTOS (Empilhadeira, Carrinhos)
   else if (cat === "equipment" || type === "forklift") {
@@ -295,16 +310,45 @@ function buildAreaGeometry(group: THREE.Group, spatial: UniversalSpatialObject, 
 // ─────────────────────────────────────────────────────────────
 // 2. PORTA-PALETES (RACKS CONVENCIONAIS)
 // ─────────────────────────────────────────────────────────────
-function buildPalletRackGeometry(group: THREE.Group, spatial: UniversalSpatialObject, readOnly: boolean) {
+function buildPalletRackGeometry(
+  group: THREE.Group,
+  spatial: UniversalSpatialObject,
+  readOnly: boolean,
+  options?: Spatial3DRenderOptions
+) {
   const { width, depth, height } = spatial.dimensions
   const levels = spatial.internalStructure?.levelsCount || 4
   const modeKey = readOnly ? "viewer" : "editor"
+  const systems = options?.systems || []
+  const filterId = options?.activeSystemFilterId || null
+  const objSys = resolveSystemForObject(spatial.raw, systems)
+  const isDimmed = Boolean(filterId && objSys?.id !== filterId)
+  const sysColor = objSys ? normalizeHexColor(objSys.color) : null
 
-  const columnProfileMat = getMaterial(`rack_column_blue_${modeKey}`, () =>
-    new THREE.MeshStandardMaterial({ color: new THREE.Color(readOnly ? "#2563eb" : "#1e40af"), roughness: 0.45, metalness: 0.55 })
+  const columnProfileMat = getMaterial(
+    `rack_column_${sysColor || "blue"}_${modeKey}_${isDimmed ? "dim" : "norm"}`,
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: new THREE.Color(isDimmed ? "#334155" : readOnly ? "#2563eb" : "#1e40af"),
+        roughness: 0.45,
+        metalness: 0.55,
+        transparent: isDimmed,
+        opacity: isDimmed ? 0.28 : 1,
+      })
   )
-  const beamMat = getMaterial(`rack_beam_orange_${modeKey}`, () =>
-    new THREE.MeshStandardMaterial({ color: new THREE.Color(readOnly ? "#f97316" : "#ea580c"), roughness: 0.35, metalness: 0.45 })
+  const beamColorHex = isDimmed
+    ? "#475569"
+    : sysColor || (readOnly ? "#f97316" : "#ea580c")
+  const beamMat = getMaterial(
+    `rack_beam_${beamColorHex}_${modeKey}_${isDimmed ? "dim" : "norm"}`,
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: new THREE.Color(beamColorHex),
+        roughness: 0.35,
+        metalness: 0.45,
+        transparent: isDimmed,
+        opacity: isDimmed ? 0.28 : 1,
+      })
   )
 
   const colWidth = 0.08
@@ -360,7 +404,12 @@ function buildPalletRackGeometry(group: THREE.Group, spatial: UniversalSpatialOb
 // ─────────────────────────────────────────────────────────────
 // 3. DRIVE-IN (ESTRUTURA COMPLETA MULTI-VÃOS COM NÍVEIS, PROFUNDIDADES E PALETES DE TESTE)
 // ─────────────────────────────────────────────────────────────
-function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObject, readOnly: boolean) {
+function buildDriveInGeometry(
+  group: THREE.Group,
+  spatial: UniversalSpatialObject,
+  readOnly: boolean,
+  options?: Spatial3DRenderOptions
+) {
   const { width, depth, height } = spatial.dimensions
   const props = spatial.props || {}
   const channelsCount = Array.isArray(props.channels) && props.channels.length > 0 ? props.channels.length : 0
@@ -379,6 +428,12 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
   const isDriveThrough = spatial.type.toLowerCase() === "drive_through"
 
   const channels = ensureDriveChannels(spatial.raw)
+  const systems = options?.systems || []
+  const activeFilterId = options?.activeSystemFilterId || null
+  const driveObjSys = resolveSystemForObject(spatial.raw, systems)
+  const anyLaneMatchedFilter =
+    !activeFilterId ||
+    channels.some((c) => resolveSystemForChannel(spatial.raw, c, systems)?.id === activeFilterId)
 
   const driveColumnMat = getMaterial(`drive_col_indigo_${modeKey}`, () =>
     new THREE.MeshStandardMaterial({ color: new THREE.Color(readOnly ? "#3b82f6" : "#3730a3"), roughness: 0.35, metalness: 0.65 })
@@ -420,6 +475,25 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
 
   const colDim = 0.08
   const colGeo = new THREE.BoxGeometry(colDim, colDim, height)
+  const effectiveColMat = !anyLaneMatchedFilter
+    ? getMaterial(`drive_col_dimmed_${modeKey}`, () =>
+        new THREE.MeshStandardMaterial({
+          color: new THREE.Color("#334155"),
+          roughness: 0.6,
+          metalness: 0.3,
+          transparent: true,
+          opacity: 0.25,
+        })
+      )
+    : driveObjSys
+    ? getMaterial(`drive_col_sys_${normalizeHexColor(driveObjSys.color)}_${modeKey}`, () =>
+        new THREE.MeshStandardMaterial({
+          color: new THREE.Color(readOnly ? "#3b82f6" : "#3730a3"),
+          roughness: 0.35,
+          metalness: 0.65,
+        })
+      )
+    : driveColumnMat
 
   // 1. Montantes Estruturais Verticais (colunas nas divisas dos vãos)
   for (let i = 0; i <= lanes; i++) {
@@ -428,7 +502,7 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
     for (let d = 0; d <= depths; d++) {
       const yPos = -depth / 2 + (depth / Math.max(1, depths)) * d
 
-      const colMesh = new THREE.Mesh(colGeo, driveColumnMat)
+      const colMesh = new THREE.Mesh(colGeo, effectiveColMat)
       colMesh.position.set(colX, yPos, height / 2)
       colMesh.castShadow = true
       colMesh.userData = { columnLineIndex: i }
@@ -437,7 +511,7 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
 
     // Travessa longitudinal superior conectando as colunas da entrada ao fundo
     const longTopGeo = new THREE.BoxGeometry(0.05, depth, 0.05)
-    const longTopMesh = new THREE.Mesh(longTopGeo, rearBeamMat)
+    const longTopMesh = new THREE.Mesh(longTopGeo, anyLaneMatchedFilter ? rearBeamMat : effectiveColMat)
     longTopMesh.position.set(colX, 0, height)
     longTopMesh.userData = { columnLineIndex: i }
     group.add(longTopMesh)
@@ -489,12 +563,62 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
 
   const laneHitboxGeo = new THREE.BoxGeometry(Math.max(0.4, laneWidth * 0.96), depth, height)
 
+  const laneFloorStripGeo = new THREE.PlaneGeometry(Math.max(0.2, laneWidth * 0.92), Math.max(0.2, depth * 0.96))
+
   for (let l = 0; l < lanes; l++) {
     const chan = channels[l] || channels.find((c) => c.laneIndex === l + 1)
     const chanId = chan ? (chan.id || chan.code) : `${spatial.id}_chan_${l + 1}`
     const chanCode = chan?.code || chanId
     const chanName = chan?.name || chanCode
     const isChanBlocked = chan?.status === "bloqueado"
+
+    const chanSys = resolveSystemForChannel(spatial.raw, chan, systems)
+    const isLaneDimmed = Boolean(activeFilterId && chanSys?.id !== activeFilterId)
+    const chanSysHex = chanSys ? normalizeHexColor(chanSys.color) : null
+
+    const laneRailMat = isLaneDimmed
+      ? effectiveColMat
+      : chanSysHex
+      ? getMaterial(`drive_rail_sys_${chanSysHex}_${modeKey}`, () =>
+          new THREE.MeshStandardMaterial({
+            color: new THREE.Color(chanSysHex),
+            roughness: 0.3,
+            metalness: 0.55,
+          })
+        )
+      : driveRailMat
+
+    const laneBeamMat = isLaneDimmed
+      ? effectiveColMat
+      : chanSysHex
+      ? getMaterial(`drive_beam_sys_${chanSysHex}_${modeKey}`, () =>
+          new THREE.MeshStandardMaterial({
+            color: new THREE.Color(chanSysHex),
+            emissive: new THREE.Color(chanSysHex),
+            emissiveIntensity: activeFilterId ? 0.25 : 0.08,
+            roughness: 0.35,
+            metalness: 0.45,
+          })
+        )
+      : rearBeamMat
+
+    const laneBraceMat = isLaneDimmed ? effectiveColMat : frameBraceMat
+
+    const laneArrowMat = isLaneDimmed
+      ? effectiveColMat
+      : isChanBlocked
+      ? entryArrowBlockedMat
+      : chanSysHex
+      ? getMaterial(`drive_arrow_sys_${chanSysHex}_${modeKey}`, () =>
+          new THREE.MeshStandardMaterial({
+            color: new THREE.Color(chanSysHex),
+            emissive: new THREE.Color(chanSysHex),
+            emissiveIntensity: 0.55,
+            roughness: 0.3,
+            metalness: 0.2,
+          })
+        )
+      : entryArrowMat
 
     const laneCenterX = -width / 2 + (l + 0.5) * laneWidth
     const vXLeft = -width / 2 + l * laneWidth + 0.07
@@ -513,6 +637,27 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
       depth,
       height,
       isBlocked: isChanBlocked,
+      systemId: chanSys?.id || null,
+      systemCode: chanSys?.code || null,
+    }
+
+    // Faixa de identificação do sistema no piso do canal (visível no Bird's-Eye & Full Top)
+    if (chanSysHex && !isLaneDimmed) {
+      const floorStripMat = getMaterial(
+        `drive_sys_floor_${chanSysHex}_${activeFilterId ? "hi" : "std"}_${modeKey}`,
+        () =>
+          new THREE.MeshBasicMaterial({
+            color: new THREE.Color(chanSysHex),
+            transparent: true,
+            opacity: activeFilterId ? 0.38 : 0.2,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+          })
+      )
+      const floorStrip = new THREE.Mesh(laneFloorStripGeo, floorStripMat)
+      floorStrip.position.set(laneCenterX, 0, 0.018)
+      floorStrip.receiveShadow = false
+      laneGroup.add(floorStrip)
     }
 
     // Volume invisível de seleção individual do canal via Raycaster
@@ -523,7 +668,7 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
     laneGroup.add(hitbox)
 
     // Seta 3D na entrada do canal (y = -depth / 2 apontando para dentro +Y)
-    const arrowMesh = new THREE.Mesh(arrowGeo, isChanBlocked ? entryArrowBlockedMat : entryArrowMat)
+    const arrowMesh = new THREE.Mesh(arrowGeo, laneArrowMat)
     arrowMesh.position.set(laneCenterX, -depth / 2 - 0.12, 0.032)
     laneGroup.add(arrowMesh)
 
@@ -531,22 +676,22 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
     for (let lvl = 2; lvl <= levels; lvl++) {
       const lz = levelSpacing * (lvl - 1)
 
-      const railL = new THREE.Mesh(railGeo, driveRailMat)
+      const railL = new THREE.Mesh(railGeo, laneRailMat)
       railL.position.set(vXLeft, 0, lz)
       laneGroup.add(railL)
 
-      const railR = new THREE.Mesh(railGeo, driveRailMat)
+      const railR = new THREE.Mesh(railGeo, laneRailMat)
       railR.position.set(vXRight, 0, lz)
       laneGroup.add(railR)
 
       for (let d = 0; d <= depths; d++) {
         const yPos = -depth / 2 + (depth / Math.max(1, depths)) * d
 
-        const bL = new THREE.Mesh(bracketGeo, driveRailMat)
+        const bL = new THREE.Mesh(bracketGeo, laneRailMat)
         bL.position.set(vXLeft - 0.03, yPos, lz - 0.02)
         laneGroup.add(bL)
 
-        const bR = new THREE.Mesh(bracketGeo, driveRailMat)
+        const bR = new THREE.Mesh(bracketGeo, laneRailMat)
         bR.position.set(vXRight + 0.03, yPos, lz - 0.02)
         laneGroup.add(bR)
       }
@@ -554,11 +699,11 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
 
     // Travamento superior frontal (entrada, y = -depth/2) e traseiro (fundo, y = +depth/2)
     const topBeamGeo = new THREE.BoxGeometry(laneWidth, 0.06, 0.06)
-    const topBackWall = new THREE.Mesh(topBeamGeo, rearBeamMat)
+    const topBackWall = new THREE.Mesh(topBeamGeo, laneBeamMat)
     topBackWall.position.set(laneCenterX, depth / 2, height)
     laneGroup.add(topBackWall)
 
-    const topEntryPortal = new THREE.Mesh(topBeamGeo, rearBeamMat)
+    const topEntryPortal = new THREE.Mesh(topBeamGeo, laneBeamMat)
     topEntryPortal.position.set(laneCenterX, -depth / 2, height)
     laneGroup.add(topEntryPortal)
 
@@ -575,9 +720,9 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
 
       rearTieHeights.forEach((tz, idx) => {
         if (idx < rearTieHeights.length - 1) {
-          const tieBeam = new THREE.Mesh(rearHorizontalGeo, rearBeamMat)
+          const tieBeam = new THREE.Mesh(rearHorizontalGeo, laneBeamMat)
           tieBeam.position.set(laneCenterX, rearY, tz)
-          tieBeam.castShadow = true
+          tieBeam.castShadow = !isLaneDimmed
           laneGroup.add(tieBeam)
         }
       })
@@ -594,16 +739,16 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
         const diagGeo = new THREE.BoxGeometry(diagLen, 0.028, 0.028)
         const zMid = (z0 + z1) / 2
 
-        const diagA = new THREE.Mesh(diagGeo, frameBraceMat)
+        const diagA = new THREE.Mesh(diagGeo, laneBraceMat)
         diagA.position.set(laneCenterX, rearY, zMid)
         diagA.rotation.y = angle
-        diagA.castShadow = true
+        diagA.castShadow = !isLaneDimmed
         laneGroup.add(diagA)
 
-        const diagB = new THREE.Mesh(diagGeo, frameBraceMat)
+        const diagB = new THREE.Mesh(diagGeo, laneBraceMat)
         diagB.position.set(laneCenterX, rearY, zMid)
         diagB.rotation.y = -angle
-        diagB.castShadow = true
+        diagB.castShadow = !isLaneDimmed
         laneGroup.add(diagB)
       }
     }
@@ -624,13 +769,13 @@ function buildDriveInGeometry(group: THREE.Group, spatial: UniversalSpatialObjec
       const posZ = lvl === 1 ? 0.02 : railLz + railThick / 2
 
       const palletMeshGroup = new THREE.Group()
-      const deck = new THREE.Mesh(pDeckGeo, testPalletWoodMat)
+      const deck = new THREE.Mesh(pDeckGeo, isLaneDimmed ? effectiveColMat : testPalletWoodMat)
       deck.position.set(0, 0, baseH / 2)
       palletMeshGroup.add(deck)
 
-      const load = new THREE.Mesh(pLoadGeo, testPalletBoxMat)
+      const load = new THREE.Mesh(pLoadGeo, isLaneDimmed ? effectiveColMat : testPalletBoxMat)
       load.position.set(0, 0, baseH + loadH / 2)
-      load.castShadow = true
+      load.castShadow = !isLaneDimmed
       palletMeshGroup.add(load)
 
       palletMeshGroup.position.set(laneCenterX, posY, posZ)
@@ -826,18 +971,33 @@ function buildGenericSolidGeometry(group: THREE.Group, spatial: UniversalSpatial
 // ─────────────────────────────────────────────────────────────
 // 9. COMPARTIMENTO (ESPAÇO ABERTO DEMARCADO NO CHÃO)
 // ─────────────────────────────────────────────────────────────
-function buildCompartmentGeometry(group: THREE.Group, spatial: UniversalSpatialObject, readOnly: boolean) {
+function buildCompartmentGeometry(
+  group: THREE.Group,
+  spatial: UniversalSpatialObject,
+  readOnly: boolean,
+  options?: Spatial3DRenderOptions
+) {
   const { width, depth } = spatial.dimensions
   const padH = 0.08
   const modeKey = readOnly ? "viewer" : "editor"
+  const systems = options?.systems || []
+  const filterId = options?.activeSystemFilterId || null
+  const objSys = resolveSystemForObject(spatial.raw, systems)
+  const isDimmed = Boolean(filterId && objSys?.id !== filterId)
+  const sysColor = objSys ? normalizeHexColor(objSys.color) : null
+  const padHex = isDimmed ? "#334155" : sysColor || (readOnly ? "#f59e0b" : "#ca8a04")
+  const borderHex = isDimmed ? "#475569" : sysColor || (readOnly ? "#fbbf24" : "#eab308")
+  const padOpacity = isDimmed ? 0.14 : sysColor ? 0.48 : readOnly ? 0.55 : 0.25
 
-  const padMat = getMaterial(`compartment_open_pad_${modeKey}`, () =>
+  const padMat = getMaterial(`compartment_open_pad_${padHex}_${modeKey}_${padOpacity}`, () =>
     new THREE.MeshStandardMaterial({
-      color: new THREE.Color(readOnly ? "#f59e0b" : "#ca8a04"),
+      color: new THREE.Color(padHex),
+      emissive: sysColor && !isDimmed ? new THREE.Color(sysColor) : new THREE.Color("#000000"),
+      emissiveIntensity: sysColor && !isDimmed ? (filterId ? 0.35 : 0.15) : 0,
       roughness: 0.65,
       metalness: 0.15,
       transparent: true,
-      opacity: readOnly ? 0.55 : 0.25,
+      opacity: padOpacity,
     })
   )
 
@@ -847,8 +1007,8 @@ function buildCompartmentGeometry(group: THREE.Group, spatial: UniversalSpatialO
   mesh.receiveShadow = true
   group.add(mesh)
 
-  const borderMat = getMaterial(`compartment_open_border_${modeKey}`, () =>
-    new THREE.LineBasicMaterial({ color: new THREE.Color(readOnly ? "#fbbf24" : "#eab308") })
+  const borderMat = getMaterial(`compartment_open_border_${borderHex}_${modeKey}`, () =>
+    new THREE.LineBasicMaterial({ color: new THREE.Color(borderHex) })
   )
   const edges = new THREE.EdgesGeometry(geo)
   const lines = new THREE.LineSegments(edges, borderMat)

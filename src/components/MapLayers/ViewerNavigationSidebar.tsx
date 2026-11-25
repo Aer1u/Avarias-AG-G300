@@ -27,16 +27,26 @@ import {
   ChevronDown,
   Sparkles,
 } from "lucide-react"
-import type { MapObject } from "../MapLibrary/types"
+import type { MapObject, SystemVisualRef } from "../MapLibrary/types"
+import type { StorageChannel } from "../MapLibrary/dimensionsTypes"
 import { ensureDriveChannels, resolveSpatialContainment } from "../MapLibrary/spatialContainment"
 import { calculateAreaM2 } from "../MapLibrary/areaClassifier"
 import { getLocalItems } from "@/lib/mapeamentosStorage"
 import { getObjectOccupiedSlotCount, ITEMS_UPDATED_EVENT } from "@/lib/driveOccupancy"
+import {
+  getSystemsLinkedToObject,
+  isObjectMatchingSystemFilter,
+  resolveSystemForChannel,
+  resolveSystemForObject,
+  isOpenSystem,
+} from "@/lib/systemVisuals"
 
 interface ViewerNavigationSidebarProps {
   objects: MapObject[]
   selectedId: string | null
   selectedChannelId?: string | null
+  systems?: SystemVisualRef[]
+  activeSystemFilterId?: string | null
   onSelectAndLocate: (obj: MapObject) => void
   onSelectChannel?: (obj: MapObject, channelId: string) => void
   onToggleVisibility: (id: string, visible: boolean) => void
@@ -97,6 +107,8 @@ export default function ViewerNavigationSidebar({
   objects,
   selectedId,
   selectedChannelId,
+  systems = [],
+  activeSystemFilterId = null,
   onSelectAndLocate,
   onSelectChannel,
   onToggleVisibility,
@@ -161,6 +173,9 @@ export default function ViewerNavigationSidebar({
       channels
     )
 
+    const resolvedSystem = resolveSystemForObject(selectedObject, systems)
+    const linkedSystems = getSystemsLinkedToObject(selectedObject, systems)
+
     return {
       isCompartment,
       wM: wM.toFixed(2),
@@ -173,13 +188,15 @@ export default function ViewerNavigationSidebar({
       capacity,
       occupiedSlots,
       occupancyPct: capacity > 0 ? Math.round((occupiedSlots / capacity) * 100) : 0,
-      systemId: (selectedObject.props?.systemId as string) || null,
-      systemLabel: (selectedObject.props?.systemLabel as string) || null,
+      systemId: resolvedSystem?.id || (selectedObject.props?.systemId as string) || null,
+      systemLabel: resolvedSystem?.name || (selectedObject.props?.systemLabel as string) || null,
+      resolvedSystem,
+      linkedSystems,
       situation: selectedObject.operationalSituation || "ativa",
       responsible: selectedObject.responsible || null,
       restrictions: selectedObject.restrictions || null,
     }
-  }, [selectedObject, itemsVersion])
+  }, [selectedObject, itemsVersion, systems])
 
   // Renderiza nó recursivo da árvore
   const renderNode = (node: TreeNode) => {
@@ -198,6 +215,9 @@ export default function ViewerNavigationSidebar({
       if (!matchSelf && !matchChildren) return null
     }
 
+    const linkedObjSystems = getSystemsLinkedToObject(obj, systems)
+    const matchesSystemFilter = isObjectMatchingSystemFilter(obj, activeSystemFilterId, systems)
+
     return (
       <div key={obj.id} className="select-none">
         <div
@@ -206,7 +226,7 @@ export default function ViewerNavigationSidebar({
             isSelected
               ? "bg-blue-600/30 text-white border border-blue-500/60 shadow-sm"
               : "text-slate-300 hover:bg-slate-800/70 hover:text-white"
-          }`}
+          } ${activeSystemFilterId && !matchesSystemFilter && !hasChildren ? "opacity-35" : ""}`}
           style={{ paddingLeft: `${Math.max(8, depth * 14 + 8)}px` }}
         >
           {/* Seta recolher/expandir */}
@@ -226,6 +246,32 @@ export default function ViewerNavigationSidebar({
 
           {/* Nome */}
           <span className="truncate flex-1 font-medium">{obj.label || obj.id}</span>
+
+          {/* Indicadores de Sistema(s) vinculado(s) */}
+          {linkedObjSystems.length > 0 && (
+            <div className="flex items-center gap-1 shrink-0" title={linkedObjSystems.map((s) => s.name).join(", ")}>
+              {linkedObjSystems.slice(0, 2).map((sys) => (
+                <span
+                  key={sys.id}
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border"
+                  style={{
+                    backgroundColor: `${sys.color}20`,
+                    borderColor: `${sys.color}66`,
+                    color: sys.color,
+                  }}
+                >
+                  <span
+                    className="w-1.5 h-1.5 rounded-full shrink-0"
+                    style={{ backgroundColor: sys.color }}
+                  />
+                  {sys.code}
+                </span>
+              ))}
+              {linkedObjSystems.length > 2 && (
+                <span className="text-[9px] text-slate-400 font-mono">+{linkedObjSystems.length - 2}</span>
+              )}
+            </div>
+          )}
 
           {/* Badge de tipo/capacidade */}
           {obj.type === "drive_in" && (
@@ -526,10 +572,11 @@ export default function ViewerNavigationSidebar({
                         Canais Individuais deste Drive:
                       </span>
                       <div className="space-y-1">
-                        {(selectedObject.props.channels as any[]).map((chan) => {
+                        {(selectedObject.props.channels as StorageChannel[]).map((chan) => {
                           const isChanActive =
                             (chan.id && chan.id === selectedChannelId) ||
                             (chan.code && chan.code === selectedChannelId)
+                          const chanSys = resolveSystemForChannel(selectedObject, chan, systems)
 
                           return (
                             <button
@@ -545,13 +592,28 @@ export default function ViewerNavigationSidebar({
                                   : "bg-slate-900/90 hover:bg-blue-950/60 border border-slate-800 hover:border-blue-600/60"
                               }`}
                             >
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs">📥</span>
-                                <div>
-                                  <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span
+                                  className="w-2.5 h-2.5 rounded-sm shrink-0 border border-white/20"
+                                  style={{ backgroundColor: chanSys?.color || "#334155" }}
+                                />
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
                                     <span className="font-mono text-xs font-bold text-white group-hover:text-blue-300">
                                       {chan.code}
                                     </span>
+                                    {chanSys && (
+                                      <span
+                                        className="text-[9px] px-1.5 py-0.5 rounded font-mono font-bold border"
+                                        style={{
+                                          backgroundColor: `${chanSys.color}20`,
+                                          borderColor: `${chanSys.color}66`,
+                                          color: chanSys.color,
+                                        }}
+                                      >
+                                        {chanSys.icon} {chanSys.code}
+                                      </span>
+                                    )}
                                     {isChanActive && (
                                       <span className="text-[9px] px-1 py-0.2 rounded bg-blue-500 text-white font-bold">
                                         Ativo
@@ -559,13 +621,13 @@ export default function ViewerNavigationSidebar({
                                     )}
                                   </div>
                                   {chan.name && (
-                                    <span className="text-[10px] text-slate-400 block">
+                                    <span className="text-[10px] text-slate-400 block truncate">
                                       {chan.name}
                                     </span>
                                   )}
                                 </div>
                               </div>
-                              <span className="text-[10px] px-2 py-0.5 rounded bg-blue-950 text-blue-400 border border-blue-800/60 font-semibold group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                              <span className="text-[10px] px-2 py-0.5 rounded bg-blue-950 text-blue-400 border border-blue-800/60 font-semibold group-hover:bg-blue-600 group-hover:text-white transition-colors shrink-0">
                                 Ver Canal →
                               </span>
                             </button>
@@ -597,11 +659,42 @@ export default function ViewerNavigationSidebar({
                   </div>
                 )}
 
-                {details.systemLabel && (
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-slate-400">Sistema Vinculado:</span>
-                    <strong className="text-blue-400">{details.systemLabel}</strong>
+                {details.linkedSystems.length > 0 ? (
+                  <div className="space-y-1 pt-1 border-t border-slate-800/60">
+                    <span className="text-[10px] text-slate-400 block">
+                      {details.linkedSystems.length > 1 ? "Sistemas Vinculados:" : "Sistema Vinculado:"}
+                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      {details.linkedSystems.map((sys) => (
+                        <span
+                          key={sys.id}
+                          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-semibold border"
+                          style={{
+                            backgroundColor: `${sys.color}1f`,
+                            borderColor: `${sys.color}66`,
+                            color: "#f8fafc",
+                          }}
+                        >
+                          <span
+                            className="w-2 h-2 rounded-sm shrink-0"
+                            style={{ backgroundColor: sys.color }}
+                          />
+                          <span>{sys.icon}</span>
+                          <span>{sys.name}</span>
+                          <span className="font-mono text-[9px] opacity-80">
+                            {isOpenSystem(sys) ? "Livre" : "Saldo"}
+                          </span>
+                        </span>
+                      ))}
+                    </div>
                   </div>
+                ) : (
+                  details.systemLabel && (
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-400">Sistema Vinculado:</span>
+                      <strong className="text-blue-400">{details.systemLabel}</strong>
+                    </div>
+                  )
                 )}
 
                 {details.restrictions && (

@@ -15,7 +15,7 @@ import type { DimensionConfig } from "../MapLibrary/dimensionsTypes"
 import SystemRecordsModal from "./SystemRecordsModal"
 import SystemMappingModal from "./SystemMappingModal"
 import SystemConfrontoModal from "./SystemConfrontoModal"
-import { isOpenSystem } from "@/lib/systemVisuals"
+import { isOpenSystem, getLinkedStructuresForSystem } from "@/lib/systemVisuals"
 
 interface SystemDataPanelProps {
   isOpen: boolean
@@ -24,6 +24,7 @@ interface SystemDataPanelProps {
   workspaceId?: string
   levelsConfig?: DimensionConfig
   depthConfig?: DimensionConfig
+  onUpdateObject?: (id: string, partial: Partial<MapObject>) => void
 }
 
 export default function SystemDataPanel({
@@ -33,6 +34,7 @@ export default function SystemDataPanel({
   workspaceId,
   levelsConfig,
   depthConfig,
+  onUpdateObject,
 }: SystemDataPanelProps) {
   const { systems } = useSystemStore(workspaceId)
 
@@ -137,17 +139,11 @@ export default function SystemDataPanel({
                         <div className="flex items-center gap-2 mt-1 text-[9px] text-slate-600">
                           {openSys ? (
                             <span className="px-1.5 py-0.5 rounded font-semibold border bg-emerald-950/60 border-emerald-700/60 text-emerald-300">
-                              Sistema Aberto
+                              Sistema Livre
                             </span>
                           ) : (
-                            <span
-                              className={`px-1.5 py-0.5 rounded font-semibold border ${
-                                sys.defaultControlMode === "vinculado_saldo"
-                                  ? "bg-blue-950/60 border-blue-800/60 text-blue-400"
-                                  : "bg-slate-800 border-slate-700 text-slate-500"
-                              }`}
-                            >
-                              {sys.defaultControlMode === "vinculado_saldo" ? "Saldo Obrig." : "Livre"}
+                            <span className="px-1.5 py-0.5 rounded font-semibold border bg-blue-950/60 border-blue-800/60 text-blue-400">
+                              Com Saldo
                             </span>
                           )}
                           <span
@@ -193,7 +189,7 @@ export default function SystemDataPanel({
                       <p className="text-xs font-bold text-white truncate">{selectedSystem.name}</p>
                       {isSelectedOpen && (
                         <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-700/60 text-emerald-300">
-                          Aberto
+                          Sistema Livre
                         </span>
                       )}
                     </div>
@@ -205,7 +201,7 @@ export default function SystemDataPanel({
                     )}
                     {isSelectedOpen && (
                       <p className="text-[10px] text-emerald-300/80 mt-0.5">
-                        Sem registros · Mapeamento direto + Confronto
+                        Sem registro de saldo · Mapeamento direto + Confronto
                       </p>
                     )}
                   </div>
@@ -277,38 +273,58 @@ export default function SystemDataPanel({
                   <ChevronRight size={15} className="text-amber-500/50 group-hover:text-amber-400 transition-colors shrink-0 mt-0.5" />
                 </button>
 
-                {/* Info: saldo por posição */}
-                {(selectedSystem.participants?.length ?? 0) > 0 && (
-                  <div className="mt-3 p-3 bg-slate-950/60 border border-slate-800 rounded-xl">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
-                      Posições Vinculadas ({selectedSystem.participants?.length})
-                    </p>
-                    <div className="space-y-1">
-                      {selectedSystem.participants?.slice(0, 5).map((p) => (
-                        <div
-                          key={p.storageObjectId}
-                          className="flex items-center justify-between text-[10px] py-1 border-b border-slate-800/60 last:border-0"
-                        >
-                          <span className="text-slate-300 font-mono truncate">{p.storageObjectLabel}</span>
-                          <span
-                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                              p.stockControlMode === "vinculado_saldo"
-                                ? "bg-blue-950 text-blue-400"
-                                : "bg-slate-800 text-slate-500"
-                            }`}
+                {/* Info: estruturas & canais vinculados */}
+                {(() => {
+                  const linkedStructures = getLinkedStructuresForSystem(selectedSystem, allObjects)
+                  if (linkedStructures.length === 0) return null
+                  return (
+                    <div className="mt-3 p-3 bg-slate-950/60 border border-slate-800 rounded-xl">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+                        Estruturas & Canais Vinculados ({linkedStructures.length})
+                      </p>
+                      <div className="space-y-1.5">
+                        {linkedStructures.slice(0, 6).map((entry) => (
+                          <div
+                            key={entry.storageObjectId}
+                            className="py-1.5 border-b border-slate-800/60 last:border-0 space-y-1"
                           >
-                            {p.stockControlMode === "vinculado_saldo" ? "Saldo" : "Livre"}
-                          </span>
-                        </div>
-                      ))}
-                      {(selectedSystem.participants?.length ?? 0) > 5 && (
-                        <p className="text-[10px] text-slate-600 pt-1">
-                          +{(selectedSystem.participants?.length ?? 0) - 5} mais posições...
-                        </p>
-                      )}
+                            <div className="flex items-center justify-between text-[10px] gap-2">
+                              <span className="text-slate-200 font-mono font-semibold truncate">
+                                {entry.storageObjectLabel}
+                              </span>
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold shrink-0 ${
+                                  !isSelectedOpen && entry.stockControlMode === "vinculado_saldo"
+                                    ? "bg-blue-950 text-blue-400"
+                                    : "bg-emerald-950/70 text-emerald-300"
+                                }`}
+                              >
+                                {!isSelectedOpen && entry.stockControlMode === "vinculado_saldo" ? "Saldo" : "Livre"}
+                              </span>
+                            </div>
+                            {entry.isDrive && entry.linkedChannels.length > 0 && (
+                              <div className="flex flex-wrap gap-1">
+                                {entry.linkedChannels.map((ch) => (
+                                  <span
+                                    key={ch.id}
+                                    className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300"
+                                  >
+                                    {ch.name || ch.code}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        {linkedStructures.length > 6 && (
+                          <p className="text-[10px] text-slate-600 pt-1">
+                            +{linkedStructures.length - 6} mais estruturas...
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )
+                })()}
               </div>
             )}
           </div>
@@ -332,6 +348,7 @@ export default function SystemDataPanel({
             workspaceId={workspaceId}
             levelsConfig={levelsConfig}
             depthConfig={depthConfig}
+            onUpdateObject={onUpdateObject}
           />
           <SystemConfrontoModal
             isOpen={isConfrontoOpen}

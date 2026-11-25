@@ -21,7 +21,7 @@ import React, {
 } from "react"
 import * as THREE from "three"
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js"
-import type { MapObject } from "../MapLibrary/types"
+import type { MapObject, SystemVisualRef } from "../MapLibrary/types"
 import type { SpatialViewMode } from "./types"
 import { mapObjectToSpatial, DEFAULT_PIXELS_PER_METER } from "./spatialAdapter"
 import { buildSpatial3DObject } from "./geometryCatalog"
@@ -52,6 +52,8 @@ interface SpatialViewer3DProps {
   readOnly?: boolean
   onSelect: (id: string | null, channelId?: string | null) => void
   onModeChange?: (mode: SpatialViewMode) => void
+  systems?: SystemVisualRef[]
+  activeSystemFilterId?: string | null
 }
 
 interface CameraNavState {
@@ -122,6 +124,8 @@ export const SpatialViewer3D = forwardRef<SpatialViewer3DHandle, SpatialViewer3D
       readOnly = false,
       onSelect,
       onModeChange,
+      systems = [],
+      activeSystemFilterId = null,
     },
     ref
   ) {
@@ -748,10 +752,10 @@ export const SpatialViewer3D = forwardRef<SpatialViewer3DHandle, SpatialViewer3D
         if (obj.visible === false) return
         if (readOnly && (obj.type === "coordinates" || obj.type === "dimension_line")) return
         const spatial = mapObjectToSpatial(obj, DEFAULT_PIXELS_PER_METER)
-        const mesh3D = buildSpatial3DObject(spatial, readOnly)
+        const mesh3D = buildSpatial3DObject(spatial, readOnly, { systems, activeSystemFilterId })
         group.add(mesh3D)
       })
-    }, [objects, readOnly, itemsVersion])
+    }, [objects, readOnly, itemsVersion, systems, activeSystemFilterId])
 
     // Enquadramento automático SOMENTE na primeira carga dos objetos (preserva estado ao alternar modos)
     useEffect(() => {

@@ -18,6 +18,7 @@ import { ensureDriveChannels } from "../MapLibrary/spatialContainment"
 import DriveTunnelPositionsViewer from "./DriveTunnelPositionsViewer"
 import ObjectDimensionConfigSection from "./ObjectDimensionConfigSection"
 import { useSystemStore } from "../Systems/useSystemStore"
+import { findSystemByRef, isOpenSystem } from "@/lib/systemVisuals"
 
 interface DriveOperationalCardProps {
   selectedObject: MapObject
@@ -156,23 +157,26 @@ export default function DriveOperationalCard({
     }
   }, [lanes, channels, props.channels, onUpdateProp])
 
-  const [expandedChannelId, setExpandedChannelId] = useState<string | null>(
-    channels.length > 0 ? channels[0].id : null
-  )
-
-  // Sincroniza expansão quando o usuário clica em um canal específico no mapa
-  useEffect(() => {
+  const [prevSelectedChannelId, setPrevSelectedChannelId] = useState(selectedChannelId)
+  const [expandedChannelId, setExpandedChannelId] = useState<string | null>(() => {
     if (selectedChannelId) {
       const match = channels.find(
         (c) => c.id === selectedChannelId || c.code === selectedChannelId
       )
-      if (match) {
-        setExpandedChannelId(match.id)
-      } else {
-        setExpandedChannelId(selectedChannelId)
-      }
+      return match ? match.id : selectedChannelId
     }
-  }, [selectedChannelId, channels])
+    return channels.length > 0 ? channels[0].id : null
+  })
+
+  if (selectedChannelId !== prevSelectedChannelId) {
+    setPrevSelectedChannelId(selectedChannelId)
+    if (selectedChannelId) {
+      const match = channels.find(
+        (c) => c.id === selectedChannelId || c.code === selectedChannelId
+      )
+      setExpandedChannelId(match ? match.id : selectedChannelId)
+    }
+  }
 
   const handleUpdateChannelProp = (channelId: string, partial: Partial<StorageChannel>) => {
     const updated = channels.map((c) => (c.id === channelId ? { ...c, ...partial } : c))
@@ -228,6 +232,38 @@ export default function DriveOperationalCard({
     })
   }
 
+  const syncChannelSystemMembership = (updatedChannels: StorageChannel[], nextDriveRef: string = stockSystemRef) => {
+    const activeSystemIds = new Set<string>()
+    const driveSys = findSystemByRef(nextDriveRef, systems)
+    if (driveSys) activeSystemIds.add(driveSys.id)
+    updatedChannels.forEach((ch) => {
+      const chSys = findSystemByRef(ch.stockSystemRef, systems)
+      if (chSys) activeSystemIds.add(chSys.id)
+    })
+
+    systems.forEach((s) => {
+      const isParticipant = s.participants?.some((p) => p.storageObjectId === selectedObject.id)
+      const shouldBeParticipant = activeSystemIds.has(s.id)
+      if (shouldBeParticipant && !isParticipant) {
+        linkStorageToSystem(s.id, {
+          storageObjectId: selectedObject.id,
+          storageObjectLabel: String(selectedObject.label || selectedObject.id),
+          storageType: selectedObject.type,
+          role: "armazenamento",
+          stockControlMode: isOpenSystem(s) ? "livre" : "vinculado_saldo",
+          permissions: {
+            allowInbound: true,
+            allowOutbound: true,
+            allowReturnToOrigin: true,
+          },
+          configuredAt: new Date().toISOString(),
+        })
+      } else if (!shouldBeParticipant && isParticipant) {
+        unlinkStorageFromSystem(s.id, selectedObject.id)
+      }
+    })
+  }
+
   // Aplica o modo de controle a todos os canais de uma vez
   const handleApplyModeToAllChannels = (mode: "livre" | "vinculado_saldo", systemRef?: string) => {
     const resolvedRef = mode === "livre" ? "" : (systemRef ?? "")
@@ -247,14 +283,14 @@ export default function DriveOperationalCard({
         }
       })
     } else {
-      const foundSys = systems.find((s) => s.code === resolvedRef || s.id === resolvedRef)
+      const foundSys = findSystemByRef(resolvedRef, systems)
       if (foundSys) {
         linkStorageToSystem(foundSys.id, {
           storageObjectId: selectedObject.id,
           storageObjectLabel: String(selectedObject.label || selectedObject.id),
           storageType: selectedObject.type,
           role: "armazenamento",
-          stockControlMode: "vinculado_saldo",
+          stockControlMode: isOpenSystem(foundSys) ? "livre" : "vinculado_saldo",
           permissions: {
             allowInbound: true,
             allowOutbound: true,
@@ -622,6 +658,8 @@ export default function DriveOperationalCard({
             const chanSys = hasChannelOverride
               ? chan.stockSystemRef ?? ""
               : chan.stockSystemRef ?? stockSystemRef
+            const resolvedChanSys = findSystemByRef(chanSys, systems)
+            const isChanOpenSys = isOpenSystem(resolvedChanSys)
             const occupiedCount = chan.occupiedPositions?.length || 0
 
             return (
@@ -636,6 +674,13 @@ export default function DriveOperationalCard({
                 {/* Header do Canal */}
                 <div className="flex items-center justify-between gap-1.5 flex-wrap">
                   <div className="flex items-center gap-1.5">
+                    {resolvedChanSys && (
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0 border border-white/30"
+                        style={{ backgroundColor: resolvedChanSys.color }}
+                        title={`Sistema: ${resolvedChanSys.name}`}
+                      />
+                    )}
                     <span className="text-[10px] font-mono text-amber-300 font-bold">
                       {chan.code}
                     </span>
@@ -646,15 +691,29 @@ export default function DriveOperationalCard({
 
                   {/* Badges de Modo e Ocupação */}
                   <div className="flex items-center gap-1.5">
-                    <span
-                      className={`text-[9px] font-semibold px-1.5 py-0.5 rounded border ${
-                        chanMode === "vinculado_saldo"
-                          ? "bg-blue-950/80 text-blue-300 border-blue-700/60"
-                          : "bg-emerald-950/60 text-emerald-300 border-emerald-700/50"
-                      }`}
-                    >
-                      {chanMode === "vinculado_saldo" ? "🔒 Saldo" : "🟢 Livre"}
-                    </span>
+                    {resolvedChanSys ? (
+                      <span
+                        className="text-[9px] font-semibold px-1.5 py-0.5 rounded border"
+                        style={{
+                          backgroundColor: `${resolvedChanSys.color}22`,
+                          borderColor: `${resolvedChanSys.color}66`,
+                          color: "#f8fafc",
+                        }}
+                      >
+                        {resolvedChanSys.icon} {resolvedChanSys.code}
+                        {isChanOpenSys ? " · Livre" : ""}
+                      </span>
+                    ) : (
+                      <span
+                        className={`text-[9px] font-semibold px-1.5 py-0.5 rounded border ${
+                          chanMode === "vinculado_saldo"
+                            ? "bg-blue-950/80 text-blue-300 border-blue-700/60"
+                            : "bg-emerald-950/60 text-emerald-300 border-emerald-700/50"
+                        }`}
+                      >
+                        {chanMode === "vinculado_saldo" ? "🔒 Saldo" : "🟢 Livre"}
+                      </span>
+                    )}
 
                     {occupiedCount > 0 && (
                       <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded font-mono font-bold animate-pulse">
@@ -702,19 +761,24 @@ export default function DriveOperationalCard({
                           >
                             {hasChannelOverride
                               ? chanMode === "vinculado_saldo"
-                                ? "Individual · Saldo"
+                                ? isChanOpenSys
+                                  ? "Individual · Sist. Livre"
+                                  : "Individual · Saldo"
                                 : "Individual · Livre"
                               : "Herdado do Drive"}
                           </span>
                           {hasChannelOverride && (
                             <button
                               type="button"
-                              onClick={() =>
-                                handleUpdateChannelProp(chan.id, {
-                                  stockControlMode: undefined,
-                                  stockSystemRef: undefined,
-                                })
-                              }
+                              onClick={() => {
+                                const updated = channels.map((c) =>
+                                  c.id === chan.id
+                                    ? { ...c, stockControlMode: undefined, stockSystemRef: undefined }
+                                    : c
+                                )
+                                onUpdateProp("channels", updated)
+                                syncChannelSystemMembership(updated)
+                              }}
                               className="text-[9px] text-slate-400 hover:text-white underline cursor-pointer"
                               title="Remover regra individual e voltar a seguir a regra geral do Drive-In"
                             >
@@ -727,12 +791,15 @@ export default function DriveOperationalCard({
                       <div className="grid grid-cols-2 gap-1.5 pt-0.5">
                         <button
                           type="button"
-                          onClick={() =>
-                            handleUpdateChannelProp(chan.id, {
-                              stockControlMode: "livre",
-                              stockSystemRef: "",
-                            })
-                          }
+                          onClick={() => {
+                            const updated = channels.map((c) =>
+                              c.id === chan.id
+                                ? { ...c, stockControlMode: "livre" as const, stockSystemRef: "" }
+                                : c
+                            )
+                            onUpdateProp("channels", updated)
+                            syncChannelSystemMembership(updated)
+                          }}
                           className={`px-2 py-1 rounded text-[10px] font-semibold border text-center transition-colors ${
                             chanMode === "livre"
                               ? "bg-slate-700 border-slate-500 text-white shadow-sm"
@@ -743,45 +810,80 @@ export default function DriveOperationalCard({
                         </button>
                         <button
                           type="button"
-                          onClick={() =>
-                            handleUpdateChannelProp(chan.id, {
-                              stockControlMode: "vinculado_saldo",
-                              stockSystemRef: chan.stockSystemRef ?? "",
-                            })
-                          }
+                          onClick={() => {
+                            const updated = channels.map((c) =>
+                              c.id === chan.id
+                                ? {
+                                    ...c,
+                                    stockControlMode: "vinculado_saldo" as const,
+                                    stockSystemRef: c.stockSystemRef ?? "",
+                                  }
+                                : c
+                            )
+                            onUpdateProp("channels", updated)
+                          }}
                           className={`px-2 py-1 rounded text-[10px] font-semibold border text-center transition-colors ${
                             chanMode === "vinculado_saldo"
                               ? "bg-blue-900/80 border-blue-500 text-blue-200 shadow-sm"
                               : "bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700"
                           }`}
                         >
-                          🔒 Vinculado ao Saldo
+                          🔗 Vincular Sistema
                         </button>
                       </div>
 
-                      {/* Dropdown de Sistema de Saldo para este Canal */}
+                      {/* Dropdown de Sistema para este Canal */}
                       {chanMode === "vinculado_saldo" && (
                         <div className="pt-1.5 space-y-1">
                           <label className="text-[9px] text-blue-300 font-medium block">
-                            Sistema de Saldo Vinculado a este Canal:
+                            Sistema Vinculado a este Canal:
                           </label>
                           <select
                             value={chanSys}
-                            onChange={(e) =>
-                              handleUpdateChannelProp(chan.id, {
-                                stockControlMode: "vinculado_saldo",
-                                stockSystemRef: e.target.value,
-                              })
-                            }
+                            onChange={(e) => {
+                              const chosenCode = e.target.value
+                              const foundSys = findSystemByRef(chosenCode, systems)
+                              const updated = channels.map((c) =>
+                                c.id === chan.id
+                                  ? {
+                                      ...c,
+                                      stockControlMode: "vinculado_saldo" as const,
+                                      stockSystemRef: chosenCode,
+                                    }
+                                  : c
+                              )
+                              onUpdateProp("channels", updated)
+                              syncChannelSystemMembership(updated)
+                              if (foundSys) {
+                                linkStorageToSystem(foundSys.id, {
+                                  storageObjectId: selectedObject.id,
+                                  storageObjectLabel: String(selectedObject.label || selectedObject.id),
+                                  storageType: selectedObject.type,
+                                  role: "armazenamento",
+                                  stockControlMode: isOpenSystem(foundSys) ? "livre" : "vinculado_saldo",
+                                  permissions: {
+                                    allowInbound: true,
+                                    allowOutbound: true,
+                                    allowReturnToOrigin: true,
+                                  },
+                                  configuredAt: new Date().toISOString(),
+                                })
+                              }
+                            }}
                             className="w-full bg-blue-950/70 border border-blue-700/60 rounded px-2 py-1 text-[11px] text-blue-100 font-semibold focus:outline-none focus:border-blue-400"
                           >
-                            <option value="">— Selecionar Sistema de Saldo —</option>
+                            <option value="">— Selecionar Sistema —</option>
                             {systems.map((s) => (
                               <option key={s.id} value={s.code}>
-                                {s.icon} {s.name} ({s.code})
+                                {s.icon} {s.name} ({s.code}) {isOpenSystem(s) ? "· Sistema Livre (Sem Saldo)" : "· Com Saldo"}
                               </option>
                             ))}
                           </select>
+                          {resolvedChanSys && isChanOpenSys && (
+                            <p className="text-[9px] text-emerald-300 leading-tight">
+                              Sistema Livre: sem registro de saldo — posições preenchidas diretamente e visualizadas pela cor do sistema.
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1089,87 +1191,89 @@ export default function DriveOperationalCard({
             <div>
               <span className={`text-[11px] font-semibold block ${
                 stockControlMode === "vinculado_saldo" ? "text-blue-300" : "text-slate-500"
-              }`}>Vinculado ao Saldo — requer saldo no sistema</span>
+              }`}>Vinculado a um Sistema — Saldo ou Sistema Livre</span>
               <span className="text-[9px] text-slate-500 leading-tight">
-                O módulo operacional somente permitirá o preenchimento de posições se houver saldo
-                disponível no sistema de referência. Indicado para Drives de armazenagem controlada.
+                Associa este Drive-In a um sistema do workspace. Sistemas com Saldo exigem saldo no chão; Sistemas Livres permitem preenchimento direto sem saldo prévio.
               </span>
             </div>
           </button>
         </div>
 
-        {/* Campo: Sistema de Saldo de Referência — aparece só quando vinculado */}
-        {stockControlMode === "vinculado_saldo" && (
-          <div className="pt-1.5 border-t border-blue-900/40 space-y-1.5 animate-in fade-in duration-200">
-            <label className="text-[10px] text-blue-300 font-medium flex items-center justify-between">
-              <span className="flex items-center gap-1">
-                <span>📋</span>
-                <span>Sistema de Saldo Vinculado</span>
-              </span>
-              {stockSystemRef && (
-                <span className="text-[9px] text-blue-400 font-mono">
-                  {stockSystemRef}
+        {/* Campo: Sistema Vinculado — aparece só quando vinculado */}
+        {stockControlMode === "vinculado_saldo" && (() => {
+          const driveSelectedSys = findSystemByRef(stockSystemRef, systems)
+          const isDriveSelectedOpen = isOpenSystem(driveSelectedSys)
+          return (
+            <div className="pt-1.5 border-t border-blue-900/40 space-y-1.5 animate-in fade-in duration-200">
+              <label className="text-[10px] text-blue-300 font-medium flex items-center justify-between">
+                <span className="flex items-center gap-1">
+                  <span>📋</span>
+                  <span>Sistema Vinculado</span>
                 </span>
-              )}
-            </label>
+                {stockSystemRef && (
+                  <span className="text-[9px] text-blue-400 font-mono">
+                    {stockSystemRef}
+                  </span>
+                )}
+              </label>
 
-            {/* Dropdown com os Sistemas do Catálogo */}
-            <select
-              value={stockSystemRef}
-              onChange={(e) => {
-                const chosenCode = e.target.value
-                onUpdateProp("stockSystemRef", chosenCode)
-                if (!chosenCode) {
-                  systems.forEach((s) => {
-                    if (s.participants?.some((p) => p.storageObjectId === selectedObject.id)) {
-                      unlinkStorageFromSystem(s.id, selectedObject.id)
-                    }
-                  })
-                  return
-                }
-                const foundSys = systems.find((s) => s.code === chosenCode || s.id === chosenCode)
-                if (foundSys) {
-                  linkStorageToSystem(foundSys.id, {
-                    storageObjectId: selectedObject.id,
-                    storageObjectLabel: String(selectedObject.label || selectedObject.id),
-                    storageType: selectedObject.type,
-                    role: "armazenamento",
-                    stockControlMode: "vinculado_saldo",
-                    permissions: {
-                      allowInbound: true,
-                      allowOutbound: true,
-                      allowReturnToOrigin: true,
-                    },
-                    configuredAt: new Date().toISOString(),
-                  })
-                }
-              }}
-              className="w-full bg-blue-950/60 border border-blue-700/60 rounded px-2 py-1 text-xs text-blue-100 font-semibold focus:outline-none focus:border-blue-400"
-            >
-              <option value="">— Selecionar Sistema de Saldo —</option>
-              {systems.map((s) => (
-                <option key={s.id} value={s.code}>
-                  {s.icon} {s.name} ({s.code}) {s.originStorageLabel ? `— Origem: ${s.originStorageLabel}` : ""}
-                </option>
-              ))}
-            </select>
-
-            <div className="flex items-center gap-1">
-              <input
-                type="text"
+              {/* Dropdown com os Sistemas do Catálogo */}
+              <select
                 value={stockSystemRef}
-                onChange={(e) => onUpdateProp("stockSystemRef", e.target.value)}
-                placeholder="Ou digite o código do sistema (ex: AVARIAS_G300, RETRABALHO)..."
-                className="w-full bg-blue-950/40 border border-blue-800/50 rounded px-2 py-0.5 text-[11px] text-blue-200 placeholder-blue-800/70 focus:outline-none focus:border-blue-500 font-mono"
-              />
-            </div>
+                onChange={(e) => {
+                  const chosenCode = e.target.value
+                  onUpdateProp("stockSystemRef", chosenCode)
+                  syncChannelSystemMembership(channels, chosenCode)
+                  const foundSys = findSystemByRef(chosenCode, systems)
+                  if (foundSys) {
+                    linkStorageToSystem(foundSys.id, {
+                      storageObjectId: selectedObject.id,
+                      storageObjectLabel: String(selectedObject.label || selectedObject.id),
+                      storageType: selectedObject.type,
+                      role: "armazenamento",
+                      stockControlMode: isOpenSystem(foundSys) ? "livre" : "vinculado_saldo",
+                      permissions: {
+                        allowInbound: true,
+                        allowOutbound: true,
+                        allowReturnToOrigin: true,
+                      },
+                      configuredAt: new Date().toISOString(),
+                    })
+                  }
+                }}
+                className="w-full bg-blue-950/60 border border-blue-700/60 rounded px-2 py-1 text-xs text-blue-100 font-semibold focus:outline-none focus:border-blue-400"
+              >
+                <option value="">— Selecionar Sistema —</option>
+                {systems.map((s) => (
+                  <option key={s.id} value={s.code}>
+                    {s.icon} {s.name} ({s.code}){" "}
+                    {isOpenSystem(s)
+                      ? "· Sistema Livre (Sem Saldo)"
+                      : s.originStorageLabel
+                      ? `— Origem: ${s.originStorageLabel}`
+                      : "· Com Saldo"}
+                  </option>
+                ))}
+              </select>
 
-            <p className="text-[9px] text-blue-400/80 leading-tight">
-              O módulo operacional futuro verificará se há saldo registrado neste sistema
-              (originado no objeto CHÃO/Entrada) antes de permitir alocar mercadorias neste Drive.
-            </p>
-          </div>
-        )}
+              <div className="flex items-center gap-1">
+                <input
+                  type="text"
+                  value={stockSystemRef}
+                  onChange={(e) => onUpdateProp("stockSystemRef", e.target.value)}
+                  placeholder="Ou digite o código do sistema (ex: AVARIAS_G300, RETRABALHO)..."
+                  className="w-full bg-blue-950/40 border border-blue-800/50 rounded px-2 py-0.5 text-[11px] text-blue-200 placeholder-blue-800/70 focus:outline-none focus:border-blue-500 font-mono"
+                />
+              </div>
+
+              <p className="text-[9px] text-blue-400/80 leading-tight">
+                {isDriveSelectedOpen
+                  ? "Sistema Livre: não exige registro de saldo no chão. Os canais recebem a cor deste sistema e alimentam o Confronto."
+                  : "Sistema com Saldo: requer saldo registrado no objeto CHÃO/Origem antes de alocar mercadorias neste Drive."}
+              </p>
+            </div>
+          )
+        })()}
 
         {/* Botão de Aplicação Rápida em Lote */}
         <div className="pt-1">

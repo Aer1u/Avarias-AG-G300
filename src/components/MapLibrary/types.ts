@@ -101,6 +101,7 @@ export interface SystemVisualRef {
   color: string
   icon: string
   systemStyle?: "completo" | "aberto"
+  defaultControlMode?: "livre" | "vinculado_saldo"
   originStorageId?: string
   participants?: Array<{ storageObjectId: string }>
 }

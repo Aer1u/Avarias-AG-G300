@@ -39,12 +39,14 @@ import {
 } from "../Systems/systemBalanceService"
 import {
   hydratePositionKeyFromSupabase,
+  hydrateSystemItemsFromSupabase,
   persistPositionItemsToSupabase,
 } from "@/lib/workspaceItemsSync"
 import {
   filterItemsForDriveChannel,
   ITEMS_UPDATED_EVENT,
 } from "@/lib/driveOccupancy"
+import { isOpenSystem } from "@/lib/systemVisuals"
 import { LocalErrorBoundary } from "../LocalErrorBoundary"
 
 interface ChannelInfo {
@@ -153,46 +155,57 @@ export default function ViewerDriveInModal({
       const chanMode = currentChannel.stockControlMode
       const chanSysRef = String(currentChannel.stockSystemRef || "").trim()
 
-      // 1) Canal explicitamente configurado como "livre" SEMPRE sobrepõe o Drive-In geral
-      if (chanMode === "livre") {
-        return { linkedSystem: undefined, linkedParticipant: undefined, channelForceFree: true }
-      }
-
-      // 2) Canal explicitamente configurado como "vinculado_saldo" SEMPRE sobrepõe o Drive-In geral
-      if (chanMode === "vinculado_saldo") {
-        if (chanSysRef) {
-          const sys = findSystemByRef(chanSysRef)
-          if (sys) {
-            const part = sys.participants?.find((p) => p.storageObjectId === object.id)
-            return { linkedSystem: sys, linkedParticipant: part, channelForceFree: false }
-          }
-        }
-        // Canal individual vinculado_saldo sem sistema selecionado: não herda o sistema geral do Drive-In
-        return { linkedSystem: undefined, linkedParticipant: undefined, channelForceFree: true }
-      }
-
-      // 3) Canal herdado (chanMode === undefined): se tiver referência legada própria, respeita-a
+      // 1) Se o canal aponta diretamente para um sistema (inclusive Sistema Livre)
       if (chanSysRef) {
         const sys = findSystemByRef(chanSysRef)
         if (sys) {
           const part = sys.participants?.find((p) => p.storageObjectId === object.id)
-          return { linkedSystem: sys, linkedParticipant: part, channelForceFree: false }
+          return {
+            linkedSystem: sys,
+            linkedParticipant: part,
+            channelForceFree: chanMode === "livre" || isOpenSystem(sys),
+          }
+        }
+      }
+
+      // 2) Canal explicitamente configurado como "livre" sem sistema vinculado SEMPRE sobrepõe o Drive-In geral
+      if (chanMode === "livre") {
+        return { linkedSystem: undefined, linkedParticipant: undefined, channelForceFree: true }
+      }
+
+      // 3) Canal explicitamente configurado como "vinculado_saldo" sem sistema selecionado: não herda o sistema geral do Drive-In
+      if (chanMode === "vinculado_saldo") {
+        return { linkedSystem: undefined, linkedParticipant: undefined, channelForceFree: true }
+      }
+    }
+
+    // Fallback para configuração geral do Drive-In / Objeto
+    if (objSysRef) {
+      const sys = findSystemByRef(objSysRef)
+      if (sys) {
+        const part = sys.participants?.find((p) => p.storageObjectId === object.id)
+        return {
+          linkedSystem: sys,
+          linkedParticipant: part,
+          channelForceFree: objMode === "livre" || isOpenSystem(sys),
         }
       }
     }
 
-    // Fallback para configuração geral do Drive-In / Objeto (e não é Origem/Chão)
     if (objMode === "livre" && !originSys) {
       return { linkedSystem: undefined, linkedParticipant: undefined, channelForceFree: true }
     }
 
-    const sys =
-      originSys ||
-      (objSysRef ? findSystemByRef(objSysRef) : undefined) ||
-      participantSys
+    const sys = originSys || participantSys
     const part = sys?.participants?.find((p) => p.storageObjectId === object.id)
-    return { linkedSystem: sys, linkedParticipant: part, channelForceFree: false }
+    return {
+      linkedSystem: sys,
+      linkedParticipant: part,
+      channelForceFree: Boolean(sys && isOpenSystem(sys)),
+    }
   }, [object, systems, isCompartment, currentChannel, findSystemByRef])
+
+  const isLinkedOpenSystem = isOpenSystem(linkedSystem)
 
   // Chave de armazenamento isolada do G300
   const objectMapeamentoKey = useMemo(() => {
@@ -226,7 +239,11 @@ export default function ViewerDriveInModal({
         setLoading(true)
         setBalanceError("")
         if (linkedSystem) {
-          await fetchAndSyncSystemBalances(linkedSystem)
+          if (isLinkedOpenSystem) {
+            await hydrateSystemItemsFromSupabase(linkedSystem)
+          } else {
+            await fetchAndSyncSystemBalances(linkedSystem)
+          }
         } else {
           await hydratePositionKeyFromSupabase(objectMapeamentoKey, workspaceId)
         }
@@ -244,7 +261,7 @@ export default function ViewerDriveInModal({
     return () => {
       cancelled = true
     }
-  }, [isOpen, object, linkedSystem, objectMapeamentoKey, workspaceId])
+  }, [isOpen, object, linkedSystem, isLinkedOpenSystem, objectMapeamentoKey, workspaceId])
 
   // Mantém a visualização sincronizada quando itens são hidratados ou editados externamente
   useEffect(() => {
@@ -355,14 +372,16 @@ export default function ViewerDriveInModal({
   )
 
   const originObjectId = useMemo(
-    () => (linkedSystem ? getOriginObjectId(linkedSystem) : null),
-    [linkedSystem]
+    () => (linkedSystem && !isLinkedOpenSystem ? getOriginObjectId(linkedSystem) : null),
+    [linkedSystem, isLinkedOpenSystem]
   )
 
-  const isOriginObject = Boolean(object && originObjectId && originObjectId === object.id)
+  const isOriginObject = Boolean(
+    object && !isLinkedOpenSystem && originObjectId && originObjectId === object.id
+  )
 
   const enforceStockLimit = useMemo(() => {
-    if (!linkedSystem || isOriginObject || channelForceFree) return false
+    if (!linkedSystem || isLinkedOpenSystem || isOriginObject || channelForceFree) return false
     if (!isCompartment && currentChannel?.stockControlMode === "livre") {
       return false
     }
@@ -381,12 +400,10 @@ export default function ViewerDriveInModal({
     if (linkedParticipant?.stockControlMode === "vinculado_saldo") {
       return true
     }
-    return (
-      linkedSystem.defaultControlMode !== "livre" ||
-      Boolean(currentChannel?.stockSystemRef || object?.props?.stockSystemRef)
-    )
+    return Boolean(currentChannel?.stockSystemRef || object?.props?.stockSystemRef) || true
   }, [
     linkedSystem,
+    isLinkedOpenSystem,
     isOriginObject,
     channelForceFree,
     isCompartment,
@@ -397,15 +414,15 @@ export default function ViewerDriveInModal({
 
   const balanceSnapshot = useMemo(() => {
     void itemsVersion
-    if (!linkedSystem) return null
+    if (!linkedSystem || isLinkedOpenSystem) return null
     return getSystemBalanceSnapshot(linkedSystem)
-  }, [linkedSystem, itemsVersion])
+  }, [linkedSystem, isLinkedOpenSystem, itemsVersion])
 
   const availableStocks = useMemo(() => {
     void itemsVersion
-    if (!linkedSystem || isOriginObject) return []
+    if (!linkedSystem || isLinkedOpenSystem || isOriginObject) return []
     return getAvailableStocksFromOrigin(linkedSystem)
-  }, [linkedSystem, isOriginObject, itemsVersion])
+  }, [linkedSystem, isLinkedOpenSystem, isOriginObject, itemsVersion])
 
   // Todos os itens armazenados neste objeto (todos os canais do objeto)
   const allObjectItems: MapeamentoItem[] = useMemo(() => {
@@ -441,7 +458,7 @@ export default function ViewerDriveInModal({
         (it) => it.mapeamentoId === objectMapeamentoKey
       )
 
-      if (linkedSystem && !isOriginObject) {
+      if (linkedSystem && !isLinkedOpenSystem && !isOriginObject) {
         const res = applyNonOriginPositionChange(
           linkedSystem,
           object.id,
@@ -461,14 +478,22 @@ export default function ViewerDriveInModal({
           nextObjectItems,
           workspaceId || linkedSystem?.workspaceId
         ).catch(() => {})
-        if (linkedSystem) {
+        if (linkedSystem && !isLinkedOpenSystem) {
           syncSupabaseUniversalBalances(linkedSystem).catch(() => {})
         }
       }
       setItemsVersion((v) => v + 1)
       return true
     },
-    [object, objectMapeamentoKey, linkedSystem, isOriginObject, enforceStockLimit, workspaceId]
+    [
+      object,
+      objectMapeamentoKey,
+      linkedSystem,
+      isLinkedOpenSystem,
+      isOriginObject,
+      enforceStockLimit,
+      workspaceId,
+    ]
   )
 
   const handleAddItem = (
@@ -656,9 +681,20 @@ export default function ViewerDriveInModal({
                       </span>
                     )}
                     {linkedSystem && (
-                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                        {linkedSystem.icon} {linkedSystem.name}
-                        {isOriginObject ? " · ORIGEM / CHÃO" : ""}
+                      <span
+                        className="text-[10px] font-bold px-2.5 py-0.5 rounded-full border"
+                        style={{
+                          backgroundColor: `${linkedSystem.color}22`,
+                          borderColor: `${linkedSystem.color}66`,
+                          color: "#ffffff",
+                        }}
+                      >
+                        {linkedSystem.icon} {linkedSystem.name} ({linkedSystem.code})
+                        {isLinkedOpenSystem
+                          ? " · Sistema Livre"
+                          : isOriginObject
+                          ? " · ORIGEM / CHÃO"
+                          : ""}
                       </span>
                     )}
                   </div>
@@ -727,8 +763,8 @@ export default function ViewerDriveInModal({
               </div>
             </div>
 
-            {/* ── BARRA DE CONSERVAÇÃO DE SALDO DO SISTEMA (para Drive-In vinculado) ── */}
-            {!isCompartment && linkedSystem && balanceSnapshot && (
+            {/* ── BARRA DE CONSERVAÇÃO DE SALDO DO SISTEMA (apenas para sistema com saldo) ── */}
+            {!isCompartment && linkedSystem && !isLinkedOpenSystem && balanceSnapshot && (
               <div className="mb-3 px-4 py-2 rounded-2xl bg-slate-950/70 border border-slate-800 flex flex-wrap items-center justify-between gap-2 text-[11px] shrink-0">
                 <div className="flex flex-wrap items-center gap-3 font-mono">
                   <span className="text-slate-300">
@@ -747,6 +783,29 @@ export default function ViewerDriveInModal({
                   {enforceStockLimit
                     ? "Alocações consomem saldo do Chão; remoções devolvem ao Chão"
                     : "Modo livre (sem bloqueio de saldo)"}
+                </span>
+              </div>
+            )}
+
+            {!isCompartment && linkedSystem && isLinkedOpenSystem && (
+              <div
+                className="mb-3 px-4 py-2 rounded-2xl border flex flex-wrap items-center justify-between gap-2 text-[11px] shrink-0"
+                style={{
+                  backgroundColor: `${linkedSystem.color}12`,
+                  borderColor: `${linkedSystem.color}40`,
+                }}
+              >
+                <span className="text-slate-200 font-medium flex items-center gap-2">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: linkedSystem.color }}
+                  />
+                  <span>
+                    <strong>{linkedSystem.name}</strong> ({linkedSystem.code}) — Sistema Livre sem registro de saldo
+                  </span>
+                </span>
+                <span className="text-[10px] text-emerald-300 font-semibold">
+                  Lançamento direto nas posições · Alimenta o Confronto
                 </span>
               </div>
             )}

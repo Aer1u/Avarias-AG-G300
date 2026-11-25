@@ -9,6 +9,7 @@
 import React, { useMemo } from "react"
 import type { MapObject } from "../MapLibrary/types"
 import { useSystemStore } from "../Systems/useSystemStore"
+import { findSystemByRef, isOpenSystem } from "@/lib/systemVisuals"
 
 interface CompartmentOperationalCardProps {
   selectedObject: MapObject
@@ -376,61 +377,70 @@ export default function CompartmentOperationalCard({
             </span>
             <div>
               <span className={`text-[11px] font-semibold block ${stockControlMode === "vinculado_saldo" ? "text-blue-300" : "text-slate-500"}`}>
-                Vinculado ao Saldo — requer saldo no sistema
+                Vinculado a um Sistema — Saldo ou Sistema Livre
               </span>
               <span className="text-[9px] text-slate-500 leading-tight">
-                Associa este espaço a um sistema de dados do workspace para rastreio de saldos.
+                Associa este espaço a um sistema do workspace (com saldo ou Sistema Livre sem saldo prévio).
               </span>
             </div>
           </button>
         </div>
 
-        {stockControlMode === "vinculado_saldo" && (
-          <div className="pt-1.5 border-t border-blue-900/40 space-y-1.5">
-            <label className="text-[10px] text-blue-300 font-medium block">
-              Sistema de Saldo Vinculado
-            </label>
-            <select
-              value={stockSystemRef}
-              onChange={(e) => {
-                const chosenCode = e.target.value
-                onUpdateProp("stockSystemRef", chosenCode)
-                if (!chosenCode) {
-                  systems.forEach((s) => {
-                    if (s.participants?.some((p) => p.storageObjectId === selectedObject.id)) {
-                      unlinkStorageFromSystem(s.id, selectedObject.id)
-                    }
-                  })
-                  return
-                }
-                const foundSys = systems.find((s) => s.code === chosenCode || s.id === chosenCode)
-                if (foundSys) {
-                  linkStorageToSystem(foundSys.id, {
-                    storageObjectId: selectedObject.id,
-                    storageObjectLabel: String(selectedObject.label || code),
-                    storageType: selectedObject.type,
-                    role: "armazenamento",
-                    stockControlMode: "vinculado_saldo",
-                    permissions: {
-                      allowInbound: true,
-                      allowOutbound: true,
-                      allowReturnToOrigin: true,
-                    },
-                    configuredAt: new Date().toISOString(),
-                  })
-                }
-              }}
-              className="w-full bg-blue-950/60 border border-blue-700/60 rounded px-2 py-1 text-xs text-blue-100 font-semibold focus:outline-none focus:border-blue-400"
-            >
-              <option value="">— Selecionar Sistema de Saldo —</option>
-              {systems.map((s) => (
-                <option key={s.id} value={s.code}>
-                  {s.icon} {s.name} ({s.code})
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+        {stockControlMode === "vinculado_saldo" && (() => {
+          const compSys = findSystemByRef(stockSystemRef, systems)
+          const isCompOpenSys = isOpenSystem(compSys)
+          return (
+            <div className="pt-1.5 border-t border-blue-900/40 space-y-1.5">
+              <label className="text-[10px] text-blue-300 font-medium block">
+                Sistema Vinculado
+              </label>
+              <select
+                value={stockSystemRef}
+                onChange={(e) => {
+                  const chosenCode = e.target.value
+                  onUpdateProp("stockSystemRef", chosenCode)
+                  if (!chosenCode) {
+                    systems.forEach((s) => {
+                      if (s.participants?.some((p) => p.storageObjectId === selectedObject.id)) {
+                        unlinkStorageFromSystem(s.id, selectedObject.id)
+                      }
+                    })
+                    return
+                  }
+                  const foundSys = findSystemByRef(chosenCode, systems)
+                  if (foundSys) {
+                    linkStorageToSystem(foundSys.id, {
+                      storageObjectId: selectedObject.id,
+                      storageObjectLabel: String(selectedObject.label || code),
+                      storageType: selectedObject.type,
+                      role: "armazenamento",
+                      stockControlMode: isOpenSystem(foundSys) ? "livre" : "vinculado_saldo",
+                      permissions: {
+                        allowInbound: true,
+                        allowOutbound: true,
+                        allowReturnToOrigin: true,
+                      },
+                      configuredAt: new Date().toISOString(),
+                    })
+                  }
+                }}
+                className="w-full bg-blue-950/60 border border-blue-700/60 rounded px-2 py-1 text-xs text-blue-100 font-semibold focus:outline-none focus:border-blue-400"
+              >
+                <option value="">— Selecionar Sistema —</option>
+                {systems.map((s) => (
+                  <option key={s.id} value={s.code}>
+                    {s.icon} {s.name} ({s.code}) {isOpenSystem(s) ? "· Sistema Livre (Sem Saldo)" : "· Com Saldo"}
+                  </option>
+                ))}
+              </select>
+              {compSys && isCompOpenSys && (
+                <p className="text-[9px] text-emerald-300 leading-tight">
+                  Sistema Livre: sem registro de saldo — lançamento direto e identificação pela cor do sistema.
+                </p>
+              )}
+            </div>
+          )
+        })()}
       </div>
     </div>
   )

@@ -44,7 +44,14 @@ import {
 import { persistPositionItemsToSupabase, hydrateSystemItemsFromSupabase } from "@/lib/workspaceItemsSync"
 import { ensureDriveChannels } from "../MapLibrary/spatialContainment"
 import { filterItemsForDriveChannel } from "@/lib/driveOccupancy"
-import { isOpenSystem, getSystemMappedStats } from "@/lib/systemVisuals"
+import {
+  isOpenSystem,
+  getSystemMappedStats,
+  getLinkedStructuresForSystem,
+  resolveSystemForChannel,
+  findSystemByRef,
+  type LinkedStructureEntry,
+} from "@/lib/systemVisuals"
 import { cn } from "@/lib/utils"
 
 interface SystemMappingModalProps {
@@ -55,6 +62,7 @@ interface SystemMappingModalProps {
   workspaceId?: string
   levelsConfig?: DimensionConfig
   depthConfig?: DimensionConfig
+  onUpdateObject?: (id: string, partial: Partial<MapObject>) => void
 }
 
 /** Cria um MapeamentoConfig mínimo com base num MapObject para usar no DriveInGrid */
@@ -80,10 +88,12 @@ export default function SystemMappingModal({
   workspaceId,
   levelsConfig: mapLevelsConfig = DEFAULT_G300_LEVELS_CONFIG,
   depthConfig: mapDepthConfig = DEFAULT_G300_DEPTH_CONFIG,
+  onUpdateObject,
 }: SystemMappingModalProps) {
   const isOpenSys = isOpenSystem(system)
   const { updateSystem } = useSystemStore(workspaceId)
   const [selectedObjectId, setSelectedObjectId] = useState("")
+  const [selectedLinkChannelId, setSelectedLinkChannelId] = useState<string>("__ALL__")
   const [role, setRole] = useState<StorageRole>("armazenamento")
   const [stockControlMode, setStockControlMode] = useState<StockControlMode>(
     isOpenSys ? "livre" : system.defaultControlMode
@@ -140,13 +150,41 @@ export default function SystemMappingModal({
     return isOpenSys ? [] : getAvailableStocksFromOrigin(system)
   }, [system, itemsVersion, isOpenSys])
 
+  const linkedStructures = useMemo(() => {
+    void itemsVersion
+    return getLinkedStructuresForSystem(system, allObjects)
+  }, [system, allObjects, itemsVersion])
+
+  const selectedFormObject = useMemo(
+    () => allObjects.find((o) => o.id === selectedObjectId) || null,
+    [allObjects, selectedObjectId]
+  )
+
+  const selectedFormChannels = useMemo(() => {
+    if (
+      !selectedFormObject ||
+      (selectedFormObject.type !== "drive_in" && selectedFormObject.type !== "drive_through")
+    ) {
+      return []
+    }
+    return ensureDriveChannels(selectedFormObject)
+  }, [selectedFormObject])
+
   if (!isOpen) return null
 
   const participants = system.participants || []
-  const linkedIds = new Set(participants.map(p => p.storageObjectId))
-  const availableObjects = allObjects.filter(o => !linkedIds.has(o.id))
+  const linkedMapById = new Map(linkedStructures.map((e) => [e.storageObjectId, e]))
+  // Mostra objetos ainda não totalmente vinculados (incluindo Drives com canais parciais)
+  const availableObjects = allObjects.filter((o) => {
+    const existing = linkedMapById.get(o.id)
+    if (!existing) return true
+    if (existing.isDrive && existing.totalChannelsCount > existing.linkedChannels.length) {
+      return true
+    }
+    return false
+  })
 
-  // ── Vincular nova estrutura ───────────────────────────────────
+  // ── Vincular nova estrutura ou canal específico ──────────────
   const handleLinkObject = (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedObjectId) return
@@ -154,6 +192,49 @@ export default function SystemMappingModal({
     if (!obj) return
 
     const effectiveRole: StorageRole = isOpenSys && role === "origem" ? "armazenamento" : role
+    const isDriveObj = obj.type === "drive_in" || obj.type === "drive_through"
+    const channels = isDriveObj ? ensureDriveChannels(obj) : []
+    const isChannelSpecific =
+      isDriveObj && channels.length > 1 && selectedLinkChannelId && selectedLinkChannelId !== "__ALL__"
+
+    // Atualiza props do objeto/canal no mapa se onUpdateObject estiver disponível
+    if (onUpdateObject) {
+      if (isChannelSpecific) {
+        const updatedChannels = channels.map((ch) =>
+          ch.id === selectedLinkChannelId || ch.code === selectedLinkChannelId
+            ? {
+                ...ch,
+                stockControlMode: isOpenSys ? ("livre" as const) : stockControlMode,
+                stockSystemRef: system.code,
+              }
+            : ch
+        )
+        onUpdateObject(obj.id, {
+          props: {
+            ...obj.props,
+            channels: updatedChannels,
+          },
+        })
+      } else {
+        const updatedChannels = isDriveObj
+          ? channels.map((ch) => ({
+              ...ch,
+              stockControlMode: isOpenSys ? ("livre" as const) : stockControlMode,
+              stockSystemRef: system.code,
+            }))
+          : obj.props?.channels
+        onUpdateObject(obj.id, {
+          props: {
+            ...obj.props,
+            stockControlMode: isOpenSys ? "livre" : stockControlMode,
+            stockSystemRef: system.code,
+            ...(updatedChannels ? { channels: updatedChannels } : {}),
+          },
+        })
+      }
+    }
+
+    const alreadyParticipant = participants.some((p) => p.storageObjectId === obj.id)
     const newParticipant: StorageParticipantConfig = {
       storageObjectId: obj.id,
       storageObjectLabel: obj.label || obj.id,
@@ -169,7 +250,9 @@ export default function SystemMappingModal({
     }
 
     const patch: Partial<BusinessSystem> = {
-      participants: [...participants, newParticipant],
+      participants: alreadyParticipant
+        ? participants.map((p) => (p.storageObjectId === obj.id ? newParticipant : p))
+        : [...participants, newParticipant],
     }
     if (!isOpenSys && effectiveRole === "origem" && !system.originStorageId) {
       patch.originStorageId = obj.id
@@ -178,12 +261,36 @@ export default function SystemMappingModal({
 
     updateSystem(system.id, patch)
     setSelectedObjectId("")
+    setSelectedLinkChannelId("__ALL__")
   }
 
   const handleUnlink = (storageObjectId: string) => {
     updateSystem(system.id, {
       participants: participants.filter(p => p.storageObjectId !== storageObjectId),
     })
+
+    if (onUpdateObject) {
+      const obj = allObjects.find((o) => o.id === storageObjectId)
+      if (obj) {
+        const nextProps = { ...obj.props }
+        if (findSystemByRef(nextProps.stockSystemRef as string | undefined, [system])) {
+          nextProps.stockSystemRef = ""
+          if (!isOpenSys) {
+            nextProps.stockControlMode = "livre"
+          }
+        }
+        if (Array.isArray(nextProps.channels)) {
+          nextProps.channels = (nextProps.channels as Array<Record<string, unknown>>).map((ch) => {
+            if (findSystemByRef(ch?.stockSystemRef as string | undefined, [system])) {
+              return { ...ch, stockSystemRef: "", stockControlMode: undefined }
+            }
+            return ch
+          })
+        }
+        onUpdateObject(obj.id, { props: nextProps })
+      }
+    }
+
     if (inspectingParticipant?.storageObjectId === storageObjectId) {
       setInspectingParticipant(null)
       setInspectingObject(null)
@@ -192,6 +299,8 @@ export default function SystemMappingModal({
 
   const handleToggleControlMode = (storageObjectId: string) => {
     if (isOpenSys) return
+    const existing = participants.find((p) => p.storageObjectId === storageObjectId)
+    if (!existing) return
     updateSystem(system.id, {
       participants: participants.map(p => {
         if (p.storageObjectId !== storageObjectId) return p
@@ -203,13 +312,26 @@ export default function SystemMappingModal({
     })
   }
 
-  // ── Inspecionar canal (abre DriveInGrid ou Relação do Compartimento) ──
-  const handleInspect = (p: StorageParticipantConfig) => {
-    const obj = allObjects.find(o => o.id === p.storageObjectId)
+  // ── Inspecionar estrutura ou canal (abre DriveInGrid ou Relação do Compartimento) ──
+  const handleInspectEntry = (entry: LinkedStructureEntry, channelIdx: number = 0) => {
+    const existingPart = participants.find((p) => p.storageObjectId === entry.storageObjectId)
+    const fallbackPart: StorageParticipantConfig = existingPart || {
+      storageObjectId: entry.storageObjectId,
+      storageObjectLabel: entry.storageObjectLabel,
+      storageType: entry.storageType,
+      role: entry.role,
+      stockControlMode: entry.stockControlMode,
+      permissions: {
+        allowInbound: true,
+        allowOutbound: true,
+        allowReturnToOrigin: !isOpenSys && !entry.isOrigin,
+      },
+      configuredAt: new Date().toISOString(),
+    }
     setBalanceError("")
-    setInspectingParticipant(p)
-    setInspectingObject(obj || null)
-    setActiveChannelIndex(0)
+    setInspectingParticipant(fallbackPart)
+    setInspectingObject(entry.object || null)
+    setActiveChannelIndex(Math.max(0, channelIdx))
     setIsEditModeActive(false)
   }
 
@@ -501,7 +623,7 @@ export default function SystemMappingModal({
                       : "bg-slate-800 border-slate-700 text-slate-400"
                   )}>
                     {isOpenSys
-                      ? "Sistema Aberto (Livre)"
+                      ? "Sistema Livre (Sem Saldo)"
                       : inspectingParticipant.stockControlMode === "vinculado_saldo"
                       ? "Saldo Obrigatório"
                       : "Livre"}
@@ -577,19 +699,35 @@ export default function SystemMappingModal({
                   </span>
                   {driveChannels.map((ch, idx) => {
                     const active = idx === Math.min(activeChannelIndex, driveChannels.length - 1)
+                    const isChannelLinked =
+                      inspectingObject &&
+                      resolveSystemForChannel(inspectingObject, ch, [system])?.id === system.id
                     return (
                       <button
                         key={ch.id || idx}
                         type="button"
                         onClick={() => setActiveChannelIndex(idx)}
                         className={cn(
-                          "px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors",
+                          "px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors flex items-center gap-1.5",
                           active
                             ? "bg-blue-600 border-blue-500 text-white shadow-sm"
-                            : "bg-slate-800/80 border-slate-700 text-slate-400 hover:text-white"
+                            : isChannelLinked
+                            ? "bg-slate-800/90 border-slate-600 text-slate-200 hover:text-white"
+                            : "bg-slate-900/60 border-slate-800 text-slate-500 hover:text-slate-300"
                         )}
+                        title={
+                          isChannelLinked
+                            ? `Vinculado ao sistema ${system.code}`
+                            : "Canal não vinculado a este sistema"
+                        }
                       >
-                        {ch.name || ch.code || `Canal ${idx + 1}`}
+                        {isChannelLinked && (
+                          <span
+                            className="w-2 h-2 rounded-full shrink-0"
+                            style={{ backgroundColor: system.color }}
+                          />
+                        )}
+                        <span>{ch.name || ch.code || `Canal ${idx + 1}`}</span>
                       </button>
                     )
                   })}
@@ -645,13 +783,16 @@ export default function SystemMappingModal({
                   Vincular Nova Estrutura do Mapa
                 </span>
 
-                <div className={`grid grid-cols-1 ${isOpenSys ? "sm:grid-cols-2" : "sm:grid-cols-3"} gap-2.5`}>
+                <div className={`grid grid-cols-1 ${selectedFormChannels.length > 1 ? "sm:grid-cols-3" : isOpenSys ? "sm:grid-cols-2" : "sm:grid-cols-3"} gap-2.5`}>
                   <div>
                     <label className="text-[10px] text-slate-400 block mb-1">Selecionar Estrutura *</label>
                     <select
                       required
                       value={selectedObjectId}
-                      onChange={e => setSelectedObjectId(e.target.value)}
+                      onChange={e => {
+                        setSelectedObjectId(e.target.value)
+                        setSelectedLinkChannelId("__ALL__")
+                      }}
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
                     >
                       <option value="">— Escolha um objeto do mapa —</option>
@@ -662,6 +803,24 @@ export default function SystemMappingModal({
                       ))}
                     </select>
                   </div>
+
+                  {selectedFormChannels.length > 1 && (
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">Canal do Drive-In</label>
+                      <select
+                        value={selectedLinkChannelId}
+                        onChange={e => setSelectedLinkChannelId(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
+                      >
+                        <option value="__ALL__">Todos os canais ({selectedFormChannels.length})</option>
+                        {selectedFormChannels.map((ch) => (
+                          <option key={ch.id} value={ch.id}>
+                            📥 {ch.name || ch.code} (Vão {ch.laneIndex})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   <div>
                     <label className="text-[10px] text-slate-400 block mb-1">Papel Operacional</label>
@@ -710,7 +869,7 @@ export default function SystemMappingModal({
                 {isOpenSys ? (
                   <div className="flex flex-wrap items-center gap-3 font-mono">
                     <span className="text-emerald-300 font-bold">
-                      Sistema Aberto
+                      Sistema Livre (Sem Registro de Saldo)
                     </span>
                     <span className="text-slate-600">|</span>
                     <span className="text-slate-200">
@@ -738,65 +897,76 @@ export default function SystemMappingModal({
                   </div>
                 )}
                 <span className="text-[10px] text-slate-500">
-                  Clique em uma posição para gerenciar ou mapear itens
+                  Clique em uma estrutura ou canal para gerenciar ou mapear itens
                 </span>
               </div>
 
-              {/* Lista de Participantes */}
+              {/* Lista de Estruturas e Canais Vinculados */}
               <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-2">
                 <div className="flex items-center justify-between pb-1">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                     <Layers size={13} className="text-amber-400" />
-                    <span>Estruturas Vinculadas ({participants.length})</span>
+                    <span>Estruturas & Canais Vinculados ({linkedStructures.length})</span>
                   </span>
                   <span className="text-[10px] text-slate-500">
-                    Clique no cartão para ver o canal (G300-style)
+                    Clique no cartão ou em um canal para abrir o Grid (G300-style)
                   </span>
                 </div>
 
-                {participants.length === 0 ? (
+                {linkedStructures.length === 0 ? (
                   <div className="py-12 text-center text-slate-500 text-xs bg-slate-950/30 rounded-xl border border-dashed border-slate-800">
                     <Layers size={28} className="mx-auto mb-2 text-slate-600" />
-                    <p>Nenhuma estrutura física vinculada.</p>
+                    <p>Nenhuma estrutura física ou canal vinculado.</p>
                     <p className="text-[11px] text-slate-600 mt-0.5">
-                      Selecione uma estrutura acima para mapeá-la.
+                      Selecione uma estrutura acima ou vincule pelo painel lateral do Drive/Canal.
                     </p>
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {participants.map(p => {
-                      const obj = allObjects.find(o => o.id === p.storageObjectId)
-                      const isComp = obj?.type === "compartment" || p.storageType === "compartment"
+                    {linkedStructures.map((entry) => {
+                      const obj = entry.object
                       const lvlCount = Number(obj?.props?.levels) || 4
                       const depth = Number(obj?.props?.depth) || 4
-                      const posTotal = balanceSnapshot.positionTotalsByObjectId.get(p.storageObjectId) || 0
-                      const isOriginCard = originObjectId === p.storageObjectId
+                      const posTotal = entry.totalUnits
+                      const firstLinkedIdx =
+                        entry.linkedChannels.length > 0
+                          ? Math.max(0, entry.linkedChannels[0].laneIndex - 1)
+                          : 0
+
                       return (
                         <div
-                          key={p.storageObjectId}
-                          className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl hover:border-blue-700/60 hover:bg-slate-900/60 transition-all cursor-pointer group"
-                          onClick={() => handleInspect(p)}
+                          key={entry.storageObjectId}
+                          className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl hover:border-blue-700/60 hover:bg-slate-900/60 transition-all cursor-pointer group space-y-2.5"
+                          onClick={() => handleInspectEntry(entry, firstLinkedIdx)}
                         >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <span className="w-9 h-9 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center text-base shadow group-hover:border-blue-600/60 transition-colors">
-                                {isComp ? "📦" : p.role === "origem" ? "📍" : p.role === "quarentena" ? "🛑" : "📥"}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span
+                                className="w-9 h-9 rounded-lg bg-slate-900 border flex items-center justify-center text-base shadow shrink-0 transition-colors"
+                                style={{ borderColor: `${system.color}70` }}
+                              >
+                                {entry.isCompartment ? "📦" : entry.isOrigin ? "📍" : entry.role === "quarentena" ? "🛑" : "📥"}
                               </span>
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <strong className="text-white text-xs">{p.storageObjectLabel}</strong>
-                                  <span className="text-[9px] text-slate-500 font-mono">({p.storageType})</span>
-                                  {isOriginCard && (
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <strong className="text-white text-xs truncate">{entry.storageObjectLabel}</strong>
+                                  <span className="text-[9px] text-slate-500 font-mono">({entry.storageType})</span>
+                                  {entry.isOrigin && (
                                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
                                       ORIGEM / CHÃO
                                     </span>
                                   )}
+                                  {entry.isDrive && entry.totalChannelsCount > 0 && (
+                                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800/90 text-slate-300 border border-slate-700">
+                                      {entry.linkedChannels.length}/{entry.totalChannelsCount} canal(is)
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-400">
-                                  <span>Papel: <strong>{p.role}</strong></span>
+                                  <span>Papel: <strong>{entry.role}</strong></span>
                                   <span>·</span>
                                   <span>
-                                    {isComp
+                                    {entry.isCompartment
                                       ? "Armazenamento Aberto (sem nível / prof.)"
                                       : `${lvlCount} nível(is) × ${depth} prof.`}
                                   </span>
@@ -804,34 +974,36 @@ export default function SystemMappingModal({
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 shrink-0">
                               <span className="px-2 py-0.5 rounded-lg bg-slate-900 border border-slate-700 text-[10px] font-mono font-bold text-emerald-300">
                                 {posTotal} un.
                               </span>
 
                               {isOpenSys ? (
                                 <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold border bg-emerald-950/60 border-emerald-700/60 text-emerald-300">
-                                  Livre (Aberto)
+                                  Livre (Sem Saldo)
                                 </span>
                               ) : (
                                 <button
-                                  onClick={e => { e.stopPropagation(); handleToggleControlMode(p.storageObjectId) }}
+                                  type="button"
+                                  onClick={e => { e.stopPropagation(); handleToggleControlMode(entry.storageObjectId) }}
                                   className={cn(
                                     "px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-colors flex items-center gap-1",
-                                    p.stockControlMode === "vinculado_saldo"
+                                    entry.stockControlMode === "vinculado_saldo"
                                       ? "bg-blue-950/70 border-blue-700/60 text-blue-300 hover:bg-blue-900"
                                       : "bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700"
                                   )}
                                   title="Clique para alternar o modo de controle"
                                 >
-                                  {p.stockControlMode === "vinculado_saldo" ? (
+                                  {entry.stockControlMode === "vinculado_saldo" ? (
                                     <><Lock size={9} /> Saldo Obrig.</>
                                   ) : "Livre"}
                                 </button>
                               )}
 
                               <button
-                                onClick={e => { e.stopPropagation(); handleUnlink(p.storageObjectId) }}
+                                type="button"
+                                onClick={e => { e.stopPropagation(); handleUnlink(entry.storageObjectId) }}
                                 className="p-1 rounded-lg text-slate-600 hover:text-rose-400 hover:bg-rose-950/40 transition-colors"
                                 title="Desvincular"
                               >
@@ -839,10 +1011,48 @@ export default function SystemMappingModal({
                               </button>
 
                               <span className="text-[10px] text-blue-400 font-semibold opacity-0 group-hover:opacity-100 transition-opacity pr-1">
-                                {isComp ? "Ver relação →" : "Ver canal →"}
+                                {entry.isCompartment ? "Ver relação →" : "Ver canal →"}
                               </span>
                             </div>
                           </div>
+
+                          {/* Canais individuais vinculados neste Drive-In */}
+                          {entry.isDrive && entry.linkedChannels.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-800/70">
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 mr-1">
+                                Canais vinculados:
+                              </span>
+                              {entry.linkedChannels.map((ch) => (
+                                <button
+                                  key={ch.id}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleInspectEntry(entry, Math.max(0, ch.laneIndex - 1))
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700/80 hover:border-blue-500/60 text-[10px] font-mono text-slate-200 transition-colors"
+                                  title={`Abrir ${ch.name || ch.code} no Grid`}
+                                >
+                                  <span
+                                    className="w-2 h-2 rounded-full shrink-0"
+                                    style={{ backgroundColor: system.color }}
+                                  />
+                                  <span className="font-bold">{ch.name || ch.code}</span>
+                                  {ch.code && ch.name !== ch.code && (
+                                    <span className="text-slate-500">({ch.code})</span>
+                                  )}
+                                  <span className="text-slate-400">
+                                    · {ch.occupiedSlots}/{ch.levels * ch.depth} pos.
+                                  </span>
+                                  {ch.totalUnits > 0 && (
+                                    <span className="text-emerald-400 font-bold">
+                                      · {ch.totalUnits} un.
+                                    </span>
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )
                     })}
@@ -855,7 +1065,7 @@ export default function SystemMappingModal({
 
         {/* Footer */}
         <div className="p-3 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between text-xs text-slate-400 shrink-0">
-          <span>{participants.length} estrutura(s) mapeada(s) · Sistema {system.code}</span>
+          <span>{linkedStructures.length} estrutura(s) mapeada(s) · Sistema {system.code}</span>
           <button
             onClick={onClose}
             className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold"
