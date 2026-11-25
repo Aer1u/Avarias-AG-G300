@@ -431,9 +431,12 @@ function buildDriveInGeometry(
   const systems = options?.systems || []
   const activeFilterId = options?.activeSystemFilterId || null
   const driveObjSys = resolveSystemForObject(spatial.raw, systems)
-  const anyLaneMatchedFilter =
-    !activeFilterId ||
-    channels.some((c) => resolveSystemForChannel(spatial.raw, c, systems)?.id === activeFilterId)
+  const laneSystems = Array.from({ length: lanes }, (_, l) => {
+    const chan = channels[l] || channels.find((c) => c.laneIndex === l + 1)
+    return resolveSystemForChannel(spatial.raw, chan, systems)
+  })
+  const laneMatchedFlags = laneSystems.map((s) => !activeFilterId || s?.id === activeFilterId)
+  const anyLaneMatchedFilter = laneMatchedFlags.some(Boolean)
 
   const driveColumnMat = getMaterial(`drive_col_indigo_${modeKey}`, () =>
     new THREE.MeshStandardMaterial({ color: new THREE.Color(readOnly ? "#3b82f6" : "#3730a3"), roughness: 0.35, metalness: 0.65 })
@@ -473,18 +476,29 @@ function buildDriveInGeometry(
     })
   )
 
+  const dimmedGrayMat = getMaterial(`drive_dimmed_gray_${modeKey}`, () =>
+    new THREE.MeshStandardMaterial({
+      color: new THREE.Color("#475569"),
+      roughness: 0.8,
+      metalness: 0.15,
+      transparent: true,
+      opacity: 0.28,
+    })
+  )
+  const dimmedFloorMat = getMaterial(`drive_dimmed_floor_${modeKey}`, () =>
+    new THREE.MeshBasicMaterial({
+      color: new THREE.Color("#334155"),
+      transparent: true,
+      opacity: 0.26,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    })
+  )
+
   const colDim = 0.08
   const colGeo = new THREE.BoxGeometry(colDim, colDim, height)
   const effectiveColMat = !anyLaneMatchedFilter
-    ? getMaterial(`drive_col_dimmed_${modeKey}`, () =>
-        new THREE.MeshStandardMaterial({
-          color: new THREE.Color("#334155"),
-          roughness: 0.6,
-          metalness: 0.3,
-          transparent: true,
-          opacity: 0.25,
-        })
-      )
+    ? dimmedGrayMat
     : driveObjSys
     ? getMaterial(`drive_col_sys_${normalizeHexColor(driveObjSys.color)}_${modeKey}`, () =>
         new THREE.MeshStandardMaterial({
@@ -498,20 +512,25 @@ function buildDriveInGeometry(
   // 1. Montantes Estruturais Verticais (colunas nas divisas dos vãos)
   for (let i = 0; i <= lanes; i++) {
     const colX = -width / 2 + i * laneWidth
+    const leftMatched = i > 0 && laneMatchedFlags[i - 1]
+    const rightMatched = i < lanes && laneMatchedFlags[i]
+    const isColLineActive = !activeFilterId || leftMatched || rightMatched
+    const colLineMat = isColLineActive ? effectiveColMat : dimmedGrayMat
+    const topLineMat = isColLineActive ? rearBeamMat : dimmedGrayMat
 
     for (let d = 0; d <= depths; d++) {
       const yPos = -depth / 2 + (depth / Math.max(1, depths)) * d
 
-      const colMesh = new THREE.Mesh(colGeo, effectiveColMat)
+      const colMesh = new THREE.Mesh(colGeo, colLineMat)
       colMesh.position.set(colX, yPos, height / 2)
-      colMesh.castShadow = true
+      colMesh.castShadow = isColLineActive
       colMesh.userData = { columnLineIndex: i }
       group.add(colMesh)
     }
 
     // Travessa longitudinal superior conectando as colunas da entrada ao fundo
     const longTopGeo = new THREE.BoxGeometry(0.05, depth, 0.05)
-    const longTopMesh = new THREE.Mesh(longTopGeo, anyLaneMatchedFilter ? rearBeamMat : effectiveColMat)
+    const longTopMesh = new THREE.Mesh(longTopGeo, topLineMat)
     longTopMesh.position.set(colX, 0, height)
     longTopMesh.userData = { columnLineIndex: i }
     group.add(longTopMesh)
@@ -572,12 +591,12 @@ function buildDriveInGeometry(
     const chanName = chan?.name || chanCode
     const isChanBlocked = chan?.status === "bloqueado"
 
-    const chanSys = resolveSystemForChannel(spatial.raw, chan, systems)
-    const isLaneDimmed = Boolean(activeFilterId && chanSys?.id !== activeFilterId)
+    const chanSys = laneSystems[l]
+    const isLaneDimmed = Boolean(activeFilterId && !laneMatchedFlags[l])
     const chanSysHex = chanSys ? normalizeHexColor(chanSys.color) : null
 
     const laneRailMat = isLaneDimmed
-      ? effectiveColMat
+      ? dimmedGrayMat
       : chanSysHex
       ? getMaterial(`drive_rail_sys_${chanSysHex}_${modeKey}`, () =>
           new THREE.MeshStandardMaterial({
@@ -589,7 +608,7 @@ function buildDriveInGeometry(
       : driveRailMat
 
     const laneBeamMat = isLaneDimmed
-      ? effectiveColMat
+      ? dimmedGrayMat
       : chanSysHex
       ? getMaterial(`drive_beam_sys_${chanSysHex}_${modeKey}`, () =>
           new THREE.MeshStandardMaterial({
@@ -602,10 +621,10 @@ function buildDriveInGeometry(
         )
       : rearBeamMat
 
-    const laneBraceMat = isLaneDimmed ? effectiveColMat : frameBraceMat
+    const laneBraceMat = isLaneDimmed ? dimmedGrayMat : frameBraceMat
 
     const laneArrowMat = isLaneDimmed
-      ? effectiveColMat
+      ? dimmedGrayMat
       : isChanBlocked
       ? entryArrowBlockedMat
       : chanSysHex
@@ -641,8 +660,13 @@ function buildDriveInGeometry(
       systemCode: chanSys?.code || null,
     }
 
-    // Faixa de identificação do sistema no piso do canal (visível no Bird's-Eye & Full Top)
-    if (chanSysHex && !isLaneDimmed) {
+    // Faixa de identificação do sistema (ou faixa cinza desabilitada quando filtrado)
+    if (isLaneDimmed) {
+      const floorStrip = new THREE.Mesh(laneFloorStripGeo, dimmedFloorMat)
+      floorStrip.position.set(laneCenterX, 0, 0.018)
+      floorStrip.receiveShadow = false
+      laneGroup.add(floorStrip)
+    } else if (chanSysHex) {
       const floorStripMat = getMaterial(
         `drive_sys_floor_${chanSysHex}_${activeFilterId ? "hi" : "std"}_${modeKey}`,
         () =>
@@ -769,11 +793,11 @@ function buildDriveInGeometry(
       const posZ = lvl === 1 ? 0.02 : railLz + railThick / 2
 
       const palletMeshGroup = new THREE.Group()
-      const deck = new THREE.Mesh(pDeckGeo, isLaneDimmed ? effectiveColMat : testPalletWoodMat)
+      const deck = new THREE.Mesh(pDeckGeo, isLaneDimmed ? dimmedGrayMat : testPalletWoodMat)
       deck.position.set(0, 0, baseH / 2)
       palletMeshGroup.add(deck)
 
-      const load = new THREE.Mesh(pLoadGeo, isLaneDimmed ? effectiveColMat : testPalletBoxMat)
+      const load = new THREE.Mesh(pLoadGeo, isLaneDimmed ? dimmedGrayMat : testPalletBoxMat)
       load.position.set(0, 0, baseH + loadH / 2)
       load.castShadow = !isLaneDimmed
       palletMeshGroup.add(load)
@@ -1041,12 +1065,24 @@ function buildCompartmentGeometry(
     const phBase = 0.12
     const phLoad = 0.95
 
-    const woodMat = getMaterial("pallet_wood", () =>
-      new THREE.MeshStandardMaterial({ color: new THREE.Color("#b45309"), roughness: 0.85, metalness: 0.05 })
-    )
-    const boxMat = getMaterial("pallet_load_kraft", () =>
-      new THREE.MeshStandardMaterial({ color: new THREE.Color("#d97706"), roughness: 0.75, metalness: 0.05 })
-    )
+    const woodMat = isDimmed
+      ? getMaterial(`pallet_dimmed_gray_${modeKey}`, () =>
+          new THREE.MeshStandardMaterial({
+            color: new THREE.Color("#475569"),
+            roughness: 0.8,
+            metalness: 0.15,
+            transparent: true,
+            opacity: 0.28,
+          })
+        )
+      : getMaterial("pallet_wood", () =>
+          new THREE.MeshStandardMaterial({ color: new THREE.Color("#b45309"), roughness: 0.85, metalness: 0.05 })
+        )
+    const boxMat = isDimmed
+      ? woodMat
+      : getMaterial("pallet_load_kraft", () =>
+          new THREE.MeshStandardMaterial({ color: new THREE.Color("#d97706"), roughness: 0.75, metalness: 0.05 })
+        )
     const deckGeo = new THREE.BoxGeometry(pw, pd, phBase)
     const loadGeo = new THREE.BoxGeometry(pw * 0.92, pd * 0.92, phLoad)
 
@@ -1062,7 +1098,7 @@ function buildCompartmentGeometry(
 
       const load = new THREE.Mesh(loadGeo, boxMat)
       load.position.set(px, py, padH + phBase + phLoad / 2)
-      load.castShadow = true
+      load.castShadow = !isDimmed
       group.add(load)
     }
   }

@@ -82,6 +82,50 @@ function drawSystemBadgeOnRect(
   }
 }
 
+function drawDisabledGrayOverlay(
+  group: Konva.Group,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  cornerRadius: number = 1.5
+) {
+  group.add(
+    new Konva.Rect({
+      x,
+      y,
+      width: w,
+      height: h,
+      fill: "rgba(30, 41, 59, 0.84)",
+      stroke: "#475569",
+      strokeWidth: 1,
+      cornerRadius,
+      listening: false,
+    })
+  )
+
+  // Hachura diagonal discreta em cinza para reforçar aparência de desabilitado
+  if (w >= 8 && h >= 12) {
+    const step = Math.max(12, Math.min(22, Math.round(Math.max(w, h) / 5)))
+    for (let offset = -h; offset < w; offset += step) {
+      const x1 = Math.max(x + 1, x + offset)
+      const y1 = y + Math.max(1, x1 - (x + offset))
+      const x2 = Math.min(x + w - 1, x + offset + h)
+      const y2 = y + Math.min(h - 1, x2 - (x + offset))
+      if (x2 > x1 + 1 && y2 > y1 + 1) {
+        group.add(
+          new Konva.Line({
+            points: [x1, y1, x2, y2],
+            stroke: "rgba(100, 116, 139, 0.26)",
+            strokeWidth: 1,
+            listening: false,
+          })
+        )
+      }
+    }
+  }
+}
+
 function applyObjectSystemOverlay(
   group: Konva.Group,
   obj: MapObject,
@@ -93,6 +137,11 @@ function applyObjectSystemOverlay(
   const filterId = options?.activeSystemFilterId
   const sys = resolveSystemForObject(obj, systems)
 
+  if (filterId && sys?.id !== filterId) {
+    drawDisabledGrayOverlay(group, 0, 0, w, h, 2)
+    return
+  }
+
   if (sys) {
     const sysColor = normalizeHexColor(sys.color)
     const isMatched = !filterId || sys.id === filterId
@@ -102,7 +151,7 @@ function applyObjectSystemOverlay(
         y: 0,
         width: w,
         height: h,
-        fill: hexToRgba(sysColor, isMatched ? 0.16 : 0.05),
+        fill: hexToRgba(sysColor, 0.16),
         stroke: sysColor,
         strokeWidth: filterId && isMatched ? 3 : 2.2,
         cornerRadius: 2,
@@ -110,29 +159,6 @@ function applyObjectSystemOverlay(
       })
     )
     drawSystemBadgeOnRect(group, 0, 0, w, h, sys.code, sysColor, Boolean(filterId && isMatched))
-    if (filterId && !isMatched) {
-      group.add(
-        new Konva.Rect({
-          x: 0,
-          y: 0,
-          width: w,
-          height: h,
-          fill: "rgba(2, 6, 23, 0.72)",
-          listening: false,
-        })
-      )
-    }
-  } else if (filterId) {
-    group.add(
-      new Konva.Rect({
-        x: 0,
-        y: 0,
-        width: w,
-        height: h,
-        fill: "rgba(2, 6, 23, 0.72)",
-        listening: false,
-      })
-    )
   }
 }
 
@@ -279,19 +305,36 @@ const drive_in: MapElementDefinition = {
     const isAllBlocked = rawChannels.length > 0 && rawChannels.every((c) => c?.status === "bloqueado")
     const systemsList = options?.systems || []
     const activeFilterId = options?.activeSystemFilterId || null
+    const laneSystems = Array.from({ length: lanes }, (_, l) =>
+      resolveSystemForChannel(obj, rawChannels[l], systemsList)
+    )
+    const laneMatchedFlags = laneSystems.map((s) => !activeFilterId || s?.id === activeFilterId)
+    const anyLaneMatched = laneMatchedFlags.some(Boolean)
 
     // ── MODO VISUALIZADOR (LEITURA): Estrutura Industrial Azul & Laranja Limpa ─────
     if (readOnly) {
-      // Fundo transparente (ou destaque sutil em vermelho somente se todo o bloco estiver bloqueado)
+      // Fundo transparente (ou cinza desabilitado se nenhum canal do bloco pertencer ao filtro)
       group.add(
         new Konva.Rect({
           x: 0,
           y: 0,
           width: w,
           height: h,
-          fill: isAllBlocked ? "rgba(239, 68, 68, 0.16)" : "transparent",
-          stroke: isAllBlocked ? "#ef4444" : "#60a5fa",
-          strokeWidth: 1.4,
+          fill:
+            activeFilterId && !anyLaneMatched
+              ? "rgba(30, 41, 59, 0.45)"
+              : isAllBlocked && (!activeFilterId || anyLaneMatched)
+              ? "rgba(239, 68, 68, 0.16)"
+              : "transparent",
+          stroke:
+            activeFilterId && !anyLaneMatched
+              ? "#475569"
+              : activeFilterId
+              ? "rgba(71, 85, 105, 0.55)"
+              : isAllBlocked
+              ? "#ef4444"
+              : "#60a5fa",
+          strokeWidth: activeFilterId && !anyLaneMatched ? 1.1 : 1.4,
           cornerRadius: 2,
         })
       )
@@ -306,8 +349,9 @@ const drive_in: MapElementDefinition = {
         const centerX = cx + laneW / 2
         const chan = rawChannels[l]
         const isChanBlocked = chan?.status === "bloqueado"
+        const isLaneDimmed = Boolean(activeFilterId && !laneMatchedFlags[l])
 
-        if (!isAllBlocked && isChanBlocked) {
+        if (!isLaneDimmed && !isAllBlocked && isChanBlocked) {
           group.add(
             new Konva.Rect({
               x: cx,
@@ -320,17 +364,17 @@ const drive_in: MapElementDefinition = {
           )
         }
 
-        // Trilhos longitudinais discretos em azul nas laterais internas do vão + ponteiras laranjas na entrada
+        // Trilhos longitudinais discretos (cinza se desabilitado pelo filtro)
         if (laneW > railInset * 3) {
-          const railColor = isChanBlocked ? "#f87171" : "#38bdf8"
-          const tipColor = isChanBlocked ? "#ef4444" : "#f97316"
+          const railColor = isLaneDimmed ? "#475569" : isChanBlocked ? "#f87171" : "#38bdf8"
+          const tipColor = isLaneDimmed ? "#475569" : isChanBlocked ? "#ef4444" : "#f97316"
 
           group.add(
             new Konva.Line({
               points: [cx + railInset, 3, cx + railInset, h - 3],
               stroke: railColor,
               strokeWidth: 0.9,
-              opacity: 0.45,
+              opacity: isLaneDimmed ? 0.3 : 0.45,
               listening: false,
             })
           )
@@ -339,13 +383,13 @@ const drive_in: MapElementDefinition = {
               points: [cx + laneW - railInset, 3, cx + laneW - railInset, h - 3],
               stroke: railColor,
               strokeWidth: 0.9,
-              opacity: 0.45,
+              opacity: isLaneDimmed ? 0.3 : 0.45,
               listening: false,
             })
           )
 
-          // Pequenas guias de entrada laranjas nas pontas dos trilhos (protetores de embocadura)
-          if (h > tipLen + 6) {
+          // Pequenas guias de entrada laranjas nas pontas dos trilhos (apenas nos canais ativos)
+          if (!isLaneDimmed && h > tipLen + 6) {
             group.add(
               new Konva.Line({
                 points: [cx + railInset, h - 2, cx + railInset, h - 2 - tipLen],
@@ -371,7 +415,7 @@ const drive_in: MapElementDefinition = {
 
         // Seta indicativa na entrada do canal
         if (h > 14 && laneW > 10) {
-          const arrowColor = isChanBlocked ? "#f87171" : "#38bdf8"
+          const arrowColor = isLaneDimmed ? "#475569" : isChanBlocked ? "#f87171" : "#38bdf8"
           group.add(
             new Konva.Arrow({
               points: [centerX, h - 2.5, centerX, h - 2.5 - arrowLen],
@@ -380,21 +424,22 @@ const drive_in: MapElementDefinition = {
               fill: arrowColor,
               stroke: arrowColor,
               strokeWidth: 1.4,
-              opacity: 0.92,
+              opacity: isLaneDimmed ? 0.3 : 0.92,
               listening: false,
             })
           )
         }
       }
 
-      // Divisórias metálicas entre canais (azul-aço)
+      // Divisórias metálicas entre canais
       for (let i = 1; i < lanes; i++) {
+        const dividerActive = !activeFilterId || laneMatchedFlags[i - 1] || laneMatchedFlags[i]
         group.add(
           new Konva.Line({
             points: [i * laneW, 0, i * laneW, h],
-            stroke: isAllBlocked ? "#ef4444" : "#3b82f6",
-            strokeWidth: 1.25,
-            opacity: 0.8,
+            stroke: !dividerActive ? "#475569" : isAllBlocked ? "#ef4444" : "#3b82f6",
+            strokeWidth: dividerActive ? 1.25 : 0.9,
+            opacity: dividerActive ? 0.8 : 0.4,
             listening: false,
           })
         )
@@ -405,7 +450,11 @@ const drive_in: MapElementDefinition = {
       const postYPositions = h > 55 ? [0, Math.round(h / 2 - postSize / 2), Math.max(0, h - postSize)] : [0, Math.max(0, h - postSize)]
       for (let i = 0; i <= lanes; i++) {
         const px = Math.min(w - postSize, Math.max(0, i * laneW - postSize / 2))
-        const postFill = isAllBlocked ? "#fca5a5" : "#3b82f6"
+        const colLineActive =
+          !activeFilterId ||
+          (i > 0 && laneMatchedFlags[i - 1]) ||
+          (i < lanes && laneMatchedFlags[i])
+        const postFill = !colLineActive ? "#475569" : isAllBlocked ? "#fca5a5" : "#3b82f6"
         postYPositions.forEach((py, idx) => {
           group.add(
             new Konva.Rect({
@@ -414,12 +463,13 @@ const drive_in: MapElementDefinition = {
               width: postSize,
               height: postSize,
               fill: postFill,
+              opacity: colLineActive ? 1 : 0.45,
               cornerRadius: 0.5,
               listening: false,
             })
           )
           // Pequeno detalhe laranja de proteção de coluna na entrada
-          if (idx === postYPositions.length - 1 && !isAllBlocked) {
+          if (colLineActive && idx === postYPositions.length - 1 && !isAllBlocked) {
             group.add(
               new Konva.Rect({
                 x: px,
@@ -440,6 +490,7 @@ const drive_in: MapElementDefinition = {
         if (chan && chan.name && !chan.name.startsWith("Canal ")) {
           const cx = i * laneW
           const isChanBlocked = chan?.status === "bloqueado"
+          const isLaneDimmed = Boolean(activeFilterId && !laneMatchedFlags[i])
           group.add(
             new Konva.Text({
               x: cx + 1,
@@ -450,7 +501,8 @@ const drive_in: MapElementDefinition = {
               fontSize: 7,
               fontFamily: "sans-serif",
               fontStyle: "bold",
-              fill: isChanBlocked ? "#fca5a5" : "#e2e8f0",
+              fill: isLaneDimmed ? "#64748b" : isChanBlocked ? "#fca5a5" : "#e2e8f0",
+              opacity: isLaneDimmed ? 0.5 : 1,
               listening: false,
             })
           )
@@ -467,6 +519,7 @@ const drive_in: MapElementDefinition = {
           const hasAtDepth = occupiedList.some((p) => p.depth === d + 1)
           if (!hasAtDepth) continue
 
+          const isLaneDimmed = Boolean(activeFilterId && !laneMatchedFlags[l])
           const slotX = l * laneW
           const marginX = Math.max(2, laneW * 0.18)
           const marginY = Math.max(2, slotH * 0.12)
@@ -478,8 +531,8 @@ const drive_in: MapElementDefinition = {
               y: slotY + marginY,
               width: pw,
               height: ph,
-              fill: "rgba(245, 158, 11, 0.45)",
-              stroke: "#fbbf24",
+              fill: isLaneDimmed ? "rgba(71, 85, 105, 0.35)" : "rgba(245, 158, 11, 0.45)",
+              stroke: isLaneDimmed ? "#64748b" : "#fbbf24",
               strokeWidth: 1,
               cornerRadius: 1.5,
               listening: false,
@@ -491,9 +544,13 @@ const drive_in: MapElementDefinition = {
       // Identificação Visual por Sistema em cada Canal do Drive-In (Modo Visualizador)
       for (let l = 0; l < lanes; l++) {
         const cx = l * laneW
-        const chan = rawChannels[l]
-        const chanSys = resolveSystemForChannel(obj, chan, systemsList)
-        const isMatched = !activeFilterId || chanSys?.id === activeFilterId
+        const chanSys = laneSystems[l]
+        const isMatched = laneMatchedFlags[l]
+
+        if (activeFilterId && !isMatched) {
+          drawDisabledGrayOverlay(group, cx, 0, laneW, h, 1.5)
+          continue
+        }
 
         if (chanSys) {
           const sysColor = normalizeHexColor(chanSys.color)
@@ -503,9 +560,9 @@ const drive_in: MapElementDefinition = {
               y: 0.5,
               width: Math.max(2, laneW - 1),
               height: Math.max(2, h - 1),
-              fill: hexToRgba(sysColor, isMatched ? 0.16 : 0.05),
+              fill: hexToRgba(sysColor, activeFilterId ? 0.2 : 0.16),
               stroke: sysColor,
-              strokeWidth: activeFilterId && isMatched ? 2.4 : 1.6,
+              strokeWidth: activeFilterId ? 2.6 : 1.6,
               cornerRadius: 1.5,
               listening: false,
             })
@@ -519,19 +576,6 @@ const drive_in: MapElementDefinition = {
             chanSys.code,
             sysColor,
             Boolean(activeFilterId && isMatched)
-          )
-        }
-
-        if (activeFilterId && !isMatched) {
-          group.add(
-            new Konva.Rect({
-              x: cx,
-              y: 0,
-              width: laneW,
-              height: h,
-              fill: "rgba(2, 6, 23, 0.72)",
-              listening: false,
-            })
           )
         }
       }
@@ -759,9 +803,13 @@ const drive_in: MapElementDefinition = {
     // Identificação Visual por Sistema em cada Canal do Drive-In (Modo Editor)
     for (let i = 0; i < lanes; i++) {
       const cx = i * laneW
-      const chan = rawChannels[i]
-      const chanSys = resolveSystemForChannel(obj, chan, systemsList)
-      const isMatched = !activeFilterId || chanSys?.id === activeFilterId
+      const chanSys = laneSystems[i]
+      const isMatched = laneMatchedFlags[i]
+
+      if (activeFilterId && !isMatched) {
+        drawDisabledGrayOverlay(group, cx, 0, laneW, h, 1)
+        continue
+      }
 
       if (chanSys) {
         const sysColor = normalizeHexColor(chanSys.color)
@@ -771,9 +819,9 @@ const drive_in: MapElementDefinition = {
             y: 0.5,
             width: Math.max(2, laneW - 1),
             height: Math.max(2, h - 1),
-            fill: hexToRgba(sysColor, isMatched ? 0.14 : 0.04),
+            fill: hexToRgba(sysColor, activeFilterId ? 0.18 : 0.14),
             stroke: sysColor,
-            strokeWidth: activeFilterId && isMatched ? 2.6 : 1.8,
+            strokeWidth: activeFilterId ? 2.6 : 1.8,
             listening: false,
           })
         )
@@ -786,19 +834,6 @@ const drive_in: MapElementDefinition = {
           chanSys.code,
           sysColor,
           Boolean(activeFilterId && isMatched)
-        )
-      }
-
-      if (activeFilterId && !isMatched) {
-        group.add(
-          new Konva.Rect({
-            x: cx,
-            y: 0,
-            width: laneW,
-            height: h,
-            fill: "rgba(2, 6, 23, 0.72)",
-            listening: false,
-          })
         )
       }
     }

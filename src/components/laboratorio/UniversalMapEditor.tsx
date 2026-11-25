@@ -1556,7 +1556,9 @@ export default function UniversalMapEditor({
               <div className="bg-slate-950/90 border border-slate-800 rounded-xl shadow-2xl px-2.5 py-2 backdrop-blur-md flex flex-col gap-1.5">
                 <div className="flex items-center justify-between gap-3 px-0.5">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Sistemas no Mapa
+                    {effectiveSystemFilterId
+                      ? "Filtro Ativo · Demais canais desabilitados"
+                      : "Sistemas no Mapa"}
                   </span>
                   {effectiveSystemFilterId && (
                     <button
@@ -1585,7 +1587,7 @@ export default function UniversalMapEditor({
                           isActive
                             ? "text-white shadow-md scale-[1.02]"
                             : effectiveSystemFilterId
-                            ? "bg-slate-900/60 border-slate-800 text-slate-500 hover:text-slate-200"
+                            ? "bg-slate-900/50 border-slate-800/60 text-slate-500 opacity-50 grayscale hover:opacity-85 hover:text-slate-200"
                             : "bg-slate-900/90 border-slate-800 text-slate-200 hover:border-slate-600"
                         }`}
                         style={

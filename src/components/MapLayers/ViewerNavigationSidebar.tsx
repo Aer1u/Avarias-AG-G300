@@ -577,6 +577,9 @@ export default function ViewerNavigationSidebar({
                             (chan.id && chan.id === selectedChannelId) ||
                             (chan.code && chan.code === selectedChannelId)
                           const chanSys = resolveSystemForChannel(selectedObject, chan, systems)
+                          const isChanDimmed = Boolean(
+                            activeSystemFilterId && chanSys?.id !== activeSystemFilterId
+                          )
 
                           return (
                             <button
@@ -587,7 +590,9 @@ export default function ViewerNavigationSidebar({
                                 onOpenDriveInGrid?.(selectedObject, chan.code || chan.id)
                               }}
                               className={`w-full flex items-center justify-between p-2 rounded-xl transition-all text-left group ${
-                                isChanActive
+                                isChanDimmed
+                                  ? "bg-slate-900/35 border border-slate-800/45 text-slate-500 opacity-40 grayscale hover:opacity-75"
+                                  : isChanActive
                                   ? "bg-blue-950/80 border-2 border-blue-500 shadow-md ring-1 ring-blue-500/40"
                                   : "bg-slate-900/90 hover:bg-blue-950/60 border border-slate-800 hover:border-blue-600/60"
                               }`}
@@ -595,21 +600,39 @@ export default function ViewerNavigationSidebar({
                               <div className="flex items-center gap-2 min-w-0">
                                 <span
                                   className="w-2.5 h-2.5 rounded-sm shrink-0 border border-white/20"
-                                  style={{ backgroundColor: chanSys?.color || "#334155" }}
+                                  style={{
+                                    backgroundColor: isChanDimmed
+                                      ? "#475569"
+                                      : chanSys?.color || "#334155",
+                                  }}
                                 />
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="font-mono text-xs font-bold text-white group-hover:text-blue-300">
+                                    <span
+                                      className={`font-mono text-xs font-bold ${
+                                        isChanDimmed
+                                          ? "text-slate-500"
+                                          : "text-white group-hover:text-blue-300"
+                                      }`}
+                                    >
                                       {chan.code}
                                     </span>
                                     {chanSys && (
                                       <span
                                         className="text-[9px] px-1.5 py-0.5 rounded font-mono font-bold border"
-                                        style={{
-                                          backgroundColor: `${chanSys.color}20`,
-                                          borderColor: `${chanSys.color}66`,
-                                          color: chanSys.color,
-                                        }}
+                                        style={
+                                          isChanDimmed
+                                            ? {
+                                                backgroundColor: "rgba(51,65,85,0.25)",
+                                                borderColor: "rgba(71,85,105,0.5)",
+                                                color: "#64748b",
+                                              }
+                                            : {
+                                                backgroundColor: `${chanSys.color}20`,
+                                                borderColor: `${chanSys.color}66`,
+                                                color: chanSys.color,
+                                              }
+                                        }
                                       >
                                         {chanSys.icon} {chanSys.code}
                                       </span>
@@ -627,8 +650,14 @@ export default function ViewerNavigationSidebar({
                                   )}
                                 </div>
                               </div>
-                              <span className="text-[10px] px-2 py-0.5 rounded bg-blue-950 text-blue-400 border border-blue-800/60 font-semibold group-hover:bg-blue-600 group-hover:text-white transition-colors shrink-0">
-                                Ver Canal →
+                              <span
+                                className={`text-[10px] px-2 py-0.5 rounded border font-semibold transition-colors shrink-0 ${
+                                  isChanDimmed
+                                    ? "bg-slate-900/60 text-slate-500 border-slate-800"
+                                    : "bg-blue-950 text-blue-400 border-blue-800/60 group-hover:bg-blue-600 group-hover:text-white"
+                                }`}
+                              >
+                                {isChanDimmed ? "Desab." : "Ver Canal →"}
                               </span>
                             </button>
                           )
