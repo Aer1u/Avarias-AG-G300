@@ -126,11 +126,23 @@ export default function ViewerNavigationSidebar({
     return () => window.removeEventListener(ITEMS_UPDATED_EVENT, onItemsUpdated)
   }, [])
 
-  const tree = useMemo(() => buildTree(objects), [objects])
+  const viewerObjects = useMemo(
+    () =>
+      objects.filter(
+        (o) =>
+          o.type !== "coordinates" &&
+          o.type !== "dimension_line" &&
+          o.type !== "pallet" &&
+          o.type !== "box"
+      ),
+    [objects]
+  )
+
+  const tree = useMemo(() => buildTree(viewerObjects), [viewerObjects])
 
   const selectedObject = useMemo(() => {
-    return objects.find((o) => o.id === selectedId) || null
-  }, [objects, selectedId])
+    return viewerObjects.find((o) => o.id === selectedId) || null
+  }, [viewerObjects, selectedId])
 
   // Se um objeto for selecionado, alterna para a aba de inspeção caso o usuário queira
   const handleSelect = (obj: MapObject) => {

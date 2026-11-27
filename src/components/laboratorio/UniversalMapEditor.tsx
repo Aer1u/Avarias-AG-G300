@@ -1715,7 +1715,17 @@ export default function UniversalMapEditor({
       <UniversalSearchSpotlight
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}
-        objects={objects}
+        objects={
+          readOnly
+            ? objects.filter(
+                (o) =>
+                  o.type !== "coordinates" &&
+                  o.type !== "dimension_line" &&
+                  o.type !== "pallet" &&
+                  o.type !== "box"
+              )
+            : objects
+        }
         onSelectAndLocate={handleSelectAndLocate}
       />
 

@@ -70,8 +70,11 @@ export function buildSpatial3DObject(
   const type = spatial.type.toLowerCase()
   const cat = spatial.category
 
-  // Oculta elementos puramente auxiliares de edição no modo visualizador
-  if (readOnly && (type === "coordinates" || type === "dimension_line")) {
+  // Oculta elementos puramente auxiliares e paletes/caixas de teste de edição no modo visualizador
+  if (
+    readOnly &&
+    (type === "coordinates" || type === "dimension_line" || type === "pallet" || type === "box")
+  ) {
     group.visible = false
     return group
   }

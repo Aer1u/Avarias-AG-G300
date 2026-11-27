@@ -818,8 +818,15 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
       renderOrder.forEach((obj) => {
         // Se o usuário ocultou o objeto (olhinho na hierarquia), não renderiza no canvas
         if (obj.visible === false) return
-        // Oculta guias puramente de CAD/edição no modo visualizador
-        if (readOnly && (obj.type === "coordinates" || obj.type === "dimension_line")) return
+        // Oculta guias de CAD/edição e paletes/caixas de teste no modo visualizador
+        if (
+          readOnly &&
+          (obj.type === "coordinates" ||
+            obj.type === "dimension_line" ||
+            obj.type === "pallet" ||
+            obj.type === "box")
+        )
+          return
 
         let node: Konva.Group | Konva.Line
 

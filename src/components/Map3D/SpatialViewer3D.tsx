@@ -750,7 +750,14 @@ export const SpatialViewer3D = forwardRef<SpatialViewer3DHandle, SpatialViewer3D
 
       objects.forEach((obj) => {
         if (obj.visible === false) return
-        if (readOnly && (obj.type === "coordinates" || obj.type === "dimension_line")) return
+        if (
+          readOnly &&
+          (obj.type === "coordinates" ||
+            obj.type === "dimension_line" ||
+            obj.type === "pallet" ||
+            obj.type === "box")
+        )
+          return
         const spatial = mapObjectToSpatial(obj, DEFAULT_PIXELS_PER_METER)
         const mesh3D = buildSpatial3DObject(spatial, readOnly, { systems, activeSystemFilterId })
         group.add(mesh3D)
