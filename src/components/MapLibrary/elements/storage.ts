@@ -515,7 +515,7 @@ const drive_in: MapElementDefinition = {
         for (let l = 0; l < lanes; l++) {
           const chan = rawChannels[l]
           if (!chan) continue
-          const occupiedList = getChannelOccupiedSlots(obj, chan, rawChannels, allLocalItems)
+          const occupiedList = getChannelOccupiedSlots(obj, chan, rawChannels, allLocalItems, false)
           const hasAtDepth = occupiedList.some((p) => p.depth === d + 1)
           if (!hasAtDepth) continue
 
@@ -610,7 +610,7 @@ const drive_in: MapElementDefinition = {
         const slotX = l * laneW
         const chan = rawChannels[l]
         const occupiedList = chan
-          ? getChannelOccupiedSlots(obj, chan, rawChannels, allLocalItems)
+          ? getChannelOccupiedSlots(obj, chan, rawChannels, allLocalItems, !readOnly)
           : []
         // Verifica se há palete alocado nesta profundidade (d + 1)
         const occupiedAtSlot = occupiedList.filter((p) => p.depth === d + 1)

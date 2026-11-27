@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useMemo, useRef } from "react"
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { 
   Package, 
   Plus, 
@@ -543,10 +543,23 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
   const [pedidosBa, setPedidosBa] = useState<any[]>([])
   const [togglingBa, setTogglingBa] = useState(false)
 
-  // ─── BA Confirm Modal (entry confirmation when marking Status BA) ───
+  // ─── BA Confirm Modal (entry confirmation per NF when marking Status BA) ───
+  interface BaConfirmItem {
+    rowId: string
+    solicitacao: string
+    sku: string
+    codigoEmbalagem: string
+    descricaoEmbalagem: string
+    modeloProduto: string
+    quantidadePrevista: number
+    confirmQty: number
+    alreadyBa: boolean
+  }
   interface BaConfirmModalData {
-    solicitacao: string; sku: string; codigoEmbalagem: string; descricaoEmbalagem: string
-    modeloProduto: string; quantidadePrevista: number; confirmQty: number; observacao: string; rowId: string
+    nf: string
+    solicitacoes: string[]
+    items: BaConfirmItem[]
+    observacao: string
   }
   const [baConfirmModalItem, setBaConfirmModalItem] = useState<BaConfirmModalData | null>(null)
   const [savingBaConfirm, setSavingBaConfirm] = useState(false)
@@ -605,121 +618,212 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
   }
   const [setoresModalSearch, setSetoresModalSearch] = useState('')
 
-  const toggleBaixado = async (solicitacao: string, codigoProduto: string, codigoEmbalagem: string, rowId?: string | number) => {
+  const normalizeNfKey = (nf: unknown): string => {
+    const raw = String(nf ?? '').trim()
+    return raw && raw !== '-' && raw.toLowerCase() !== 'null' ? raw : '__SEM_NF__'
+  }
+
+  const isRowMarkedBa = useCallback((row: { id?: any; solicitacao?: any; codigo?: any; codigo_embalagem?: any }) => {
+    const sol = String(row.solicitacao || '').trim()
+    const prod = String(row.codigo || '').trim().toUpperCase()
+    const emb = String(row.codigo_embalagem || '').trim().toUpperCase()
+    const rowId = String(row.id || '')
+    return pedidosBa.some(ba => {
+      if (ba.row_id && rowId) {
+        return String(ba.row_id) === rowId
+      }
+      return String(ba.solicitacao || '').trim() === sol &&
+             String(ba.codigo_produto || '').trim().toUpperCase() === prod &&
+             String(ba.codigo_embalagem || '').trim().toUpperCase() === emb
+    })
+  }, [pedidosBa])
+
+  const getNfStatusBa = useCallback((nfKey: string) => {
+    if (!nfKey || nfKey === '__SEM_NF__') {
+      return { hasNf: false, allBa: false, someBa: false, nfRows: [] as EmbalagemRegistro[] }
+    }
+    const nfRows = pedidas.filter(r => !r.isNew && normalizeNfKey(r.nf) === nfKey)
+    if (nfRows.length === 0) {
+      return { hasNf: true, allBa: false, someBa: false, nfRows: [] as EmbalagemRegistro[] }
+    }
+    const markedCount = nfRows.filter(r => isRowMarkedBa(r)).length
+    return {
+      hasNf: true,
+      allBa: markedCount === nfRows.length,
+      someBa: markedCount > 0 && markedCount < nfRows.length,
+      nfRows,
+    }
+  }, [pedidas, isRowMarkedBa])
+
+  const unmarkNfBa = async (nfRows: EmbalagemRegistro[]) => {
     if (!user) {
-      alert("Faça login para alterar o Status BA.");
-      return;
+      alert("Faça login para alterar o Status BA.")
+      return
     }
-    const sol = String(solicitacao || "").trim();
-    const prod = String(codigoProduto || "").trim().toUpperCase();
-    const emb = String(codigoEmbalagem || "").trim().toUpperCase();
-    
-    if (!sol || !prod || !emb) {
-      alert("Erro: Informações do pedido incompletas.");
-      return;
-    }
-
-    setTogglingBa(true);
+    setTogglingBa(true)
     try {
-      // Se row_id disponível, usá-lo como chave primária para diferenciar linhas duplicadas
-      const exists = pedidosBa.find(
-        r => {
-          if (rowId && r.row_id) {
-            return String(r.row_id) === String(rowId);
+      const idsToDelete = new Set<any>()
+      pedidosBa.forEach(ba => {
+        const matched = nfRows.some(row => {
+          const rowId = String(row.id || '')
+          if (ba.row_id && rowId) {
+            return String(ba.row_id) === rowId
           }
-          return String(r.solicitacao).trim() === sol &&
-                 String(r.codigo_produto).trim().toUpperCase() === prod &&
-                 String(r.codigo_embalagem).trim().toUpperCase() === emb;
+          return String(ba.solicitacao || '').trim() === String(row.solicitacao || '').trim() &&
+                 String(ba.codigo_produto || '').trim().toUpperCase() === String(row.codigo || '').trim().toUpperCase() &&
+                 String(ba.codigo_embalagem || '').trim().toUpperCase() === String(row.codigo_embalagem || '').trim().toUpperCase()
+        })
+        if (matched && ba.id !== undefined && ba.id !== null) {
+          idsToDelete.add(ba.id)
         }
-      );
+      })
 
-      if (exists) {
-        // Remove BA
+      const idList = Array.from(idsToDelete)
+      if (idList.length > 0) {
         const { error } = await supabase
           .from("pedidos_ba")
           .delete()
-          .eq("id", exists.id);
-        if (error) throw error;
-      } else {
-        // Add BA
-        const insertData: any = { solicitacao: sol, codigo_produto: prod, codigo_embalagem: emb };
-        if (rowId) insertData.row_id = String(rowId);
-        const { error } = await supabase
-          .from("pedidos_ba")
-          .insert([insertData]);
-        if (error) throw error;
+          .in("id", idList)
+        if (error) throw error
       }
-      
-      // Refresh only the BA list
-      const res = await supabase.from("pedidos_ba").select("*");
-      setPedidosBa(res.data || []);
+
+      const res = await supabase.from("pedidos_ba").select("*")
+      setPedidosBa(res.data || [])
     } catch (err: any) {
-      alert("Erro ao salvar Status BA: " + err.message);
+      alert("Erro ao desmarcar Status BA da NF: " + err.message)
     } finally {
-      setTogglingBa(false);
+      setTogglingBa(false)
     }
-  };
+  }
 
-  // ─── Confirm BA Entry (called from BaConfirmModal) ───────────────────────────
+  const handleNfBaClick = (nfKey: string) => {
+    if (!user) {
+      alert("Faça login para alterar o Status BA.")
+      return
+    }
+    const { hasNf, allBa, nfRows } = getNfStatusBa(nfKey)
+    if (!hasNf || nfRows.length === 0) {
+      alert("Esta movimentação não possui Nota Fiscal vinculada para confirmar Status BA.")
+      return
+    }
+    if (allBa) {
+      void unmarkNfBa(nfRows)
+      return
+    }
+    const solicitacoes = Array.from(
+      new Set(nfRows.map(r => String(r.solicitacao || '').trim()).filter(Boolean))
+    )
+    const modalItems: BaConfirmItem[] = nfRows.map(r => {
+      const qty = Math.round(Number(r.quantidade) || 0)
+      return {
+        rowId: String(r.id || ''),
+        solicitacao: String(r.solicitacao || '').trim(),
+        sku: String(r.codigo || '').trim().toUpperCase(),
+        codigoEmbalagem: String(r.codigo_embalagem || '').trim().toUpperCase(),
+        descricaoEmbalagem: String(r.descricao_embalagem || ''),
+        modeloProduto: String(r.modelo_produto || r.modelo || ''),
+        quantidadePrevista: qty,
+        confirmQty: qty,
+        alreadyBa: isRowMarkedBa(r),
+      }
+    })
+    setBaConfirmModalItem({
+      nf: nfKey,
+      solicitacoes,
+      items: modalItems,
+      observacao: '',
+    })
+  }
+
+  // ─── Confirm BA Entry per NF (called from BaConfirmModal) ────────────────────
   const handleConfirmBaEntry = async (data: BaConfirmModalData) => {
-    if (data.confirmQty <= 0) { alert('Quantidade deve ser maior que zero.'); return; }
-    setSavingBaConfirm(true);
+    const itemsToProcess = data.items.filter(it => !it.alreadyBa)
+    if (itemsToProcess.length === 0) {
+      setBaConfirmModalItem(null)
+      return
+    }
+    const hasPositiveQty = itemsToProcess.some(it => it.confirmQty > 0)
+    if (!hasPositiveQty) {
+      alert('Informe ao menos uma quantidade maior que zero para confirmar entrada.')
+      return
+    }
+
+    setSavingBaConfirm(true)
     try {
-      // 1. Insert into pedidos_ba
-      const insertBa: any = {
-        solicitacao: data.solicitacao,
-        codigo_produto: data.sku,
-        codigo_embalagem: data.codigoEmbalagem,
-      };
-      if (data.rowId) insertBa.row_id = data.rowId;
-      const { error: baErr } = await supabase.from('pedidos_ba').insert([insertBa]);
-      if (baErr) throw baErr;
+      // 1. Insert all unmarked items of this NF into pedidos_ba
+      const insertBaRows = itemsToProcess.map(it => {
+        const payload: any = {
+          solicitacao: it.solicitacao,
+          codigo_produto: it.sku,
+          codigo_embalagem: it.codigoEmbalagem,
+        }
+        if (it.rowId) payload.row_id = it.rowId
+        return payload
+      })
+      const { error: baErr } = await supabase.from('pedidos_ba').insert(insertBaRows)
+      if (baErr) throw baErr
 
-      // 2. Update or insert estoque_g300 (match by codigo_embalagem + codigo_produto)
-      const existingRow = estoqueG300.find(
-        r => String(r.codigo_embalagem || '').trim().toUpperCase() === data.codigoEmbalagem.trim().toUpperCase() &&
-             String(r.codigo_produto || '').trim().toUpperCase() === data.sku.trim().toUpperCase()
-      );
-      if (existingRow) {
-        const { error: upErr } = await supabase
-          .from('estoque_g300')
-          .update({ cd: (Number(existingRow.cd) || 0) + data.confirmQty })
-          .eq('id', existingRow.id);
-        if (upErr) throw upErr;
-      } else {
-        const { error: insErr } = await supabase.from('estoque_g300').insert([{
-          codigo_embalagem: data.codigoEmbalagem,
-          descricao_embalagem: data.descricaoEmbalagem,
-          codigo_produto: data.sku,
-          modelo_produto: data.modeloProduto,
-          cd: data.confirmQty,
-          status: '',
-        }]);
-        if (insErr) throw insErr;
+      // 2. Update or insert estoque_g300 & movement records per item with qty > 0
+      const runningCdByKey = new Map<string, { id?: any; cd: number }>()
+      estoqueG300.forEach(r => {
+        const k = `${String(r.codigo_embalagem || '').trim().toUpperCase()}||${String(r.codigo_produto || '').trim().toUpperCase()}`
+        runningCdByKey.set(k, { id: r.id, cd: Number(r.cd) || 0 })
+      })
+
+      for (const it of itemsToProcess) {
+        if (it.confirmQty <= 0) continue
+        const embUpper = it.codigoEmbalagem.trim().toUpperCase()
+        const skuUpper = it.sku.trim().toUpperCase()
+        const key = `${embUpper}||${skuUpper}`
+        const existing = runningCdByKey.get(key)
+
+        if (existing?.id) {
+          const nextCd = existing.cd + it.confirmQty
+          const { error: upErr } = await supabase
+            .from('estoque_g300')
+            .update({ cd: nextCd })
+            .eq('id', existing.id)
+          if (upErr) throw upErr
+          runningCdByKey.set(key, { id: existing.id, cd: nextCd })
+        } else {
+          const { data: insertedRows, error: insErr } = await supabase
+            .from('estoque_g300')
+            .insert([{
+              codigo_embalagem: it.codigoEmbalagem,
+              descricao_embalagem: it.descricaoEmbalagem,
+              codigo_produto: it.sku,
+              modelo_produto: it.modeloProduto,
+              cd: it.confirmQty,
+              status: '',
+            }])
+            .select()
+          if (insErr) throw insErr
+          const created = insertedRows?.[0]
+          runningCdByKey.set(key, { id: created?.id, cd: it.confirmQty })
+        }
+
+        const movRecord = {
+          tipo: 'ENTRADA',
+          codigo_produto: it.sku,
+          quantidade: it.confirmQty,
+          motivo: data.observacao || `Entrada via Status BA (NF ${data.nf})`,
+          data: new Date().toISOString(),
+          usuario: user?.email || 'sistema',
+        }
+        try {
+          await supabase.from('movimentacoes_embalagens').insert([movRecord])
+        } catch {
+          const prev = JSON.parse(localStorage.getItem('movimentacoesEmbalagensHistory') || '[]')
+          localStorage.setItem('movimentacoesEmbalagensHistory', JSON.stringify([{ ...movRecord, id: Date.now() }, ...prev]))
+        }
       }
 
-      // 3. Insert movement record (with localStorage fallback)
-      const movRecord = {
-        tipo: 'ENTRADA',
-        codigo_produto: data.sku,
-        quantidade: data.confirmQty,
-        motivo: data.observacao || 'Entrada via Status BA',
-        data: new Date().toISOString(),
-        usuario: user?.email || 'sistema',
-      };
-      try {
-        await supabase.from('movimentacoes_embalagens').insert([movRecord]);
-      } catch {
-        const prev = JSON.parse(localStorage.getItem('movimentacoesEmbalagensHistory') || '[]');
-        localStorage.setItem('movimentacoesEmbalagensHistory', JSON.stringify([{ ...movRecord, id: Date.now() }, ...prev]));
-      }
-
-      setBaConfirmModalItem(null);
-      await fetchData();
+      setBaConfirmModalItem(null)
+      await fetchData()
     } catch (err: any) {
-      alert('Erro ao confirmar entrada BA: ' + err.message);
+      alert('Erro ao confirmar entrada BA da NF: ' + err.message)
     } finally {
-      setSavingBaConfirm(false);
+      setSavingBaConfirm(false)
     }
   };
 
@@ -1967,7 +2071,7 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
                   ? "bg-blue-600/20 border-blue-500/40 text-blue-300 hover:bg-blue-600/30 shadow-sm"
                   : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800"
               )}
-              title="Alternar agrupamento por Nota Fiscal dentro de cada Solicitação"
+              title="Alternar entre agrupamento direto por Nota Fiscal (com Solicitação como metadado) e agrupamento por Solicitação"
             >
               <Layers size={13} className={groupByNf ? "text-blue-400" : "text-slate-500"} />
               {groupByNf ? "Agrupado por NF (Ativo)" : "Lista Direta"}
@@ -2228,9 +2332,9 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
             {/* Accordion header */}
             <div className="rounded-xl overflow-hidden border border-white/[0.06] bg-[#0B1120]">
               <div className="grid grid-cols-[2fr_1.5fr_1.5fr_4fr_1fr_1fr_1fr] px-4 py-2 border-b border-white/[0.06] text-[9.5px] font-medium text-slate-500 uppercase tracking-widest select-none">
-                <span>Solicitação</span>
-                <span>Data Solicitação</span>
-                <span>Solicitante</span>
+                <span>{groupByNf ? "Nota Fiscal" : "Solicitação"}</span>
+                <span>{groupByNf ? "Solicitação" : "Data Solicitação"}</span>
+                <span>{groupByNf ? "Data / Solicitante" : "Solicitante"}</span>
                 <span>Resumo Operacional</span>
                 <span className="text-right">Solicitado</span>
                 <span className="text-right">Enviado</span>
@@ -2265,6 +2369,372 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
                   </div>
                 )
 
+                const buildRowDetails = (items: EmbalagemRegistro[]) => {
+                  let totSolic = 0, totEnviado = 0, totPendente = 0
+                  const rowDetails = items.map(p => {
+                    const sku = String(p.codigo || '').trim().toUpperCase()
+                    const qty = Math.round(Number(p.quantidade) || 0)
+                    const enviado = Math.round(Number(p.enviado) || 0)
+                    const pendente = Math.round(Number(p.pendente) || 0)
+                    totSolic += qty; totEnviado += enviado; totPendente += pendente
+
+                    const status = String(p.status || 'PENDENTE').toUpperCase()
+                    const statusCls = status === 'FINALIZADO'
+                      ? 'text-emerald-400'
+                      : status === 'EM ANDAMENTO'
+                        ? 'text-blue-400'
+                        : 'text-amber-400'
+
+                    const sol = String(p.solicitacao || '').trim()
+                    const prod = String(p.codigo || '').trim().toUpperCase()
+                    const emb = String(p.codigo_embalagem || '').trim().toUpperCase()
+                    const rowId = String(p.id || '')
+                    const isBa = pedidosBa.some(ba => {
+                      if (ba.row_id && rowId) {
+                        return String(ba.row_id) === rowId
+                      }
+                      return String(ba.solicitacao).trim() === sol &&
+                             String(ba.codigo_produto).trim().toUpperCase() === prod &&
+                             String(ba.codigo_embalagem).trim().toUpperCase() === emb
+                    })
+
+                    return { p, sku, qty, enviado, pendente, status, statusCls, isBa, rowId }
+                  })
+                  return { rowDetails, totSolic, totEnviado, totPendente }
+                }
+
+                const renderItemRow = (
+                  row: ReturnType<typeof buildRowDetails>['rowDetails'][0],
+                  ri: number | string,
+                  metaCol: 'nf' | 'solicitacao',
+                  showBaCol: boolean
+                ) => {
+                  const rowSolDate = row.p.data_solicitacao
+                    ? new Date(row.p.data_solicitacao + 'T00:00:00').toLocaleDateString('pt-BR')
+                    : row.p.data
+                      ? new Date(row.p.data + 'T00:00:00').toLocaleDateString('pt-BR')
+                      : ''
+                  const solTooltip = [
+                    row.p.solicitacao ? `Solicitação: ${row.p.solicitacao}` : null,
+                    row.p.solicitante ? `Solicitante: ${row.p.solicitante}` : null,
+                    rowSolDate ? `Data: ${rowSolDate}` : null,
+                  ].filter(Boolean).join(' · ')
+                  const rowNfKey = normalizeNfKey(row.p.nf)
+                  const rowNfBa = showBaCol ? getNfStatusBa(rowNfKey) : null
+
+                  return (
+                    <tr key={ri} className="border-b border-white/[0.03] last:border-0 hover:bg-white/[0.015] transition-colors">
+                      <td className="px-2.5 py-1.5 whitespace-nowrap">
+                        <span className="text-slate-400 cursor-help" title={row.p.modelo_produto || row.p.modelo || ''}>{row.sku}</span>
+                      </td>
+                      <td className="px-2.5 py-1.5 whitespace-nowrap">
+                        <span className="text-slate-400" title={row.p.modelo || ''}>{row.p.modelo || '—'}</span>
+                      </td>
+                      <td className="px-2.5 py-1.5 text-center text-slate-400 whitespace-nowrap">{row.qty.toLocaleString('pt-BR')}</td>
+                      <td className="px-2.5 py-1.5 whitespace-nowrap">
+                        <span className="text-slate-400" title={row.p.codigo_embalagem || ''}>{row.p.codigo_embalagem || '—'}</span>
+                      </td>
+                      <td className="px-2.5 py-1.5 whitespace-nowrap">
+                        <span className="text-slate-400" title={row.p.descricao_embalagem || ''}>{row.p.descricao_embalagem || '—'}</span>
+                      </td>
+                      <td className="px-2.5 py-1.5 whitespace-nowrap">
+                        <span className="text-slate-400 uppercase text-[10px]">{row.p.tipo || '—'}</span>
+                      </td>
+                      <td className="px-2.5 py-1.5 whitespace-nowrap">
+                        <span className="text-slate-400 uppercase text-[10px]">{row.p.tipo_embalagem || '—'}</span>
+                      </td>
+                      <td className="px-2.5 py-1.5 text-center font-mono whitespace-nowrap">
+                        <span className={cn("inline-flex items-center gap-1", row.enviado > 0 ? "text-emerald-500" : "text-slate-600")}>
+                          {row.enviado > 0 && <Truck size={10} className="opacity-70 flex-shrink-0" />}
+                          {row.enviado.toLocaleString('pt-BR')}
+                        </span>
+                      </td>
+                      <td className="px-2.5 py-1.5 text-center font-mono whitespace-nowrap">
+                        <span className={cn("inline-flex items-center gap-1", row.pendente !== 0 ? "text-amber-500" : "text-slate-600")}>
+                          {row.pendente !== 0 && <Hourglass size={10} className="opacity-70 flex-shrink-0" />}
+                          {row.pendente.toLocaleString('pt-BR')}
+                        </span>
+                      </td>
+                      <td className="px-2.5 py-1.5 text-center text-slate-400 text-[10px] whitespace-nowrap">{row.p.entrega_compras || 'TBC'}</td>
+                      <td className="px-2.5 py-1.5 text-center text-slate-400 text-[10px] whitespace-nowrap">{row.p.envio_expedicao || 'TBC'}</td>
+                      <td className="px-2.5 py-1.5 text-center whitespace-nowrap">
+                        <span className={cn(
+                          "inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-medium",
+                          row.status === 'FINALIZADO' ? 'text-emerald-400 bg-emerald-500/10' :
+                          row.status === 'EM ANDAMENTO' ? 'text-blue-400 bg-blue-500/10' :
+                          'text-amber-400 bg-amber-500/10'
+                        )}>{row.status}</span>
+                      </td>
+                      {showBaCol && rowNfBa && (
+                        <td className="px-3 py-1.5 text-center whitespace-nowrap">
+                          {!rowNfBa.hasNf ? (
+                            <span
+                              title="Vincule uma NF para controlar o Status BA"
+                              className="inline-flex items-center px-2 py-0.5 rounded text-[9.5px] text-slate-600 border border-white/[0.04]"
+                            >
+                              S/ NF
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={togglingBa || savingBaConfirm}
+                              onClick={() => handleNfBaClick(rowNfKey)}
+                              title={
+                                rowNfBa.allBa
+                                  ? `BA confirmado para toda a NF ${rowNfKey} — clique para desmarcar`
+                                  : rowNfBa.someBa
+                                    ? `BA parcial na NF ${rowNfKey} — clique para completar BA da NF`
+                                    : `Confirmar entrada (Status BA) da NF ${rowNfKey}`
+                              }
+                              className={cn(
+                                "px-2 py-0.5 rounded text-[9.5px] font-medium transition-all border",
+                                (togglingBa || savingBaConfirm) ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
+                                rowNfBa.allBa
+                                  ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20"
+                                  : rowNfBa.someBa
+                                    ? "bg-amber-500/10 border-amber-500/25 text-amber-300 hover:bg-amber-500/20"
+                                    : "bg-transparent border-white/[0.06] text-slate-500 hover:text-slate-300 hover:border-white/[0.15]"
+                              )}
+                            >
+                              {rowNfBa.allBa ? "✓ BA NF" : rowNfBa.someBa ? "Parcial" : "—"}
+                            </button>
+                          )}
+                        </td>
+                      )}
+                      {metaCol === 'nf' ? (
+                        <td className="px-3 py-1.5 text-center text-slate-400 text-[10px] whitespace-nowrap">{row.p.nf || '—'}</td>
+                      ) : (
+                        <td className="px-3 py-1.5 text-center whitespace-nowrap">
+                          <span
+                            title={solTooltip || undefined}
+                            className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-800/80 text-slate-300 border border-white/[0.06]"
+                          >
+                            {row.p.solicitacao || 'S/N'}
+                          </span>
+                        </td>
+                      )}
+                      <td className="px-3 py-1.5 text-center text-slate-400 text-[10px] whitespace-nowrap">{row.p.previsao_entrega || '—'}</td>
+                    </tr>
+                  )
+                }
+
+                // Modo Agrupado por NF: ignora Solicitação no agrupamento e exibe Solicitação como metadado
+                if (groupByNf) {
+                  const nfGroups: Record<string, EmbalagemRegistro[]> = {}
+                  realPedidas.forEach(p => {
+                    const nfKey = normalizeNfKey(p.nf)
+                    if (!nfGroups[nfKey]) nfGroups[nfKey] = []
+                    nfGroups[nfKey].push(p)
+                  })
+
+                  const sortedNfKeys = Object.keys(nfGroups).sort((a, b) => {
+                    if (a === '__SEM_NF__') return 1
+                    if (b === '__SEM_NF__') return -1
+                    const numA = Number(a.replace(/\D/g, ''))
+                    const numB = Number(b.replace(/\D/g, ''))
+                    if (!isNaN(numA) && !isNaN(numB) && numA !== numB) return numB - numA
+                    return b.localeCompare(a)
+                  })
+
+                  return sortedNfKeys.map(nfKey => {
+                    const items = nfGroups[nfKey]
+                    const isNfExpanded = expandedNfGroups.has(nfKey)
+                    const toggleNf = () => setExpandedNfGroups(prev => {
+                      const next = new Set(prev)
+                      if (next.has(nfKey)) next.delete(nfKey)
+                      else next.add(nfKey)
+                      return next
+                    })
+
+                    const { rowDetails, totSolic, totEnviado, totPendente } = buildRowDetails(items)
+
+                    const uniqueSols = Array.from(
+                      new Set(items.map(x => String(x.solicitacao || '').trim()).filter(Boolean))
+                    )
+                    const uniqueSolicitantesNf = Array.from(
+                      new Set(items.map(x => String(x.solicitante || '').trim()).filter(Boolean))
+                    )
+                    const uniqueDates = Array.from(
+                      new Set(
+                        items
+                          .map(x =>
+                            x.data_solicitacao
+                              ? new Date(x.data_solicitacao + 'T00:00:00').toLocaleDateString('pt-BR')
+                              : x.data
+                                ? new Date(x.data + 'T00:00:00').toLocaleDateString('pt-BR')
+                                : ''
+                          )
+                          .filter(Boolean)
+                      )
+                    )
+                    const uniqueResp = Array.from(
+                      new Set(items.map(x => String(x.responsabilidade || '').trim()).filter(Boolean))
+                    )
+                    const responsavelLabel = uniqueResp.length > 0 ? uniqueResp.join(', ') : 'Não definido'
+                    const nfPrevisao = items.find(x => x.previsao_entrega)?.previsao_entrega
+                    const nfStatusBa = getNfStatusBa(nfKey)
+                    const isAllFinalized = items.every(x => String(x.status || '').trim().toUpperCase() === 'FINALIZADO')
+
+                    return (
+                      <div key={`nf-${nfKey}`} className="border-b border-white/[0.04] last:border-0">
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={toggleNf}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              toggleNf()
+                            }
+                          }}
+                          className="w-full grid grid-cols-[2fr_1.5fr_1.5fr_4fr_1fr_1fr_1fr] px-4 py-2.5 hover:bg-white/[0.02] transition-colors text-left items-center cursor-pointer group gap-2"
+                        >
+                          <span className="flex items-center gap-1.5 min-w-0">
+                            <ChevronRight size={13} className={cn("text-blue-400 transition-transform duration-150 flex-shrink-0", isNfExpanded ? "rotate-90 text-blue-300" : "")} />
+                            <FileText size={12} className="text-blue-400 flex-shrink-0" />
+                            <span className="text-[11px] font-medium text-blue-200 tracking-wide truncate">
+                              {nfKey === '__SEM_NF__' ? 'Sem NF' : `NF ${nfKey}`}
+                            </span>
+                          </span>
+
+                          {/* Solicitação como metadado */}
+                          <span
+                            className="flex items-center gap-1 flex-wrap min-w-0"
+                            title={uniqueSols.length > 0 ? `Solicitações nesta NF: ${uniqueSols.join(', ')}` : 'Sem solicitação'}
+                          >
+                            {uniqueSols.length === 0 ? (
+                              <span className="text-[10.5px] text-slate-600">—</span>
+                            ) : uniqueSols.length <= 2 ? (
+                              uniqueSols.map(s => (
+                                <span
+                                  key={s}
+                                  className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-800/90 text-slate-300 border border-slate-700/70"
+                                >
+                                  Sol. {s}
+                                </span>
+                              ))
+                            ) : (
+                              <>
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-800/90 text-slate-300 border border-slate-700/70">
+                                  Sol. {uniqueSols[0]}
+                                </span>
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-blue-500/10 text-blue-300 border border-blue-500/20">
+                                  +{uniqueSols.length - 1}
+                                </span>
+                              </>
+                            )}
+                          </span>
+
+                          {/* Data / Solicitante como metadado */}
+                          <span
+                            className="flex flex-col min-w-0"
+                            title={[uniqueDates.join(', '), uniqueSolicitantesNf.join(', ')].filter(Boolean).join(' · ')}
+                          >
+                            <span className="text-[10.5px] text-slate-400 truncate">
+                              {uniqueSolicitantesNf.length > 0 ? uniqueSolicitantesNf.join(', ') : '—'}
+                            </span>
+                            <span className="text-[9.5px] text-slate-600 truncate">
+                              {uniqueDates.length > 0 ? uniqueDates.join(', ') : '—'}
+                            </span>
+                          </span>
+
+                          <span className="flex items-center gap-2 text-[11px] flex-wrap">
+                            <span className="text-slate-500">{items.length} {items.length === 1 ? 'item' : 'itens'}</span>
+                            <span className="text-slate-700">·</span>
+                            <span className="text-slate-500 truncate max-w-[140px]" title={responsavelLabel}>{responsavelLabel}</span>
+                            {nfPrevisao && (
+                              <>
+                                <span className="text-slate-700">·</span>
+                                <span className="text-[10px] text-slate-400 font-mono">Prev. {nfPrevisao}</span>
+                              </>
+                            )}
+                            <span className="text-slate-700">·</span>
+                            <span className={cn(
+                              "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium",
+                              isAllFinalized || totPendente === 0
+                                ? 'text-emerald-400/90 bg-emerald-500/10'
+                                : totEnviado > 0
+                                  ? 'text-blue-400/90 bg-blue-500/10'
+                                  : 'text-amber-400/90 bg-amber-500/10'
+                            )}>
+                              {isAllFinalized || totPendente === 0 ? '✓ Concluído' : totEnviado > 0 ? 'Em Andamento' : 'Pendente'}
+                            </span>
+                            <span className="text-slate-700">·</span>
+                            {!nfStatusBa.hasNf ? (
+                              <span
+                                title="Vincule uma NF para controlar o Status BA"
+                                className="inline-flex items-center px-2 py-0.5 rounded text-[9.5px] font-medium bg-slate-900/80 border border-white/[0.06] text-slate-600"
+                              >
+                                BA: Sem NF
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={togglingBa || savingBaConfirm}
+                                onClick={e => {
+                                  e.stopPropagation()
+                                  handleNfBaClick(nfKey)
+                                }}
+                                title={
+                                  nfStatusBa.allBa
+                                    ? `Status BA confirmado para a NF ${nfKey} — clique para desmarcar`
+                                    : nfStatusBa.someBa
+                                      ? `Parte dos itens da NF ${nfKey} sem BA — clique para completar`
+                                      : `Clique para confirmar entrada (Status BA) da NF ${nfKey}`
+                                }
+                                className={cn(
+                                  "inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9.5px] font-semibold uppercase tracking-wider transition-all border",
+                                  (togglingBa || savingBaConfirm) ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
+                                  nfStatusBa.allBa
+                                    ? "bg-emerald-500/15 border-emerald-500/35 text-emerald-400 hover:bg-emerald-500/25"
+                                    : nfStatusBa.someBa
+                                      ? "bg-amber-500/15 border-amber-500/35 text-amber-300 hover:bg-amber-500/25"
+                                      : "bg-slate-900/80 border-white/[0.1] text-slate-400 hover:text-emerald-300 hover:border-emerald-500/35 hover:bg-emerald-500/10"
+                                )}
+                              >
+                                {nfStatusBa.allBa ? "✓ Status BA" : nfStatusBa.someBa ? "BA Parcial" : "Marcar BA"}
+                              </button>
+                            )}
+                          </span>
+
+                          <span className="text-[11px] text-slate-400 text-right font-mono">{totSolic.toLocaleString('pt-BR')}</span>
+                          <span className="text-[11px] text-emerald-500/80 text-right font-mono">{totEnviado.toLocaleString('pt-BR')}</span>
+                          <span className={cn("text-[11px] text-right font-mono", totPendente > 0 ? 'text-amber-400' : 'text-slate-600')}>{totPendente.toLocaleString('pt-BR')}</span>
+                        </div>
+
+                        {isNfExpanded && (
+                          <div className="border-t border-blue-500/20 overflow-x-auto bg-[#070d18]">
+                            <table className="w-full border-collapse text-[10px]">
+                              <thead>
+                                <tr className="border-b border-white/[0.04] bg-white/[0.02]">
+                                  <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Cód. Produto</th>
+                                  <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Modelo</th>
+                                  <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Qtd</th>
+                                  <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Cód. Emb.</th>
+                                  <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Descrição Emb.</th>
+                                  <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Tipo</th>
+                                  <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Tipo Emb.</th>
+                                  <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Enviado</th>
+                                  <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Pendente</th>
+                                  <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Entrega (C.)</th>
+                                  <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Envio (E.)</th>
+                                  <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Status</th>
+                                  <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Solicitação</th>
+                                  <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Previsão</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {rowDetails.map((row, ri) => renderItemRow(row, `${nfKey}-${ri}`, 'solicitacao', false))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })
+                }
+
+                // Modo Lista Direta (agrupado por Solicitação)
                 const groups: Record<string, EmbalagemRegistro[]> = {}
                 realPedidas.forEach(p => {
                   const key = p.solicitacao || 'sem-solicitacao'
@@ -2278,7 +2748,7 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
                   return numB - numA // Descending
                 })
 
-                return sortedGroups.map(([solKey, items], gi) => {
+                return sortedGroups.map(([solKey, items]) => {
                   const isExpanded = expandedSolicitations.has(solKey)
                   const toggle = () => setExpandedSolicitations(prev => {
                     const next = new Set(prev)
@@ -2287,40 +2757,7 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
                     return next
                   })
 
-                  // Compute totals
-                  let totSolic = 0, totEnviado = 0, totPendente = 0
-                  const rowDetails = items.map(p => {
-                    const sku = String(p.codigo || '').trim().toUpperCase()
-                    const qty = Math.round(Number(p.quantidade) || 0)
-                    const enviado = Math.round(Number(p.enviado) || 0)
-                    const pendente = Math.round(Number(p.pendente) || 0)
-                    totSolic += qty; totEnviado += enviado; totPendente += pendente
-                    
-                    const status = String(p.status || 'PENDENTE').toUpperCase()
-                    const statusCls = status === 'FINALIZADO'
-                      ? 'text-emerald-400'
-                      : status === 'EM ANDAMENTO'
-                        ? 'text-blue-400'
-                        : 'text-amber-400'
-
-                    const sol = String(p.solicitacao || '').trim()
-                    const prod = String(p.codigo || '').trim().toUpperCase()
-                    const emb = String(p.codigo_embalagem || '').trim().toUpperCase()
-                    const rowId = String(p.id || '')
-                    const isBa = pedidosBa.some(
-                      ba => {
-                        // Se o registro BA tem row_id, usar para match preciso (evita confundir linhas duplicadas)
-                        if (ba.row_id && rowId) {
-                          return String(ba.row_id) === rowId;
-                        }
-                        return String(ba.solicitacao).trim() === sol &&
-                               String(ba.codigo_produto).trim().toUpperCase() === prod &&
-                               String(ba.codigo_embalagem).trim().toUpperCase() === emb;
-                      }
-                    )
-
-                    return { p, sku, qty, enviado, pendente, status, statusCls, isBa, rowId }
-                  })
+                  const { rowDetails, totSolic, totEnviado, totPendente } = buildRowDetails(items)
 
                   const itemWithDate = items.find(x => x.data_solicitacao || x.data)
                   const dateLabel = itemWithDate?.data_solicitacao
@@ -2330,9 +2767,6 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
                       : '—'
 
                   const responsavel = items[0]?.responsabilidade || 'Não definido'
-                  const statusResumo = totPendente > 0
-                    ? `Pendente (${totPendente.toLocaleString('pt-BR')} un)`
-                    : 'Concluído'
                   const uniqueNfs = Array.from(new Set(items.map(x => String(x.nf || '').trim()).filter(Boolean)))
 
                   return (
@@ -2381,258 +2815,30 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
                       {/* Expanded detail rows */}
                       {isExpanded && (
                         <div className="border-t border-white/[0.04] overflow-x-auto">
-                          {(() => {
-                            const renderItemRow = (row: typeof rowDetails[0], ri: number | string, showNfCol = true) => (
-                              <tr key={ri} className="border-b border-white/[0.03] last:border-0 hover:bg-white/[0.015] transition-colors">
-                                <td className="px-2.5 py-1.5 whitespace-nowrap">
-                                  <span className="text-slate-400 cursor-help" title={row.p.modelo_produto || row.p.modelo || ''}>{row.sku}</span>
-                                </td>
-                                <td className="px-2.5 py-1.5 whitespace-nowrap">
-                                  <span className="text-slate-400" title={row.p.modelo || ''}>{row.p.modelo || '—'}</span>
-                                </td>
-                                <td className="px-2.5 py-1.5 text-center text-slate-400 whitespace-nowrap">{row.qty.toLocaleString('pt-BR')}</td>
-                                <td className="px-2.5 py-1.5 whitespace-nowrap">
-                                  <span className="text-slate-400" title={row.p.codigo_embalagem || ''}>{row.p.codigo_embalagem || '—'}</span>
-                                </td>
-                                <td className="px-2.5 py-1.5 whitespace-nowrap">
-                                  <span className="text-slate-400" title={row.p.descricao_embalagem || ''}>{row.p.descricao_embalagem || '—'}</span>
-                                </td>
-                                <td className="px-2.5 py-1.5 whitespace-nowrap">
-                                  <span className="text-slate-400 uppercase text-[10px]">{row.p.tipo || '—'}</span>
-                                </td>
-                                <td className="px-2.5 py-1.5 whitespace-nowrap">
-                                  <span className="text-slate-400 uppercase text-[10px]">{row.p.tipo_embalagem || '—'}</span>
-                                </td>
-                                <td className="px-2.5 py-1.5 text-center font-mono whitespace-nowrap">
-                                  <span className={cn("inline-flex items-center gap-1", row.enviado > 0 ? "text-emerald-500" : "text-slate-600")}>
-                                    {row.enviado > 0 && <Truck size={10} className="opacity-70 flex-shrink-0" />}
-                                    {row.enviado.toLocaleString('pt-BR')}
-                                  </span>
-                                </td>
-                                <td className="px-2.5 py-1.5 text-center font-mono whitespace-nowrap">
-                                  <span className={cn("inline-flex items-center gap-1", row.pendente !== 0 ? "text-amber-500" : "text-slate-600")}>
-                                    {row.pendente !== 0 && <Hourglass size={10} className="opacity-70 flex-shrink-0" />}
-                                    {row.pendente.toLocaleString('pt-BR')}
-                                  </span>
-                                </td>
-                                <td className="px-2.5 py-1.5 text-center text-slate-400 text-[10px] whitespace-nowrap">{row.p.entrega_compras || 'TBC'}</td>
-                                <td className="px-2.5 py-1.5 text-center text-slate-400 text-[10px] whitespace-nowrap">{row.p.envio_expedicao || 'TBC'}</td>
-                                <td className="px-2.5 py-1.5 text-center whitespace-nowrap">
-                                  <span className={cn(
-                                    "inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-medium",
-                                    row.status === 'FINALIZADO' ? 'text-emerald-400 bg-emerald-500/10' :
-                                    row.status === 'EM ANDAMENTO' ? 'text-blue-400 bg-blue-500/10' :
-                                    'text-amber-400 bg-amber-500/10'
-                                  )}>{row.status}</span>
-                                </td>
-                                <td className="px-3 py-1.5 text-center">
-                                  <button
-                                    disabled={togglingBa || savingBaConfirm}
-                                    onClick={() => {
-                                      if (row.isBa) {
-                                        // Unmark: toggle directly
-                                        toggleBaixado(
-                                          row.p.solicitacao || '',
-                                          row.sku,
-                                          row.p.codigo_embalagem || '',
-                                          row.rowId
-                                        )
-                                      } else {
-                                        // Mark BA: open confirmation modal
-                                        setBaConfirmModalItem({
-                                          solicitacao: row.p.solicitacao || '',
-                                          sku: row.sku,
-                                          codigoEmbalagem: row.p.codigo_embalagem || '',
-                                          descricaoEmbalagem: row.p.descricao_embalagem || '',
-                                          modeloProduto: row.p.modelo_produto || row.p.modelo || '',
-                                          quantidadePrevista: row.qty,
-                                          confirmQty: row.qty,
-                                          observacao: '',
-                                          rowId: String(row.rowId || ''),
-                                        })
-                                      }
-                                    }}
-                                    title={row.isBa ? "Clique para desmarcar BA" : "Clique para confirmar entrada (BA)"}
-                                    className={cn(
-                                      "px-2 py-0.5 rounded text-[9.5px] font-medium transition-all border",
-                                      (togglingBa || savingBaConfirm) ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
-                                      row.isBa
-                                        ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20"
-                                        : "bg-transparent border-white/[0.06] text-slate-600 hover:text-slate-400 hover:border-white/[0.12]"
-                                    )}
-                                  >
-                                    {row.isBa ? "✓ BA" : "—"}
-                                  </button>
-                                </td>
-                                {showNfCol && (
-                                  <td className="px-3 py-1.5 text-center text-slate-400 text-[10px]">{row.p.nf || '—'}</td>
-                                )}
-                                <td className="px-3 py-1.5 text-center text-slate-400 text-[10px]">{row.p.previsao_entrega || '—'}</td>
+                          <table className="w-full border-collapse text-[10px]">
+                            <thead>
+                              <tr className="border-b border-white/[0.04] bg-white/[0.01]">
+                                <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Cód. Produto</th>
+                                <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Modelo</th>
+                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Qtd</th>
+                                <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Cód. Emb.</th>
+                                <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Descrição Emb.</th>
+                                <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Tipo</th>
+                                <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Tipo Emb.</th>
+                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Enviado</th>
+                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Pendente</th>
+                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Entrega (C.)</th>
+                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Envio (E.)</th>
+                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Status</th>
+                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Status BA (NF)</th>
+                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">NF</th>
+                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Previsão</th>
                               </tr>
-                            )
-
-                            if (!groupByNf) {
-                              return (
-                                <table className="w-full border-collapse text-[10px]">
-                                  <thead>
-                                    <tr className="border-b border-white/[0.04] bg-white/[0.01]">
-                                      <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Cód. Produto</th>
-                                      <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Modelo</th>
-                                      <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Qtd</th>
-                                      <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Cód. Emb.</th>
-                                      <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Descrição Emb.</th>
-                                      <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Tipo</th>
-                                      <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Tipo Emb.</th>
-                                      <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Enviado</th>
-                                      <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Pendente</th>
-                                      <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Entrega (C.)</th>
-                                      <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Envio (E.)</th>
-                                      <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Status</th>
-                                      <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Status BA</th>
-                                      <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">NF</th>
-                                      <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Previsão</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {rowDetails.map((row, ri) => renderItemRow(row, ri, true))}
-                                  </tbody>
-                                </table>
-                              )
-                            }
-
-                            // Agrupamento por Nota Fiscal
-                            const nfGroups: Record<string, typeof rowDetails> = {}
-                            rowDetails.forEach(row => {
-                              const rawNf = String(row.p.nf || '').trim()
-                              const nfKey = rawNf && rawNf !== '-' && rawNf.toLowerCase() !== 'null' ? rawNf : '__SEM_NF__'
-                              if (!nfGroups[nfKey]) nfGroups[nfKey] = []
-                              nfGroups[nfKey].push(row)
-                            })
-
-                            const sortedNfKeys = Object.keys(nfGroups).sort((a, b) => {
-                              if (a === '__SEM_NF__') return 1
-                              if (b === '__SEM_NF__') return -1
-                              const numA = Number(a.replace(/\D/g, ''))
-                              const numB = Number(b.replace(/\D/g, ''))
-                              if (!isNaN(numA) && !isNaN(numB) && numA !== numB) return numA - numB
-                              return a.localeCompare(b)
-                            })
-
-                            return (
-                              <div className="p-3 space-y-2 bg-[#070b14]/80">
-                                {sortedNfKeys.map(nfKey => {
-                                  const nfRows = nfGroups[nfKey]
-                                  const nfGroupStateKey = `${solKey}__NF__${nfKey}`
-                                  // As NFs vem fechadas por padrão (expandedNfGroups starts empty)
-                                  const isNfExpanded = expandedNfGroups.has(nfGroupStateKey)
-                                  const toggleNf = () => {
-                                    setExpandedNfGroups(prev => {
-                                      const next = new Set(prev)
-                                      if (next.has(nfGroupStateKey)) next.delete(nfGroupStateKey)
-                                      else next.add(nfGroupStateKey)
-                                      return next
-                                    })
-                                  }
-
-                                  let nfSolic = 0, nfEnviado = 0, nfPendente = 0
-                                  nfRows.forEach(r => {
-                                    nfSolic += r.qty
-                                    nfEnviado += r.enviado
-                                    nfPendente += r.pendente
-                                  })
-                                  const nfPrevisao = nfRows.find(r => r.p.previsao_entrega)?.p.previsao_entrega
-                                  const allBaInNf = nfRows.length > 0 && nfRows.every(r => r.isBa)
-
-                                  return (
-                                    <div
-                                      key={nfGroupStateKey}
-                                      className="rounded-lg border border-blue-500/25 bg-[#0b1324] overflow-hidden transition-all shadow-sm"
-                                    >
-                                      {/* Header / Toggle da Nota Fiscal */}
-                                      <button
-                                        type="button"
-                                        onClick={toggleNf}
-                                        className="w-full px-3 py-2 bg-gradient-to-r from-blue-950/50 via-slate-900/60 to-transparent hover:bg-blue-900/20 text-left transition-colors cursor-pointer flex items-center justify-between flex-wrap gap-2 group"
-                                      >
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                          <ChevronRight
-                                            size={13}
-                                            className={cn("text-blue-400 transition-transform duration-150 flex-shrink-0", isNfExpanded ? "rotate-90 text-blue-300" : "")}
-                                          />
-                                          <span className="text-[11px] font-normal text-blue-200/90 flex items-center gap-1.5">
-                                            <FileText size={12} className="text-blue-400" />
-                                            {nfKey === '__SEM_NF__' ? 'Sem Nota Fiscal' : `Nota Fiscal: ${nfKey}`}
-                                          </span>
-                                          <span className="text-[10px] text-slate-400 bg-slate-800/90 px-2 py-0.5 rounded-full border border-slate-700/60 font-mono">
-                                            {nfRows.length} {nfRows.length === 1 ? 'item' : 'itens'}
-                                          </span>
-                                          {nfPrevisao && (
-                                            <span className="text-[10px] text-slate-400 ml-1.5">
-                                              Previsão: <span className="text-slate-300 font-mono">{nfPrevisao}</span>
-                                            </span>
-                                          )}
-                                          {allBaInNf && (
-                                            <span className="text-[9px] font-normal text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded ml-1">
-                                              ✓ Todos BA
-                                            </span>
-                                          )}
-                                        </div>
-
-                                        <div className="flex items-center gap-3 text-[10px]">
-                                          <span className="text-slate-400">
-                                            Solicitado: <span className="text-slate-400 font-mono font-normal">{nfSolic.toLocaleString('pt-BR')}</span>
-                                          </span>
-                                          <span className="text-slate-400">
-                                            Enviado: <span className="text-emerald-500/80 font-mono font-normal">{nfEnviado.toLocaleString('pt-BR')}</span>
-                                          </span>
-                                          <span className="text-slate-400">
-                                            Pendente: <span className={cn("font-mono font-normal", nfPendente > 0 ? "text-amber-400" : "text-slate-600")}>{nfPendente.toLocaleString('pt-BR')}</span>
-                                          </span>
-                                          <span className={cn(
-                                            "px-1.5 py-0.5 rounded text-[9px] font-normal uppercase tracking-wider",
-                                            nfPendente === 0 ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
-                                            nfEnviado > 0 ? "bg-blue-500/10 text-blue-400 border border-blue-500/20" :
-                                            "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                                          )}>
-                                            {nfPendente === 0 ? "Concluído" : nfEnviado > 0 ? "Em Andamento" : "Pendente"}
-                                          </span>
-                                        </div>
-                                      </button>
-
-                                      {/* Cabeçalho das informações e linhas de itens DENTRO do toggle da NF (coluna NF oculta) */}
-                                      {isNfExpanded && (
-                                        <div className="border-t border-blue-500/20 overflow-x-auto bg-[#070d18]">
-                                          <table className="w-full border-collapse text-[10px]">
-                                            <thead>
-                                              <tr className="border-b border-white/[0.04] bg-white/[0.02]">
-                                                <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Cód. Produto</th>
-                                                <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Modelo</th>
-                                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Qtd</th>
-                                                <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Cód. Emb.</th>
-                                                <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Descrição Emb.</th>
-                                                <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Tipo</th>
-                                                <th className="px-2.5 py-1.5 text-left text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Tipo Emb.</th>
-                                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Enviado</th>
-                                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Pendente</th>
-                                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Entrega (C.)</th>
-                                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Envio (E.)</th>
-                                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Status</th>
-                                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Status BA</th>
-                                                <th className="px-2.5 py-1.5 text-center text-[9px] font-semibold text-slate-300 uppercase tracking-widest whitespace-nowrap">Previsão</th>
-                                              </tr>
-                                            </thead>
-                                            <tbody>
-                                              {nfRows.map((row, ri) => renderItemRow(row, `${nfKey}-${ri}`, false))}
-                                            </tbody>
-                                          </table>
-                                        </div>
-                                      )}
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            )
-                          })()}
+                            </thead>
+                            <tbody>
+                              {rowDetails.map((row, ri) => renderItemRow(row, ri, 'nf', true))}
+                            </tbody>
+                          </table>
                         </div>
                       )}
                     </div>
@@ -3520,7 +3726,7 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
         )}
       </AnimatePresence>
 
-      {/* ─── BA CONFIRM MODAL ─── */}
+      {/* ─── BA CONFIRM MODAL (POR NF) ─── */}
       <AnimatePresence>
         {baConfirmModalItem && (
           <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
@@ -3532,17 +3738,22 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
               initial={{ scale: 0.95, opacity: 0, y: 10 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 10 }}
-              className="relative w-full max-w-md rounded-2xl bg-[#0D1523] p-6 shadow-2xl border border-white/[0.08] flex flex-col gap-4 text-slate-200"
+              className="relative w-full max-w-lg rounded-2xl bg-[#0D1523] p-5 shadow-2xl border border-white/[0.08] flex flex-col gap-3.5 text-slate-200 max-h-[90vh]"
             >
               {/* Header */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2.5">
                   <div className="p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
                     <CheckCircle2 size={15} className="text-emerald-400" />
                   </div>
                   <div>
-                    <h3 className="text-[12px] font-semibold text-white uppercase tracking-widest">Confirmar Entrada BA</h3>
-                    <p className="text-[9.5px] text-slate-500 mt-0.5">Solicitação #{baConfirmModalItem.solicitacao}</p>
+                    <h3 className="text-[12px] font-semibold text-white uppercase tracking-widest">Confirmar Entrada BA — NF {baConfirmModalItem.nf}</h3>
+                    <p className="text-[9.5px] text-slate-400 mt-0.5">
+                      {baConfirmModalItem.items.filter(i => !i.alreadyBa).length} item(ns) pendente(s) de BA
+                      {baConfirmModalItem.solicitacoes.length > 0 && (
+                        <> · Sol. {baConfirmModalItem.solicitacoes.map(s => `#${s}`).join(', ')}</>
+                      )}
+                    </p>
                   </div>
                 </div>
                 <button onClick={() => setBaConfirmModalItem(null)} disabled={savingBaConfirm} className="text-slate-500 hover:text-white transition-colors cursor-pointer">
@@ -3550,64 +3761,85 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
                 </button>
               </div>
 
-              {/* Info */}
-              <div className="rounded-xl bg-white/[0.03] border border-white/[0.05] p-3 space-y-1.5 text-[10.5px]">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Cód. Embalagem</span>
-                  <span className="font-mono text-blue-300">{baConfirmModalItem.codigoEmbalagem}</span>
-                </div>
-                {baConfirmModalItem.descricaoEmbalagem && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Descrição</span>
-                    <span className="text-slate-300 max-w-[200px] text-right truncate">{baConfirmModalItem.descricaoEmbalagem}</span>
+              {/* Items of the NF */}
+              <div className="space-y-2 overflow-y-auto pr-1 max-h-[45vh]">
+                {baConfirmModalItem.items.map((item, idx) => (
+                  <div
+                    key={`${item.rowId || item.sku}-${idx}`}
+                    className={cn(
+                      "rounded-xl border p-3 text-[10.5px] flex items-center justify-between gap-3",
+                      item.alreadyBa
+                        ? "bg-emerald-500/[0.04] border-emerald-500/20 opacity-60"
+                        : "bg-white/[0.03] border-white/[0.06]"
+                    )}
+                  >
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-blue-300 font-semibold">{item.codigoEmbalagem || '—'}</span>
+                        <span className="text-slate-600">·</span>
+                        <span className="font-mono text-slate-300">{item.sku}</span>
+                        {item.solicitacao && (
+                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono text-[9px]">
+                            Sol. {item.solicitacao}
+                          </span>
+                        )}
+                        {item.alreadyBa && (
+                          <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 text-[9px] font-semibold">
+                            ✓ Já marcado
+                          </span>
+                        )}
+                      </div>
+                      {(item.descricaoEmbalagem || item.modeloProduto) && (
+                        <p className="text-[10px] text-slate-400 truncate">
+                          {item.descricaoEmbalagem || item.modeloProduto}
+                        </p>
+                      )}
+                      <p className="text-[9.5px] text-slate-500">
+                        Previsto: <span className="font-mono text-amber-300">{item.quantidadePrevista.toLocaleString('pt-BR')}</span>
+                      </p>
+                    </div>
+
+                    {!item.alreadyBa && (
+                      <div className="shrink-0 w-28">
+                        <label className="block text-[8.5px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                          Qtd Recebida
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={item.confirmQty}
+                          onChange={e => {
+                            const val = Math.max(0, Number(e.target.value) || 0)
+                            setBaConfirmModalItem(prev => {
+                              if (!prev) return prev
+                              const nextItems = prev.items.map((it, i) => i === idx ? { ...it, confirmQty: val } : it)
+                              return { ...prev, items: nextItems }
+                            })
+                          }}
+                          className="w-full bg-[#111827] border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-white text-right focus:outline-none focus:border-emerald-500/40 focus:bg-[#0f1a2e]"
+                        />
+                      </div>
+                    )}
                   </div>
-                )}
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Cód. Produto</span>
-                  <span className="font-mono text-slate-300">{baConfirmModalItem.sku}</span>
-                </div>
-                {baConfirmModalItem.modeloProduto && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Modelo</span>
-                    <span className="text-slate-400 text-right truncate max-w-[200px]">{baConfirmModalItem.modeloProduto}</span>
-                  </div>
-                )}
-                <div className="flex justify-between border-t border-white/[0.05] pt-1.5">
-                  <span className="text-slate-500">Qtd. Prevista</span>
-                  <span className="font-mono text-amber-300">{baConfirmModalItem.quantidadePrevista.toLocaleString('pt-BR')}</span>
-                </div>
+                ))}
               </div>
 
-              {/* Editable fields */}
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-[9.5px] font-semibold text-slate-400 uppercase tracking-widest mb-1">
-                    Quantidade Confirmada / Recebida
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={baConfirmModalItem.confirmQty}
-                    onChange={e => setBaConfirmModalItem(prev => prev ? { ...prev, confirmQty: Math.max(1, Number(e.target.value) || 0) } : prev)}
-                    className="w-full bg-[#111827] border border-white/[0.08] rounded-lg px-3 py-2 text-[11px] font-mono text-white focus:outline-none focus:border-emerald-500/40 focus:bg-[#0f1a2e]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[9.5px] font-semibold text-slate-400 uppercase tracking-widest mb-1">
-                    Observação (opcional)
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={baConfirmModalItem.observacao}
-                    onChange={e => setBaConfirmModalItem(prev => prev ? { ...prev, observacao: e.target.value } : prev)}
-                    placeholder="Ex: Carga parcial, aguardando restante..."
-                    className="w-full bg-[#111827] border border-white/[0.08] rounded-lg px-3 py-2 text-[10.5px] text-slate-300 focus:outline-none focus:border-emerald-500/40 resize-none"
-                  />
-                </div>
+              {/* Observação */}
+              <div className="shrink-0">
+                <label className="block text-[9.5px] font-semibold text-slate-400 uppercase tracking-widest mb-1">
+                  Observação (opcional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={baConfirmModalItem.observacao}
+                  onChange={e => setBaConfirmModalItem(prev => prev ? { ...prev, observacao: e.target.value } : prev)}
+                  placeholder="Ex: Carga conferida, recebimento completo da NF..."
+                  className="w-full bg-[#111827] border border-white/[0.08] rounded-lg px-3 py-2 text-[10.5px] text-slate-300 focus:outline-none focus:border-emerald-500/40 resize-none"
+                />
               </div>
 
               {/* Buttons */}
-              <div className="flex gap-2 pt-1">
+              <div className="flex gap-2 pt-1 shrink-0">
                 <button
                   onClick={() => setBaConfirmModalItem(null)}
                   disabled={savingBaConfirm}
@@ -3617,11 +3849,11 @@ export default function EmbalagensTab({ refreshTrigger, showSetoresModal, onClos
                 </button>
                 <button
                   onClick={() => handleConfirmBaEntry(baConfirmModalItem)}
-                  disabled={savingBaConfirm || baConfirmModalItem.confirmQty <= 0}
+                  disabled={savingBaConfirm || !baConfirmModalItem.items.some(i => !i.alreadyBa && i.confirmQty > 0)}
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-[10px] font-semibold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
                 >
                   {savingBaConfirm ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
-                  Confirmar Entrada & Marcar BA
+                  Confirmar Entrada & Marcar BA (NF)
                 </button>
               </div>
             </motion.div>

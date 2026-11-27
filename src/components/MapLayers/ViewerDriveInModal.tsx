@@ -9,7 +9,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { MapPin, Printer, X, AlertCircle, Package } from "lucide-react"
+import { MapPin, Printer, X, AlertCircle, Package, Box } from "lucide-react"
 import type { MapObject } from "../MapLibrary/types"
 import type { DimensionConfig } from "../MapLibrary/dimensionsTypes"
 import {
@@ -46,8 +46,9 @@ import {
   filterItemsForDriveChannel,
   ITEMS_UPDATED_EVENT,
 } from "@/lib/driveOccupancy"
-import { isOpenSystem } from "@/lib/systemVisuals"
+import { isOpenSystem, resolveSystemForChannel } from "@/lib/systemVisuals"
 import { LocalErrorBoundary } from "../LocalErrorBoundary"
+import { cn } from "@/lib/utils"
 
 interface ChannelInfo {
   id: string
@@ -58,7 +59,7 @@ interface ChannelInfo {
   depth?: number
   capacity?: number
   occupancy?: number
-  status?: string
+  status?: "operacional" | "bloqueado" | "manutencao"
   stockControlMode?: "livre" | "vinculado_saldo"
   stockSystemRef?: string
 }
@@ -100,6 +101,11 @@ export default function ViewerDriveInModal({
     prof: 1,
   })
   const [batchCoords, setBatchCoords] = useState<{ lvl: number; prof: number }[] | null>(null)
+  const [channelOverride, setChannelOverride] = useState<{
+    objectId: string
+    initialKey: string
+    channelId: string
+  } | null>(null)
 
   const { systems } = useSystemStore(workspaceId)
   const isCompartment = object?.type === "compartment"
@@ -110,19 +116,28 @@ export default function ViewerDriveInModal({
     return ensureDriveChannels(object)
   }, [object, isCompartment])
 
-  // Canal único aberto no modal (somente o canal selecionado)
+  // Canal ativo no modal (inicia no canal selecionado no mapa, podendo alternar pelos botões)
+  const initialChannelKey = initialChannelId || ""
+  const effectiveChannelId =
+    channelOverride &&
+    object &&
+    channelOverride.objectId === object.id &&
+    channelOverride.initialKey === initialChannelKey
+      ? channelOverride.channelId
+      : initialChannelId
+
   const currentChannel = useMemo(() => {
     if (channels.length === 0) return null
-    if (initialChannelId) {
+    if (effectiveChannelId) {
       const byIdOrCode = channels.find(
-        (c) => c.id === initialChannelId || c.code === initialChannelId
+        (c) => c.id === effectiveChannelId || c.code === effectiveChannelId
       )
       if (byIdOrCode) return byIdOrCode
-      const byName = channels.find((c) => c.name === initialChannelId)
+      const byName = channels.find((c) => c.name === effectiveChannelId)
       if (byName) return byName
     }
     return channels[0]
-  }, [channels, initialChannelId])
+  }, [channels, effectiveChannelId])
 
   const findSystemByRef = useCallback(
     (ref: string) => {
@@ -226,6 +241,7 @@ export default function ViewerDriveInModal({
     setEditingItem(null)
     setEditingSlotItems(null)
     setBatchCoords(null)
+    setChannelOverride(null)
     onClose()
   }, [onClose])
 
@@ -452,6 +468,7 @@ export default function ViewerDriveInModal({
 
   const commitObjectItems = useCallback(
     (nextObjectItems: MapeamentoItem[]): boolean => {
+      if (!isAdmin || !isEditMode) return false
       if (!object || !objectMapeamentoKey) return false
       setBalanceError("")
       const currentObjectItems = getLocalItems().filter(
@@ -486,6 +503,8 @@ export default function ViewerDriveInModal({
       return true
     },
     [
+      isAdmin,
+      isEditMode,
       object,
       objectMapeamentoKey,
       linkedSystem,
@@ -501,6 +520,7 @@ export default function ViewerDriveInModal({
     profundidade: number,
     batch?: { lvl: number; prof: number }[]
   ) => {
+    if (!isAdmin || !isEditMode) return
     setBalanceError("")
     setItemCoords({ lvl: nivel, prof: profundidade })
     setBatchCoords(batch || null)
@@ -510,6 +530,7 @@ export default function ViewerDriveInModal({
   }
 
   const handleEditItem = (updated: MapeamentoItem): boolean => {
+    if (!isAdmin || !isEditMode) return false
     const currentObjectItems = getLocalItems().filter(
       (it) => it.mapeamentoId === objectMapeamentoKey
     )
@@ -521,6 +542,7 @@ export default function ViewerDriveInModal({
   }
 
   const handleEditSlot = (slotItems: MapeamentoItem[]) => {
+    if (!isAdmin || !isEditMode) return
     if (slotItems.length === 0) return
     setBalanceError("")
     setEditingItem(null)
@@ -531,6 +553,7 @@ export default function ViewerDriveInModal({
   }
 
   const handleSaveModalItems = (saved: MapeamentoItem[] | MapeamentoItem): boolean => {
+    if (!isAdmin || !isEditMode) return false
     const savedArr = Array.isArray(saved) ? saved : [saved]
     const formatted = savedArr.map((it) => ({
       ...it,
@@ -557,6 +580,7 @@ export default function ViewerDriveInModal({
   }
 
   const handleDeleteItem = (itemId: string) => {
+    if (!isAdmin || !isEditMode) return
     const currentObjectItems = getLocalItems().filter(
       (it) => it.mapeamentoId === objectMapeamentoKey
     )
@@ -568,6 +592,7 @@ export default function ViewerDriveInModal({
     source: { lvl: number; d: number },
     target: { lvl: number; d: number }
   ) => {
+    if (!isAdmin || !isEditMode) return
     const all = getLocalItems()
     const objItems = all.filter((it) => it.mapeamentoId === objectMapeamentoKey)
     const channelIds = new Set(
@@ -634,55 +659,46 @@ export default function ViewerDriveInModal({
             className="absolute inset-0 bg-slate-950/80 backdrop-blur-md"
           />
 
-          {/* Modal Principal (sem rolagem interna para o Grid do Canal) */}
+          {/* Modal Principal — mesmo layout do Mapeamento de Posições com visualização 3D */}
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
-            className="relative w-full max-w-7xl h-[calc(100vh-1rem)] sm:h-[calc(100vh-1.5rem)] max-h-[880px] rounded-2xl md:rounded-3xl bg-slate-900 p-3 sm:p-5 md:p-6 shadow-2xl border border-slate-800 flex flex-col overflow-hidden text-white"
+            className="relative w-full max-w-6xl max-h-[92vh] rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl flex flex-col overflow-hidden text-slate-100"
           >
             {/* ── HEADER ────────────────────────────────────────────────────── */}
-            <div className="flex flex-row items-center justify-between gap-2 mb-2.5 sm:mb-3 shrink-0">
-              <div className="flex items-center gap-2.5 md:gap-3.5 min-w-0">
+            <div className="flex items-center justify-between gap-2 px-5 py-3.5 border-b border-slate-800 bg-slate-950/60 shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
                 <div
-                  className={`h-9 w-9 md:h-11 md:w-11 rounded-xl md:rounded-2xl flex items-center justify-center text-white shadow-xl transition-all shrink-0 ${
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-md shrink-0 ${
                     isCompartment
-                      ? "bg-amber-600 shadow-amber-900/30"
-                      : "bg-blue-600 shadow-blue-900/30"
+                      ? "bg-amber-600/25 border border-amber-500/60 text-amber-300"
+                      : "bg-blue-600/25 border border-blue-500/60 text-blue-300"
                   }`}
                 >
-                  {isCompartment ? (
-                    <Package size={18} className="md:w-5 md:h-5" />
-                  ) : (
-                    <MapPin size={18} className="md:w-5 md:h-5" />
-                  )}
+                  {isCompartment ? <Package size={18} /> : <MapPin size={18} />}
                 </div>
                 <div className="text-left min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-base md:text-2xl font-light text-white transition-colors leading-tight font-mono truncate">
+                    <h3 className="text-sm md:text-base font-bold text-white leading-tight font-mono truncate">
                       {objectDisplayName || effectivePositionCode}
+                      {!isCompartment && currentChannel
+                        ? ` · ${currentChannel.name || currentChannel.code}`
+                        : ""}
                     </h3>
-                    {!isCompartment && currentChannel && (
-                      <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-600/20 text-blue-300 border border-blue-500/40 font-semibold">
-                        {currentChannel.name || currentChannel.code}
-                        {currentChannel.code && currentChannel.name !== currentChannel.code
-                          ? ` · ${currentChannel.code}`
-                          : ""}
-                      </span>
-                    )}
                     {!isCompartment && Boolean(object?.props?.code) && String(object?.props?.code) !== objectDisplayName && (
-                      <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-slate-800/80 text-amber-300 border border-slate-700">
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-amber-300 font-bold border border-slate-700">
                         {String(object?.props?.code)}
                       </span>
                     )}
                     {isCompartment && (
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
                         Espaço Aberto
                       </span>
                     )}
                     {linkedSystem && (
                       <span
-                        className="text-[10px] font-bold px-2.5 py-0.5 rounded-full border"
+                        className="text-[10px] font-bold px-2 py-0.5 rounded border"
                         style={{
                           backgroundColor: `${linkedSystem.color}22`,
                           borderColor: `${linkedSystem.color}66`,
@@ -698,17 +714,17 @@ export default function ViewerDriveInModal({
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 mt-0.5 md:mt-1 flex-wrap">
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                     {isCompartment ? (
-                      <span className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-[0.15em]">
+                      <span className="text-[11px] text-slate-400">
                         Armazenamento Aberto • Sem Nível / Profundidade
                       </span>
                     ) : (
                       <>
-                        <span className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-[0.15em]">
-                          {occupiedCount} / {capacity} PALETES • {levelCount}{" "}
-                          {(resolvedLevelsConfig.displayName || "NÍVEIS").toUpperCase()} ({levelRangeLabel}) •{" "}
-                          {depthCount} {(resolvedDepthConfig.displayName || "PROF.").toUpperCase()} ({depthRangeLabel})
+                        <span className="text-[11px] text-slate-400 font-mono">
+                          {occupiedCount} / {capacity} Paletes • {levelCount}{" "}
+                          {resolvedLevelsConfig.displayName || "Níveis"} ({levelRangeLabel}) •{" "}
+                          {depthCount} {resolvedDepthConfig.displayName || "Prof."} ({depthRangeLabel})
                         </span>
                         {isOverflow && (
                           <span className="flex items-center gap-1 rounded-full bg-red-900/40 px-2 py-0.5 text-[9px] font-semibold uppercase text-red-400 border border-red-800/60">
@@ -727,113 +743,170 @@ export default function ViewerDriveInModal({
                   type="button"
                   onClick={() => window.print()}
                   title="Imprimir Mapa de Mapeamento"
-                  className="h-9 px-3 md:h-11 md:px-5 rounded-xl md:rounded-2xl flex items-center justify-center gap-2 transition-all border bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700 text-xs font-semibold uppercase tracking-wider shadow-sm"
+                  className="px-3 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-colors border bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700 text-xs font-semibold"
                 >
-                  <Printer size={15} />
+                  <Printer size={14} />
                   <span className="hidden sm:inline">Imprimir Mapa</span>
                 </button>
-
-                {isAdmin ? (
-                  <button
-                    type="button"
-                    onClick={() => setIsEditMode((v) => !v)}
-                    title="Habilitar Modo Edição e Movimentação"
-                    className={`h-9 px-3 md:h-11 md:px-6 rounded-xl md:rounded-2xl flex items-center justify-center gap-2 transition-all border text-xs font-bold uppercase tracking-wider ${
-                      isEditMode
-                        ? "bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-600/30"
-                        : "bg-blue-600 hover:bg-blue-500 text-white border-blue-500 shadow-lg shadow-blue-600/30"
-                    }`}
-                  >
-                    <span>{isEditMode ? "Concluir" : "Editar"}</span>
-                  </button>
-                ) : (
-                  <span className="h-9 px-3 md:h-11 md:px-4 rounded-xl md:rounded-2xl flex items-center justify-center gap-1.5 border bg-indigo-950/60 text-indigo-400 border-indigo-800/50 text-[11px] font-bold uppercase tracking-wider">
-                    <span>👁️</span>
-                    <span className="hidden sm:inline">Visualização</span>
-                  </span>
-                )}
 
                 <button
                   type="button"
                   onClick={handleClose}
-                  className="h-9 w-9 md:h-11 md:w-11 rounded-xl md:rounded-2xl bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 flex items-center justify-center transition-all border border-slate-700"
+                  className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
                 >
                   <X size={18} />
                 </button>
               </div>
             </div>
 
-            {/* ── BARRA DE CONSERVAÇÃO DE SALDO DO SISTEMA (apenas para sistema com saldo) ── */}
-            {!isCompartment && linkedSystem && !isLinkedOpenSystem && balanceSnapshot && (
-              <div className="mb-3 px-4 py-2 rounded-2xl bg-slate-950/70 border border-slate-800 flex flex-wrap items-center justify-between gap-2 text-[11px] shrink-0">
-                <div className="flex flex-wrap items-center gap-3 font-mono">
-                  <span className="text-slate-300">
-                    Entradas - Saídas ={" "}
-                    <strong className="text-emerald-400">{balanceSnapshot.totalSystemNet} un.</strong>
-                  </span>
-                  <span className="text-slate-600">|</span>
-                  <span className="text-amber-300">
-                    Disponível no Chão (Origem): <strong>{balanceSnapshot.totalOrigin} un.</strong>
-                  </span>
-                  <span className="text-blue-300">
-                    Alocado em Posições: <strong>{balanceSnapshot.totalAllocated} un.</strong>
+            {/* ── CORPO ROLLABLE (idêntico ao Mapeamento de Posições) + PRÉVIA 3D ──────── */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
+              {/* Barra de Conservação de Saldo / Sistema Livre */}
+              {!isCompartment && linkedSystem && !isLinkedOpenSystem && balanceSnapshot && (
+                <div className="mb-3 px-4 py-2 rounded-xl bg-slate-950/70 border border-slate-800 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                  <div className="flex flex-wrap items-center gap-3 font-mono">
+                    <span className="text-slate-300">
+                      Entradas - Saídas ={" "}
+                      <strong className="text-emerald-400">{balanceSnapshot.totalSystemNet} un.</strong>
+                    </span>
+                    <span className="text-slate-600">|</span>
+                    <span className="text-amber-300">
+                      Disponível no Chão (Origem): <strong>{balanceSnapshot.totalOrigin} un.</strong>
+                    </span>
+                    <span className="text-blue-300">
+                      Alocado em Posições: <strong>{balanceSnapshot.totalAllocated} un.</strong>
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-400">
+                    {enforceStockLimit
+                      ? "Alocações consomem saldo do Chão; remoções devolvem ao Chão"
+                      : "Modo livre (sem bloqueio de saldo)"}
                   </span>
                 </div>
-                <span className="text-[10px] text-slate-400">
-                  {enforceStockLimit
-                    ? "Alocações consomem saldo do Chão; remoções devolvem ao Chão"
-                    : "Modo livre (sem bloqueio de saldo)"}
-                </span>
-              </div>
-            )}
+              )}
 
-            {!isCompartment && linkedSystem && isLinkedOpenSystem && (
-              <div
-                className="mb-3 px-4 py-2 rounded-2xl border flex flex-wrap items-center justify-between gap-2 text-[11px] shrink-0"
-                style={{
-                  backgroundColor: `${linkedSystem.color}12`,
-                  borderColor: `${linkedSystem.color}40`,
-                }}
-              >
-                <span className="text-slate-200 font-medium flex items-center gap-2">
-                  <span
-                    className="w-2.5 h-2.5 rounded-full shrink-0"
-                    style={{ backgroundColor: linkedSystem.color }}
-                  />
-                  <span>
-                    <strong>{linkedSystem.name}</strong> ({linkedSystem.code}) — Sistema Livre sem registro de saldo
-                  </span>
-                </span>
-                <span className="text-[10px] text-emerald-300 font-semibold">
-                  Lançamento direto nas posições · Alimenta o Confronto
-                </span>
-              </div>
-            )}
-
-            {balanceError && (
-              <div className="mb-3 flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl bg-rose-950/70 border border-rose-700/60 text-xs text-rose-200 shrink-0">
-                <span className="flex items-center gap-2">
-                  <AlertCircle size={14} className="text-rose-400 shrink-0" />
-                  <span>{balanceError}</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setBalanceError("")}
-                  className="text-rose-300 hover:text-white"
+              {!isCompartment && linkedSystem && isLinkedOpenSystem && (
+                <div
+                  className="mb-3 px-4 py-2 rounded-xl border flex flex-wrap items-center justify-between gap-2 text-[11px]"
+                  style={{
+                    backgroundColor: `${linkedSystem.color}12`,
+                    borderColor: `${linkedSystem.color}40`,
+                  }}
                 >
-                  <X size={14} />
-                </button>
-              </div>
-            )}
+                  <span className="text-slate-200 font-medium flex items-center gap-2">
+                    <span
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: linkedSystem.color }}
+                    />
+                    <span>
+                      <strong>{linkedSystem.name}</strong> ({linkedSystem.code}) — Sistema Livre sem registro de saldo
+                    </span>
+                  </span>
+                  <span className="text-[10px] text-emerald-300 font-semibold">
+                    Lançamento direto nas posições · Alimenta o Confronto
+                  </span>
+                </div>
+              )}
 
-            {/* ── CORPO: RELAÇÃO DO COMPARTIMENTO OU GRID DO CANAL SELECIONADO ──────── */}
-            <div
-              className={
-                isCompartment
-                  ? "flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-1 -mr-1 pt-2"
-                  : "flex-1 min-h-0 overflow-hidden flex flex-col pt-1"
-              }
-            >
+              {balanceError && (
+                <div className="mb-3 flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl bg-rose-950/70 border border-rose-700/60 text-xs text-rose-200">
+                  <span className="flex items-center gap-2">
+                    <AlertCircle size={14} className="text-rose-400 shrink-0" />
+                    <span>{balanceError}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setBalanceError("")}
+                    className="text-rose-300 hover:text-white"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+
+              {/* Sub-cabeçalho da Posição (idêntico ao SystemMappingModal) */}
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Box size={13} className={isCompartment ? "text-amber-400" : "text-blue-400"} />
+                  {isCompartment
+                    ? "Espaço Aberto — Armazenamento sem nível ou profundidade"
+                    : `Canal de Armazenamento — ${levelCount} Nível(is) · Capacidade: ${capacity} posições`}
+                </span>
+                {isAdmin ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditMode((v) => !v)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors cursor-pointer",
+                      isEditMode
+                        ? "bg-amber-900/60 border-amber-700 text-amber-300"
+                        : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white"
+                    )}
+                  >
+                    {isEditMode ? "✏️ Modo Edição Ativo" : "🔒 Modo Visualização"}
+                  </button>
+                ) : (
+                  <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border bg-slate-800 border-slate-700 text-slate-400">
+                    🔒 Modo Visualização
+                  </span>
+                )}
+              </div>
+
+              {/* Seletor de Canais do Drive-In (apenas canais do mesmo sistema) */}
+              {!isCompartment && (() => {
+                const matchingChannels = channels.filter((ch) => {
+                  const channelSys = resolveSystemForChannel(object, ch, systems)
+                  return linkedSystem ? channelSys?.id === linkedSystem.id : !channelSys
+                })
+                if (matchingChannels.length <= 1) return null
+                return (
+                  <div className="flex flex-wrap items-center gap-1.5 mb-3 pb-2 border-b border-slate-800">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">
+                      Canais ({matchingChannels.length}):
+                    </span>
+                    {matchingChannels.map((ch, idx) => {
+                      const active =
+                        currentChannel?.id === ch.id || currentChannel?.code === ch.code
+                      const channelSys = resolveSystemForChannel(object, ch, systems)
+                      return (
+                        <button
+                          key={ch.id || idx}
+                          type="button"
+                          onClick={() =>
+                            setChannelOverride({
+                              objectId: object.id,
+                              initialKey: initialChannelKey,
+                              channelId: ch.id || ch.code,
+                            })
+                          }
+                          className={cn(
+                            "px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors flex items-center gap-1.5 cursor-pointer",
+                            active
+                              ? "bg-blue-600 border-blue-500 text-white shadow-sm"
+                              : channelSys
+                              ? "bg-slate-800/90 border-slate-600 text-slate-200 hover:text-white"
+                              : "bg-slate-900/60 border-slate-800 text-slate-500 hover:text-slate-300"
+                          )}
+                          title={
+                            channelSys
+                              ? `Vinculado ao sistema ${channelSys.code}`
+                              : "Canal sem sistema vinculado"
+                          }
+                        >
+                          {channelSys && (
+                            <span
+                              className="w-2 h-2 rounded-full shrink-0"
+                              style={{ backgroundColor: channelSys.color }}
+                            />
+                          )}
+                          <span>{ch.name || ch.code || `Canal ${idx + 1}`}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )
+              })()}
+
               <LocalErrorBoundary fallbackTitle="Erro ao carregar conteúdo da posição">
                 {isCompartment ? (
                   <CompartmentRelationView
@@ -851,12 +924,13 @@ export default function ViewerDriveInModal({
                     }
                   />
                 ) : loading ? (
-                  <div className="flex-1 flex flex-col items-center justify-center text-slate-400 text-xs gap-3">
+                  <div className="py-20 flex flex-col items-center justify-center text-slate-400 text-xs gap-3">
                     <span className="animate-spin text-2xl">⏳</span>
                     <span>Sincronizando saldos do canal...</span>
                   </div>
                 ) : (
                   <MapeamentoDriveInGrid
+                    key={currentChannel?.id || currentChannel?.code || object.id}
                     positionId={positionDisplayName}
                     items={visibleDriveItems}
                     capacity={capacity}
@@ -875,7 +949,6 @@ export default function ViewerDriveInModal({
                     onDeleteItem={handleDeleteItem}
                     onSwapItems={handleSwapItems}
                     isLoggedIn={isAdmin}
-                    fitToViewport={true}
                     sidePreview={
                       <LocalErrorBoundary compact fallbackTitle="Prévia 3D indisponível">
                         <DriveIn3DPreviewFrame

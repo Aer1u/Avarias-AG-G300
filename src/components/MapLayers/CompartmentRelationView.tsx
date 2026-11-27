@@ -224,6 +224,7 @@ export default function CompartmentRelationView({
 
   const commitItemsForChannel = useCallback(
     (nextChannelItems: MapeamentoItem[]): boolean => {
+      if (!canEdit) return false
       setBalanceError("")
       if (system && !isOpenSys && objectId && isNonOriginSystemParticipant) {
         const res = applyNonOriginPositionChange(
@@ -257,6 +258,7 @@ export default function CompartmentRelationView({
       return true
     },
     [
+      canEdit,
       mapeamentoId,
       onItemsChanged,
       system,

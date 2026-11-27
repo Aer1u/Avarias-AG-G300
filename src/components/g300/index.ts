@@ -17,3 +17,8 @@ export { default as RelatorioRecebimentoTab } from "./RelatorioRecebimentoTab"
 export { EstoqueBATab } from "./EstoqueBATab"
 export { ProdutosTab } from "./ProdutosTab"
 export { ConfrontosTab } from "./ConfrontosTab"
+export { GeralTab } from "./GeralTab"
+export { MapeamentoTab } from "./MapeamentoTab"
+export { ClassificacoesTab, ClassificacoesPrintReport } from "./ClassificacoesTab"
+export type { DevolucaoPrintPayload } from "./ClassificacoesTab"
+

@@ -5,8 +5,28 @@
 
 "use client"
 
-import React from "react"
+import React, { useState, useRef, useEffect } from "react"
+import {
+  Camera,
+  MoreVertical,
+  ChevronDown,
+  Check,
+  Hand,
+  MousePointerClick,
+  Maximize2,
+  Edit3,
+  Search,
+  Eye,
+  Compass,
+  Map as MapIcon,
+  Box,
+  Layers,
+  Database,
+} from "lucide-react"
 import type { SpatialViewMode } from "../Map3D/types"
+import type { MapObject } from "../MapLibrary/types"
+import type { BusinessSystem } from "../Systems/types"
+import { getLinkedStructuresForSystem, isOpenSystem } from "@/lib/systemVisuals"
 
 interface MapToolbarProps {
   tool: "select" | "pan" | "draw_area" | "draw_floor"
@@ -16,7 +36,14 @@ interface MapToolbarProps {
   objectsCount: number
   spatialMode?: SpatialViewMode
   readOnly?: boolean
+  canEnableEditMode?: boolean
+  onEnableEditMode?: () => void
+  onOpenSystemDataPanel?: () => void
   onSpatialModeChange?: (mode: SpatialViewMode) => void
+  systems?: BusinessSystem[]
+  objects?: MapObject[]
+  activeSystemFilterId?: string | null
+  onSelectSystemFilter?: (systemId: string | null) => void
   onToolChange: (tool: "select" | "pan" | "draw_area" | "draw_floor") => void
   onToggleSnap: () => void
   onGridSizeChange: (size: number) => void
@@ -41,6 +68,50 @@ interface MapToolbarProps {
   onRedo?: () => void
 }
 
+const VIEWER_CAMERA_MODES: Array<{
+  id: SpatialViewMode
+  label: string
+  description: string
+  badgeClass: string
+  icon: "birdseye" | "fulltop" | "3d" | "2d"
+}> = [
+  {
+    id: "birdseye",
+    label: "Bird's-Eye 3D",
+    description: "Ortográfica superior com inclinação de 20°",
+    badgeClass: "text-emerald-400 bg-emerald-950/60 border-emerald-700/50",
+    icon: "birdseye",
+  },
+  {
+    id: "fulltop",
+    label: "Full Top",
+    description: "Visão ortográfica vertical a 90°",
+    badgeClass: "text-sky-400 bg-sky-950/60 border-sky-700/50",
+    icon: "fulltop",
+  },
+  {
+    id: "3d",
+    label: "3D Livre",
+    description: "Câmera perspectiva com órbita 360°",
+    badgeClass: "text-purple-400 bg-purple-950/60 border-purple-700/50",
+    icon: "3d",
+  },
+  {
+    id: "2d",
+    label: "Planta 2D",
+    description: "Visualização plana vetorial",
+    badgeClass: "text-blue-400 bg-blue-950/60 border-blue-700/50",
+    icon: "2d",
+  },
+]
+
+function renderCameraModeIcon(kind: "birdseye" | "fulltop" | "3d" | "2d") {
+  if (kind === "birdseye") return <Compass size={14} className="text-emerald-400 shrink-0" />
+  if (kind === "fulltop") return <MapIcon size={14} className="text-sky-400 shrink-0" />
+  if (kind === "3d") return <Box size={14} className="text-purple-400 shrink-0" />
+  return <Layers size={14} className="text-blue-400 shrink-0" />
+}
+
 export default function MapToolbar({
   tool,
   snapEnabled,
@@ -49,7 +120,14 @@ export default function MapToolbar({
   objectsCount,
   spatialMode = "2d",
   readOnly = false,
+  canEnableEditMode = false,
+  onEnableEditMode,
+  onOpenSystemDataPanel,
   onSpatialModeChange,
+  systems = [],
+  objects = [],
+  activeSystemFilterId = null,
+  onSelectSystemFilter,
   onToolChange,
   onToggleSnap,
   onGridSizeChange,
@@ -73,161 +151,466 @@ export default function MapToolbar({
   onUndo,
   onRedo,
 }: MapToolbarProps) {
-  // ── MODO VISUALIZADOR: SUMIR TUDO DE EDIÇÃO ──────────────────
+  const [isCameraMenuOpen, setIsCameraMenuOpen] = useState(false)
+  const [isSystemMenuOpen, setIsSystemMenuOpen] = useState(false)
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false)
+  const cameraMenuRef = useRef<HTMLDivElement>(null)
+  const systemMenuRef = useRef<HTMLDivElement>(null)
+  const moreMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!readOnly) return
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as Node
+      if (cameraMenuRef.current && !cameraMenuRef.current.contains(target)) {
+        setIsCameraMenuOpen(false)
+      }
+      if (systemMenuRef.current && !systemMenuRef.current.contains(target)) {
+        setIsSystemMenuOpen(false)
+      }
+      if (moreMenuRef.current && !moreMenuRef.current.contains(target)) {
+        setIsMoreMenuOpen(false)
+      }
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsCameraMenuOpen(false)
+        setIsSystemMenuOpen(false)
+        setIsMoreMenuOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", onMouseDown)
+    window.addEventListener("keydown", onKeyDown)
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown)
+      window.removeEventListener("keydown", onKeyDown)
+    }
+  }, [readOnly])
+
+  // ── MODO VISUALIZADOR: INTERFACE LIMPA COM MENU DE CÂMERA, SISTEMAS NO MAPA & 3 PONTINHOS ──
   if (readOnly) {
+    const activeCamera =
+      VIEWER_CAMERA_MODES.find((m) => m.id === spatialMode) || VIEWER_CAMERA_MODES[0]
+    const activeSystem =
+      activeSystemFilterId
+        ? systems.find((s) => s.id === activeSystemFilterId) || null
+        : null
+
     return (
-      <div className="h-12 bg-slate-900 border-b border-slate-800 px-3 flex items-center justify-between text-slate-100 select-none shrink-0 gap-2">
-        {/* Esquerda: Modos de Visualização & Interação (Leitura) */}
+      <div className="h-11 bg-slate-900/95 border-b border-slate-800 px-3 flex items-center justify-between text-slate-100 select-none shrink-0 gap-2 relative z-30">
+        {/* Esquerda: Seletor de Câmera + Seletor Sistemas no Mapa + status discreto */}
         <div className="flex items-center gap-2">
-          {/* Alternador Bird's-Eye 3D · Full Top · 3D Livre · 2D */}
-          <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800 gap-0.5 shadow-inner">
+          <div ref={cameraMenuRef} className="relative">
             <button
-              onClick={() => onSpatialModeChange?.("birdseye")}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all ${
-                spatialMode === "birdseye"
-                  ? "bg-emerald-600 text-white shadow-sm"
-                  : "text-slate-400 hover:text-slate-200"
+              type="button"
+              onClick={() => {
+                setIsCameraMenuOpen((prev) => !prev)
+                setIsSystemMenuOpen(false)
+                setIsMoreMenuOpen(false)
+              }}
+              className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
+                isCameraMenuOpen
+                  ? "bg-slate-800 border-sky-500/70 text-white shadow-lg"
+                  : "bg-slate-950/90 hover:bg-slate-800 border-slate-700/80 text-slate-200"
               }`}
-              title="Bird's-Eye 3D (Padrão) — Câmera ortográfica superior com inclinação fixa de 20°"
+              title="Alterar modo de câmera"
             >
-              <span>🦅</span>
-              <span>Bird&apos;s-Eye 3D</span>
+              <Camera size={15} className="text-sky-400 shrink-0" />
+              <span>{activeCamera.label}</span>
+              <ChevronDown
+                size={13}
+                className={`text-slate-400 transition-transform ${
+                  isCameraMenuOpen ? "rotate-180" : ""
+                }`}
+              />
             </button>
 
-            <button
-              onClick={() => onSpatialModeChange?.("fulltop")}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all ${
-                spatialMode === "fulltop"
-                  ? "bg-sky-600 text-white shadow-sm"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
-              title="Full Top — Câmera ortográfica estritamente vertical a 90°"
-            >
-              <span>🗺️</span>
-              <span>Full Top</span>
-            </button>
-
-            <button
-              onClick={() => onSpatialModeChange?.("3d")}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all ${
-                spatialMode === "3d"
-                  ? "bg-purple-600 text-white shadow-sm"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
-              title="3D Livre — Câmera Perspectiva com movimentação orbital 360°"
-            >
-              <span>🌐</span>
-              <span>3D Livre</span>
-            </button>
-
-            <button
-              onClick={() => onSpatialModeChange?.("2d")}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all ${
-                spatialMode === "2d"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
-              title="Visualização 2D — Planta Konva"
-            >
-              <span>📐</span>
-              <span>2D</span>
-            </button>
+            {isCameraMenuOpen && (
+              <div className="absolute left-0 top-full mt-1.5 w-64 bg-slate-900 border border-slate-700/90 rounded-xl shadow-2xl p-1.5 z-50 backdrop-blur-md">
+                <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Modos de Câmera
+                </div>
+                <div className="space-y-0.5 mt-0.5">
+                  {VIEWER_CAMERA_MODES.map((cam) => {
+                    const isSelected = spatialMode === cam.id
+                    return (
+                      <button
+                        key={cam.id}
+                        type="button"
+                        onClick={() => {
+                          onSpatialModeChange?.(cam.id)
+                          setIsCameraMenuOpen(false)
+                        }}
+                        className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors cursor-pointer ${
+                          isSelected
+                            ? "bg-slate-800/95 border border-slate-600/80 text-white"
+                            : "hover:bg-slate-800/60 border border-transparent text-slate-300"
+                        }`}
+                      >
+                        {renderCameraModeIcon(cam.icon)}
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-semibold leading-tight">
+                            {cam.label}
+                          </div>
+                          <div className="text-[10px] text-slate-400 truncate mt-0.5">
+                            {cam.description}
+                          </div>
+                        </div>
+                        {isSelected && <Check size={14} className="text-sky-400 shrink-0" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="h-5 w-px bg-slate-800" />
+          {/* Seletor Sistemas no Mapa (ao lado do seletor de câmeras) */}
+          {systems.length > 0 && onSelectSystemFilter && (
+            <div ref={systemMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSystemMenuOpen((prev) => !prev)
+                  setIsCameraMenuOpen(false)
+                  setIsMoreMenuOpen(false)
+                }}
+                style={
+                  activeSystem
+                    ? {
+                        backgroundColor: `${activeSystem.color}24`,
+                        borderColor: activeSystem.color,
+                      }
+                    : undefined
+                }
+                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
+                  activeSystem
+                    ? "text-white shadow-md"
+                    : isSystemMenuOpen
+                    ? "bg-slate-800 border-amber-500/70 text-white shadow-lg"
+                    : "bg-slate-950/90 hover:bg-slate-800 border-slate-700/80 text-slate-200"
+                }`}
+                title="Selecionar sistema no mapa"
+              >
+                {activeSystem ? (
+                  <>
+                    <span
+                      className="w-2.5 h-2.5 rounded-sm shrink-0 border border-white/30"
+                      style={{ backgroundColor: activeSystem.color }}
+                    />
+                    <span>{activeSystem.icon}</span>
+                    <span className="font-mono font-bold">{activeSystem.code}</span>
+                    <span className="hidden sm:inline truncate max-w-[110px] text-slate-200 font-normal">
+                      {activeSystem.name}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Layers size={14} className="text-amber-400 shrink-0" />
+                    <span>Sistemas no Mapa</span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                      {systems.length}
+                    </span>
+                  </>
+                )}
+                <ChevronDown
+                  size={13}
+                  className={`text-slate-400 transition-transform ${
+                    isSystemMenuOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
 
-          {/* Ferramentas do Visualizador: Pan (Navegar) & Selecionar (Inspecionar) */}
-          <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800 gap-0.5">
-            <button
-              onClick={() => onToolChange("pan")}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                tool === "pan"
-                  ? "bg-blue-600 text-white font-bold"
-                  : "text-slate-400 hover:text-white"
-              }`}
-              title="Navegar pelo mapa (Arrastar tela / H)"
-            >
-              <span>🖐️</span>
-              <span>Navegar</span>
-            </button>
+              {isSystemMenuOpen && (
+                <div className="absolute left-0 top-full mt-1.5 w-80 max-h-96 overflow-y-auto custom-scrollbar bg-slate-900 border border-slate-700/90 rounded-xl shadow-2xl p-1.5 z-50 backdrop-blur-md">
+                  <div className="px-2 py-1 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    <span>Sistemas no Mapa</span>
+                    {activeSystem && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onSelectSystemFilter(null)
+                          setIsSystemMenuOpen(false)
+                        }}
+                        className="text-sky-400 hover:text-sky-300 font-semibold normal-case cursor-pointer"
+                      >
+                        Mostrar todos
+                      </button>
+                    )}
+                  </div>
 
-            <button
-              onClick={() => onToolChange("select")}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                tool === "select"
-                  ? "bg-blue-600 text-white font-bold"
-                  : "text-slate-400 hover:text-white"
-              }`}
-              title="Inspecionar e selecionar estruturas (V)"
-            >
-              <span>🔍</span>
-              <span>Inspecionar</span>
-            </button>
+                  <div className="space-y-0.5 mt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSelectSystemFilter(null)
+                        setIsSystemMenuOpen(false)
+                      }}
+                      className={`w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-left text-xs transition-colors cursor-pointer ${
+                        !activeSystemFilterId
+                          ? "bg-slate-800/95 border border-slate-600/80 text-white font-semibold"
+                          : "hover:bg-slate-800/60 border border-transparent text-slate-300"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <Layers size={14} className="text-slate-400 shrink-0" />
+                        <span>Todos os sistemas (sem filtro)</span>
+                      </span>
+                      {!activeSystemFilterId && <Check size={14} className="text-sky-400 shrink-0" />}
+                    </button>
+
+                    <div className="my-1 border-t border-slate-800" />
+
+                    {systems.map((sys) => {
+                      const isSelected = activeSystemFilterId === sys.id
+                      const linkedCount = getLinkedStructuresForSystem(sys, objects).length
+                      const isLivre = isOpenSystem(sys)
+                      return (
+                        <button
+                          key={sys.id}
+                          type="button"
+                          onClick={() => {
+                            onSelectSystemFilter(isSelected ? null : sys.id)
+                            setIsSystemMenuOpen(false)
+                          }}
+                          style={
+                            isSelected
+                              ? {
+                                  backgroundColor: `${sys.color}22`,
+                                  borderColor: sys.color,
+                                }
+                              : undefined
+                          }
+                          className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors border cursor-pointer ${
+                            isSelected
+                              ? "text-white"
+                              : "hover:bg-slate-800/60 border-transparent text-slate-300"
+                          }`}
+                        >
+                          <span
+                            className="w-3 h-3 rounded-sm shrink-0 border border-white/30"
+                            style={{ backgroundColor: sys.color }}
+                          />
+                          <span className="text-sm shrink-0">{sys.icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-mono font-bold text-white">
+                                {sys.code}
+                              </span>
+                              <span className="text-xs font-medium text-slate-200 truncate">
+                                {sys.name}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-400">
+                              <span
+                                className={`px-1 rounded border font-mono ${
+                                  isLivre
+                                    ? "bg-emerald-950/60 border-emerald-700/50 text-emerald-300"
+                                    : "bg-blue-950/60 border-blue-800/50 text-blue-300"
+                                }`}
+                              >
+                                {isLivre ? "Livre" : "Saldo"}
+                              </span>
+                              <span>· {linkedCount} estrutura{linkedCount !== 1 ? "s" : ""}</span>
+                            </div>
+                          </div>
+                          {isSelected && <Check size={14} className="text-sky-400 shrink-0" />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-md bg-indigo-950/50 border border-indigo-800/40 text-indigo-300 text-[10px] font-semibold uppercase tracking-wider">
+            <Eye size={11} />
+            <span>Visualizador</span>
           </div>
 
-          <div className="h-5 w-px bg-slate-800" />
-
-          {/* Badge Visualizador */}
-          <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-lg bg-indigo-950/80 border border-indigo-700/60 text-indigo-300 flex items-center gap-1.5 shadow-sm">
-            <span>👁️</span>
-            <span>Modo Visualizador</span>
+          <span className="hidden lg:inline text-[11px] font-mono text-slate-500">
+            {objectsCount} objetos
           </span>
         </div>
 
-        {/* Direita: Enquadrar + Zoom + Busca + Contagem */}
+        {/* Direita: Busca + Zoom + Gerenciar Dados (ADM) + Menu 3 Pontinhos */}
         <div className="flex items-center gap-2">
-          {/* Busca Universal */}
           <button
+            type="button"
             onClick={onOpenSearch}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700/60 text-slate-300 hover:text-white text-xs font-medium transition-all"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 border border-slate-700/60 text-slate-200 text-xs font-medium transition-all cursor-pointer"
             title="Buscar estruturas no mapa (Ctrl+K)"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8" />
-              <path d="m21 21-4.35-4.35" />
-            </svg>
-            <span>Buscar</span>
-            <kbd className="text-[9px] bg-slate-700 px-1 py-0.5 rounded font-mono">⌃K</kbd>
+            <Search size={13} className="text-slate-400" />
+            <span className="hidden sm:inline">Buscar</span>
+            <kbd className="text-[9px] bg-slate-900 px-1 py-0.5 rounded font-mono text-slate-400">
+              ⌃K
+            </kbd>
           </button>
 
-          {/* Zoom */}
           <div className="flex items-center gap-0.5 bg-slate-950 px-1.5 py-1 rounded-lg border border-slate-800">
             <button
+              type="button"
               onClick={onZoomOut}
-              className="w-5 h-5 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 text-xs"
+              className="w-5 h-5 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 text-xs cursor-pointer"
+              title="Diminuir zoom"
             >
               −
             </button>
             <button
+              type="button"
               onClick={onZoomReset}
-              className="text-xs font-mono text-slate-300 px-1.5 hover:text-blue-400 min-w-[36px] text-center"
+              className="text-xs font-mono text-slate-300 px-1.5 hover:text-blue-400 min-w-[36px] text-center cursor-pointer"
               title="Resetar zoom para 100%"
             >
               {zoom}%
             </button>
             <button
+              type="button"
               onClick={onZoomIn}
-              className="w-5 h-5 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 text-xs"
+              className="w-5 h-5 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 text-xs cursor-pointer"
+              title="Aumentar zoom"
             >
               +
             </button>
           </div>
 
-          {/* Enquadrar */}
-          {onFitToScreen && (
+          {onOpenSystemDataPanel && (
             <button
-              onClick={onFitToScreen}
-              className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white text-xs transition-colors flex items-center gap-1 px-2 font-medium"
-              title="Enquadrar todo o galpão na tela (Shift+1)"
+              type="button"
+              onClick={onOpenSystemDataPanel}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-700/90 hover:bg-emerald-600 text-white shadow-sm transition-all cursor-pointer"
+              title="Gerenciar dados dos sistemas (Registros, Mapeamento, Confronto)"
             >
-              <span>🎯</span>
-              <span>Enquadrar</span>
+              <Database size={13} />
+              <span className="hidden md:inline">Gerenciar Dados</span>
             </button>
           )}
 
-          <span className="text-[11px] font-mono text-slate-500 pl-1">
-            {objectsCount} estruturas
-          </span>
+          {/* Menu 3 Pontinhos: Navegar, Inspecionar, Enquadrar e Modo Edição */}
+          <div ref={moreMenuRef} className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setIsMoreMenuOpen((prev) => !prev)
+                setIsCameraMenuOpen(false)
+                setIsSystemMenuOpen(false)
+              }}
+              aria-label="Mais opções do visualizador"
+              title="Mais opções (Navegar, Inspecionar, Enquadrar)"
+              className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-all cursor-pointer ${
+                isMoreMenuOpen
+                  ? "bg-slate-800 border-slate-500 text-white shadow-lg"
+                  : "bg-slate-950/90 hover:bg-slate-800 border-slate-700/80 text-slate-300 hover:text-white"
+              }`}
+            >
+              <MoreVertical size={16} />
+            </button>
+
+            {isMoreMenuOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-60 bg-slate-900 border border-slate-700/90 rounded-xl shadow-2xl p-1.5 z-50 backdrop-blur-md">
+                <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Ferramentas
+                </div>
+
+                <div className="space-y-0.5 mt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onToolChange("pan")
+                      setIsMoreMenuOpen(false)
+                    }}
+                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs transition-colors cursor-pointer ${
+                      tool === "pan"
+                        ? "bg-blue-600/20 border border-blue-500/50 text-white font-semibold"
+                        : "hover:bg-slate-800/70 border border-transparent text-slate-300"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <Hand size={14} className={tool === "pan" ? "text-blue-400" : "text-slate-400"} />
+                      <span>Navegar</span>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <kbd className="text-[9px] bg-slate-800 px-1 py-0.5 rounded font-mono text-slate-400">
+                        H
+                      </kbd>
+                      {tool === "pan" && <Check size={13} className="text-blue-400" />}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onToolChange("select")
+                      setIsMoreMenuOpen(false)
+                    }}
+                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs transition-colors cursor-pointer ${
+                      tool === "select"
+                        ? "bg-blue-600/20 border border-blue-500/50 text-white font-semibold"
+                        : "hover:bg-slate-800/70 border border-transparent text-slate-300"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <MousePointerClick
+                        size={14}
+                        className={tool === "select" ? "text-blue-400" : "text-slate-400"}
+                      />
+                      <span>Inspecionar</span>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <kbd className="text-[9px] bg-slate-800 px-1 py-0.5 rounded font-mono text-slate-400">
+                        V
+                      </kbd>
+                      {tool === "select" && <Check size={13} className="text-blue-400" />}
+                    </span>
+                  </button>
+                </div>
+
+                {onFitToScreen && (
+                  <>
+                    <div className="my-1.5 border-t border-slate-800" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onFitToScreen()
+                        setIsMoreMenuOpen(false)
+                      }}
+                      className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs text-slate-300 hover:bg-slate-800/70 hover:text-white transition-colors cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Maximize2 size={14} className="text-sky-400" />
+                        <span>Enquadrar</span>
+                      </span>
+                      <kbd className="text-[9px] bg-slate-800 px-1 py-0.5 rounded font-mono text-slate-400">
+                        ⇧1
+                      </kbd>
+                    </button>
+                  </>
+                )}
+
+                {canEnableEditMode && onEnableEditMode && (
+                  <>
+                    <div className="my-1.5 border-t border-slate-800" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsMoreMenuOpen(false)
+                        onEnableEditMode()
+                      }}
+                      className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs text-emerald-300 hover:bg-emerald-950/60 hover:text-emerald-200 border border-transparent hover:border-emerald-700/50 transition-colors cursor-pointer font-semibold"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Edit3 size={14} className="text-emerald-400" />
+                        <span>Modo Edição</span>
+                      </span>
+                      <span className="text-[10px] text-emerald-500">Ativar →</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     )

@@ -25,10 +25,10 @@ const UniversalMapEditor = dynamic(
 export default function WorkspaceEditorPage() {
   const params = useParams()
   const router = useRouter()
-  const { userEmail, isAuthenticated, isAnyAdmin, authorityLevel } = useIAM()
+  const { userEmail, isAuthenticated, isAdminForWorkspace } = useIAM()
 
   const workspaceId = typeof params?.id === "string" ? params.id : ""
-  const isAdmin = isAnyAdmin || (authorityLevel !== null && authorityLevel <= 3)
+  const isAdmin = isAdminForWorkspace(workspaceId)
 
   const [workspace, setWorkspace] = useState<WorkspaceMap | null>(null)
   const [loading, setLoading] = useState(true)
@@ -167,27 +167,16 @@ export default function WorkspaceEditorPage() {
         )}
 
         <div className="ml-auto flex items-center gap-2">
-          {/* Se o usuário tiver permissão, pode alternar conscientemente entre Modo Visualização e Edição */}
-          {hasEditPermission && (
-            isEditMode ? (
-              <button
-                onClick={() => setIsEditMode(false)}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800 border border-slate-700 text-slate-300 hover:text-white transition-colors"
-                title="Sair do modo edição e voltar ao modo visualizador"
-              >
-                <Eye size={12} className="text-indigo-400" />
-                <span>Voltar para Visualizador</span>
-              </button>
-            ) : (
-              <button
-                onClick={() => setIsEditMode(true)}
-                className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-all"
-                title="Habilitar ferramentas de edição do mapa"
-              >
-                <Edit3 size={12} />
-                <span>Habilitar Modo Edição</span>
-              </button>
-            )
+          {/* Em Modo Edição exibe atalho rápido para retornar ao Visualizador; no Modo Visualizador fica oculto no menu ⋮ */}
+          {hasEditPermission && isEditMode && (
+            <button
+              onClick={() => setIsEditMode(false)}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800 border border-slate-700 text-slate-300 hover:text-white transition-colors"
+              title="Sair do modo edição e voltar ao modo visualizador"
+            >
+              <Eye size={12} className="text-indigo-400" />
+              <span>Voltar para Visualizador</span>
+            </button>
           )}
 
           <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-amber-950/60 border border-amber-800/40 text-amber-500">
@@ -203,6 +192,8 @@ export default function WorkspaceEditorPage() {
         workspaceOwnerEmail={userEmail || undefined}
         workspaceIsAdmin={isAdmin}
         readOnly={isReadOnly}
+        canEnableEditMode={hasEditPermission}
+        onEnableEditMode={() => setIsEditMode(true)}
         onWorkspaceSaved={(count) => {
           setWorkspace((prev) =>
             prev ? { ...prev, objectsCount: count, updatedAt: new Date().toISOString() } : prev

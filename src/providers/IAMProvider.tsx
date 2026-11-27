@@ -24,6 +24,8 @@ export interface IAMSession {
   userName: string | null
   /** 1=Owner, 2=Global Admin, 3=WS Admin, 4=Operacional, null=não autenticado */
   authorityLevel: AuthorityLevel | null
+  /** IDs dos workspaces onde o usuário é Administrador Local (Nível 3) */
+  adminWorkspaceIds: string[]
   /** true enquanto a sessão está sendo carregada */
   loading: boolean
   /** true se autenticado */
@@ -34,6 +36,8 @@ export interface IAMSession {
   isPlatformAdmin: boolean
   /** true para qualquer nível com acesso administrativo (nível ≤ 3) */
   isAnyAdmin: boolean
+  /** true se o usuário for ADM global ou ADM específico do workspace informado */
+  isAdminForWorkspace: (workspaceId?: string) => boolean
   /** Recarrega a sessão e consultas IAM */
   refresh: () => void
 }
@@ -43,11 +47,13 @@ const IAMContext = createContext<IAMSession>({
   userEmail: null,
   userName: null,
   authorityLevel: null,
+  adminWorkspaceIds: [],
   loading: true,
   isAuthenticated: false,
   isPlatformOwner: false,
   isPlatformAdmin: false,
   isAnyAdmin: false,
+  isAdminForWorkspace: () => false,
   refresh: () => {},
 })
 
@@ -55,33 +61,33 @@ const IAMContext = createContext<IAMSession>({
 // Provedor
 // ---------------------------------------------------------------------------
 export function IAMProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<IAMSession>({
+  const [session, setSession] = useState<Omit<IAMSession, 'isAdminForWorkspace' | 'refresh'>>({
     userId: null,
     userEmail: null,
     userName: null,
     authorityLevel: null,
+    adminWorkspaceIds: [],
     loading: true,
     isAuthenticated: false,
     isPlatformOwner: false,
     isPlatformAdmin: false,
     isAnyAdmin: false,
-    refresh: () => {},
   })
 
   const resolveAuthority = useCallback(async (userId: string | null, userEmail: string | null, userName: string | null) => {
     if (!userId) {
-      setSession(prev => ({
-        ...prev,
+      setSession({
         userId: null,
         userEmail: null,
         userName: null,
         authorityLevel: null,
+        adminWorkspaceIds: [],
         loading: false,
         isAuthenticated: false,
         isPlatformOwner: false,
         isPlatformAdmin: false,
         isAnyAdmin: false,
-      }))
+      })
       return
     }
 
@@ -89,18 +95,18 @@ export function IAMProvider({ children }: { children: React.ReactNode }) {
       // 0. Reconhecimento Direto do Proprietário Global por E-mail Soberano
       const isMasterOwnerEmail = userEmail?.trim().toLowerCase() === 'profissionaltrgm@gmail.com';
       if (isMasterOwnerEmail) {
-        setSession(prev => ({
-          ...prev,
+        setSession({
           userId,
           userEmail,
           userName: userName || 'Proprietário Global',
           authorityLevel: 1,
+          adminWorkspaceIds: ['*'],
           loading: false,
           isAuthenticated: true,
           isPlatformOwner: true,
           isPlatformAdmin: true,
           isAnyAdmin: true,
-        }));
+        });
 
         // Registra e sincroniza no Supabase em segundo plano
         Promise.resolve(
@@ -126,18 +132,18 @@ export function IAMProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle()
 
       if (ownerRow) {
-        setSession(prev => ({
-          ...prev,
+        setSession({
           userId,
           userEmail,
           userName,
           authorityLevel: 1,
+          adminWorkspaceIds: ['*'],
           loading: false,
           isAuthenticated: true,
           isPlatformOwner: true,
           isPlatformAdmin: true,
           isAnyAdmin: true,
-        }))
+        })
         return
       }
 
@@ -150,75 +156,94 @@ export function IAMProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle()
 
       if (adminRow) {
-        setSession(prev => ({
-          ...prev,
+        setSession({
           userId,
           userEmail,
           userName,
           authorityLevel: 2,
+          adminWorkspaceIds: ['*'],
           loading: false,
           isAuthenticated: true,
           isPlatformOwner: false,
           isPlatformAdmin: true,
           isAnyAdmin: true,
-        }))
+        })
         return
       }
 
-      // 3. Verifica Administrador de Workspace (Nível 3)
-      const { data: wsAdminRow } = await supabase
+      // 3. Verifica Administrador de Workspace (Nível 3) — por workspace_id
+      const { data: wsAdminRows } = await supabase
         .from('nexus_iam_workspace_admin_assignments')
-        .select('id')
+        .select('workspace_id')
         .eq('user_id', userId)
         .eq('status', 'active')
-        .maybeSingle()
 
-      if (wsAdminRow) {
-        setSession(prev => ({
-          ...prev,
+      const wsIds = Array.isArray(wsAdminRows)
+        ? wsAdminRows
+            .map((r: { workspace_id?: string | null }) => String(r.workspace_id || '').trim())
+            .filter(Boolean)
+        : []
+
+      if (wsIds.length > 0) {
+        setSession({
           userId,
           userEmail,
           userName,
           authorityLevel: 3,
+          adminWorkspaceIds: wsIds,
           loading: false,
           isAuthenticated: true,
           isPlatformOwner: false,
           isPlatformAdmin: false,
           isAnyAdmin: true,
-        }))
+        })
         return
       }
 
       // 4. Usuário Operacional (Nível 4)
-      setSession(prev => ({
-        ...prev,
+      setSession({
         userId,
         userEmail,
         userName,
         authorityLevel: 4,
+        adminWorkspaceIds: [],
         loading: false,
         isAuthenticated: true,
         isPlatformOwner: false,
         isPlatformAdmin: false,
         isAnyAdmin: false,
-      }))
+      })
     } catch (err) {
       console.error('[IAMProvider] Erro ao resolver autoridade:', err)
       // Falha segura: usuário operacional
-      setSession(prev => ({
-        ...prev,
+      setSession({
         userId,
         userEmail,
         userName,
         authorityLevel: 4,
+        adminWorkspaceIds: [],
         loading: false,
         isAuthenticated: true,
         isPlatformOwner: false,
         isPlatformAdmin: false,
         isAnyAdmin: false,
-      }))
+      })
     }
   }, [])
+
+  const isAdminForWorkspace = useCallback(
+    (workspaceId?: string): boolean => {
+      if (session.isPlatformOwner || session.isPlatformAdmin || (session.authorityLevel !== null && session.authorityLevel <= 2)) {
+        return true
+      }
+      if (!workspaceId) return false
+      return (
+        session.adminWorkspaceIds.includes('*') ||
+        session.adminWorkspaceIds.includes(workspaceId)
+      )
+    },
+    [session.isPlatformOwner, session.isPlatformAdmin, session.authorityLevel, session.adminWorkspaceIds]
+  )
 
   const refresh = useCallback(async () => {
     setSession(prev => ({ ...prev, loading: true }))
@@ -255,8 +280,8 @@ export function IAMProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe()
   }, [resolveAuthority])
 
-  // Injeta o `refresh` no contexto
-  const value: IAMSession = { ...session, refresh }
+  // Injeta o `refresh` e `isAdminForWorkspace` no contexto
+  const value: IAMSession = { ...session, isAdminForWorkspace, refresh }
 
   return <IAMContext.Provider value={value}>{children}</IAMContext.Provider>
 }

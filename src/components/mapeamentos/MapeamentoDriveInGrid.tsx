@@ -1233,7 +1233,12 @@ export function MapeamentoDriveInGrid({
 
               {/* Frame 3D do Drive-In em rotação suave abaixo dos indicadores */}
               {sidePreview && (
-                <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                <div
+                  className={cn(
+                    "flex flex-col overflow-hidden",
+                    fitToViewport ? "flex-1 min-h-0" : "h-[230px] shrink-0"
+                  )}
+                >
                   {sidePreview}
                 </div>
               )}

@@ -242,6 +242,7 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
   const [importTarget, setImportTarget] = useState<{ item: ProgramacaoItem; prog: Programacao } | null>(null)
   const [isConsolidarOpen, setIsConsolidarOpen] = useState(false)
   const [consolidarTarget, setConsolidarTarget] = useState<ProgramacaoItem | null>(null)
+  const [qtdConsolidarInput, setQtdConsolidarInput] = useState<string>('')
 
   const [saving, setSaving] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -496,11 +497,11 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
     const item = consolidarTarget
     if (!item) return
 
-    const { qtdConfirmada } = getItemStats(item)
-    const qtdFinal = Math.min(qtdConfirmada, item.embalagens)
+    const parsedQtd = Number(String(qtdConsolidarInput).replace(',', '.'))
+    const qtdFinal = Number.isFinite(parsedQtd) ? parsedQtd : 0
 
     if (qtdFinal <= 0) {
-      showToast('Nenhuma reserva confirmada para consolidar.', 'error')
+      showToast('Informe a quantidade retrabalhada para consolidar.', 'error')
       return
     }
 
@@ -554,10 +555,11 @@ export default function RetrabalhosTab({ refreshTrigger }: { refreshTrigger?: bo
       await fetchData()
       setIsConsolidarOpen(false)
       setConsolidarTarget(null)
+      setQtdConsolidarInput('')
       const dif = item.embalagens - qtdFinal
       showToast(
-        dif > 0
-          ? `${item.produto} consolidado: ${fmtNum(qtdFinal)} un. (diferença de ${fmtNum(dif)})`
+        dif !== 0
+          ? `${item.produto} consolidado: ${fmtNum(qtdFinal)} un. (diferença de ${fmtNum(Math.abs(dif))})`
           : `${item.produto} consolidado com sucesso!`
       )
     } catch (err: any) {
@@ -697,9 +699,8 @@ const handlePrintReservas = (
   // ─────────────────────────────────────────────────────────────────────────────
 
   const consolidarStats = consolidarTarget ? getItemStats(consolidarTarget) : null
-  const qtdConsolidar = consolidarTarget && consolidarStats
-    ? Math.min(consolidarStats.qtdConfirmada, consolidarTarget.embalagens)
-    : 0
+  const parsedConsolidar = Number(String(qtdConsolidarInput).replace(',', '.'))
+  const qtdConsolidar = Number.isFinite(parsedConsolidar) && parsedConsolidar > 0 ? parsedConsolidar : 0
 
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-4 relative">
@@ -951,7 +952,12 @@ const handlePrintReservas = (
                                     </button>
                                     {!isConcluido && (
                                       <button
-                                        onClick={() => { setConsolidarTarget(item); setIsConsolidarOpen(true) }}
+                                        onClick={() => {
+                                          const stats = getItemStats(item)
+                                          setConsolidarTarget(item)
+                                          setQtdConsolidarInput(stats.qtdConfirmada > 0 ? String(stats.qtdConfirmada) : '')
+                                          setIsConsolidarOpen(true)
+                                        }}
                                         className="p-1.5 text-slate-400 hover:text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors"
                                         title="Consolidar (concluir)"
                                       >
@@ -1313,7 +1319,7 @@ const handlePrintReservas = (
         {isConsolidarOpen && consolidarTarget && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => { if (!consolidating) { setIsConsolidarOpen(false); setConsolidarTarget(null) } }}
+              onClick={() => { if (!consolidating) { setIsConsolidarOpen(false); setConsolidarTarget(null); setQtdConsolidarInput('') } }}
               className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
             <motion.div initial={{ opacity: 0, scale: 0.92, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.92, y: 20 }}
               className="relative w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 shadow-2xl">
@@ -1332,22 +1338,39 @@ const handlePrintReservas = (
                   <span className="text-slate-400">Programado</span>
                   <span className="font-bold text-slate-800 dark:text-slate-200">{fmtNum(consolidarTarget.embalagens)} un.</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Confirmado (a consolidar)</span>
-                  <span className="font-bold text-emerald-500">{fmtNum(qtdConsolidar)} un.</span>
+                <div className="flex justify-between items-center gap-3">
+                  <span className="text-slate-400">Retrabalhado (a consolidar)</span>
+                  <span className="inline-flex items-center gap-1.5 font-bold text-emerald-500">
+                    <input
+                      type="number"
+                      min={1}
+                      step="any"
+                      value={qtdConsolidarInput}
+                      onChange={e => setQtdConsolidarInput(e.target.value)}
+                      placeholder="0"
+                      disabled={consolidating}
+                      className="w-28 text-right bg-white dark:bg-slate-900 border border-emerald-500/40 rounded-lg px-2.5 py-1 text-sm font-bold text-emerald-500 focus:outline-none focus:border-emerald-500 font-mono"
+                    />
+                    <span>un.</span>
+                  </span>
                 </div>
                 <div className="border-t border-slate-200 dark:border-slate-700 pt-2 mt-2 space-y-1 text-xs text-slate-500">
                   <p>✓ Abater {fmtNum(qtdConsolidar)} un. da posição <strong>Retrabalho</strong> no Mapeamento</p>
                   <p>✓ Criar registro de saída em <strong>Monitoramento</strong></p>
                   <p>✓ Marcar item como <strong>Concluído</strong></p>
-                  {consolidarTarget.embalagens - qtdConsolidar > 0 && (
-                    <p className="text-amber-500">⚠ Diferença de {fmtNum(consolidarTarget.embalagens - qtdConsolidar)} un. ficará registrada</p>
+                  {consolidarStats && consolidarStats.qtdConfirmada > 0 && qtdConsolidar !== consolidarStats.qtdConfirmada && (
+                    <p className="text-slate-400">• Reservas confirmadas: {fmtNum(consolidarStats.qtdConfirmada)} un.</p>
+                  )}
+                  {qtdConsolidar > 0 && consolidarTarget.embalagens - qtdConsolidar !== 0 && (
+                    <p className="text-amber-500">
+                      ⚠ Diferença de {fmtNum(Math.abs(consolidarTarget.embalagens - qtdConsolidar))} un. ({qtdConsolidar > consolidarTarget.embalagens ? 'acima' : 'abaixo'} do programado) ficará registrada
+                    </p>
                   )}
                 </div>
               </div>
 
               <div className="flex gap-3">
-                <button onClick={() => { setIsConsolidarOpen(false); setConsolidarTarget(null) }} disabled={consolidating}
+                <button onClick={() => { setIsConsolidarOpen(false); setConsolidarTarget(null); setQtdConsolidarInput('') }} disabled={consolidating}
                   className="flex-1 px-4 py-3 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-white text-xs font-semibold transition-all disabled:opacity-50">
                   Cancelar
                 </button>

@@ -350,7 +350,7 @@ export function getLinkedStructuresForSystem(
           channels,
           objLabel
         )
-        const occupiedList = getChannelOccupiedSlots(obj, chan, channels, objItems)
+        const occupiedList = getChannelOccupiedSlots(obj, chan, channels, objItems, false)
         const totalUnits = chanItems.reduce((sum, it) => sum + (Number(it.quantidade) || 0), 0)
 
         linkedChannels.push({

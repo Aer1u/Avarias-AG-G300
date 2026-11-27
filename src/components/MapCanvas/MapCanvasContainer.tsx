@@ -1326,16 +1326,20 @@ const MapCanvasContainer = forwardRef<MapCanvasHandle, MapCanvasContainerProps>(
 
           {/* Botões de Ação de Câmera */}
           <div className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800 shadow-2xl backdrop-blur">
-            <button
-              onClick={() => fitToScreen()}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-950/70 hover:bg-blue-900/80 border border-blue-800/60 text-blue-300 hover:text-white text-xs font-bold transition-all shadow-sm"
-              title="Enquadrar todo o conteúdo na tela (Shift+1)"
-            >
-              <span>🎯</span>
-              <span>Enquadrar Tudo</span>
-            </button>
+            {!readOnly && (
+              <>
+                <button
+                  onClick={() => fitToScreen()}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-950/70 hover:bg-blue-900/80 border border-blue-800/60 text-blue-300 hover:text-white text-xs font-bold transition-all shadow-sm"
+                  title="Enquadrar todo o conteúdo na tela (Shift+1)"
+                >
+                  <span>🎯</span>
+                  <span>Enquadrar Tudo</span>
+                </button>
 
-            <div className="h-4 w-px bg-slate-800 mx-1" />
+                <div className="h-4 w-px bg-slate-800 mx-1" />
+              </>
+            )}
 
             <button
               onClick={() => onZoomChange(Math.max(zoom - 15, 20))}

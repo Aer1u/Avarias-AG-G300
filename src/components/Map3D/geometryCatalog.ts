@@ -782,7 +782,8 @@ function buildDriveInGeometry(
       spatial.raw,
       chan,
       channels,
-      allLocalItems
+      allLocalItems,
+      !readOnly
     )
 
     occupiedList.forEach((pos) => {

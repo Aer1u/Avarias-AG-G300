@@ -157,7 +157,7 @@ export const SpatialViewer3D = forwardRef<SpatialViewer3DHandle, SpatialViewer3D
       onSelectRef.current = onSelect
     }, [onSelect])
 
-    const [shadowsEnabled, setShadowsEnabled] = useState(true)
+    const [shadowsEnabled, setShadowsEnabled] = useState(false)
     const shadowsEnabledRef = useRef<boolean>(shadowsEnabled)
     useEffect(() => {
       shadowsEnabledRef.current = shadowsEnabled
@@ -1301,8 +1301,8 @@ export const SpatialViewer3D = forwardRef<SpatialViewer3DHandle, SpatialViewer3D
 
           {/* Barra de Ações Rápidas de Câmera */}
           <div className="flex items-center gap-1.5 bg-slate-900/95 p-1.5 rounded-2xl border border-slate-800 shadow-2xl flex-wrap justify-end">
-            {/* Alternador Rápido: Bird's-Eye 3D (Padrão) · Full Top · 3D Livre */}
-            {onModeChange && (
+            {/* Alternador Rápido: exibido apenas no Modo Editor (no Visualizador fica dentro do botão da Câmera) */}
+            {!readOnly && onModeChange && (
               <div className="flex bg-slate-950 p-0.5 rounded-xl border border-slate-800 gap-0.5">
                 <button
                   onClick={() => {
@@ -1436,18 +1436,20 @@ export const SpatialViewer3D = forwardRef<SpatialViewer3DHandle, SpatialViewer3D
               </>
             )}
 
-            {/* Enquadrar Tudo */}
-            <button
-              onClick={() => {
-                setSideViewIsolated(false)
-                fitToScreen()
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-950/80 hover:bg-blue-900 text-blue-300 hover:text-white text-xs font-bold transition-all border border-blue-800/50"
-              title="Enquadrar todas as estruturas na tela"
-            >
-              <span>🎯</span>
-              <span>Enquadrar</span>
-            </button>
+            {/* Enquadrar Tudo — no Visualizador fica oculto dentro do menu ⋮ */}
+            {!readOnly && (
+              <button
+                onClick={() => {
+                  setSideViewIsolated(false)
+                  fitToScreen()
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-950/80 hover:bg-blue-900 text-blue-300 hover:text-white text-xs font-bold transition-all border border-blue-800/50"
+                title="Enquadrar todas as estruturas na tela"
+              >
+                <span>🎯</span>
+                <span>Enquadrar</span>
+              </button>
+            )}
 
             {/* Alternar Sombras */}
             <button

@@ -43,7 +43,6 @@ import ResourceEngineModal from "../Resources/ResourceEngineModal"
 import SystemManagerModal from "../Systems/SystemManagerModal"
 import SystemDataPanel from "../Systems/SystemDataPanel"
 import { useSystemStore } from "../Systems/useSystemStore"
-import { getLinkedStructuresForSystem, isOpenSystem } from "@/lib/systemVisuals"
 import { AdminCenterModal } from "../IAM/AdminCenter/AdminCenterModal"
 import { useAuthz } from "../IAM/useAuthz"
 import { LocalErrorBoundary } from "../LocalErrorBoundary"
@@ -346,6 +345,10 @@ export interface UniversalMapEditorProps {
   workspaceIsAdmin?: boolean
   /** Modo somente leitura para visualizadores (bloqueia edições e salvamentos) */
   readOnly?: boolean
+  /** Indica se o usuário atual possui permissão para ativar o Modo Edição */
+  canEnableEditMode?: boolean
+  /** Callback para habilitar o Modo Edição a partir do menu do visualizador */
+  onEnableEditMode?: () => void
   /** Callback chamado após cada save bem-sucedido (para atualizar UI pai) */
   onWorkspaceSaved?: (objectsCount: number) => void
 }
@@ -357,6 +360,8 @@ export default function UniversalMapEditor({
   workspaceOwnerEmail,
   workspaceIsAdmin = false,
   readOnly = false,
+  canEnableEditMode = false,
+  onEnableEditMode,
   onWorkspaceSaved,
 }: UniversalMapEditorProps = {}) {
   // Histórico de alterações com suporte a Desfazer / Refazer (Undo / Redo)
@@ -520,8 +525,25 @@ export default function UniversalMapEditor({
   }, [])
 
   // Painéis com Largura Arrastável e Colapsável (Resizable Splitters)
+  // No Modo Visualizador, o Navegador Espacial inicia fechado para priorizar o mapa.
   const [leftWidth, setLeftWidth] = useState(290)
-  const [isLeftCollapsed, setIsLeftCollapsed] = useState(false)
+  const [isEditorLeftCollapsed, setIsEditorLeftCollapsed] = useState(false)
+  const [isViewerLeftOpen, setIsViewerLeftOpen] = useState(false)
+  const isLeftCollapsed = readOnly ? !isViewerLeftOpen : isEditorLeftCollapsed
+  const setIsLeftCollapsed = useCallback(
+    (next: boolean | ((prev: boolean) => boolean)) => {
+      if (readOnly) {
+        setIsViewerLeftOpen((prevOpen) => {
+          const prevCollapsed = !prevOpen
+          const resolved = typeof next === "function" ? next(prevCollapsed) : next
+          return !resolved
+        })
+      } else {
+        setIsEditorLeftCollapsed(next)
+      }
+    },
+    [readOnly]
+  )
   const [rightWidth, setRightWidth] = useState(330)
   const [isRightCollapsed, setIsRightCollapsed] = useState(false)
 
@@ -592,8 +614,13 @@ export default function UniversalMapEditor({
   }>({ isOpen: false, object: null })
 
   // Motor de Autorização & RBAC (NEXUS IAM)
-  const { can, activeUser, primaryRole, isPlatformOwner, isPlatformAdmin } = useAuthz("MAP-LAB-01")
+  const { can, activeUser, primaryRole, isPlatformOwner, isPlatformAdmin } = useAuthz(
+    workspaceId || "MAP-LAB-01",
+    workspaceId || "ws_g300"
+  )
   const canViewIAM = isPlatformOwner || isPlatformAdmin || can('workspace.manage_roles')
+  const effectiveIsAdmin = Boolean(workspaceIsAdmin)
+  const canEditSystemPositions = Boolean(workspaceIsAdmin || canEnableEditMode || !readOnly)
 
   // Ref para os renderizadores 2D Konva e 3D Three.js (navegação programática)
   const canvasRef = useRef<MapCanvasHandle>(null)
@@ -1273,6 +1300,15 @@ export default function UniversalMapEditor({
         objectsCount={objects.length}
         spatialMode={spatialMode}
         readOnly={readOnly}
+        canEnableEditMode={canEnableEditMode}
+        onEnableEditMode={onEnableEditMode}
+        onOpenSystemDataPanel={
+          readOnly && effectiveIsAdmin ? () => setIsSystemDataPanelOpen(true) : undefined
+        }
+        systems={systems}
+        objects={objects}
+        activeSystemFilterId={effectiveSystemFilterId}
+        onSelectSystemFilter={setActiveSystemFilterId}
         onSpatialModeChange={setSpatialMode}
         onToolChange={setTool}
         onToggleSnap={() => setSnapEnabled((v) => !v)}
@@ -1310,36 +1346,9 @@ export default function UniversalMapEditor({
         onRedo={redo}
       />
 
-      {/* Barra de contexto do Workspace (Save status OU Banner de Visualizador) */}
-      {workspaceId && (
-        readOnly ? (
-          <div className="shrink-0 flex items-center gap-3 px-4 py-1.5 border-b border-indigo-900/60 bg-indigo-950/40 text-[11px] backdrop-blur">
-            <span className="flex items-center gap-1.5 text-indigo-400 font-bold uppercase tracking-wider bg-indigo-900/50 px-2 py-0.5 rounded-md border border-indigo-700/50">
-              <span>👁️</span>
-              <span>Modo Visualizador</span>
-            </span>
-            <span className="text-slate-400">
-              Navegação e inspeção espacial (Bird&apos;s-Eye 3D, Full Top, 3D Livre e 2D) · Alterações bloqueadas
-            </span>
-            <span className="text-slate-600">· {objects.length} objetos</span>
-            <div className="ml-auto flex items-center gap-2">
-              {/* Botão de dados — disponível para ADMs no modo visualizador */}
-              {workspaceIsAdmin && (
-                <button
-                  onClick={() => setIsSystemDataPanelOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-semibold bg-emerald-700 hover:bg-emerald-600 text-white shadow transition-all"
-                  title="Gerenciar dados dos sistemas (Registros, Mapeamento, Confronto)"
-                >
-                  🗂️ Gerenciar Dados
-                </button>
-              )}
-              <span className="text-slate-500 text-[10px]">
-                Workspace: <strong className="text-slate-300">{workspaceName || workspaceId}</strong>
-              </span>
-            </div>
-          </div>
-        ) : (
-          <div className="shrink-0 flex items-center gap-3 px-4 py-1 border-b border-slate-800 bg-slate-900/60 text-[11px]">
+      {/* Barra de contexto do Workspace (apenas no Modo Edição — no Modo Visualizador fica tudo limpo na barra principal) */}
+      {workspaceId && !readOnly && (
+        <div className="shrink-0 flex items-center gap-3 px-4 py-1 border-b border-slate-800 bg-slate-900/60 text-[11px]">
             <span className="text-slate-500">Workspace:</span>
             <span className="font-semibold text-amber-400 truncate max-w-xs">{workspaceName || workspaceId}</span>
             <span className="text-slate-700">·</span>
@@ -1376,7 +1385,6 @@ export default function UniversalMapEditor({
               </button>
             </div>
           </div>
-        )
       )}
 
       {/* Dica contextual do modo draw_area */}
@@ -1397,10 +1405,10 @@ export default function UniversalMapEditor({
           <button
             onClick={() => setIsLeftCollapsed(false)}
             className="absolute left-2 top-3 z-30 bg-slate-900 hover:bg-slate-800 text-slate-300 p-1.5 rounded-lg border border-slate-700 shadow-xl text-xs flex items-center gap-1 transition-all"
-            title={readOnly ? "Expandir Navegação" : "Expandir Biblioteca (Ctrl+B)"}
+            title={readOnly ? "Expandir Navegador Espacial" : "Expandir Biblioteca (Ctrl+B)"}
           >
             <span>▶</span>
-            <span className="text-[10px] font-bold">{readOnly ? "Navegação" : "Biblioteca"}</span>
+            <span className="text-[10px] font-bold">{readOnly ? "Navegador Espacial" : "Biblioteca"}</span>
           </button>
         )}
 
@@ -1548,81 +1556,6 @@ export default function UniversalMapEditor({
                 onModeChange={setSpatialMode}
               />
             </LocalErrorBoundary>
-          )}
-
-          {/* Legenda Interativa & Filtro de Identificação de Sistemas (2D e 3D) */}
-          {systems.length > 0 && (
-            <div className="absolute bottom-4 left-4 z-20 max-w-[calc(100%-24rem)] pointer-events-auto">
-              <div className="bg-slate-950/90 border border-slate-800 rounded-xl shadow-2xl px-2.5 py-2 backdrop-blur-md flex flex-col gap-1.5">
-                <div className="flex items-center justify-between gap-3 px-0.5">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    {effectiveSystemFilterId
-                      ? "Filtro Ativo · Demais canais desabilitados"
-                      : "Sistemas no Mapa"}
-                  </span>
-                  {effectiveSystemFilterId && (
-                    <button
-                      type="button"
-                      onClick={() => setActiveSystemFilterId(null)}
-                      className="text-[10px] font-semibold text-sky-400 hover:text-sky-300 cursor-pointer"
-                    >
-                      Mostrar todos
-                    </button>
-                  )}
-                </div>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {systems.map((sys) => {
-                    const isActive = effectiveSystemFilterId === sys.id
-                    const linkedCount = getLinkedStructuresForSystem(sys, objects).length
-                    const isLivre = isOpenSystem(sys)
-                    return (
-                      <button
-                        key={sys.id}
-                        type="button"
-                        onClick={() =>
-                          setActiveSystemFilterId((prev) => (prev === sys.id ? null : sys.id))
-                        }
-                        title={`${sys.name} (${isLivre ? "Sistema Livre — Sem Saldo" : "Com Saldo"}) · Clique para destacar no mapa`}
-                        className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${
-                          isActive
-                            ? "text-white shadow-md scale-[1.02]"
-                            : effectiveSystemFilterId
-                            ? "bg-slate-900/50 border-slate-800/60 text-slate-500 opacity-50 grayscale hover:opacity-85 hover:text-slate-200"
-                            : "bg-slate-900/90 border-slate-800 text-slate-200 hover:border-slate-600"
-                        }`}
-                        style={
-                          isActive
-                            ? {
-                                backgroundColor: `${sys.color}2b`,
-                                borderColor: sys.color,
-                              }
-                            : undefined
-                        }
-                      >
-                        <span
-                          className="w-2.5 h-2.5 rounded-sm shrink-0 border border-white/25"
-                          style={{ backgroundColor: sys.color }}
-                        />
-                        <span>{sys.icon}</span>
-                        <span className="font-mono font-bold">{sys.code}</span>
-                        <span className="text-[10px] text-slate-400 truncate max-w-[110px]">
-                          {sys.name}
-                        </span>
-                        <span
-                          className={`text-[9px] px-1 py-0.2 rounded font-mono border ${
-                            isLivre
-                              ? "bg-emerald-950/60 border-emerald-700/50 text-emerald-300"
-                              : "bg-slate-950/70 border-slate-700 text-slate-400"
-                          }`}
-                        >
-                          {isLivre ? "Livre" : "Saldo"} · {linkedCount}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            </div>
           )}
 
           {/* Pill Flutuante de Acesso Rápido na Parte Superior (Modo Visualizador) */}
@@ -1843,10 +1776,11 @@ export default function UniversalMapEditor({
       )}
 
       {/* Painel de Dados dos Sistemas — apenas no Modo Visualização para ADMs */}
-      {readOnly && (
+      {readOnly && effectiveIsAdmin && (
         <SystemDataPanel
           isOpen={isSystemDataPanelOpen}
           onClose={() => setIsSystemDataPanelOpen(false)}
+          canEdit={effectiveIsAdmin}
           allObjects={objects}
           workspaceId={workspaceId}
           levelsConfig={levelsConfig}
@@ -1870,7 +1804,7 @@ export default function UniversalMapEditor({
               : null
           }
           initialChannelId={driveInModalState.initialChannelId || driveInModalState.channelId}
-          isAdmin={workspaceIsAdmin}
+          isAdmin={canEditSystemPositions}
           workspaceId={workspaceId}
           allObjects={objects}
           levelsConfig={levelsConfig}
@@ -1882,7 +1816,8 @@ export default function UniversalMapEditor({
       <AdminCenterModal
         isOpen={isIAMOpen}
         onClose={() => setIsIAMOpen(false)}
-        currentMapId="MAP-LAB-01"
+        currentMapId={workspaceId || "MAP-LAB-01"}
+        currentWorkspaceId={workspaceId || "ws_g300"}
       />
     </div>
   )

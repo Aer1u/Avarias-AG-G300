@@ -20,6 +20,7 @@ import { isOpenSystem, getLinkedStructuresForSystem } from "@/lib/systemVisuals"
 interface SystemDataPanelProps {
   isOpen: boolean
   onClose: () => void
+  canEdit?: boolean
   allObjects?: MapObject[]
   workspaceId?: string
   levelsConfig?: DimensionConfig
@@ -30,6 +31,7 @@ interface SystemDataPanelProps {
 export default function SystemDataPanel({
   isOpen,
   onClose,
+  canEdit = false,
   allObjects = [],
   workspaceId,
   levelsConfig,
@@ -43,7 +45,7 @@ export default function SystemDataPanel({
   const [isMappingOpen, setIsMappingOpen] = useState(false)
   const [isConfrontoOpen, setIsConfrontoOpen] = useState(false)
 
-  if (!isOpen) return null
+  if (!isOpen || !canEdit) return null
 
   const selectedSystem = systems.find((s) => s.id === selectedSystemId) || null
   const isSelectedOpen = isOpenSystem(selectedSystem)

@@ -170,7 +170,8 @@ export default function ViewerNavigationSidebar({
     const occupiedSlots = getObjectOccupiedSlotCount(
       selectedObject,
       getLocalItems(),
-      channels
+      channels,
+      false
     )
 
     const resolvedSystem = resolveSystemForObject(selectedObject, systems)

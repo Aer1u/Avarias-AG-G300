@@ -32,7 +32,6 @@ import {
   Save,
   EllipsisVertical,
   Pencil,
-  Hourglass,
   BarChart3,
   Table2,
   Lock,
@@ -183,20 +182,6 @@ function hasMissingColumns(rows: ControlePKRow[]): boolean {
   )
 }
 
-function getMissingManualFields(row: ControlePKRow): string[] {
-  const missing: string[] = []
-  if (!row.empresa?.trim()) missing.push("Empresa")
-  if (row.qtde_notas === null || row.qtde_notas === undefined) {
-    missing.push("Qtde. Notas")
-  }
-  if (!row.data_faturamento?.trim()) missing.push("Data de Faturamento")
-  if (!row.solicitante?.trim()) missing.push("Solicitante")
-  if (!row.notas?.trim()) missing.push("Notas")
-  if (!row.embalador?.trim()) missing.push("Embalador")
-  if (!row.horario_inicio_embalagem?.trim()) missing.push("Início Embalagem")
-  if (!row.horario_final_embalagem?.trim()) missing.push("Final Embalagem")
-  return missing
-}
 
 const MONTHS_PT = [
   { month: 1, short: "JAN", name: "Janeiro" },
@@ -322,7 +307,6 @@ type FilterTab =
   | "todos"
   | "pendentes"
   | "atualizados"
-  | "manual_pendentes"
   | "Simples"
   | "Normal"
   | "Complexa"
@@ -1032,9 +1016,6 @@ export function ControlePKView() {
       (r) => r.skus > 0 || Boolean(r.pessoa) || Boolean(r.conferente)
     ).length
     const pendentes = total - atualizados
-    const manualPendentes = periodFilteredRows.filter(
-      (r) => getMissingManualFields(r).length > 0
-    ).length
     const pecas = periodFilteredRows.reduce(
       (s, r) => s + (Number(r.pecas) || 0),
       0
@@ -1056,7 +1037,6 @@ export function ControlePKView() {
       total,
       atualizados,
       pendentes,
-      manualPendentes,
       pecas,
       skus,
       simples,
@@ -1073,8 +1053,6 @@ export function ControlePKView() {
       list = list.filter(
         (r) => r.skus > 0 || Boolean(r.pessoa) || Boolean(r.conferente)
       )
-    } else if (filterTab === "manual_pendentes") {
-      list = list.filter((r) => getMissingManualFields(r).length > 0)
     } else if (
       filterTab === "Simples" ||
       filterTab === "Normal" ||
@@ -1903,32 +1881,22 @@ export function ControlePKView() {
                   id: "atualizados",
                   label: `Atualizados (${stats.atualizados})`,
                 },
-                {
-                  id: "manual_pendentes",
-                  label: `Falta Manual (${stats.manualPendentes})`,
-                  isManualPending: true,
-                },
                 { id: "Simples", label: `Simples (${stats.simples})` },
                 { id: "Normal", label: `Normal (${stats.normal})` },
                 { id: "Complexa", label: `Complexa (${stats.complexa})` },
-              ] as { id: FilterTab; label: string; isManualPending?: boolean }[]
+              ] as { id: FilterTab; label: string }[]
             ).map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setFilterTab(tab.id)}
                 className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-colors cursor-pointer ${
                   filterTab === tab.id
-                    ? tab.isManualPending
-                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                      : tab.id === "Complexa"
-                        ? "bg-red-500/20 text-red-400 border border-red-500/40"
-                        : "bg-[#159BFF] text-[#003157] border border-[#159BFF]"
-                    : tab.isManualPending && stats.manualPendentes > 0
-                      ? "bg-amber-500/10 text-amber-300/90 border border-amber-500/20 hover:bg-amber-500/15"
-                      : "bg-[#122131] text-[#bfc7d5] border border-[#273647]/80 hover:bg-[#1c2b3c] hover:text-[#d4e4fa]"
+                    ? tab.id === "Complexa"
+                      ? "bg-red-500/20 text-red-400 border border-red-500/40"
+                      : "bg-[#159BFF] text-[#003157] border border-[#159BFF]"
+                    : "bg-[#122131] text-[#bfc7d5] border border-[#273647]/80 hover:bg-[#1c2b3c] hover:text-[#d4e4fa]"
                 }`}
               >
-                {tab.isManualPending && <Hourglass size={11} />}
                 {tab.label}
               </button>
             ))}
@@ -2119,7 +2087,6 @@ export function ControlePKView() {
                       row.horario_inicio_embalagem,
                       row.horario_final_embalagem
                     )
-                    const missingManual = getMissingManualFields(row)
                     return (
                       <React.Fragment key={row.id}>
                         <tr
@@ -2154,17 +2121,6 @@ export function ControlePKView() {
                                 )}
                                 <span>{row.aviso}</span>
                               </button>
-                              {missingManual.length > 0 && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenEditModal(row)}
-                                  title={`Faltam dados manuais (${missingManual.length}): ${missingManual.join(", ")}`}
-                                  aria-label={`Faltam dados manuais: ${missingManual.join(", ")}`}
-                                  className="inline-flex items-center justify-center p-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-400 hover:bg-amber-500/25 transition-colors cursor-pointer shrink-0"
-                                >
-                                  <Hourglass size={11} />
-                                </button>
-                              )}
                             </div>
                           </td>
                           <td className="py-3 px-3 text-center whitespace-nowrap">
@@ -2885,7 +2841,7 @@ export function ControlePKView() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[135] flex items-center justify-center p-4"
+            className="fixed inset-0 z-[135] flex items-center justify-center p-2 sm:p-3"
             style={{
               backdropFilter: "blur(14px)",
               background: "rgba(2,6,23,0.8)",
@@ -2897,19 +2853,19 @@ export function ControlePKView() {
               initial={{ opacity: 0, scale: 0.95, y: 16 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 16 }}
-              className="relative w-full max-w-2xl max-h-[90vh] flex flex-col rounded-3xl overflow-hidden shadow-2xl border border-white/10 bg-[#0B1120]"
+              className="relative w-full max-w-6xl max-h-[96vh] flex flex-col rounded-2xl overflow-hidden shadow-2xl border border-white/10 bg-[#0B1120]"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="px-6 py-4 border-b border-white/[0.06] flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-sky-500/15 text-sky-400">
-                    <Pencil size={17} />
+              <div className="px-4 py-2.5 border-b border-white/[0.06] flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 rounded-lg bg-sky-500/15 text-sky-400">
+                    <Pencil size={14} />
                   </div>
-                  <div>
-                    <h2 className="text-sm font-bold text-white uppercase tracking-wider">
+                  <div className="flex flex-wrap items-baseline gap-x-2.5">
+                    <h2 className="text-xs font-bold text-white uppercase tracking-wider">
                       Editar Aviso
                     </h2>
-                    <p className="text-[11px] text-slate-400">
+                    <p className="text-[10px] text-slate-400">
                       Preencha ou edite todas as colunas do registro.
                     </p>
                   </div>
@@ -2917,22 +2873,22 @@ export function ControlePKView() {
                 <button
                   type="button"
                   onClick={() => setEditingRow(null)}
-                  className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white cursor-pointer"
+                  className="p-1.5 rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white cursor-pointer"
                 >
-                  <X size={16} />
+                  <X size={14} />
                 </button>
               </div>
 
-              <div className="p-6 space-y-5 overflow-y-auto flex-1">
+              <div className="px-4 py-3 space-y-2.5 overflow-y-auto lg:overflow-visible flex-1">
                 {/* 1. Dados do Aviso e Faturamento */}
-                <div className="space-y-3.5">
-                  <span className="block text-[10px] font-bold uppercase tracking-wider text-amber-400">
+                <div className="space-y-2">
+                  <span className="block text-[9px] font-bold uppercase tracking-wider text-amber-400">
                     Dados do Aviso e Faturamento
                   </span>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
                     <div>
-                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                      <label className="block text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
                         Aviso *
                       </label>
                       <input
@@ -2944,12 +2900,12 @@ export function ControlePKView() {
                             aviso: e.target.value,
                           }))
                         }
-                        className="w-full px-3 py-2 rounded-xl bg-slate-900/90 border border-white/[0.08] focus:border-sky-500/50 text-xs text-white font-mono uppercase outline-none"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-white/[0.08] focus:border-sky-500/50 text-[11px] text-white font-mono uppercase outline-none"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                      <label className="block text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
                         Data Separação
                       </label>
                       <input
@@ -2961,12 +2917,12 @@ export function ControlePKView() {
                             data_separacao: e.target.value,
                           }))
                         }
-                        className="w-full px-3 py-2 rounded-xl bg-slate-900/90 border border-white/[0.08] focus:border-sky-500/50 text-xs text-slate-200 font-mono outline-none [color-scheme:dark]"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-white/[0.08] focus:border-sky-500/50 text-[11px] text-slate-200 font-mono outline-none [color-scheme:dark]"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                      <label className="block text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
                         Empresa
                       </label>
                       <input
@@ -2979,12 +2935,12 @@ export function ControlePKView() {
                           }))
                         }
                         placeholder="Nome da empresa..."
-                        className="w-full px-3 py-2 rounded-xl bg-slate-900/90 border border-white/[0.08] focus:border-sky-500/50 text-xs text-white placeholder:text-slate-600 outline-none"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-white/[0.08] focus:border-sky-500/50 text-[11px] text-white placeholder:text-slate-600 outline-none"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                      <label className="block text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
                         Notas
                       </label>
                       <input
@@ -2997,12 +2953,12 @@ export function ControlePKView() {
                           }))
                         }
                         placeholder="Número(s) da(s) nota(s)..."
-                        className="w-full px-3 py-2 rounded-xl bg-slate-900/90 border border-white/[0.08] focus:border-sky-500/50 text-xs text-white font-mono placeholder:text-slate-600 outline-none"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-white/[0.08] focus:border-sky-500/50 text-[11px] text-white font-mono placeholder:text-slate-600 outline-none"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                      <label className="block text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
                         Qtde. Notas
                       </label>
                       <input
@@ -3017,12 +2973,12 @@ export function ControlePKView() {
                           }))
                         }
                         placeholder="0"
-                        className="w-full px-3 py-2 rounded-xl bg-slate-900/90 border border-white/[0.08] focus:border-sky-500/50 text-xs text-white font-mono placeholder:text-slate-600 outline-none"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-white/[0.08] focus:border-sky-500/50 text-[11px] text-white font-mono placeholder:text-slate-600 outline-none"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                      <label className="block text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
                         Data de Faturamento
                       </label>
                       <input
@@ -3034,17 +2990,17 @@ export function ControlePKView() {
                             data_faturamento: e.target.value,
                           }))
                         }
-                        className="w-full px-3 py-2 rounded-xl bg-slate-900/90 border border-white/[0.08] focus:border-sky-500/50 text-xs text-slate-200 font-mono outline-none [color-scheme:dark]"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-white/[0.08] focus:border-sky-500/50 text-[11px] text-slate-200 font-mono outline-none [color-scheme:dark]"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                    <label className="block text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
                       Solicitante
                     </label>
                     <textarea
-                      rows={2}
+                      rows={1}
                       value={editDraft.solicitante}
                       onChange={(e) =>
                         setEditDraft((d) => ({
@@ -3053,15 +3009,15 @@ export function ControlePKView() {
                         }))
                       }
                       placeholder="Nome do solicitante, observações ou instruções detalhadas..."
-                      className="w-full px-3.5 py-2 rounded-xl bg-slate-900/90 border border-white/[0.08] focus:border-sky-500/50 text-xs text-white placeholder:text-slate-600 outline-none resize-y min-h-[64px]"
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-white/[0.08] focus:border-sky-500/50 text-[11px] text-white placeholder:text-slate-600 outline-none resize-none min-h-[30px]"
                     />
                   </div>
                 </div>
 
                 {/* 2. Separação */}
-                <div className="pt-4 border-t border-white/[0.06] space-y-3.5">
+                <div className="pt-2.5 border-t border-white/[0.06] space-y-2">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-sky-400">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-sky-400">
                       Separação
                     </span>
                     {(() => {
@@ -3070,17 +3026,17 @@ export function ControlePKView() {
                         editDraft.final
                       )
                       return (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-sky-500/10 border border-sky-500/25 text-sky-300 text-[11px] font-mono">
-                          <Clock size={11} />
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-sky-500/10 border border-sky-500/25 text-sky-300 text-[10px] font-mono">
+                          <Clock size={10} />
                           Tempo Separação: {sepDur ? sepDur.formatted : "—"}
                         </span>
                       )
                     })()}
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-                    <div className="sm:col-span-2 lg:col-span-1">
-                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                    <div>
+                      <label className="block text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
                         Pessoa
                       </label>
                       <input
@@ -3093,12 +3049,12 @@ export function ControlePKView() {
                           }))
                         }
                         placeholder="Separador(es)..."
-                        className="w-full px-3 py-2 rounded-xl bg-slate-900/90 border border-white/[0.08] focus:border-sky-500/50 text-xs text-white placeholder:text-slate-600 outline-none"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-white/[0.08] focus:border-sky-500/50 text-[11px] text-white placeholder:text-slate-600 outline-none"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                      <label className="block text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
                         Peças
                       </label>
                       <input
@@ -3113,12 +3069,12 @@ export function ControlePKView() {
                           }))
                         }
                         placeholder="0"
-                        className="w-full px-3 py-2 rounded-xl bg-slate-900/90 border border-white/[0.08] focus:border-sky-500/50 text-xs text-white font-mono placeholder:text-slate-600 outline-none"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-white/[0.08] focus:border-sky-500/50 text-[11px] text-white font-mono placeholder:text-slate-600 outline-none"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                      <label className="block text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
                         SKUs
                       </label>
                       <input
@@ -3149,12 +3105,12 @@ export function ControlePKView() {
                           }))
                         }}
                         placeholder="0"
-                        className="w-full px-3 py-2 rounded-xl bg-slate-900/90 border border-white/[0.08] focus:border-sky-500/50 text-xs text-white font-mono placeholder:text-slate-600 outline-none"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-white/[0.08] focus:border-sky-500/50 text-[11px] text-white font-mono placeholder:text-slate-600 outline-none"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                      <label className="block text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
                         Tipo de Embarque
                       </label>
                       <select
@@ -3165,7 +3121,7 @@ export function ControlePKView() {
                             tipo_de_embarque: e.target.value as "" | TipoEmbarque,
                           }))
                         }
-                        className="w-full px-3 py-2 rounded-xl bg-slate-900/90 border border-white/[0.08] focus:border-sky-500/50 text-xs text-white outline-none cursor-pointer"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-white/[0.08] focus:border-sky-500/50 text-[11px] text-white outline-none cursor-pointer"
                       >
                         <option value="">Automático / Aguardando</option>
                         <option value="Simples">Simples</option>
@@ -3173,11 +3129,9 @@ export function ControlePKView() {
                         <option value="Complexa">Complexa</option>
                       </select>
                     </div>
-                  </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                     <div>
-                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                      <label className="block text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
                         Início Separação
                       </label>
                       <input
@@ -3189,13 +3143,13 @@ export function ControlePKView() {
                             inicio: e.target.value,
                           }))
                         }
-                        placeholder="DD/MM/AAAA HH:MM:SS ou HH:MM:SS"
-                        className="w-full px-3 py-2 rounded-xl bg-slate-900/90 border border-white/[0.08] focus:border-sky-500/50 text-xs text-slate-200 font-mono placeholder:text-slate-600 outline-none"
+                        placeholder="DD/MM/AAAA HH:MM:SS"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-white/[0.08] focus:border-sky-500/50 text-[11px] text-slate-200 font-mono placeholder:text-slate-600 outline-none"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                      <label className="block text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
                         Final Separação
                       </label>
                       <input
@@ -3207,17 +3161,17 @@ export function ControlePKView() {
                             final: e.target.value,
                           }))
                         }
-                        placeholder="DD/MM/AAAA HH:MM:SS ou HH:MM:SS"
-                        className="w-full px-3 py-2 rounded-xl bg-slate-900/90 border border-white/[0.08] focus:border-sky-500/50 text-xs text-slate-200 font-mono placeholder:text-slate-600 outline-none"
+                        placeholder="DD/MM/AAAA HH:MM:SS"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-white/[0.08] focus:border-sky-500/50 text-[11px] text-slate-200 font-mono placeholder:text-slate-600 outline-none"
                       />
                     </div>
                   </div>
                 </div>
 
                 {/* 3. Conferência */}
-                <div className="pt-4 border-t border-white/[0.06] space-y-3.5">
+                <div className="pt-2.5 border-t border-white/[0.06] space-y-2">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-400">
                       Conferência
                     </span>
                     {(() => {
@@ -3226,17 +3180,17 @@ export function ControlePKView() {
                         editDraft.conferencia_final
                       )
                       return (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 text-[11px] font-mono">
-                          <Clock size={11} />
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 text-[10px] font-mono">
+                          <Clock size={10} />
                           Tempo Conferência: {confDur ? confDur.formatted : "—"}
                         </span>
                       )
                     })()}
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <div>
-                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                      <label className="block text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
                         Conferente
                       </label>
                       <input
@@ -3249,12 +3203,12 @@ export function ControlePKView() {
                           }))
                         }
                         placeholder="Nome do conferente..."
-                        className="w-full px-3 py-2 rounded-xl bg-slate-900/90 border border-white/[0.08] focus:border-emerald-500/50 text-xs text-white placeholder:text-slate-600 outline-none"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-white/[0.08] focus:border-emerald-500/50 text-[11px] text-white placeholder:text-slate-600 outline-none"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                      <label className="block text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
                         Início Conferência
                       </label>
                       <input
@@ -3267,12 +3221,12 @@ export function ControlePKView() {
                           }))
                         }
                         placeholder="DD/MM/AAAA HH:MM:SS ou HH:MM:SS"
-                        className="w-full px-3 py-2 rounded-xl bg-slate-900/90 border border-white/[0.08] focus:border-emerald-500/50 text-xs text-slate-200 font-mono placeholder:text-slate-600 outline-none"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-white/[0.08] focus:border-emerald-500/50 text-[11px] text-slate-200 font-mono placeholder:text-slate-600 outline-none"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                      <label className="block text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
                         Final Conferência
                       </label>
                       <input
@@ -3285,16 +3239,16 @@ export function ControlePKView() {
                           }))
                         }
                         placeholder="DD/MM/AAAA HH:MM:SS ou HH:MM:SS"
-                        className="w-full px-3 py-2 rounded-xl bg-slate-900/90 border border-white/[0.08] focus:border-emerald-500/50 text-xs text-slate-200 font-mono placeholder:text-slate-600 outline-none"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-white/[0.08] focus:border-emerald-500/50 text-[11px] text-slate-200 font-mono placeholder:text-slate-600 outline-none"
                       />
                     </div>
                   </div>
                 </div>
 
                 {/* 4. Embalagem */}
-                <div className="pt-4 border-t border-white/[0.06] space-y-3.5">
+                <div className="pt-2.5 border-t border-white/[0.06] space-y-2">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-amber-400">
                       Embalagem
                     </span>
                   </div>
@@ -3305,9 +3259,9 @@ export function ControlePKView() {
                       editDraft.horario_final_embalagem
                     )
                     return (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 items-end">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 items-end">
                         <div>
-                          <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                          <label className="block text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
                             Embalador
                           </label>
                           <input
@@ -3320,12 +3274,12 @@ export function ControlePKView() {
                               }))
                             }
                             placeholder="Nome do embalador..."
-                            className="w-full px-3 py-2 rounded-xl bg-slate-900/90 border border-white/[0.08] focus:border-amber-500/50 text-xs text-white placeholder:text-slate-600 outline-none"
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-white/[0.08] focus:border-amber-500/50 text-[11px] text-white placeholder:text-slate-600 outline-none"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                          <label className="block text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
                             Início Embalagem
                           </label>
                           <input
@@ -3338,12 +3292,12 @@ export function ControlePKView() {
                                 horario_inicio_embalagem: e.target.value,
                               }))
                             }
-                            className="w-full px-3 py-2 rounded-xl bg-slate-900/90 border border-white/[0.08] focus:border-amber-500/50 text-xs text-slate-200 font-mono outline-none [color-scheme:dark]"
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-white/[0.08] focus:border-amber-500/50 text-[11px] text-slate-200 font-mono outline-none [color-scheme:dark]"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                          <label className="block text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
                             Final Embalagem
                           </label>
                           <input
@@ -3356,22 +3310,22 @@ export function ControlePKView() {
                                 horario_final_embalagem: e.target.value,
                               }))
                             }
-                            className="w-full px-3 py-2 rounded-xl bg-slate-900/90 border border-white/[0.08] focus:border-amber-500/50 text-xs text-slate-200 font-mono outline-none [color-scheme:dark]"
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-white/[0.08] focus:border-amber-500/50 text-[11px] text-slate-200 font-mono outline-none [color-scheme:dark]"
                           />
                         </div>
 
                         <div>
-                          <span className="block text-[10px] font-semibold uppercase tracking-wider text-amber-400/90 mb-1.5">
+                          <span className="block text-[9px] font-semibold uppercase tracking-wider text-amber-400/90 mb-1">
                             Tempo Embalagem
                           </span>
                           <div
-                            className={`w-full px-3 py-2 rounded-xl border text-xs font-mono flex items-center gap-1.5 ${
+                            className={`w-full px-2.5 py-1.5 rounded-lg border text-[11px] font-mono flex items-center gap-1.5 ${
                               embDur
                                 ? "bg-amber-500/15 border-amber-500/35 text-amber-300 font-semibold"
                                 : "bg-slate-900/50 border-white/[0.06] text-slate-500"
                             }`}
                           >
-                            <Clock size={12} className="shrink-0" />
+                            <Clock size={11} className="shrink-0" />
                             <span>
                               {embDur ? embDur.formatted : "Preencha início/final"}
                             </span>
@@ -3383,23 +3337,23 @@ export function ControlePKView() {
                 </div>
               </div>
 
-              <div className="px-6 py-4 border-t border-white/[0.06] flex items-center justify-end gap-2 bg-slate-950/50">
+              <div className="px-4 py-2.5 border-t border-white/[0.06] flex items-center justify-end gap-2 bg-slate-950/50 shrink-0">
                 <button
                   type="button"
                   onClick={() => setEditingRow(null)}
-                  className="px-4 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-xs font-semibold text-slate-300 cursor-pointer"
+                  className="px-3.5 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-[11px] font-semibold text-slate-300 cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={isSavingEdit}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-[11px] font-semibold uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50"
                 >
                   {isSavingEdit ? (
-                    <Loader2 size={14} className="animate-spin" />
+                    <Loader2 size={13} className="animate-spin" />
                   ) : (
-                    <Save size={14} />
+                    <Save size={13} />
                   )}
                   Salvar Alterações
                 </button>

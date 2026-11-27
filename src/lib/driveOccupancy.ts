@@ -220,21 +220,23 @@ export interface OccupiedSlotCoord {
 }
 
 /**
- * Retorna todos os slots únicos (level, depth) ocupados de um canal Drive-In,
- * combinando marcações visuais legadas (`occupiedPositions`) com itens reais salvos.
+ * Retorna todos os slots únicos (level, depth) ocupados de um canal Drive-In.
+ * Quando `includeTestPositions` é `false` (ex.: modo visualizador), ignora os
+ * paletes de teste (`occupiedPositions`) do modo edição e considera somente dados reais.
  */
 export function getChannelOccupiedSlots(
   object: MapObject,
   channel: Partial<StorageChannel>,
   allChannels: Array<Partial<StorageChannel>>,
-  allLocalItems: MapeamentoItem[]
+  allLocalItems: MapeamentoItem[],
+  includeTestPositions: boolean = true
 ): OccupiedSlotCoord[] {
   const levels = Math.max(1, Number(channel?.levels || object.props?.levels) || 4)
   const depths = Math.max(1, Number(channel?.depth || object.props?.depth) || 4)
 
   const slotsMap = new Map<string, OccupiedSlotCoord>()
 
-  if (Array.isArray(channel?.occupiedPositions)) {
+  if (includeTestPositions && Array.isArray(channel?.occupiedPositions)) {
     channel.occupiedPositions.forEach((pos: { level?: number; depth?: number }) => {
       const lvl = Math.max(1, Math.min(levels, Number(pos?.level) || 1))
       const dep = Math.max(1, Math.min(depths, Number(pos?.depth) || 1))
@@ -262,7 +264,8 @@ export function getChannelOccupiedSlots(
 export function getObjectOccupiedSlotCount(
   object: MapObject,
   allLocalItems: MapeamentoItem[],
-  channels: Array<Partial<StorageChannel>>
+  channels: Array<Partial<StorageChannel>>,
+  includeTestPositions: boolean = true
 ): number {
   if (object.type === "compartment") {
     const compItems = allLocalItems.filter(
@@ -284,7 +287,13 @@ export function getObjectOccupiedSlotCount(
   if (channels.length === 0) return 0
   let total = 0
   channels.forEach((chan) => {
-    total += getChannelOccupiedSlots(object, chan, channels, allLocalItems).length
+    total += getChannelOccupiedSlots(
+      object,
+      chan,
+      channels,
+      allLocalItems,
+      includeTestPositions
+    ).length
   })
   return total
 }
