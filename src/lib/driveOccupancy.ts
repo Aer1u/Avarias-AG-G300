@@ -169,6 +169,7 @@ export function filterItemsForDriveChannel(
   objectLabel?: string
 ): MapeamentoItem[] {
   if (!allObjectItems || allObjectItems.length === 0) return []
+  if (allChannels.length > 1 && !channel) return []
   if (allChannels.length <= 1 || !channel) return allObjectItems
 
   // Conta quantos canais compartilham o mesmo nome
@@ -209,14 +210,26 @@ export function filterItemsForDriveChannel(
   return allObjectItems.filter((it) => {
     const pos = String(it.posicao || "").trim()
     if (ownStrongKeys.has(pos)) return true
-    if (isOwnNameUnique && pos === ownName) return true
-    return isFirstChannel && !allKnownKeys.has(pos)
+    if (ownCode && pos.endsWith(` · ${ownCode}`)) return true
+    if (isOwnNameUnique && (pos === ownName || pos.endsWith(` · ${ownName}`))) return true
+    if (!isFirstChannel || allKnownKeys.has(pos)) return false
+    // Fallback legado estrito: apenas itens sem vínculo de canal específico
+    return pos === "" || pos === "POS" || pos === "N/A" || (Boolean(objectLabel) && pos === objectLabel)
   })
 }
 
 export interface OccupiedSlotCoord {
   level: number
   depth: number
+}
+
+export interface ChannelSlotLookupOptions {
+  /** Sistema resolvido para este canal (null/undefined = canal livre / sem sistema vinculado) */
+  channelSystemId?: string | null
+  /** Quando true, restringe `mapeamentoId` exclusivamente ao sistema do canal (`sys_<id>_` vs `ws_`/`comp_`) */
+  isolateByChannelSystem?: boolean
+  /** Sistema filtrado no visualizador; quando diferente de channelSystemId em modo leitura, retorna [] */
+  activeSystemFilterId?: string | null
 }
 
 /**
@@ -226,11 +239,21 @@ export interface OccupiedSlotCoord {
  */
 export function getChannelOccupiedSlots(
   object: MapObject,
-  channel: Partial<StorageChannel>,
+  channel: Partial<StorageChannel> | null | undefined,
   allChannels: Array<Partial<StorageChannel>>,
   allLocalItems: MapeamentoItem[],
-  includeTestPositions: boolean = true
+  includeTestPositions: boolean = true,
+  options?: ChannelSlotLookupOptions
 ): OccupiedSlotCoord[] {
+  if (!channel && allChannels.length > 1) return []
+  if (
+    !includeTestPositions &&
+    options?.activeSystemFilterId &&
+    options.channelSystemId !== options.activeSystemFilterId
+  ) {
+    return []
+  }
+
   const levels = Math.max(1, Number(channel?.levels || object.props?.levels) || 4)
   const depths = Math.max(1, Number(channel?.depth || object.props?.depth) || 4)
 
@@ -244,7 +267,15 @@ export function getChannelOccupiedSlots(
     })
   }
 
-  const objectItems = allLocalItems.filter((it) => isItemBelongingToObject(it, object.id))
+  const objectItems = allLocalItems.filter((it) => {
+    if (!isItemBelongingToObject(it, object.id)) return false
+    if (!options?.isolateByChannelSystem) return true
+    const parsed = parsePositionKeyParts(it.mapeamentoId)
+    if (options.channelSystemId) {
+      return parsed.kind === "sys" && parsed.systemId === options.channelSystemId
+    }
+    return parsed.kind === "ws" || parsed.kind === "comp"
+  })
   const objLabel = String(object.label || object.props?.label || object.props?.code || "").trim()
   const channelItems = filterItemsForDriveChannel(objectItems, channel, allChannels, objLabel)
 

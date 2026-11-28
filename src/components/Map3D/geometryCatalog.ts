@@ -781,13 +781,21 @@ function buildDriveInGeometry(
     }
 
     // 3. RENDERIZAÇÃO DOS PALETES REAIS + OCUPAÇÃO DO CANAL
-    const occupiedList = getChannelOccupiedSlots(
-      spatial.raw,
-      chan,
-      channels,
-      allLocalItems,
-      !readOnly
-    )
+    const occupiedList =
+      chan && !(readOnly && isLaneDimmed)
+        ? getChannelOccupiedSlots(
+            spatial.raw,
+            chan,
+            channels,
+            allLocalItems,
+            !readOnly,
+            {
+              channelSystemId: chanSys?.id ?? null,
+              isolateByChannelSystem: true,
+              activeSystemFilterId: readOnly ? activeFilterId : null,
+            }
+          )
+        : []
 
     occupiedList.forEach((pos) => {
       const lvl = Math.max(1, Math.min(levels, Number(pos.level) || 1))
@@ -1043,10 +1051,19 @@ function buildCompartmentGeometry(
   lines.position.copy(mesh.position)
   group.add(lines)
 
-  // Renderiza paletes reais armazenados no espaço aberto do compartimento
-  const compItems = getLocalItems().filter(
-    (it) => isItemBelongingToObject(it, spatial.id) && (Number(it.quantidade) || 0) > 0
-  )
+  // Renderiza paletes reais armazenados no espaço aberto do compartimento (isolados por sistema)
+  const compItems =
+    readOnly && isDimmed
+      ? []
+      : getLocalItems().filter((it) => {
+          if (!isItemBelongingToObject(it, spatial.id) || (Number(it.quantidade) || 0) <= 0) {
+            return false
+          }
+          if (objSys) {
+            return it.mapeamentoId === `sys_${objSys.id}_${spatial.id}`
+          }
+          return it.mapeamentoId.startsWith("comp_") || it.mapeamentoId.startsWith("ws_")
+        })
   if (compItems.length > 0) {
     const palletKeys = new Set<string>()
     let simplePallets = 0

@@ -349,6 +349,10 @@ export interface UniversalMapEditorProps {
   canEnableEditMode?: boolean
   /** Callback para habilitar o Modo Edição a partir do menu do visualizador */
   onEnableEditMode?: () => void
+  /** Callback para retornar à lista de Workspaces diretamente pela barra superior */
+  onBackToWorkspaces?: () => void
+  /** Callback para sair do Modo Edição e voltar ao Modo Visualizador */
+  onExitEditMode?: () => void
   /** Callback chamado após cada save bem-sucedido (para atualizar UI pai) */
   onWorkspaceSaved?: (objectsCount: number) => void
 }
@@ -362,6 +366,8 @@ export default function UniversalMapEditor({
   readOnly = false,
   canEnableEditMode = false,
   onEnableEditMode,
+  onBackToWorkspaces,
+  onExitEditMode,
   onWorkspaceSaved,
 }: UniversalMapEditorProps = {}) {
   // Histórico de alterações com suporte a Desfazer / Refazer (Undo / Redo)
@@ -525,10 +531,10 @@ export default function UniversalMapEditor({
   }, [])
 
   // Painéis com Largura Arrastável e Colapsável (Resizable Splitters)
-  // No Modo Visualizador, o Navegador Espacial inicia fechado para priorizar o mapa.
-  const [leftWidth, setLeftWidth] = useState(290)
+  // No Modo Visualizador, o Navegador Espacial inicia aberto na aba Sistema.
+  const [leftWidth, setLeftWidth] = useState(readOnly ? 340 : 290)
   const [isEditorLeftCollapsed, setIsEditorLeftCollapsed] = useState(false)
-  const [isViewerLeftOpen, setIsViewerLeftOpen] = useState(false)
+  const [isViewerLeftOpen, setIsViewerLeftOpen] = useState(true)
   const isLeftCollapsed = readOnly ? !isViewerLeftOpen : isEditorLeftCollapsed
   const setIsLeftCollapsed = useCallback(
     (next: boolean | ((prev: boolean) => boolean)) => {
@@ -1302,6 +1308,8 @@ export default function UniversalMapEditor({
         readOnly={readOnly}
         canEnableEditMode={canEnableEditMode}
         onEnableEditMode={onEnableEditMode}
+        onBackToWorkspaces={onBackToWorkspaces}
+        onExitEditMode={onExitEditMode}
         onOpenSystemDataPanel={
           readOnly && effectiveIsAdmin ? () => setIsSystemDataPanelOpen(true) : undefined
         }

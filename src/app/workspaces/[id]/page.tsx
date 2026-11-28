@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic"
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, Map, Lock, Eye, Edit3 } from "lucide-react"
+import { Map, Lock } from "lucide-react"
 import { useIAM } from "@/providers/IAMProvider"
 import { workspacesService, canUserEditWorkspace, type WorkspaceMap } from "@/lib/workspacesService"
 import { GlobalAdminBar } from "@/components/IAM/GlobalAdminBar"
@@ -128,64 +128,7 @@ export default function WorkspaceEditorPage() {
     <div className="h-screen w-full bg-slate-950 text-slate-100 flex flex-col">
       <GlobalAdminBar currentWorkspaceId={workspaceId} />
 
-      {/* Header do Workspace */}
-      <header className="flex items-center gap-3 px-4 py-2 border-b border-slate-800/80 bg-slate-900 shrink-0">
-        <button
-          onClick={() => router.push("/workspaces")}
-          className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors text-xs"
-        >
-          <ArrowLeft size={14} />
-          Workspaces
-        </button>
-        <span className="text-slate-700">›</span>
-        <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded bg-amber-600 flex items-center justify-center">
-            <Map size={11} className="text-white" />
-          </div>
-          <span className="text-sm font-semibold text-slate-200 truncate max-w-xs">
-            {workspace.name}
-          </span>
-        </div>
-
-        {/* Informação do proprietário */}
-        <span className="ml-1 text-[10px] text-slate-400 bg-slate-800 border border-slate-700 px-2 py-0.5 rounded-full flex items-center gap-1">
-          <span>Criado por:</span>
-          <strong className="text-slate-200">{workspace.ownerName || workspace.ownerEmail}</strong>
-        </span>
-
-        {/* Badge de status operacional */}
-        {isReadOnly ? (
-          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-indigo-950/60 border border-indigo-800/50 text-indigo-400 flex items-center gap-1">
-            <Eye size={10} />
-            Visualizador (Leitura)
-          </span>
-        ) : (
-          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/50 text-emerald-400 flex items-center gap-1">
-            <Edit3 size={10} />
-            Modo Edição Ativo
-          </span>
-        )}
-
-        <div className="ml-auto flex items-center gap-2">
-          {/* Em Modo Edição exibe atalho rápido para retornar ao Visualizador; no Modo Visualizador fica oculto no menu ⋮ */}
-          {hasEditPermission && isEditMode && (
-            <button
-              onClick={() => setIsEditMode(false)}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800 border border-slate-700 text-slate-300 hover:text-white transition-colors"
-              title="Sair do modo edição e voltar ao modo visualizador"
-            >
-              <Eye size={12} className="text-indigo-400" />
-              <span>Voltar para Visualizador</span>
-            </button>
-          )}
-
-          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-amber-950/60 border border-amber-800/40 text-amber-500">
-            Workspace Oficial
-          </span>
-        </div>
-      </header>
-
-      {/* Editor — mesmo motor do Lab, com o flag readOnly quando for visualizador */}
+      {/* Editor — barra superior unificada + motor espacial (readOnly quando visualizador) */}
       <UniversalMapEditor
         workspaceId={workspaceId}
         workspaceName={workspace.name}
@@ -194,6 +137,8 @@ export default function WorkspaceEditorPage() {
         readOnly={isReadOnly}
         canEnableEditMode={hasEditPermission}
         onEnableEditMode={() => setIsEditMode(true)}
+        onBackToWorkspaces={() => router.push("/workspaces")}
+        onExitEditMode={hasEditPermission && isEditMode ? () => setIsEditMode(false) : undefined}
         onWorkspaceSaved={(count) => {
           setWorkspace((prev) =>
             prev ? { ...prev, objectsCount: count, updatedAt: new Date().toISOString() } : prev

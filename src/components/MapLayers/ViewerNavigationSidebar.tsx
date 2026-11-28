@@ -17,22 +17,28 @@ import {
   Eye,
   EyeOff,
   MapPin,
-  Maximize2,
   Box,
   Building2,
   Info,
-  CheckCircle2,
-  AlertTriangle,
   ChevronRight,
   ChevronDown,
-  Sparkles,
+  BarChart3,
+  LayoutGrid,
+  Package,
+  Warehouse,
+  Rows3,
 } from "lucide-react"
 import type { MapObject, SystemVisualRef } from "../MapLibrary/types"
 import type { StorageChannel } from "../MapLibrary/dimensionsTypes"
 import { ensureDriveChannels, resolveSpatialContainment } from "../MapLibrary/spatialContainment"
-import { calculateAreaM2 } from "../MapLibrary/areaClassifier"
-import { getLocalItems } from "@/lib/mapeamentosStorage"
-import { getObjectOccupiedSlotCount, ITEMS_UPDATED_EVENT } from "@/lib/driveOccupancy"
+import { getLocalItems, type MapeamentoItem } from "@/lib/mapeamentosStorage"
+import {
+  filterItemsForDriveChannel,
+  getChannelOccupiedSlots,
+  getObjectOccupiedSlotCount,
+  isItemBelongingToObject,
+  ITEMS_UPDATED_EVENT,
+} from "@/lib/driveOccupancy"
 import {
   getSystemsLinkedToObject,
   isObjectMatchingSystemFilter,
@@ -115,7 +121,11 @@ export default function ViewerNavigationSidebar({
   onToggleAllVisibility,
   onOpenDriveInGrid,
 }: ViewerNavigationSidebarProps) {
-  const [activeTab, setActiveTab] = useState<"tree" | "details">("tree")
+  const [activeTab, setActiveTab] = useState<"system" | "tree" | "details">("system")
+  const [systemBreakdownMode, setSystemBreakdownMode] = useState<"blocks" | "drives">("blocks")
+  const [systemSearch, setSystemSearch] = useState("")
+  const [collapsedBlocks, setCollapsedBlocks] = useState<Set<string>>(new Set())
+  const [expandedDrives, setExpandedDrives] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState("")
   const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set())
   const [itemsVersion, setItemsVersion] = useState(0)
@@ -210,6 +220,350 @@ export default function ViewerNavigationSidebar({
       restrictions: selectedObject.restrictions || null,
     }
   }, [selectedObject, itemsVersion, systems])
+
+  // Mini-dashboard completo do Sistema (Paletes, SKUs, Drive-Ins, Canais, Blocos)
+  const systemDashboard = useMemo(() => {
+    void itemsVersion
+
+    const allItems: MapeamentoItem[] = getLocalItems().filter(
+      (it) => (Number(it.quantidade) || 0) > 0
+    )
+    const scopedItems = activeSystemFilterId
+      ? allItems.filter(
+          (it) =>
+            typeof it.mapeamentoId === "string" &&
+            it.mapeamentoId.startsWith(`sys_${activeSystemFilterId}_`)
+        )
+      : allItems
+
+    const objectById = new Map(viewerObjects.map((o) => [o.id, o]))
+    const { containmentMap } = resolveSpatialContainment(viewerObjects)
+
+    const resolveBlockContainer = (obj: MapObject): { id: string; label: string; obj?: MapObject } => {
+      const visited = new Set<string>()
+      let currentId: string | undefined = obj.id
+      let fallbackArea: MapObject | undefined
+      let fallbackFloor: MapObject | undefined
+
+      while (currentId && !visited.has(currentId)) {
+        visited.add(currentId)
+        const currentObj = objectById.get(currentId)
+        const parentId =
+          (currentObj?.props?.streetId as string | undefined) ||
+          currentObj?.parentId ||
+          containmentMap.get(currentId)
+
+        if (!parentId || visited.has(parentId)) break
+        const parentObj = objectById.get(parentId)
+        if (!parentObj) break
+
+        if (parentObj.classification === "bloco") {
+          return {
+            id: parentObj.id,
+            label: parentObj.label || parentObj.id,
+            obj: parentObj,
+          }
+        }
+        if (!fallbackArea && parentObj.category === "area" && parentObj.type !== "floor") {
+          fallbackArea = parentObj
+        }
+        if (!fallbackFloor && parentObj.type === "floor") {
+          fallbackFloor = parentObj
+        }
+        currentId = parentObj.id
+      }
+
+      if (fallbackArea) {
+        return {
+          id: fallbackArea.id,
+          label: fallbackArea.label || fallbackArea.id,
+          obj: fallbackArea,
+        }
+      }
+      if (fallbackFloor) {
+        return {
+          id: fallbackFloor.id,
+          label: fallbackFloor.label || fallbackFloor.id,
+          obj: fallbackFloor,
+        }
+      }
+      return { id: "__sem_bloco__", label: "Sem Bloco" }
+    }
+
+    interface ChannelMetric {
+      id: string
+      code: string
+      name: string
+      paletes: number
+      capacidade: number
+      skusCount: number
+      units: number
+      system?: SystemVisualRef
+    }
+
+    interface StructureMetric {
+      obj: MapObject
+      label: string
+      isCompartment: boolean
+      blockId: string
+      blockLabel: string
+      paletes: number
+      capacidade: number
+      skusCount: number
+      skuSet: Set<string>
+      units: number
+      canaisTotal: number
+      canaisOcupados: number
+      occupancyPct: number
+      channels: ChannelMetric[]
+      linkedSystems: SystemVisualRef[]
+    }
+
+    interface BlockMetric {
+      id: string
+      label: string
+      obj?: MapObject
+      paletes: number
+      capacidade: number
+      skusCount: number
+      skuSet: Set<string>
+      units: number
+      driveInsCount: number
+      compartmentsCount: number
+      canaisTotal: number
+      canaisOcupados: number
+      occupancyPct: number
+      structures: StructureMetric[]
+    }
+
+    const storageObjects = viewerObjects.filter(
+      (o) =>
+        o.type === "drive_in" ||
+        o.type === "drive_through" ||
+        o.type === "compartment" ||
+        o.category === "storage"
+    )
+
+    const structures: StructureMetric[] = []
+    const globalSkuSet = new Set<string>()
+    let totalPaletes = 0
+    let totalCapacidade = 0
+    let totalUnits = 0
+    let totalDriveIns = 0
+    let totalCompartments = 0
+    let totalCanais = 0
+    let totalCanaisOcupados = 0
+
+    storageObjects.forEach((obj) => {
+      const isCompartment = obj.type === "compartment"
+      const objLabel = String(obj.label || obj.props?.label || obj.props?.code || obj.id).trim()
+      const objItems = scopedItems.filter((it) => isItemBelongingToObject(it, obj.id))
+      const linkedSystems = getSystemsLinkedToObject(obj, systems)
+      const block = resolveBlockContainer(obj)
+
+      if (isCompartment) {
+        if (activeSystemFilterId && !isObjectMatchingSystemFilter(obj, activeSystemFilterId, systems)) {
+          return
+        }
+        const paletes = getObjectOccupiedSlotCount(obj, objItems, [], false)
+        const skuSet = new Set<string>()
+        let units = 0
+        objItems.forEach((it) => {
+          units += Number(it.quantidade) || 0
+          const sku = String(it.sku || "").trim().toUpperCase()
+          if (sku) {
+            skuSet.add(sku)
+            globalSkuSet.add(sku)
+          }
+        })
+
+        totalPaletes += paletes
+        totalUnits += units
+        totalCompartments += 1
+
+        structures.push({
+          obj,
+          label: objLabel,
+          isCompartment: true,
+          blockId: block.id,
+          blockLabel: block.label,
+          paletes,
+          capacidade: 0,
+          skusCount: skuSet.size,
+          skuSet,
+          units,
+          canaisTotal: 0,
+          canaisOcupados: 0,
+          occupancyPct: 0,
+          channels: [],
+          linkedSystems,
+        })
+        return
+      }
+
+      const allChannels = ensureDriveChannels(obj)
+      const scopedChannels = activeSystemFilterId
+        ? allChannels.filter(
+            (chan) => resolveSystemForChannel(obj, chan, systems)?.id === activeSystemFilterId
+          )
+        : allChannels
+
+      if (activeSystemFilterId && scopedChannels.length === 0) {
+        return
+      }
+
+      const driveSkuSet = new Set<string>()
+      const channelMetrics: ChannelMetric[] = []
+      let drivePaletes = 0
+      let driveCapacidade = 0
+      let driveUnits = 0
+      let driveCanaisOcupados = 0
+
+      scopedChannels.forEach((chan) => {
+        const chanSys = resolveSystemForChannel(obj, chan, systems)
+        const chanScopedObjItems = objItems.filter((it) => {
+          if (chanSys) {
+            return it.mapeamentoId === `sys_${chanSys.id}_${obj.id}`
+          }
+          return it.mapeamentoId.startsWith("ws_") || it.mapeamentoId.startsWith("comp_")
+        })
+        const chanItems = filterItemsForDriveChannel(chanScopedObjItems, chan, allChannels, objLabel)
+        const chanPaletes = getChannelOccupiedSlots(obj, chan, allChannels, chanScopedObjItems, false, {
+          channelSystemId: chanSys?.id ?? null,
+          isolateByChannelSystem: true,
+          activeSystemFilterId,
+        }).length
+        const chanLevels = Math.max(1, Number(chan.levels || obj.props?.levels) || 4)
+        const chanDepth = Math.max(1, Number(chan.depth || obj.props?.depth) || 4)
+        const chanCap = chanLevels * chanDepth
+        const chanSkuSet = new Set<string>()
+        let chanUnits = 0
+
+        chanItems.forEach((it) => {
+          chanUnits += Number(it.quantidade) || 0
+          const sku = String(it.sku || "").trim().toUpperCase()
+          if (sku) {
+            chanSkuSet.add(sku)
+            driveSkuSet.add(sku)
+            globalSkuSet.add(sku)
+          }
+        })
+
+        if (chanPaletes > 0 || chanUnits > 0) {
+          driveCanaisOcupados += 1
+        }
+        drivePaletes += chanPaletes
+        driveCapacidade += chanCap
+        driveUnits += chanUnits
+
+        channelMetrics.push({
+          id: chan.id,
+          code: chan.code || chan.name || `C${chan.laneIndex}`,
+          name: chan.name || chan.code || `Canal ${chan.laneIndex}`,
+          paletes: chanPaletes,
+          capacidade: chanCap,
+          skusCount: chanSkuSet.size,
+          units: chanUnits,
+          system: chanSys,
+        })
+      })
+
+      totalPaletes += drivePaletes
+      totalCapacidade += driveCapacidade
+      totalUnits += driveUnits
+      totalDriveIns += 1
+      totalCanais += scopedChannels.length
+      totalCanaisOcupados += driveCanaisOcupados
+
+      structures.push({
+        obj,
+        label: objLabel,
+        isCompartment: false,
+        blockId: block.id,
+        blockLabel: block.label,
+        paletes: drivePaletes,
+        capacidade: driveCapacidade,
+        skusCount: driveSkuSet.size,
+        skuSet: driveSkuSet,
+        units: driveUnits,
+        canaisTotal: scopedChannels.length,
+        canaisOcupados: driveCanaisOcupados,
+        occupancyPct: driveCapacidade > 0 ? Math.round((drivePaletes / driveCapacidade) * 100) : 0,
+        channels: channelMetrics,
+        linkedSystems,
+      })
+    })
+
+    // Agrupamento por Bloco
+    const blockMap = new Map<string, BlockMetric>()
+    structures.forEach((st) => {
+      let grp = blockMap.get(st.blockId)
+      if (!grp) {
+        const blockObj = st.blockId !== "__sem_bloco__" ? objectById.get(st.blockId) : undefined
+        grp = {
+          id: st.blockId,
+          label: st.blockLabel,
+          obj: blockObj,
+          paletes: 0,
+          capacidade: 0,
+          skusCount: 0,
+          skuSet: new Set<string>(),
+          units: 0,
+          driveInsCount: 0,
+          compartmentsCount: 0,
+          canaisTotal: 0,
+          canaisOcupados: 0,
+          occupancyPct: 0,
+          structures: [],
+        }
+        blockMap.set(st.blockId, grp)
+      }
+      grp.paletes += st.paletes
+      grp.capacidade += st.capacidade
+      grp.units += st.units
+      if (st.isCompartment) grp.compartmentsCount += 1
+      else grp.driveInsCount += 1
+      grp.canaisTotal += st.canaisTotal
+      grp.canaisOcupados += st.canaisOcupados
+      st.skuSet.forEach((sku) => grp!.skuSet.add(sku))
+      grp.skusCount = grp.skuSet.size
+      grp.occupancyPct = grp.capacidade > 0 ? Math.round((grp.paletes / grp.capacidade) * 100) : 0
+      grp.structures.push(st)
+    })
+
+    const blocks = Array.from(blockMap.values()).sort((a, b) => {
+      if (a.id === "__sem_bloco__") return 1
+      if (b.id === "__sem_bloco__") return -1
+      return a.label.localeCompare(b.label, "pt-BR", { numeric: true })
+    })
+    blocks.forEach((b) => {
+      b.structures.sort((a, c) => a.label.localeCompare(c.label, "pt-BR", { numeric: true }))
+    })
+
+    const sortedStructures = [...structures].sort((a, b) =>
+      a.label.localeCompare(b.label, "pt-BR", { numeric: true })
+    )
+
+    const activeSystem = activeSystemFilterId
+      ? systems.find((s) => s.id === activeSystemFilterId) || null
+      : null
+
+    return {
+      activeSystem,
+      totalPaletes,
+      totalCapacidade,
+      occupancyPct: totalCapacidade > 0 ? Math.round((totalPaletes / totalCapacidade) * 100) : 0,
+      totalSkus: globalSkuSet.size,
+      totalUnits,
+      totalDriveIns,
+      totalCompartments,
+      totalCanais,
+      totalCanaisOcupados,
+      totalBlocos: blocks.filter((b) => b.id !== "__sem_bloco__").length,
+      blocks,
+      structures: sortedStructures,
+    }
+  }, [viewerObjects, itemsVersion, activeSystemFilterId, systems])
 
   // Renderiza nó recursivo da árvore
   const renderNode = (node: TreeNode) => {
@@ -368,35 +722,633 @@ export default function ViewerNavigationSidebar({
         </span>
       </div>
 
-      {/* Abas: Estrutura & Navegação ↔ Inspeção Detalhada */}
+      {/* Abas: Sistema (Mini-Dashboard) ↔ Estrutura ↔ Inspeção */}
       <div className="flex border-b border-slate-800 bg-slate-950 shrink-0">
         <button
+          onClick={() => setActiveTab("system")}
+          className={`flex-1 py-2 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
+            activeTab === "system"
+              ? "border-emerald-500 text-emerald-400 bg-slate-900/70"
+              : "border-transparent text-slate-500 hover:text-slate-300"
+          }`}
+        >
+          <BarChart3 size={12} />
+          <span>Sistema</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab("tree")}
-          className={`flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
+          className={`flex-1 py-2 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
             activeTab === "tree"
               ? "border-blue-500 text-blue-400 bg-slate-900/60"
               : "border-transparent text-slate-500 hover:text-slate-300"
           }`}
         >
-          <span>🌳</span>
+          <Layers size={12} />
           <span>Estrutura ({objects.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab("details")}
-          className={`flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
+          className={`flex-1 py-2 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
             activeTab === "details"
               ? "border-amber-500 text-amber-400 bg-slate-900/60"
               : "border-transparent text-slate-500 hover:text-slate-300"
           }`}
         >
-          <span>🔍</span>
+          <Info size={12} />
           <span>Inspeção {selectedObject ? "●" : ""}</span>
         </button>
       </div>
 
-      {/* Conteúdo Aba: Estrutura */}
-      {activeTab === "tree" ? (
+      {/* Conteúdo Aba: Sistema (Mini-Dashboard) */}
+      {activeTab === "system" ? (
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-3">
+            {/* Indicador informativo do sistema selecionado na barra superior */}
+            {systems.length > 0 && (
+              <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl bg-slate-950/75 border border-slate-800/90">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{
+                      backgroundColor: systemDashboard.activeSystem?.color || "#10b981",
+                    }}
+                  />
+                  <span className="text-[11px] font-semibold text-white truncate">
+                    {systemDashboard.activeSystem
+                      ? systemDashboard.activeSystem.name
+                      : `Todos os Sistemas (${systems.length})`}
+                  </span>
+                </div>
+                {systemDashboard.activeSystem && (
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 shrink-0">
+                    {isOpenSystem(systemDashboard.activeSystem) ? "Livre" : "Saldo"}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* KPIs Principais do Sistema */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="p-2.5 rounded-xl bg-slate-950/75 border border-slate-800/90 space-y-0.5">
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <span className="font-semibold uppercase tracking-wider">Paletes</span>
+                  <Package size={12} className="text-amber-400" />
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <strong className="text-lg font-bold text-white font-mono leading-tight">
+                    {systemDashboard.totalPaletes.toLocaleString("pt-BR")}
+                  </strong>
+                  {systemDashboard.totalCapacidade > 0 && (
+                    <span className="text-[10px] text-slate-500 font-mono">
+                      / {systemDashboard.totalCapacidade.toLocaleString("pt-BR")}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10px] text-amber-400/90 font-medium block">
+                  {systemDashboard.occupancyPct}% ocupado
+                </span>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-slate-950/75 border border-slate-800/90 space-y-0.5">
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <span className="font-semibold uppercase tracking-wider">SKUs</span>
+                  <LayoutGrid size={12} className="text-emerald-400" />
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <strong className="text-lg font-bold text-white font-mono leading-tight">
+                    {systemDashboard.totalSkus.toLocaleString("pt-BR")}
+                  </strong>
+                  <span className="text-[10px] text-slate-500">únicos</span>
+                </div>
+                <span className="text-[10px] text-emerald-400/90 font-medium block">
+                  {systemDashboard.totalUnits.toLocaleString("pt-BR")} unid.
+                </span>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-slate-950/75 border border-slate-800/90 space-y-0.5">
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <span className="font-semibold uppercase tracking-wider">Drive-Ins</span>
+                  <Warehouse size={12} className="text-blue-400" />
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <strong className="text-lg font-bold text-white font-mono leading-tight">
+                    {systemDashboard.totalDriveIns}
+                  </strong>
+                  {systemDashboard.totalCompartments > 0 && (
+                    <span className="text-[10px] text-slate-500">
+                      +{systemDashboard.totalCompartments} comp.
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10px] text-blue-400/90 font-medium block">
+                  {systemDashboard.totalBlocos > 0
+                    ? `${systemDashboard.totalBlocos} bloco${systemDashboard.totalBlocos > 1 ? "s" : ""}`
+                    : `${systemDashboard.blocks.length} agrup.`}
+                </span>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-slate-950/75 border border-slate-800/90 space-y-0.5">
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <span className="font-semibold uppercase tracking-wider">Canais</span>
+                  <Rows3 size={12} className="text-violet-400" />
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <strong className="text-lg font-bold text-white font-mono leading-tight">
+                    {systemDashboard.totalCanais}
+                  </strong>
+                  <span className="text-[10px] text-slate-500">totais</span>
+                </div>
+                <span className="text-[10px] text-violet-300/90 font-medium block">
+                  {systemDashboard.totalCanaisOcupados} em uso ·{" "}
+                  {Math.max(0, systemDashboard.totalCanais - systemDashboard.totalCanaisOcupados)} livres
+                </span>
+              </div>
+            </div>
+
+            {/* Barra de Ocupação Consolidada */}
+            {systemDashboard.totalCapacidade > 0 && (
+              <div className="px-2.5 py-2 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1">
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-slate-400 font-medium">Ocupação global das posições</span>
+                  <strong className="text-white font-mono">
+                    {systemDashboard.totalPaletes}/{systemDashboard.totalCapacidade} ({systemDashboard.occupancyPct}%)
+                  </strong>
+                </div>
+                <div className="w-full h-1.5 rounded-full bg-slate-900 overflow-hidden border border-slate-800">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-blue-500 to-amber-400 transition-all"
+                    style={{ width: `${Math.min(100, systemDashboard.occupancyPct)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Subdivisões: Blocos e Drive-Ins isolados */}
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400">
+                  Subdivisões
+                </span>
+                <div className="inline-flex rounded-lg bg-slate-950 p-0.5 border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setSystemBreakdownMode("blocks")}
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-colors ${
+                      systemBreakdownMode === "blocks"
+                        ? "bg-slate-800 text-white"
+                        : "text-slate-500 hover:text-slate-300"
+                    }`}
+                  >
+                    Por Bloco ({systemDashboard.blocks.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSystemBreakdownMode("drives")}
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-colors ${
+                      systemBreakdownMode === "drives"
+                        ? "bg-slate-800 text-white"
+                        : "text-slate-500 hover:text-slate-300"
+                    }`}
+                  >
+                    Por Drive-In ({systemDashboard.structures.length})
+                  </button>
+                </div>
+              </div>
+
+              {/* Busca rápida dentro das subdivisões */}
+              {systemDashboard.structures.length > 4 && (
+                <div className="relative">
+                  <Search
+                    size={11}
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500"
+                  />
+                  <input
+                    value={systemSearch}
+                    onChange={(e) => setSystemSearch(e.target.value)}
+                    placeholder="Filtrar bloco ou drive-in..."
+                    className="w-full pl-7 pr-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-[11px] text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              )}
+
+              {systemDashboard.structures.length === 0 ? (
+                <div className="py-8 text-center text-slate-500 text-xs rounded-xl bg-slate-950/40 border border-slate-800/60">
+                  <Box size={22} className="mx-auto mb-1.5 text-slate-600" />
+                  <p className="font-medium text-slate-400">Nenhuma estrutura neste escopo</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">
+                    Selecione outro sistema ou visualize Todos.
+                  </p>
+                </div>
+              ) : systemBreakdownMode === "blocks" ? (
+                /* Visão isolada por Bloco -> Drive-Ins -> Canais */
+                <div className="space-y-2">
+                  {systemDashboard.blocks
+                    .filter((blk) => {
+                      const q = systemSearch.trim().toLowerCase()
+                      if (!q) return true
+                      return (
+                        blk.label.toLowerCase().includes(q) ||
+                        blk.structures.some((s) => s.label.toLowerCase().includes(q))
+                      )
+                    })
+                    .map((blk) => {
+                      const isBlkCollapsed = collapsedBlocks.has(blk.id)
+                      const filteredStructures = systemSearch.trim()
+                        ? blk.structures.filter((s) => {
+                            const q = systemSearch.trim().toLowerCase()
+                            return (
+                              blk.label.toLowerCase().includes(q) ||
+                              s.label.toLowerCase().includes(q)
+                            )
+                          })
+                        : blk.structures
+
+                      return (
+                        <div
+                          key={blk.id}
+                          className="rounded-xl bg-slate-950/75 border border-slate-800/90 overflow-hidden"
+                        >
+                          {/* Cabeçalho do Bloco */}
+                          <div
+                            onClick={() =>
+                              setCollapsedBlocks((prev) => {
+                                const next = new Set(prev)
+                                if (next.has(blk.id)) next.delete(blk.id)
+                                else next.add(blk.id)
+                                return next
+                              })
+                            }
+                            className="p-2.5 cursor-pointer hover:bg-slate-900/70 transition-colors space-y-1.5"
+                          >
+                            <div className="flex items-center justify-between gap-1.5">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                {isBlkCollapsed ? (
+                                  <ChevronRight size={13} className="text-slate-500 shrink-0" />
+                                ) : (
+                                  <ChevronDown size={13} className="text-slate-400 shrink-0" />
+                                )}
+                                <Building2 size={13} className="text-indigo-400 shrink-0" />
+                                <span className="text-xs font-bold text-white truncate">
+                                  {blk.label}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                {blk.capacidade > 0 && (
+                                  <span className="text-[10px] font-mono font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/25 px-1.5 py-0.5 rounded">
+                                    {blk.occupancyPct}%
+                                  </span>
+                                )}
+                                {blk.obj && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      onSelectAndLocate(blk.obj!)
+                                    }}
+                                    className="p-1 rounded text-slate-400 hover:text-blue-400 hover:bg-slate-800 transition-colors"
+                                    title="Centralizar bloco no mapa"
+                                  >
+                                    <MapPin size={11} />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Métricas isoladas do Bloco */}
+                            <div className="grid grid-cols-4 gap-1 text-center pt-0.5">
+                              <div className="px-1 py-1 rounded bg-slate-900/90 border border-slate-800/80">
+                                <span className="text-[9px] text-slate-500 block">Paletes</span>
+                                <strong className="text-[11px] font-mono text-white">
+                                  {blk.paletes}
+                                </strong>
+                              </div>
+                              <div className="px-1 py-1 rounded bg-slate-900/90 border border-slate-800/80">
+                                <span className="text-[9px] text-slate-500 block">SKUs</span>
+                                <strong className="text-[11px] font-mono text-emerald-300">
+                                  {blk.skusCount}
+                                </strong>
+                              </div>
+                              <div className="px-1 py-1 rounded bg-slate-900/90 border border-slate-800/80">
+                                <span className="text-[9px] text-slate-500 block">Drives</span>
+                                <strong className="text-[11px] font-mono text-blue-300">
+                                  {blk.driveInsCount}
+                                </strong>
+                              </div>
+                              <div className="px-1 py-1 rounded bg-slate-900/90 border border-slate-800/80">
+                                <span className="text-[9px] text-slate-500 block">Canais</span>
+                                <strong className="text-[11px] font-mono text-violet-300">
+                                  {blk.canaisOcupados}/{blk.canaisTotal}
+                                </strong>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Drive-Ins isolados dentro do Bloco */}
+                          {!isBlkCollapsed && (
+                            <div className="border-t border-slate-800/80 bg-slate-900/40 p-1.5 space-y-1.5">
+                              {filteredStructures.map((st) => {
+                                const isSelected = st.obj.id === selectedId
+                                const isExpanded = expandedDrives.has(st.obj.id)
+                                return (
+                                  <div
+                                    key={st.obj.id}
+                                    className={`rounded-lg border transition-colors ${
+                                      isSelected
+                                        ? "bg-blue-950/40 border-blue-500/60"
+                                        : "bg-slate-950/70 border-slate-800/80 hover:border-slate-700"
+                                    }`}
+                                  >
+                                    <div
+                                      onClick={() => onSelectAndLocate(st.obj)}
+                                      className="p-2 cursor-pointer space-y-1.5"
+                                    >
+                                      <div className="flex items-center justify-between gap-1.5">
+                                        <div className="flex items-center gap-1.5 min-w-0">
+                                          {!st.isCompartment && st.channels.length > 0 && (
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation()
+                                                setExpandedDrives((prev) => {
+                                                  const next = new Set(prev)
+                                                  if (next.has(st.obj.id)) next.delete(st.obj.id)
+                                                  else next.add(st.obj.id)
+                                                  return next
+                                                })
+                                              }}
+                                              className="p-0.5 rounded text-slate-500 hover:text-slate-200 hover:bg-slate-800"
+                                              title="Expandir canais deste Drive-In"
+                                            >
+                                              {isExpanded ? (
+                                                <ChevronDown size={11} />
+                                              ) : (
+                                                <ChevronRight size={11} />
+                                              )}
+                                            </button>
+                                          )}
+                                          <span className="text-[11px] font-semibold text-white truncate">
+                                            {st.label}
+                                          </span>
+                                        </div>
+
+                                        <div className="flex items-center gap-1 shrink-0">
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              onOpenDriveInGrid?.(st.obj)
+                                            }}
+                                            className="text-[9px] px-1.5 py-0.5 rounded bg-blue-950/90 text-blue-300 border border-blue-800/60 hover:bg-blue-700 hover:text-white font-mono transition-colors"
+                                            title={
+                                              st.isCompartment
+                                                ? "Abrir relação de itens"
+                                                : "Abrir Grid de Paletes"
+                                            }
+                                          >
+                                            {st.isCompartment ? "Relação" : "Grid"}
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                      <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                                        <span>
+                                          <strong className="text-amber-300">{st.paletes}</strong>
+                                          {st.capacidade > 0 ? `/${st.capacidade}` : ""} pal.
+                                        </span>
+                                        <span>
+                                          <strong className="text-emerald-300">{st.skusCount}</strong>{" "}
+                                          SKU{st.skusCount === 1 ? "" : "s"}
+                                        </span>
+                                        {!st.isCompartment ? (
+                                          <span>
+                                            <strong className="text-violet-300">
+                                              {st.canaisOcupados}/{st.canaisTotal}
+                                            </strong>{" "}
+                                            can.
+                                          </span>
+                                        ) : (
+                                          <span className="text-amber-400/80">Compart.</span>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Canais individuais do Drive-In */}
+                                    {isExpanded && st.channels.length > 0 && (
+                                      <div className="border-t border-slate-800/70 px-2 py-1.5 space-y-1 bg-slate-900/50">
+                                        {st.channels.map((ch) => (
+                                          <button
+                                            key={ch.id}
+                                            type="button"
+                                            onClick={() => {
+                                              onSelectChannel?.(st.obj, ch.id || ch.code)
+                                              onOpenDriveInGrid?.(st.obj, ch.code || ch.id)
+                                            }}
+                                            className="w-full flex items-center justify-between gap-2 px-1.5 py-1 rounded bg-slate-950/80 hover:bg-blue-950/60 border border-slate-800/80 hover:border-blue-600/50 text-left transition-colors"
+                                          >
+                                            <div className="flex items-center gap-1.5 min-w-0">
+                                              <span
+                                                className="w-2 h-2 rounded-sm shrink-0"
+                                                style={{
+                                                  backgroundColor: ch.system?.color || "#475569",
+                                                }}
+                                              />
+                                              <span
+                                                className="text-[10px] font-semibold text-slate-200 truncate"
+                                                title={ch.name && ch.code && ch.name !== ch.code ? `${ch.name} (${ch.code})` : ch.name || ch.code}
+                                              >
+                                                {ch.name || ch.code}
+                                              </span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-[9px] font-mono text-slate-400 shrink-0">
+                                              <span>
+                                                <strong className="text-amber-300">{ch.paletes}</strong>
+                                                /{ch.capacidade}p
+                                              </span>
+                                              <span>
+                                                <strong className="text-emerald-300">
+                                                  {ch.skusCount}
+                                                </strong>{" "}
+                                                SKU
+                                              </span>
+                                            </div>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                </div>
+              ) : (
+                /* Visão isolada direta por Drive-In */
+                <div className="space-y-1.5">
+                  {systemDashboard.structures
+                    .filter((st) => {
+                      const q = systemSearch.trim().toLowerCase()
+                      if (!q) return true
+                      return (
+                        st.label.toLowerCase().includes(q) ||
+                        st.blockLabel.toLowerCase().includes(q)
+                      )
+                    })
+                    .map((st) => {
+                      const isSelected = st.obj.id === selectedId
+                      const isExpanded = expandedDrives.has(st.obj.id)
+                      return (
+                        <div
+                          key={st.obj.id}
+                          className={`rounded-xl border overflow-hidden transition-colors ${
+                            isSelected
+                              ? "bg-blue-950/40 border-blue-500/60"
+                              : "bg-slate-950/75 border-slate-800/90 hover:border-slate-700"
+                          }`}
+                        >
+                          <div
+                            onClick={() => onSelectAndLocate(st.obj)}
+                            className="p-2.5 cursor-pointer space-y-1.5"
+                          >
+                            <div className="flex items-start justify-between gap-1.5">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  {!st.isCompartment && st.channels.length > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setExpandedDrives((prev) => {
+                                          const next = new Set(prev)
+                                          if (next.has(st.obj.id)) next.delete(st.obj.id)
+                                          else next.add(st.obj.id)
+                                          return next
+                                        })
+                                      }}
+                                      className="p-0.5 rounded text-slate-500 hover:text-slate-200 hover:bg-slate-800"
+                                      title="Ver canais individuais"
+                                    >
+                                      {isExpanded ? (
+                                        <ChevronDown size={11} />
+                                      ) : (
+                                        <ChevronRight size={11} />
+                                      )}
+                                    </button>
+                                  )}
+                                  <span className="text-xs font-bold text-white truncate">
+                                    {st.label}
+                                  </span>
+                                </div>
+                                <span className="text-[10px] text-indigo-300/80 block pl-0.5 truncate">
+                                  {st.blockLabel}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    onSelectAndLocate(st.obj)
+                                  }}
+                                  className="p-1 rounded text-slate-400 hover:text-blue-400 hover:bg-slate-800"
+                                  title="Localizar no mapa"
+                                >
+                                  <MapPin size={11} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    onOpenDriveInGrid?.(st.obj)
+                                  }}
+                                  className="text-[9px] px-1.5 py-0.5 rounded bg-blue-950/90 text-blue-300 border border-blue-800/60 hover:bg-blue-700 hover:text-white font-mono transition-colors"
+                                >
+                                  {st.isCompartment ? "Relação" : "Grid"}
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-4 gap-1 text-center">
+                              <div className="px-1 py-1 rounded bg-slate-900/90 border border-slate-800/80">
+                                <span className="text-[9px] text-slate-500 block">Paletes</span>
+                                <strong className="text-[11px] font-mono text-amber-300">
+                                  {st.paletes}
+                                </strong>
+                              </div>
+                              <div className="px-1 py-1 rounded bg-slate-900/90 border border-slate-800/80">
+                                <span className="text-[9px] text-slate-500 block">SKUs</span>
+                                <strong className="text-[11px] font-mono text-emerald-300">
+                                  {st.skusCount}
+                                </strong>
+                              </div>
+                              <div className="px-1 py-1 rounded bg-slate-900/90 border border-slate-800/80">
+                                <span className="text-[9px] text-slate-500 block">Canais</span>
+                                <strong className="text-[11px] font-mono text-violet-300">
+                                  {st.isCompartment ? "—" : `${st.canaisOcupados}/${st.canaisTotal}`}
+                                </strong>
+                              </div>
+                              <div className="px-1 py-1 rounded bg-slate-900/90 border border-slate-800/80">
+                                <span className="text-[9px] text-slate-500 block">Ocup.</span>
+                                <strong className="text-[11px] font-mono text-slate-200">
+                                  {st.capacidade > 0 ? `${st.occupancyPct}%` : `${st.units}u`}
+                                </strong>
+                              </div>
+                            </div>
+                          </div>
+
+                          {isExpanded && st.channels.length > 0 && (
+                            <div className="border-t border-slate-800/80 px-2 py-1.5 space-y-1 bg-slate-900/40">
+                              {st.channels.map((ch) => (
+                                <button
+                                  key={ch.id}
+                                  type="button"
+                                  onClick={() => {
+                                    onSelectChannel?.(st.obj, ch.id || ch.code)
+                                    onOpenDriveInGrid?.(st.obj, ch.code || ch.id)
+                                  }}
+                                  className="w-full flex items-center justify-between gap-2 px-2 py-1 rounded-lg bg-slate-950/80 hover:bg-blue-950/60 border border-slate-800/80 hover:border-blue-600/50 text-left transition-colors"
+                                >
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <span
+                                      className="w-2 h-2 rounded-sm shrink-0"
+                                      style={{
+                                        backgroundColor: ch.system?.color || "#475569",
+                                      }}
+                                    />
+                                    <span
+                                      className="text-[10px] font-semibold text-slate-200 truncate"
+                                      title={ch.name && ch.code && ch.name !== ch.code ? `${ch.name} (${ch.code})` : ch.name || ch.code}
+                                    >
+                                      {ch.name || ch.code}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2 text-[9px] font-mono text-slate-400 shrink-0">
+                                    <span>
+                                      <strong className="text-amber-300">{ch.paletes}</strong>/
+                                      {ch.capacidade}p
+                                    </span>
+                                    <span>
+                                      <strong className="text-emerald-300">{ch.skusCount}</strong> SKU
+                                    </span>
+                                    <span>{ch.units}u</span>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : activeTab === "tree" ? (
         <div className="flex-1 flex flex-col min-h-0">
           {/* Busca + Ações Globais */}
           <div className="p-2.5 border-b border-slate-800 bg-slate-950/30 space-y-2">

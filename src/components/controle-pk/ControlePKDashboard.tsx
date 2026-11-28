@@ -12,31 +12,17 @@ import {
   Layers,
   HelpCircle,
 } from "lucide-react"
-import { ControlePKRow, calculateDuration } from "./pkSpreadsheetParser"
+import {
+  ControlePKRow,
+  calculateDuration,
+  formatDurationHuman,
+  formatDurationDetailed,
+} from "./pkSpreadsheetParser"
 
 interface ControlePKDashboardProps {
   rows: ControlePKRow[]
   loading: boolean
   periodLabel: string
-}
-
-function formatDurationHuman(sec: number | null): string {
-  if (sec === null || !Number.isFinite(sec) || sec <= 0) return "—"
-  const r = Math.round(sec)
-  const h = Math.floor(r / 3600)
-  const m = Math.round((r % 3600) / 60)
-  if (h > 0 && m > 0) return `${h}h ${m}min`
-  if (h > 0) return `${h}h`
-  if (m > 0) return `${m} min`
-  return `${r}s`
-}
-
-function formatMinSec(sec: number | null): string {
-  if (sec === null || !Number.isFinite(sec) || sec <= 0) return "—"
-  const r = Math.round(sec)
-  const m = Math.floor(r / 60)
-  const s = r % 60
-  return `${m}m ${s.toString().padStart(2, "0")}s`
 }
 
 function avg(values: number[]): number | null {
@@ -161,7 +147,7 @@ function RankRow({
         </div>
       </div>
       <div className="text-right shrink-0 pl-3">
-        <div className={`text-xs font-medium tabular-nums ${st.time}`}>{formatMinSec(item.avgSec)}</div>
+        <div className={`text-xs font-medium tabular-nums ${st.time}`}>{formatDurationDetailed(item.avgSec)}</div>
         <div className="text-[11px] font-light text-slate-500 tabular-nums">Eficiência {item.efficiency}%</div>
       </div>
     </div>

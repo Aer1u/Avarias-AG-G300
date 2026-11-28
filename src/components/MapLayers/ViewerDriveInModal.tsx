@@ -955,6 +955,7 @@ export default function ViewerDriveInModal({
                           object={object}
                           channelId={currentChannel?.id || currentChannel?.code}
                           channelLabel={currentChannel?.name || currentChannel?.code}
+                          systems={systems}
                         />
                       </LocalErrorBoundary>
                     }

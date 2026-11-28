@@ -249,6 +249,64 @@ export interface DurationResult {
   totalSeconds: number
 }
 
+export function formatDurationHuman(sec: number | null): string {
+  if (sec === null || !Number.isFinite(sec) || sec <= 0) return "—"
+  const r = Math.round(sec)
+  if (r <= 0) return "—"
+  if (r < 60) return `${r}s`
+
+  const totalMinutes = Math.round(r / 60)
+  if (totalMinutes < 60) return `${totalMinutes} min`
+
+  const totalHours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  if (totalHours < 24) {
+    return minutes > 0 ? `${totalHours}h ${minutes}min` : `${totalHours}h`
+  }
+
+  const days = Math.floor(totalHours / 24)
+  const hours = totalHours % 24
+  if (hours === 0 && minutes === 0) {
+    return days === 1 ? "1 dia" : `${days} dias`
+  }
+  const parts = [`${days}d`]
+  if (hours > 0) parts.push(`${hours}h`)
+  if (minutes > 0) parts.push(`${minutes}min`)
+  return parts.join(" ")
+}
+
+export function formatDurationDetailed(sec: number | null): string {
+  if (sec === null || !Number.isFinite(sec) || sec <= 0) return "—"
+  const r = Math.round(sec)
+  if (r <= 0) return "—"
+  if (r < 60) return `${r}s`
+
+  const days = Math.floor(r / 86400)
+  const hours = Math.floor((r % 86400) / 3600)
+  const minutes = Math.floor((r % 3600) / 60)
+  const seconds = r % 60
+
+  if (days > 0) {
+    if (hours === 0 && minutes === 0 && seconds === 0) {
+      return days === 1 ? "1 dia" : `${days} dias`
+    }
+    const parts = [`${days}d`]
+    if (hours > 0) parts.push(`${hours}h`)
+    if (minutes > 0) parts.push(`${minutes}m`)
+    if (seconds > 0 && hours === 0) parts.push(`${pad2(seconds)}s`)
+    return parts.join(" ")
+  }
+
+  if (hours > 0) {
+    const parts = [`${hours}h`]
+    if (minutes > 0 || seconds > 0) parts.push(`${pad2(minutes)}m`)
+    if (seconds > 0) parts.push(`${pad2(seconds)}s`)
+    return parts.join(" ")
+  }
+
+  return `${minutes}m ${pad2(seconds)}s`
+}
+
 export function calculateDuration(
   startRaw: string | null | undefined,
   endRaw: string | null | undefined
@@ -266,19 +324,33 @@ export function calculateDuration(
   if (diffMs < 0) diffMs = 0
 
   const totalSeconds = Math.round(diffMs / 1000)
-  const hours = Math.floor(totalSeconds / 3600)
+  const days = Math.floor(totalSeconds / 86400)
+  const hours = Math.floor((totalSeconds % 86400) / 3600)
   const minutes = Math.floor((totalSeconds % 3600) / 60)
   const seconds = totalSeconds % 60
 
-  const formatted = `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`
-  const humanParts: string[] = []
-  if (hours > 0) humanParts.push(`${hours}h`)
-  if (minutes > 0 || hours > 0) humanParts.push(`${minutes}m`)
-  humanParts.push(`${seconds}s`)
+  const formatted =
+    days > 0
+      ? `${days}d ${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`
+      : `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`
+
+  let human: string
+  if (totalSeconds <= 0) {
+    human = "0s"
+  } else if (days > 0 && hours === 0 && minutes === 0 && seconds === 0) {
+    human = days === 1 ? "1 dia" : `${days} dias`
+  } else {
+    const humanParts: string[] = []
+    if (days > 0) humanParts.push(`${days}d`)
+    if (hours > 0) humanParts.push(`${hours}h`)
+    if (minutes > 0) humanParts.push(`${minutes}m`)
+    if (seconds > 0 || humanParts.length === 0) humanParts.push(`${seconds}s`)
+    human = humanParts.join(" ")
+  }
 
   return {
     formatted,
-    human: humanParts.join(" "),
+    human,
     totalSeconds,
   }
 }

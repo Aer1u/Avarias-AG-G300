@@ -515,11 +515,16 @@ const drive_in: MapElementDefinition = {
         for (let l = 0; l < lanes; l++) {
           const chan = rawChannels[l]
           if (!chan) continue
-          const occupiedList = getChannelOccupiedSlots(obj, chan, rawChannels, allLocalItems, false)
+          const isLaneDimmed = Boolean(activeFilterId && !laneMatchedFlags[l])
+          if (isLaneDimmed) continue
+          const chanSys = laneSystems[l]
+          const occupiedList = getChannelOccupiedSlots(obj, chan, rawChannels, allLocalItems, false, {
+            channelSystemId: chanSys?.id ?? null,
+            isolateByChannelSystem: true,
+            activeSystemFilterId: activeFilterId,
+          })
           const hasAtDepth = occupiedList.some((p) => p.depth === d + 1)
           if (!hasAtDepth) continue
-
-          const isLaneDimmed = Boolean(activeFilterId && !laneMatchedFlags[l])
           const slotX = l * laneW
           const marginX = Math.max(2, laneW * 0.18)
           const marginY = Math.max(2, slotH * 0.12)

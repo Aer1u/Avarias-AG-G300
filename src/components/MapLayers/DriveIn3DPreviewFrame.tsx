@@ -8,7 +8,7 @@
 
 import React, { useEffect, useRef, useState } from "react"
 import * as THREE from "three"
-import type { MapObject } from "../MapLibrary/types"
+import type { MapObject, SystemVisualRef } from "../MapLibrary/types"
 import { mapObjectToSpatial, DEFAULT_PIXELS_PER_METER } from "../Map3D/spatialAdapter"
 import { buildSpatial3DObject } from "../Map3D/geometryCatalog"
 import { ITEMS_UPDATED_EVENT } from "@/lib/driveOccupancy"
@@ -17,7 +17,10 @@ interface DriveIn3DPreviewFrameProps {
   object: MapObject
   channelId?: string | null
   channelLabel?: string | null
+  systems?: SystemVisualRef[]
 }
+
+const EMPTY_SYSTEMS: SystemVisualRef[] = []
 
 function isVisibleInHierarchy(obj: THREE.Object3D, root: THREE.Object3D): boolean {
   let cur: THREE.Object3D | null = obj
@@ -51,6 +54,7 @@ export default function DriveIn3DPreviewFrame({
   object,
   channelId,
   channelLabel,
+  systems = EMPTY_SYSTEMS,
 }: DriveIn3DPreviewFrameProps) {
   const mountRef = useRef<HTMLDivElement>(null)
   const [itemsVersion, setItemsVersion] = useState(0)
@@ -221,7 +225,7 @@ export default function DriveIn3DPreviewFrame({
     }
 
     const spatial = mapObjectToSpatial(object, DEFAULT_PIXELS_PER_METER)
-    const structureGroup = buildSpatial3DObject(spatial, true)
+    const structureGroup = buildSpatial3DObject(spatial, true, { systems })
     structureGroup.position.set(0, 0, 0)
     structureGroup.rotation.set(0, 0, 0)
     turntablePivot.add(structureGroup)
@@ -315,7 +319,7 @@ export default function DriveIn3DPreviewFrame({
     camera.aspect = w / h
     camera.updateProjectionMatrix()
     refs.fitDistance(w / h)
-  }, [object, channelId, itemsVersion])
+  }, [object, channelId, itemsVersion, systems])
 
   return (
     <div className="flex-1 min-h-[160px] rounded-xl bg-slate-950 border border-slate-800/90 flex flex-col overflow-hidden shadow-inner relative">

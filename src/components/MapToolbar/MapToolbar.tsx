@@ -17,6 +17,7 @@ import {
   Edit3,
   Search,
   Eye,
+  ArrowLeft,
   Compass,
   Map as MapIcon,
   Box,
@@ -38,6 +39,8 @@ interface MapToolbarProps {
   readOnly?: boolean
   canEnableEditMode?: boolean
   onEnableEditMode?: () => void
+  onBackToWorkspaces?: () => void
+  onExitEditMode?: () => void
   onOpenSystemDataPanel?: () => void
   onSpatialModeChange?: (mode: SpatialViewMode) => void
   systems?: BusinessSystem[]
@@ -122,6 +125,8 @@ export default function MapToolbar({
   readOnly = false,
   canEnableEditMode = false,
   onEnableEditMode,
+  onBackToWorkspaces,
+  onExitEditMode,
   onOpenSystemDataPanel,
   onSpatialModeChange,
   systems = [],
@@ -197,9 +202,22 @@ export default function MapToolbar({
         : null
 
     return (
-      <div className="h-11 bg-slate-900/95 border-b border-slate-800 px-3 flex items-center justify-between text-slate-100 select-none shrink-0 gap-2 relative z-30">
-        {/* Esquerda: Seletor de Câmera + Seletor Sistemas no Mapa + status discreto */}
+      <header className="h-11 bg-slate-900 border-b border-slate-800/80 px-3 sm:px-4 flex items-center justify-between text-slate-100 select-none shrink-0 gap-2 relative z-30">
+        {/* Esquerda: Voltar aos Workspaces + Seletor de Câmera + Seletor Sistemas no Mapa */}
         <div className="flex items-center gap-2">
+          {onBackToWorkspaces && (
+            <>
+              <button
+                type="button"
+                onClick={onBackToWorkspaces}
+                className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors text-xs cursor-pointer shrink-0"
+              >
+                <ArrowLeft size={14} />
+                <span>Workspaces</span>
+              </button>
+              <div className="h-4 w-px bg-slate-800 shrink-0" />
+            </>
+          )}
           <div ref={cameraMenuRef} className="relative">
             <button
               type="button"
@@ -424,11 +442,6 @@ export default function MapToolbar({
             </div>
           )}
 
-          <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-md bg-indigo-950/50 border border-indigo-800/40 text-indigo-300 text-[10px] font-semibold uppercase tracking-wider">
-            <Eye size={11} />
-            <span>Visualizador</span>
-          </div>
-
           <span className="hidden lg:inline text-[11px] font-mono text-slate-500">
             {objectsCount} objetos
           </span>
@@ -612,15 +625,29 @@ export default function MapToolbar({
             )}
           </div>
         </div>
-      </div>
+      </header>
     )
   }
 
   // ── MODO EDITOR NORMAL (ADMIN / PROPRIETÁRIO) ─────────────────
   return (
-    <div className="h-12 bg-slate-900 border-b border-slate-800 px-3 flex items-center justify-between text-slate-100 select-none shrink-0 gap-2">
-      {/* Esquerda: Modos de Visualização & Interação */}
+    <header className="h-12 bg-slate-900 border-b border-slate-800/80 px-3 flex items-center justify-between text-slate-100 select-none shrink-0 gap-2">
+      {/* Esquerda: Voltar + Modos de Visualização & Interação */}
       <div className="flex items-center gap-2">
+        {onBackToWorkspaces && (
+          <>
+            <button
+              type="button"
+              onClick={onBackToWorkspaces}
+              className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors text-xs cursor-pointer shrink-0"
+              title="Voltar aos Workspaces"
+            >
+              <ArrowLeft size={14} />
+              <span className="hidden 2xl:inline">Workspaces</span>
+            </button>
+            <div className="h-5 w-px bg-slate-800 shrink-0" />
+          </>
+        )}
         {/* Alternador Compacto de Visualização: 2D · Bird's-Eye 3D · Full Top · 3D Livre */}
         <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800 gap-0.5 shadow-inner">
           <button
@@ -988,7 +1015,19 @@ export default function MapToolbar({
         >
           Limpar
         </button>
+
+        {onExitEditMode && (
+          <button
+            type="button"
+            onClick={onExitEditMode}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800 border border-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer shrink-0"
+            title="Sair do modo edição e voltar ao modo visualizador"
+          >
+            <Eye size={12} className="text-indigo-400" />
+            <span>Visualizador</span>
+          </button>
+        )}
       </div>
-    </div>
+    </header>
   )
 }
